@@ -35,7 +35,7 @@ define ensure_tool
 endef
 
 define ensure_tool_venv
-	$(UV_ENV) @uv run which $(1) >/dev/null 2>&1 || { \
+	@$(UV_ENV) uv run which $(1) >/dev/null 2>&1 || { \
 	  printf "Error: '%s' is required in the virtualenv, but is not installed\n" "$(1)" >&2; \
 	  exit 1; \
 	}
