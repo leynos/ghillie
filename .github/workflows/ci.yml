@@ -51,7 +51,7 @@ jobs:
             --omit="*/unittests/*,*/.venv/*" \
             --branch \
             --out coverage.xml \
-            -m pytest --forked -v ghillie/unittests
+            -m pytest --forked -v
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
