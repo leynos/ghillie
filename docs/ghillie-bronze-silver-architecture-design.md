@@ -1,15 +1,20 @@
-Here’s a concrete design you can build from. I’ll keep it anchored in the Medallion model from the Ghillie docs, but grounded in the stack you named: Granian, async Falcon, msgspec, Postgres, async SQLAlchemy 2.x, async Dramatiq, pytest, pytest-bdd.
-
----
-
 # Bronze and Silver Layer Design for Ghillie
+
+Here’s a concrete design you can build from. I’ll keep it anchored in the
+Medallion model from the Ghillie docs, but grounded in the stack you named:
+Granian, async Falcon, msgspec, Postgres, async SQLAlchemy 2.x, async Dramatiq,
+pytest, pytest-bdd.
+
+______________________________________________________________________
 
 ## 1. Scope and goals
 
 This design covers:
 
-- the **Bronze layer**: raw, immutable event ingestion (“what happened, exactly?”), and
-- the **Silver layer**: cleaned, deduplicated, relational state for the estate (“what is the current state and history?”),
+- the **Bronze layer**: raw, immutable event ingestion (“what happened,
+  exactly?”), and
+- the **Silver layer**: cleaned, deduplicated, relational state for the estate
+  (“what is the current state and history?”),
 
 implemented using:
 
@@ -18,11 +23,13 @@ implemented using:
 - **Postgres** – storage for Bronze (append-only) and Silver (relational),
 - **async SQLAlchemy 2.x** – async ORM/SQL layer,
 - **async Dramatiq** – background workers for Bronze→Silver transformation,
-- **pytest** + **pytest-bdd** – tiered testing: unit, service, and scenario-level.
+- **pytest** + **pytest-bdd** – tiered testing: unit, service, and
+  scenario-level.
 
-Gold/reporting and LLM bits sit above Silver and are out of scope here; the point of this design is to give them a sane substrate.
+Gold/reporting and LLM bits sit above Silver and are out of scope here; the
+point of this design is to give them a sane substrate.
 
----
+______________________________________________________________________
 
 ## 2. High-level architecture
 
@@ -35,36 +42,40 @@ At a high level:
 - A Dramatiq task is enqueued for each new event, or per batch.
 - **Silver**:
 
-- Dramatiq workers consume Bronze events and apply **deterministic, idempotent transforms** into relational tables:
+- Dramatiq workers consume Bronze events and apply **deterministic, idempotent
+  transforms** into relational tables:
 
 - `repositories`, `commits`, `pull_requests`, `issues`, `documentation_changes`,
 - later, `violations`, `enrolments`, etc.
-- Silver tables always represent the **current cleaned view**, but retain enough history for reports and metrics.
+- Silver tables always represent the **current cleaned view**, but retain
+  enough history for reports and metrics.
 
 One way to picture it:
 
 ```mermaid
 flowchart LR
-    G[GitHub API] -->|poll| P[Ingestion worker\n(async Dramatiq)]
-    C[Concordat CloudEvents] -->|HTTP POST| I[Ingestion API\n(Granian + Falcon)]
+    G["GitHub API"] -->|poll| P["Ingestion worker (async Dramatiq)"]
+    C["Concordat CloudEvents"] -->|HTTP POST| I["Ingestion API (Granian + Falcon)"]
 
-    P -->|msgspec event structs| B[(Postgres\nraw_events)]
+    P -->|msgspec event structs| B["Postgres raw_events"]
     I -->|msgspec event structs| B
 
-    B -->|event_id batches| W[Transform workers\n(async Dramatiq)]
-    W -->|upserts| S[(Postgres\nSilver tables)]
+    B -->|event_id batches| W["Transform workers (async Dramatiq)"]
+    W -->|upserts| S["Postgres Silver tables"]
 
-    S --> downstream[Gold/reporting,\nmetrics, status models]
+    S --> downstream["Gold/reporting, metrics, status models"]
 
 ```
 
----
+______________________________________________________________________
 
 ## 3. Database schemas
 
 ### 3.1 Bronze: ,`raw_events`
 
-**Purpose:** preserve an immutable history of everything we saw from external systems, with minimal assumptions, while giving the Silver layer enough hooks to do its work efficiently.
+**Purpose:** preserve an immutable history of everything we saw from external
+systems, with minimal assumptions, while giving the Silver layer enough hooks
+to do its work efficiently.
 
 **Recommended table:**
 
@@ -98,9 +109,14 @@ CREATE INDEX raw_events_repo_time_idx
 
 Notes:
 
-- `dedupe_key` is a **deterministic hash** over `(source_system, event_type, source_event_id)` or, when the provider does not give a stable id, a combination such as `(repo, occurred_at, SHA1(payload))`. This prevents duplicate Bronze events when webhooks retry or pollers overlap.
-- `transform_state` lets the Silver workers pick up pending events efficiently without locking the entire table.
-- No foreign keys: Bronze optimises for **write throughput** and **replayability**, not relational integrity.
+- `dedupe_key` is a **deterministic hash** over
+  `(source_system, event_type, source_event_id)` or, when the provider does not
+  give a stable id, a combination such as `(repo, occurred_at, SHA1(payload))`.
+  This prevents duplicate Bronze events when webhooks retry or pollers overlap.
+- `transform_state` lets the Silver workers pick up pending events efficiently
+  without locking the entire table.
+- No foreign keys: Bronze optimises for **write throughput** and
+  **replayability**, not relational integrity.
 
 You will also want a little side-table for **polling offsets**:
 
@@ -118,7 +134,8 @@ CREATE TABLE github_ingestion_offsets (
 
 ### 3.2 Silver: core tables
 
-This deliberately mirrors the high-level design doc: the Silver layer manages the estate inventory and event history in a relational form.
+This deliberately mirrors the high-level design doc: the Silver layer manages
+the estate inventory and event history in a relational form.
 
 Minimal Silver schema for the Ghillie MVP:
 
@@ -213,9 +230,10 @@ CREATE TABLE event_facts (
 
 ```
 
-This gives you a structured, queryable linkage from Bronze to Silver without forcing every consumer to understand all the entity tables.
+This gives you a structured, queryable linkage from Bronze to Silver without
+forcing every consumer to understand all the entity tables.
 
----
+______________________________________________________________________
 
 ## 4. Python package layout
 
@@ -257,9 +275,10 @@ ghillie/
 
 ```
 
-This keeps Bronze concerns (raw ingestion) separated from Silver concerns (stateful transforms), while allowing shared db infrastructure.
+This keeps Bronze concerns (raw ingestion) separated from Silver concerns
+(stateful transforms), while allowing shared db infrastructure.
 
----
+______________________________________________________________________
 
 ## 5. Bronze layer design
 
@@ -326,7 +345,8 @@ class ConcordatEventResource:
 
 ### 5.2 GitHub ingestion worker (async Dramatiq)
 
-GitHub ingestion is **poll-based**, not webhook-based, to keep control over rate limits and estate scoping.
+GitHub ingestion is **poll-based**, not webhook-based, to keep control over
+rate limits and estate scoping.
 
 A Dramatiq actor (synchronous wrapper around async code):
 
@@ -362,7 +382,8 @@ async def _ingest_github_repo_async(repo_external_id: str) -> None:
 
 ```
 
-You can schedule `ingest_github_repo` via cron, another orchestrator, or a simple periodic loop actor.
+You can schedule `ingest_github_repo` via cron, another orchestrator, or a
+simple periodic loop actor.
 
 ### 5.3 Bronze persistence service
 
@@ -439,9 +460,10 @@ async def persist_raw_event(
 
 ```
 
-This function enforces idempotent Bronze ingestion and hides SQLAlchemy details from callers.
+This function enforces idempotent Bronze ingestion and hides SQLAlchemy details
+from callers.
 
----
+______________________________________________________________________
 
 ## 6. Silver layer design
 
@@ -490,11 +512,14 @@ class Commit(Base):
 
 ```
 
-Use separate `Base` classes for Bronze and Silver if you want to keep them physically separated (`bronze.models.Base`, `silver.models.Base`), but sharing an engine is fine.
+Use separate `Base` classes for Bronze and Silver if you want to keep them
+physically separated (`bronze.models.Base`, `silver.models.Base`), but sharing
+an engine is fine.
 
 ### 6.2 Event routing and transformation
 
-The fundamental pattern: map each `raw_events.event_type` to a **transformer** function that:
+The fundamental pattern: map each `raw_events.event_type` to a **transformer**
+function that:
 
 - loads the Bronze payload,
 - performs **pure, deterministic mapping** (preferably into msgspec structs),
@@ -646,18 +671,22 @@ async def _transform_events(raw_event_ids: Sequence[int]) -> None:
 
 For large backfills, you probably want a **pull-based transform** as well:
 
-- a periodic actor that selects pending events (`transform_state = 0`) in batches and passes them into `_transform_events`.
+- a periodic actor that selects pending events (`transform_state = 0`) in
+  batches and passes them into `_transform_events`.
 
-This helps when Bronze ingestion is bulk-loaded, rather than one-at-a-time via `persist_raw_event`.
+This helps when Bronze ingestion is bulk-loaded, rather than one-at-a-time via
+`persist_raw_event`.
 
----
+______________________________________________________________________
 
 ## 7. msgspec schemas and event normalisation
 
 You will have three levels of structure:
 
-1. **Provider payloads** – whatever GitHub/Concordat send. These live as plain `dict[str, Any]` in `raw_events.payload`.
-2. **Bronze-normalised structs** – minimal `msgspec.Struct` types that adapt provider differences but still reflect “event-level” granularity.
+1. **Provider payloads** – whatever GitHub/Concordat send. These live as plain
+   `dict[str, Any]` in `raw_events.payload`.
+2. **Bronze-normalised structs** – minimal `msgspec.Struct` types that adapt
+   provider differences but still reflect “event-level” granularity.
 3. **Silver entities** – ORM tables representing long-lived objects.
 
 Example for a pull request:
@@ -696,15 +725,18 @@ await persist_raw_event(
 
 ```
 
-In Silver, you use `msgspec.convert(raw.payload, GitHubPullRequestEvent)` to reconstruct the typed struct and map it to `PullRequest` rows.
+In Silver, you use `msgspec.convert(raw.payload, GitHubPullRequestEvent)` to
+reconstruct the typed struct and map it to `PullRequest` rows.
 
 This gives you:
 
 - strong typing in transform code,
 - stable Bronze storage (just JSONB),
-- easy schema evolution: when you add fields to `GitHubPullRequestEvent`, old events continue to decode, as long as you mark new fields optional or with defaults.
+- easy schema evolution: when you add fields to `GitHubPullRequestEvent`, old
+  events continue to decode, as long as you mark new fields optional or with
+  defaults.
 
----
+______________________________________________________________________
 
 ## 8. Tiered testing strategy
 
@@ -712,7 +744,8 @@ This gives you:
 
 Scope:
 
-- Pure functions: dedupe key generation, offset management, mapping logic (msgspec struct → ORM object).
+- Pure functions: dedupe key generation, offset management, mapping logic
+  (msgspec struct → ORM object).
 - Transformers with **fake sessions** or small in-memory dbs.
 
 Example: test the commit transformer with a stub session:
@@ -747,7 +780,8 @@ async def test_transform_github_commit_creates_repo_and_commit(async_session):
 
 ```
 
-Here `async_session` is a fixture that creates an ephemeral Postgres schema (or uses SQLite in memory if you’re happy with the limitations).
+Here `async_session` is a fixture that creates an ephemeral Postgres schema (or
+uses SQLite in memory if you’re happy with the limitations).
 
 ### 8.2 Service / component tests
 
@@ -848,15 +882,18 @@ async def assert_commit(async_session):
 
 ```
 
-The BDD layer is where you exercise the **whole data path** end-to-end, and explicitly encode behaviours like idempotency and error handling.
+The BDD layer is where you exercise the **whole data path** end-to-end, and
+explicitly encode behaviours like idempotency and error handling.
 
----
+______________________________________________________________________
 
 ## 9. Error handling and observability
 
 A few practical constraints you’ll want to bake into the design up front:
 
-- **Idempotency:** every transformer must be safe to run many times over the same events. Use primary keys anchored in provider ids (`sha`, PR number + repo, GitHub node id) and “upsert, don’t insert blindly”.
+- **Idempotency:** every transformer must be safe to run many times over the
+  same events. Use primary keys anchored in provider ids (`sha`, PR number +
+  repo, GitHub node id) and “upsert, don’t insert blindly”.
 - **Reprocessing:** you can safely re-run transformations over a time window by:
 
 - setting `transform_state` back to `0` for selected events, and
@@ -864,23 +901,28 @@ A few practical constraints you’ll want to bake into the design up front:
 - **Telemetry:**
 
 - Bronze: log ingestion failures, event sizes, and dedupe rates.
-- Silver: log transform failures per event type, and maintain a simple `transform_failures` dashboard.
+- Silver: log transform failures per event type, and maintain a simple
+  `transform_failures` dashboard.
 - **Back-pressure:** if Silver can’t keep up, you can:
 
 - slow down pollers (GitHub),
 - disable ingestion for some repos,
 - or scale Dramatiq workers horizontally.
 
----
+______________________________________________________________________
 
 ## 10. How this ties back to the roadmap
 
 This design gives you concrete implementations for:
 
-- **Task 1.2.a – Bronze raw event store**: `raw_events` schema, `github_ingestion_offsets`, `persist_raw_event`.
-- **Task 1.2.b – Silver entity tables**: `repositories`, `commits`, `pull_requests`, `issues`, `documentation_changes`, plus transformers.
-- **Task 1.3 – GitHub ingestion service**: Granian/Falcon API (for Concordat), async Dramatiq pollers for GitHub.
-- **Task 4.1 – Concordat CloudEvents ingestion**: `CloudEvent` msgspec struct and `/ingest/concordat` endpoint.
+- **Task 1.2.a – Bronze raw event store**: `raw_events` schema,
+  `github_ingestion_offsets`, `persist_raw_event`.
+- **Task 1.2.b – Silver entity tables**: `repositories`, `commits`,
+  `pull_requests`, `issues`, `documentation_changes`, plus transformers.
+- **Task 1.3 – GitHub ingestion service**: Granian/Falcon API (for Concordat),
+  async Dramatiq pollers for GitHub.
+- **Task 4.1 – Concordat CloudEvents ingestion**: `CloudEvent` msgspec struct
+  and `/ingest/concordat` endpoint.
 
 From here, plugging in Gold/reporting is mostly a matter of:
 
@@ -888,4 +930,5 @@ From here, plugging in Gold/reporting is mostly a matter of:
 - building evidence bundles (again via msgspec),
 - and calling the status model.
 
-Bronze and Silver then stay boring, deterministic plumbing you can trust while you pile the clever stuff on top.
+Bronze and Silver then stay boring, deterministic plumbing you can trust while
+you pile the clever stuff on top.

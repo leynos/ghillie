@@ -1,0 +1,139 @@
+%YAML 1.2
+---
+version: 1
+programmes:
+  - key: df12
+    name: df12 platform
+    description: >-
+      df12 is the delivery foundation across the estate, shaping shared
+      practices and reusable components.
+    projects:
+      - wildside
+      - df12-foundations
+projects:
+  - key: wildside
+    name: Wildside
+    description: >-
+      Transactional streaming platform composed of multiple cooperating
+      services.
+    programme: df12
+    documentation_paths:
+      - docs/roadmap.md
+      - docs/adr/
+    noise:
+      ignore_authors:
+        - dependabot[bot]
+        - renovate[bot]
+      ignore_labels:
+        - chore/deps
+        - ci/noisy
+      ignore_paths:
+        - docs/generated/**
+        - build/**
+      ignore_title_prefixes:
+        - "chore:"
+    status:
+      summarise_dependency_prs: false
+      emphasise_documentation: true
+      prefer_long_form: false
+    components:
+      - key: wildside-core
+        name: Wildside Core Service
+        type: service
+        lifecycle: active
+        description: >-
+          User-facing API and orchestration layer for Wildside clients.
+        repository:
+          owner: leynos
+          name: wildside
+          default_branch: main
+        depends_on:
+          - component: wildside-engine
+            kind: runtime
+            rationale: Engine executes domain flows.
+          - component: ortho-config
+            kind: runtime
+            rationale: Shared configuration service.
+          - component: pg-embedded-setup-unpriv
+            kind: dev
+            rationale: Local database bootstrap for developers.
+          - component: rstest-bdd
+            kind: dev
+            rationale: Behavioural testing support for service flows.
+        emits_events_to:
+          - component: wildside-mockup
+            rationale: Mock UI consumes telemetry events.
+      - key: wildside-engine
+        name: Wildside Engine
+        type: service
+        lifecycle: active
+        description: >-
+          Deterministic execution engine backing the Wildside API.
+        repository:
+          owner: leynos
+          name: wildside-engine
+          default_branch: main
+        blocked_by:
+          - component: ortho-config
+            rationale: Requires config releases for rollout.
+      - key: wildside-mockup
+        name: Wildside Mockup
+        type: ui
+        lifecycle: active
+        description: >-
+          Lightweight UI for design validation and user research.
+        repository:
+          owner: leynos
+          name: wildside-mockup
+          default_branch: main
+      - key: wildside-ingestion
+        name: Wildside Ingestion Pipeline
+        type: data-pipeline
+        lifecycle: planned
+        description: >-
+          Planned component to land upstream telemetry into the estate.
+  - key: df12-foundations
+    name: df12 Shared Foundations
+    description: >-
+      Shared building blocks reused across df12 projects.
+    programme: df12
+    documentation_paths:
+      - docs/adr/
+    noise:
+      ignore_authors:
+        - dependabot[bot]
+      ignore_labels:
+        - chore/deps
+      ignore_paths:
+        - vendor/**
+      ignore_title_prefixes:
+        - "chore:"
+    status:
+      summarise_dependency_prs: true
+      emphasise_documentation: false
+      prefer_long_form: true
+    components:
+      - key: ortho-config
+        name: Ortho Config
+        type: library
+        lifecycle: active
+        repository:
+          owner: leynos
+          name: ortho-config
+          default_branch: main
+      - key: rstest-bdd
+        name: rstest-bdd
+        type: library
+        lifecycle: active
+        repository:
+          owner: leynos
+          name: rstest-bdd
+          default_branch: main
+      - key: pg-embedded-setup-unpriv
+        name: pg-embedded-setup-unpriv
+        type: library
+        lifecycle: active
+        repository:
+          owner: leynos
+          name: pg-embedded-setup-unpriv
+          default_branch: main
