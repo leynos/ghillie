@@ -15,6 +15,15 @@ if typ.TYPE_CHECKING:
         Repository,
     )
 
+
+class EdgeContext(typ.NamedTuple):
+    """Context for validating a single component edge."""
+
+    component_key: str
+    project_key: str
+    known_components: set[str]
+    issues: list[str]
+
 SLUG_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 REPO_SEGMENT_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
 
@@ -156,38 +165,30 @@ def _validate_relationships(
         ("blocked_by", component.blocked_by),
         ("emits_events_to", component.emits_events_to),
     ):
+        context = EdgeContext(
+            component_key=component_key,
+            project_key=project_key,
+            known_components=known_components,
+            issues=issues,
+        )
         for edge in edges:
-            _validate_edge(
-                component_key,
-                project_key,
-                edge_list_name,
-                edge,
-                known_components,
-                issues,
-            )
+            _validate_edge(context, edge_list_name, edge)
 
 
-def _validate_edge(
-    component_key: str,
-    project_key: str,
-    edge_name: str,
-    edge: ComponentLink,
-    known_components: set[str],
-    issues: list[str],
-) -> None:
-    if edge.component == component_key:
+def _validate_edge(context: EdgeContext, edge_name: str, edge: ComponentLink) -> None:
+    if edge.component == context.component_key:
         message = (
-            f"component {component_key} in project {project_key} cannot reference "
-            f"itself via {edge_name}"
+            f"component {context.component_key} in project {context.project_key} "
+            f"cannot reference itself via {edge_name}"
         )
-        issues.append(message)
+        context.issues.append(message)
 
-    if edge.component not in known_components:
+    if edge.component not in context.known_components:
         message = (
-            f"component {component_key} in project {project_key} references missing "
-            f"component '{edge.component}' via {edge_name}"
+            f"component {context.component_key} in project {context.project_key} "
+            f"references missing component '{edge.component}' via {edge_name}"
         )
-        issues.append(message)
+        context.issues.append(message)
 
 
 def _validate_programme_membership(
