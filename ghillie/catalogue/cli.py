@@ -9,6 +9,7 @@ import msgspec
 
 from .loader import lint_catalogue
 from .schema import write_catalogue_schema
+from .validation import CatalogueValidationError
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -30,7 +31,16 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     catalogue_path: Path = args.catalogue
-    catalogue = lint_catalogue(catalogue_path)
+    try:
+        catalogue = lint_catalogue(catalogue_path)
+    except CatalogueValidationError as exc:  # pragma: no cover - exercised in CLI tests
+        print(f"Catalogue validation failed for {catalogue_path}:")
+        if hasattr(exc, "issues"):
+            for issue in exc.issues:
+                print(f"  - {issue}")
+        else:
+            print(f"  - {exc}")
+        return 1
 
     if args.schema_out:
         write_catalogue_schema(args.schema_out)

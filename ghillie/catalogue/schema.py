@@ -18,7 +18,7 @@ SCHEMA_ID = "https://ghillie.example/schemas/catalogue.json"
 def build_catalogue_schema() -> dict[str, typ.Any]:
     """Return the JSON Schema describing the catalogue structures."""
     schema = msgspec.json.schema(Catalogue)
-    schema.setdefault("$id", SCHEMA_ID)
+    schema["$id"] = SCHEMA_ID
     return schema
 
 

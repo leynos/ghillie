@@ -1,17 +1,17 @@
 # Ghillie proposal
 
-Here’s a design for an “estate-level” status system that actually understands
-what’s going on, not just counts commits.
+This proposal outlines an “estate-level” status system that actually
+understands what’s going on, not just counts commits.
 
-I’ll go top‑down, then zoom into the bits that matter: repo relationships,
-multi-repo projects, previous status awareness, and where the giant context
-windows actually help.
+The narrative works top‑down, then zooms into the bits that matter: repo
+relationships, multi-repo projects, previous status awareness, and where the
+giant context windows actually help.
 
 ______________________________________________________________________
 
 ## 1. High‑level picture
 
-Conceptually, you want three layers:
+Conceptually, the system uses three layers:
 
 1. **Ingest & normalise**
 Pull structured “events” from GitHub for each repo:
@@ -38,8 +38,8 @@ Pull structured “events” from GitHub for each repo:
 - Per‑project summary across multiple repos + planned components.
 - Optional “estate overview” (top risks, big movements).
 
-LLMs sit in layer 3, but you get most of the value from getting layers 1 and 2
-right.
+LLMs sit in layer 3, but the system derives most of the value from getting
+layers 1 and 2 right.
 
 ______________________________________________________________________
 
@@ -109,7 +109,7 @@ reports
 
 ```
 
-You also want:
+The system also want:
 
 ```text
 report_coverage
@@ -118,15 +118,15 @@ report_coverage
 
 ```
 
-So you can tell which events have already been “consumed” into a report.
+So the system can tell which events have already been “consumed” into a report.
 
 ______________________________________________________________________
 
 ## 3. Configuring relationships between repositories
 
-You explicitly asked for a mechanism to define relationships where manifests
-don’t help. I’d treat this as a separate _catalogue_ config, not an
-afterthought.
+The system explicitly asked for a mechanism to define relationships where
+manifests don’t help. This design would treat this as a separate _catalogue_
+config, not an afterthought.
 
 ### 3.1 A “catalogue” config repo
 
@@ -168,21 +168,22 @@ project:
 
 ```
 
-For a multi-repo project like Episodic, you just list all component→repo
+For a multi-repo project like Episodic, the system just list all component→repo
 mappings, plus any planned components with `has_repo: false`.
 
-A small daemon in your system watches this config repo:
+A small daemon in the system watches this config repo:
 
 - On changes, it re-syncs the DB (`projects`, `project_components`,
   `repositories`).
-- It also lets you define overrides for when manifests lie or are incomplete.
+- It also lets the system define overrides for when manifests lie or are
+  incomplete.
 
 ### 3.2 Auto‑inference, then override
 
-You can still infer relations from package manifests:
+The system can still infer relations from package manifests:
 
 - `pyproject.toml`, `Cargo.toml`, `package.json`, etc.
-- Dependencies that point to other repos in your GitHub org (e.g.
+- Dependencies that point to other repos in the GitHub org (e.g.
   `git+ssh://git@github.com/org/mxd-api.git`).
 
 Use those to build a _suggested_ dependency graph. Then use the catalogue YAML
@@ -239,11 +240,12 @@ For each repo, since `last_ingested_at`:
 - Minimal diff summary: e.g. new headings added/removed, changed sections.
 - **Previous status reports**
 
-- If you commit generated reports back into `STATUS.md` or similar, you can
-  ingest them too, but you probably don’t need to; you already have them in
-  your DB.
+- If the system commit generated reports back into `STATUS.md` or similar, the
+  system can
+  ingest them too, but the system probably don’t need to; the system already
+  have them in the DB.
 
-Implementation‑wise, you’d probably use:
+Implementation‑wise, the system’d probably use:
 
 - GitHub GraphQL for efficiency (one query to fetch PRs, issues, etc.)
 - REST for diff/patch where needed.
@@ -252,7 +254,7 @@ Each item becomes an `events` row with a `type` and `payload`.
 
 ### 4.3 Noise control
 
-You _really_ want this configurable:
+The system _really_ want this configurable:
 
 - Ignore PRs with labels like `dependencies`, `ci`, `chore`.
 - Ignore issues with `triage` labels if still untriaged.
@@ -281,26 +283,26 @@ When querying `events`, filter by:
 
 Then mark included events as covered in `report_coverage`.
 
-This guarantees you don’t re‑use the same raw events in two reports. That alone
-avoids most repetition.
+This guarantees the system don’t re‑use the same raw events in two reports.
+That alone avoids most repetition.
 
 ### 5.2 Directional context
 
-To give continuity, you also include:
+To give continuity, the system also include:
 
 - The **last 1–2 reports** for that repo/project as context for the LLM.
 
 So the prompt gets:
 
-- “Here’s what we previously said.”
+- “Here’s what the design previously said.”
 - “Here are the _new_ events.”
 
 Instruction to the model: _describe the new developments relative to the prior
 context; do not repeat items that haven’t materially changed, except to note
 continued progress or unchanged risks._
 
-You can also ask the model to emit a structured machine summary alongside the
-prose, e.g.:
+The system can also ask the model to emit a structured machine summary
+alongside the prose, e.g.:
 
 ```json
 {
@@ -339,8 +341,8 @@ For each repo + time window, build an “evidence bundle”, e.g.:
 Compress noisy details before hitting the model. For instance:
 
 - Instead of full diffs, give: “Modified files: [list of paths]” and a very
-  short summarised description of changes (which you can get via a first small
-  LLM call if you like).
+  short summarised description of changes (which the system can get via a first
+  small LLM call if the system like).
 
 ### 6.2 Prompt shape (conceptual)
 
@@ -353,7 +355,7 @@ In pseudo‑JSON for the responses API:
   "input": [
     {
       "role": "system",
-      "content": "You are generating concise engineering status reports..."
+      "content": "The system are generating concise engineering status reports..."
     },
     {
       "role": "user",
@@ -387,14 +389,14 @@ In pseudo‑JSON for the responses API:
 ```
 <!-- markdownlint-enable MD013 -->
 
-You then render `summary/highlights/risks` as human Markdown, and store the
-full JSON in `machine_summary`.
+The system then render `summary/highlights/risks` as human Markdown, and store
+the full JSON in `machine_summary`.
 
 ______________________________________________________________________
 
 ## 7. Project‑level (Wildside, Limela, mxd, Episodic, etc.)
 
-For a logical project, you want the model to reason over:
+For a logical project, the system wants the model to reason over:
 
 - Repo‑level reports for all linked repos.
 - Component graph (including planned components).
@@ -413,7 +415,7 @@ For project `wildside`:
 - `wildside-ui` → repo `wildside/admin-ui`, status: at_risk
 - `wildside-ingestion` → planned, no repo yet
 - Latest repo‑level machine summaries for all components with repos.
-- Any component‑level annotations for planned components (which you might
+- Any component‑level annotations for planned components (which the system might
   maintain manually in the catalogue or in a separate “wildside-meta” repo).
 
 Then ask the model for:
@@ -431,18 +433,18 @@ Then ask the model for:
 
 ### 7.2 Handling components without repos
 
-You model them exactly like real components, just with:
+The system model them exactly like real components, just with:
 
 - `has_repo = false`
 - `external_links` to whatever artefacts exist: RFCS, initial tickets,
-  spreadsheets if you’re unlucky.
+  spreadsheets if the system is unlucky.
 
 For these, events won’t come from GitHub; at first they’ll be static. Two
 options:
 
 1. **Manual updates**
-For now, you let humans attach a short free‑text status to such components in
-the catalogue. The system ingests that as synthetic “events”.
+For now, the system let humans attach a short free‑text status to such
+components in the catalogue. The system ingests that as synthetic “events”.
 2. **Later: multi‑source ingestion**
 Extend the ingestion to e.g. JIRA/YouTrack/whatever to pull tickets for those
 components. The system still treats them as events; they just don’t belong to a
@@ -455,14 +457,14 @@ ______________________________________________________________________
 
 ## 8. Estate‑level overview
 
-Once you have repo‑ and project‑level structured summaries, an estate-level
-report becomes cheap:
+Once the system have repo‑ and project‑level structured summaries, an
+estate-level report becomes cheap:
 
 - Gather:
 
 - Project statuses (with `status` and top risks).
 - Maybe a small slice of metrics (PR throughput, lead time, incident count per
-  project if you track that elsewhere).
+  project if the system track that elsewhere).
 
 Push everything into the big context model and ask for:
 
@@ -471,14 +473,14 @@ Push everything into the big context model and ask for:
 - Projects drifting vs roadmap.
 - Emerging themes (e.g. too many teams blocked on one core library).
 
-Because you already have structured machine summaries, the estate call doesn’t
-need to read raw GitHub data at all.
+Because the system already have structured machine summaries, the estate call
+doesn’t need to read raw GitHub data at all.
 
 ______________________________________________________________________
 
 ## 9. GPT‑5.1 vs Gemini 3 Pro via OpenRouter
 
-You listed:
+The system listed:
 
 - **GPT‑5.1‑thinking (responses API, 400k tokens)**
 - **Gemini 3 Pro Preview via OpenRouter (1.05M tokens)**
@@ -493,19 +495,19 @@ A few points to keep it honest:
 - Several prior reports
 - A nice chunk of structured event data
 - 1.05M is fun for “stuff the universe in and see what happens”, but at that
-  scale you often hit:
+  scale the system often hit:
 
 - Higher cost
 - Higher latency
 - More variability in what the model actually pays attention to
 
-Given you’re _already_ building a structured event + summary layer, you don’t
-need million‑token contexts. A hierarchical approach scales much better than
-“just shove everything in, YOLO”.
+Given the system is _already_ building a structured event + summary layer, the
+system don’t need million‑token contexts. A hierarchical approach scales much
+better than “just shove everything in, YOLO”.
 
 ### 9.2 Model abstraction
 
-I’d design a simple abstraction:
+This design would design a simple abstraction:
 
 ```python
 class StatusModel(Protocol):
@@ -523,7 +525,7 @@ With two implementations:
 Both take the same structured `Evidence` objects; they differ only in the
 backend call and max context.
 
-That keeps your design from ossifying around one vendor, and it lets you
+That keeps the design from ossifying around one vendor, and it lets the system
 benchmark:
 
 - Quality of repo‑level summaries
@@ -532,10 +534,10 @@ benchmark:
 
 ### 9.3 Security/compliance reality check
 
-Given the kind of org you work for:
+Given the kind of org the system work for:
 
-Sending your entire internal GitHub estate to _any_ external model needs
-serious scrutiny:
+Sending the entire internal GitHub estate to _any_ external model needs serious
+scrutiny:
 
 - OpenAI direct vs OpenRouter proxy vs in‑house deployment matters for:
 
@@ -546,11 +548,11 @@ serious scrutiny:
 Architecturally:
 
 - Encapsulate the LLM calls behind a narrow interface (above).
-- Make the infra pluggable so you can swap:
+- Make the infra pluggable so the system can swap:
 
 - Cloud LLM → on‑prem / VPC deployment
 - One vendor → another
-- Keep as much summarisation as possible within your perimeter (e.g. first
+- Keep as much summarisation as possible within the perimeter (e.g. first
   pass: reduce raw events down before calling any external model).
 
 ______________________________________________________________________
@@ -594,7 +596,7 @@ Very roughly:
 
 - A “status” repo per estate (e.g. `status/2025-11-20.md`).
 - Optionally a `STATUS.md` in each project meta repo.
-- Also pushes to Slack / email / Teams if you fancy.
+- Also pushes to Slack / email / Teams if the system fancy.
 - **Service C – UI & API (optional)**
 
 - Simple web UI showing:
@@ -607,14 +609,16 @@ ______________________________________________________________________
 
 ## 11. Where the big contexts actually help
 
-- **Repo‑level:** you don’t need huge context here; you’re looking at <= 1 week
+- **Repo‑level:** the system don’t need huge context here; the system is
+  looking at <= 1 week
   of events.
 - **Project‑level:** context window matters if:
 
 - The project spans many repos, _and_
-- You want the model to consider several weeks of history to detect trends.
+- The system wants the model to consider several weeks of history to detect
+  trends.
 - **Estate‑level:** big contexts shine for an “annual review”‑style report
-  where you feed in:
+  where the system feed in:
 
 - 6–12 months of project summaries
 - Organisational / roadmap docs
@@ -626,7 +630,7 @@ GPT‑5.1‑thinking and 400k tokens is already comfortably overpowered.
 ______________________________________________________________________
 
 Bottom line: treat this as a data+domain modelling problem with an LLM bolted
-on the front, not an LLM problem with some GitHub seasoning. Once you have
-clean events and a clear model of Wildside/Limela/mxd/Episodic as _projects_
-with explicit components and dependencies, the choice of GPT‑5.1 vs Gemini
-becomes an implementation detail rather than an architectural constraint.
+on the front, not an LLM problem with some GitHub seasoning. Once the system
+have clean events and a clear model of Wildside/Limela/mxd/Episodic as
+_projects_ with explicit components and dependencies, the choice of GPT‑5.1 vs
+Gemini becomes an implementation detail rather than an architectural constraint.

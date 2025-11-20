@@ -163,11 +163,10 @@ def _validate_relationships(
     state: ValidationState,
 ) -> None:
     if state.known_components is None:
-        state.issues.append(
-            "internal error: known_components not populated before relationship "
-            "validation"
+        message = (
+            "internal error: known_components not set before relationship validation"
         )
-        return
+        raise RuntimeError(message)
 
     for edge_list_name, edges in (
         ("depends_on", component.depends_on),

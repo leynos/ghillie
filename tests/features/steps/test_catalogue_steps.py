@@ -12,7 +12,12 @@ import msgspec
 import pytest
 from pytest_bdd import given, scenario, then, when
 
-from ghillie.catalogue import Catalogue, lint_catalogue, write_catalogue_schema
+from ghillie.catalogue import (
+    Catalogue,
+    CatalogueValidationError,
+    lint_catalogue,
+    write_catalogue_schema,
+)
 
 
 class StepContext(typ.TypedDict, total=False):
@@ -20,6 +25,7 @@ class StepContext(typ.TypedDict, total=False):
 
     catalogue_path: Path
     catalogue: Catalogue
+    error: str
 
 
 @scenario(
@@ -28,6 +34,22 @@ class StepContext(typ.TypedDict, total=False):
 )
 def test_catalogue_linting() -> None:
     """Behavioural regression for catalogue linting."""
+
+
+@scenario(
+    "../catalogue_ingestion.feature",
+    "Duplicate component keys are rejected",
+)
+def test_duplicate_component_bdd() -> None:
+    """Duplicate component keys should fail validation."""
+
+
+@scenario(
+    "../catalogue_ingestion.feature",
+    "Invalid slug format is rejected",
+)
+def test_invalid_slug_bdd() -> None:
+    """Invalid slug formats should fail validation."""
 
 
 @pytest.fixture
@@ -43,11 +65,36 @@ def catalogue_example(context: StepContext) -> Path:
     return path
 
 
+@given('the catalogue example at "tests/fixtures/catalogues/duplicate-component.yaml"')
+def duplicate_catalogue_example(context: StepContext) -> Path:
+    path = Path("tests/fixtures/catalogues/duplicate-component.yaml")
+    assert path.exists(), "Expected duplicate component fixture to exist"
+    context["catalogue_path"] = path
+    return path
+
+
+@given('the catalogue example at "tests/fixtures/catalogues/invalid-slug.yaml"')
+def invalid_slug_catalogue_example(context: StepContext) -> Path:
+    path = Path("tests/fixtures/catalogues/invalid-slug.yaml")
+    assert path.exists(), "Expected invalid slug fixture to exist"
+    context["catalogue_path"] = path
+    return path
+
+
 @when("I lint the catalogue with the built in validator")
 def lint_catalogue_file(context: StepContext) -> None:
     assert "catalogue_path" in context
     catalogue_path = context["catalogue_path"]
     context["catalogue"] = lint_catalogue(catalogue_path)
+
+
+@when("I lint the catalogue expecting failure")
+def lint_catalogue_failure(context: StepContext) -> None:
+    assert "catalogue_path" in context
+    catalogue_path = context["catalogue_path"]
+    with pytest.raises(CatalogueValidationError) as excinfo:
+        lint_catalogue(catalogue_path)
+    context["error"] = str(excinfo.value)
 
 
 @then(
@@ -115,3 +162,15 @@ def schema_validation(context: StepContext, tmp_path: Path) -> None:
             f"pajv rejected the catalogue: stdout={exc.stdout}\nstderr={exc.stderr}"
         )
         raise AssertionError(message) from exc
+
+
+@then('validation reports contain "duplicate component key"')
+def validation_reports_duplicate(context: StepContext) -> None:
+    assert "error" in context
+    assert "duplicate component key" in context["error"].lower()
+
+
+@then('validation reports contain "slug"')
+def validation_reports_slug(context: StepContext) -> None:
+    assert "error" in context
+    assert "slug" in context["error"].lower()

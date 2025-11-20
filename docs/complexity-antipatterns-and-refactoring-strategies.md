@@ -770,6 +770,15 @@ Thoughtfully apply these refactoring strategies to significantly reduce
 cognitive complexity, and to create codebases that are more understandable,
 maintainable, and adaptable to future changes.
 
+### 5.4 Key takeaways before concluding
+
+- Command and dispatcher patterns replace sprawling conditionals with cohesive,
+  testable units.
+- Declarative approaches and structural pattern matching lower cognitive load by
+  expressing intent directly.
+- Refactoring toward clearer abstractions prepares teams for the broader
+  conclusions that follow.
+
 ## 6. Conclusion: towards a more maintainable and understandable codebase
 
 Managing software complexity, particularly the cognitive load it imposes on

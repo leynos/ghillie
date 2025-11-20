@@ -3,7 +3,11 @@
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 import typing as typ
+
+import msgspec
 
 if typ.TYPE_CHECKING:
     from pathlib import Path
@@ -15,6 +19,7 @@ from ghillie.catalogue import (
     CatalogueValidationError,
     build_catalogue_schema,
     lint_catalogue,
+    write_catalogue_schema,
 )
 
 
@@ -53,6 +58,43 @@ projects:
     assert "alpha-worker" in str(excinfo.value)
 
 
+def test_lint_catalogue_rejects_duplicate_component_keys(tmp_path: Path) -> None:
+    catalogue_file = tmp_path / "duplicate-components.yaml"
+    catalogue_file.write_text(
+        """
+version: 1
+projects:
+  - key: beta
+    name: Beta
+    components:
+      - key: beta-api
+        name: Beta API
+        repository:
+          owner: org
+          name: beta
+      - key: beta-api
+        name: Beta API Duplicate
+        repository:
+          owner: org
+          name: beta-dup
+    noise:
+      ignore_authors: []
+      ignore_labels: []
+      ignore_paths: []
+    status:
+      summarise_dependency_prs: false
+        """,
+        encoding="utf-8",
+    )
+
+    with pytest.raises(CatalogueValidationError) as excinfo:
+        lint_catalogue(catalogue_file)
+
+    message = str(excinfo.value).lower()
+    assert "duplicate component key" in message
+    assert "beta-api" in message
+
+
 def test_yaml_loader_respects_yaml_1_2(tmp_path: Path) -> None:
     catalogue_file = tmp_path / "yaml-12.yaml"
     catalogue_file.write_text(
@@ -85,6 +127,48 @@ projects:
     assert repository.default_branch == "on"
 
 
+def test_yaml_loader_invalid_yaml_syntax(tmp_path: Path) -> None:
+    catalogue_file = tmp_path / "invalid.yaml"
+    catalogue_file.write_text(
+        """
+version: 1
+projects:
+  - key: beta
+    name: Beta
+    components:
+      - key: beta-api
+        name: Beta API
+        repository:
+          owner: org
+          name: beta
+          default_branch: on
+    noise:
+      ignore_authors: []
+      ignore_labels: []
+      ignore_paths: []
+    status:
+      summarise_dependency_prs: true
+      - invalid
+        """,
+        encoding="utf-8",
+    )
+
+    with pytest.raises(CatalogueValidationError) as excinfo:
+        lint_catalogue(catalogue_file)
+
+    assert "failed to parse" in str(excinfo.value)
+
+
+def test_yaml_loader_empty_file(tmp_path: Path) -> None:
+    catalogue_file = tmp_path / "empty.yaml"
+    catalogue_file.write_text("", encoding="utf-8")
+
+    with pytest.raises(CatalogueValidationError) as excinfo:
+        lint_catalogue(catalogue_file)
+
+    assert "empty" in str(excinfo.value)
+
+
 def test_generated_schema_mentions_projects() -> None:
     schema = build_catalogue_schema()
 
@@ -92,6 +176,34 @@ def test_generated_schema_mentions_projects() -> None:
     assert "$id" in schema
     catalogue_properties = schema["$defs"]["Catalogue"]["properties"]
     assert "projects" in catalogue_properties
+
+
+def test_schema_id_assigned() -> None:
+    schema = build_catalogue_schema()
+
+    assert schema["$id"] == "https://ghillie.example/schemas/catalogue.json"
+
+
+def test_schema_validates_simple_catalogue(tmp_path: Path) -> None:
+    schema_path = tmp_path / "schema.json"
+    write_catalogue_schema(schema_path)
+
+    catalogue = Catalogue(version=1, projects=[], programmes=[])
+    data_path = tmp_path / "cat.json"
+    data_path.write_bytes(msgspec.json.encode(catalogue))
+
+    pajv_path = shutil.which("pajv")
+    if pajv_path is None:
+        pytest.skip("pajv not installed")
+
+    result = subprocess.run(  # noqa: S603
+        [pajv_path, "-s", str(schema_path), "-d", str(data_path)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_lint_catalogue_returns_catalogue(tmp_path: Path) -> None:
@@ -123,3 +235,33 @@ projects:
 
     assert isinstance(catalogue, Catalogue)
     assert catalogue.projects[0].noise.ignore_labels == ["chore/deps"]
+
+
+def test_lint_catalogue_rejects_unknown_programme(tmp_path: Path) -> None:
+    catalogue_file = tmp_path / "unknown-programme.yaml"
+    catalogue_file.write_text(
+        """
+version: 1
+projects:
+  - key: delta
+    name: Delta
+    programme: missing-programme
+    components:
+      - key: delta-api
+        name: Delta API
+    noise:
+      ignore_authors: []
+      ignore_labels: []
+      ignore_paths: []
+    status:
+      summarise_dependency_prs: false
+        """,
+        encoding="utf-8",
+    )
+
+    with pytest.raises(CatalogueValidationError) as excinfo:
+        lint_catalogue(catalogue_file)
+
+    message = str(excinfo.value)
+    assert "unknown programme" in message
+    assert "missing-programme" in message
