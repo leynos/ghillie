@@ -1,0 +1,15 @@
+%YAML 1.2
+---
+version: 1
+projects:
+  - key: BADSlug
+    name: Bad Slug Project
+    components:
+      - key: component
+        name: Component
+    noise:
+      ignore_authors: []
+      ignore_labels: []
+      ignore_paths: []
+    status:
+      summarise_dependency_prs: false

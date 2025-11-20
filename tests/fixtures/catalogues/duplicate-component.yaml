@@ -1,0 +1,23 @@
+%YAML 1.2
+---
+version: 1
+projects:
+  - key: beta
+    name: Beta
+    components:
+      - key: beta-api
+        name: Beta API
+        repository:
+          owner: org
+          name: beta
+      - key: beta-api
+        name: Beta API Duplicate
+        repository:
+          owner: org
+          name: beta-dup
+    noise:
+      ignore_authors: []
+      ignore_labels: []
+      ignore_paths: []
+    status:
+      summarise_dependency_prs: false

@@ -85,9 +85,9 @@ Core Principles of Calculation:
 Cognitive Complexity is incremented based on three main rules[^8]:
 
 1. **Breaks in Linear Flow:** Each time the code breaks the normal linear
-   reading flow (e.g., loops, conditionals like
-   `if`/`else`/`switch`, `try-catch` blocks, jumps to labels, and sequences of
-   logical operators like `&&` and `||`), a penalty is applied.
+   reading flow (e.g., loops, conditionals like `if`/`else`/`switch`,
+   `try-catch` blocks, jumps to labels, and sequences of logical operators like
+   `&&` and `||`), a penalty is applied.
 
 2. **Nesting:** Each level of nesting of these flow-breaking structures adds an
    additional penalty. This is because deeper nesting makes it harder to keep
@@ -769,6 +769,15 @@ effective for refactoring state machines implemented with complex
 Thoughtfully apply these refactoring strategies to significantly reduce
 cognitive complexity, and to create codebases that are more understandable,
 maintainable, and adaptable to future changes.
+
+### 5.D Key takeaways before concluding
+
+- Command and dispatcher patterns replace sprawling conditionals with cohesive,
+  testable units.
+- Declarative approaches and structural pattern matching lower cognitive load by
+  expressing intent directly.
+- Refactoring towards clearer abstractions prepares teams for the broader
+  conclusions that follow.
 
 ## 6. Conclusion: towards a more maintainable and understandable codebase
 
