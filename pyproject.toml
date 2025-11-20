@@ -90,6 +90,12 @@ datetime = "dt"
 "msgspec.json" = "msjson"
 typing = "typ"
 
+[tool.ruff.lint.mccabe]
+max-complexity = 9
+
+[tool.ruff.lint.pylint]
+max-args = 4
+
 [tool.pytest.ini_options]
 # Tests automatically killed after seconds elapsed
 timeout = 30
