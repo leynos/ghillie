@@ -27,7 +27,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
 
       - name: Install yaml schema validator
-        run: bun install -j pajv
+        run: bun install -g pajv
 
       - name: Install CLI tools
         run: |
