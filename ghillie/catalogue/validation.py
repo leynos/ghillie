@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import re
 import typing as typ
 
@@ -16,6 +17,17 @@ if typ.TYPE_CHECKING:
     )
 
 
+@dataclasses.dataclass(slots=True)
+class ValidationState:
+    """Mutable validation context shared across helper functions."""
+
+    project_index: dict[str, Project]
+    component_index: dict[str, tuple[str, Component]]
+    programme_index: dict[str, Programme]
+    issues: list[str]
+    known_components: set[str] | None = None
+
+
 class EdgeContext(typ.NamedTuple):
     """Context for validating a single component edge."""
 
@@ -23,6 +35,7 @@ class EdgeContext(typ.NamedTuple):
     project_key: str
     known_components: set[str]
     issues: list[str]
+
 
 SLUG_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 REPO_SEGMENT_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
@@ -40,101 +53,91 @@ class CatalogueValidationError(ValueError):
 
 def validate_catalogue(catalogue: Catalogue) -> Catalogue:
     """Validate a catalogue instance, returning it when all checks pass."""
-    issues: list[str] = []
-    project_index: dict[str, Project] = {}
-    component_index: dict[str, tuple[str, Component]] = {}
-    programme_index: dict[str, Programme] = {}
+    state = ValidationState(
+        project_index={},
+        component_index={},
+        programme_index={},
+        issues=[],
+    )
 
     if catalogue.version < 1:
-        issues.append("catalogue.version must be >= 1")
+        state.issues.append("catalogue.version must be >= 1")
 
     for programme in catalogue.programmes:
-        _validate_programme(programme, programme_index, issues)
+        _validate_programme(programme, state)
 
     for project in catalogue.projects:
-        _validate_project(
-            project,
-            project_index,
-            component_index,
-            programme_index,
-            issues,
-        )
+        _validate_project(project, state)
 
-    known_components = set(component_index)
-    for component_key, (project_key, component) in component_index.items():
-        _validate_relationships(
-            component_key, project_key, component, known_components, issues
-        )
+    state.known_components = set(state.component_index)
+    for component_key, (project_key, component) in state.component_index.items():
+        _validate_relationships(component_key, project_key, component, state)
 
-    _validate_programme_membership(catalogue.programmes, project_index, issues)
+    _validate_programme_membership(
+        catalogue.programmes, state.project_index, state.issues
+    )
 
-    if issues:
-        raise CatalogueValidationError(issues)
+    if state.issues:
+        raise CatalogueValidationError(state.issues)
 
     return catalogue
 
 
-def _validate_programme(
-    programme: Programme, programme_index: dict[str, Programme], issues: list[str]
-) -> None:
-    _validate_slug(programme.key, "programme.key", issues)
+def _validate_programme(programme: Programme, state: ValidationState) -> None:
+    _validate_slug(programme.key, "programme.key", state.issues)
 
-    if programme.key in programme_index:
-        issues.append(f"duplicate programme key '{programme.key}'")
+    if programme.key in state.programme_index:
+        state.issues.append(f"duplicate programme key '{programme.key}'")
     else:
-        programme_index[programme.key] = programme
+        state.programme_index[programme.key] = programme
 
     if not programme.name.strip():
-        issues.append(f"programme {programme.key} is missing a name")
+        state.issues.append(f"programme {programme.key} is missing a name")
 
 
 def _validate_project(
     project: Project,
-    project_index: dict[str, Project],
-    component_index: dict[str, tuple[str, Component]],
-    programme_index: dict[str, Programme],
-    issues: list[str],
+    state: ValidationState,
 ) -> None:
-    _validate_slug(project.key, "project.key", issues)
+    _validate_slug(project.key, "project.key", state.issues)
 
-    if project.key in project_index:
-        issues.append(f"duplicate project key '{project.key}'")
+    if project.key in state.project_index:
+        state.issues.append(f"duplicate project key '{project.key}'")
     else:
-        project_index[project.key] = project
+        state.project_index[project.key] = project
 
     if not project.name.strip():
-        issues.append(f"project {project.key} is missing a name")
+        state.issues.append(f"project {project.key} is missing a name")
 
-    if project.programme and project.programme not in programme_index:
-        issues.append(
+    if project.programme and project.programme not in state.programme_index:
+        state.issues.append(
             f"project {project.key} references unknown programme '{project.programme}'"
         )
 
     for component in project.components:
-        _validate_component(project.key, component, component_index, issues)
+        _validate_component(project.key, component, state)
 
 
 def _validate_component(
     project_key: str,
     component: Component,
-    component_index: dict[str, tuple[str, Component]],
-    issues: list[str],
+    state: ValidationState,
 ) -> None:
-    _validate_slug(component.key, "component.key", issues)
+    _validate_slug(component.key, "component.key", state.issues)
 
-    if component.key in component_index:
-        issues.append(
+    if component.key in state.component_index:
+        state.issues.append(
             f"duplicate component key '{component.key}' used by "
-            f"projects {component_index[component.key][0]} and {project_key}"
+            f"projects {state.component_index[component.key][0]} and {project_key}"
         )
     else:
-        component_index[component.key] = (project_key, component)
+        state.component_index[component.key] = (project_key, component)
 
     if not component.name.strip():
-        issues.append(f"component {component.key} is missing a name")
+        state.issues.append(f"component {component.key} is missing a name")
 
     if component.repository is not None:
-        _validate_repository(component.key, component.repository, issues)
+        _validate_repository(component.key, component.repository, state.issues)
 
 
 def _validate_repository(
@@ -157,9 +160,15 @@ def _validate_relationships(
     component_key: str,
     project_key: str,
     component: Component,
-    known_components: set[str],
-    issues: list[str],
+    state: ValidationState,
 ) -> None:
+    if state.known_components is None:
+        state.issues.append(
+            "internal error: known_components not populated before relationship "
+            "validation"
+        )
+        return
+
     for edge_list_name, edges in (
         ("depends_on", component.depends_on),
         ("blocked_by", component.blocked_by),
@@ -168,8 +177,8 @@ def _validate_relationships(
         context = EdgeContext(
             component_key=component_key,
             project_key=project_key,
-            known_components=known_components,
-            issues=issues,
+            known_components=state.known_components,
+            issues=state.issues,
         )
         for edge in edges:
             _validate_edge(context, edge_list_name, edge)
