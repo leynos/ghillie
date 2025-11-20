@@ -205,6 +205,77 @@ correctly, regardless of the underlying compliance check that generated it.
   components without repositories, and cross-project dependencies into the df12
   shared libraries.
 
+#### Catalogue class diagram
+
+```mermaid
+classDiagram
+    class Catalogue {
+        +int version
+        +List~Project~ projects
+        +List~Programme~ programmes
+    }
+    class Programme {
+        +str key
+        +str name
+        +str description
+        +List~str~ projects
+    }
+    class Project {
+        +str key
+        +str name
+        +str description
+        +str programme
+        +List~Component~ components
+        +NoiseFilters noise
+        +StatusSettings status
+        +List~str~ documentation_paths
+    }
+    class Component {
+        +str key
+        +str name
+        +str type
+        +str description
+        +str lifecycle
+        +Repository repository
+        +List~ComponentLink~ depends_on
+        +List~ComponentLink~ blocked_by
+        +List~ComponentLink~ emits_events_to
+        +List~str~ notes
+    }
+    class Repository {
+        +str owner
+        +str name
+        +str default_branch
+        +slug()
+    }
+    class ComponentLink {
+        +str component
+        +str kind
+        +str rationale
+    }
+    class NoiseFilters {
+        +List~str~ ignore_authors
+        +List~str~ ignore_labels
+        +List~str~ ignore_paths
+        +List~str~ ignore_title_prefixes
+    }
+    class StatusSettings {
+        +bool summarise_dependency_prs
+        +bool emphasise_documentation
+        +bool prefer_long_form
+    }
+    Catalogue "1" o-- "many" Project
+    Catalogue "1" o-- "many" Programme
+    Programme "1" o-- "many" Project : projects
+    Project "1" o-- "many" Component
+    Component "0..1" o-- Repository
+    Component "many" o-- ComponentLink : depends_on
+    Component "many" o-- ComponentLink : blocked_by
+    Component "many" o-- ComponentLink : emits_events_to
+    Project "1" o-- NoiseFilters
+    Project "1" o-- StatusSettings
+```
+
 ## 4. The Intelligence Engine: Hierarchical Summarization
 
 The defining feature of Ghillie is its ability to transform raw data into
