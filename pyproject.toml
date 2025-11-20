@@ -21,11 +21,6 @@ dev = [
     "pytest-timeout",
 ]
 
-[tool.pyright]
-pythonVersion = "3.13"
-typeCheckingMode = "strict"
-include = ["ghillie"]
-
 [tool.ruff]
 line-length = 88
 
@@ -63,6 +58,8 @@ select = [
     "TRY",
     "D",
     "ANN",
+    "C90",
+    "PLR",
 ]
 per-file-ignores = {"**/test_*.py" = ["S101"]}
 
@@ -93,8 +90,6 @@ datetime = "dt"
 typing = "typ"
 
 [tool.pytest.ini_options]
-# Ensure asyncio fixtures create a new event loop for each test
-asyncio_default_fixture_loop_scope = "function"
 # Tests automatically killed after seconds elapsed
 timeout = 30
 
