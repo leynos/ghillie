@@ -49,13 +49,18 @@ def test_example_catalogue_json_matches_schema(tmp_path: Path) -> None:
 
     pajv_path = shutil.which("pajv")
     if pajv_path is None:
-        pytest.skip("pajv not installed")
+        pytest.skip("pajv not installed; skipping schema validation")
 
-    result = subprocess.run(  # noqa: S603
-        [pajv_path, "-s", str(schema_path), "-d", str(json_path)],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-    assert result.returncode == 0, result.stderr
+    try:
+        subprocess.run(  # noqa: S603
+            [pajv_path, "-s", str(schema_path), "-d", str(json_path)],
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        message = (
+            "pajv failed to validate the example catalogue "
+            f"(stdout={exc.stdout!r}, stderr={exc.stderr!r})"
+        )
+        raise AssertionError(message) from exc

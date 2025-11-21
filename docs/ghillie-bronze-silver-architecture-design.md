@@ -12,7 +12,7 @@ This design covers:
 
 - the **Bronze layer**: raw, immutable event ingestion (“what happened,
   exactly?”), and
-- the **Silver layer**: cleaned, deduplicated, relational state for the estate
+- the **Silver layer**: cleaned, deduplicated, relational state of the estate
   (“what is the current state and history?”),
 
 implemented using:

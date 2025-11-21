@@ -13,7 +13,19 @@ from .validation import CatalogueValidationError
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Validate a catalogue file and optionally export JSON/schema artefacts."""
+    """Validate a catalogue file and optionally export JSON and schema artefacts.
+
+    Parameters
+    ----------
+    argv : list[str] | None, optional
+        Command-line arguments. ``None`` defaults to ``sys.argv``.
+
+    Returns
+    -------
+    int
+        Exit code: 0 on success, 1 when validation fails.
+
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("catalogue", type=Path, help="YAML catalogue to validate")
     parser.add_argument(
@@ -35,11 +47,8 @@ def main(argv: list[str] | None = None) -> int:
         catalogue = lint_catalogue(catalogue_path)
     except CatalogueValidationError as exc:  # pragma: no cover - exercised in CLI tests
         print(f"Catalogue validation failed for {catalogue_path}:")
-        if hasattr(exc, "issues"):
-            for issue in exc.issues:
-                print(f"  - {issue}")
-        else:
-            print(f"  - {exc}")
+        for issue in exc.issues:
+            print(f"  - {issue}")
         return 1
 
     if args.schema_out:

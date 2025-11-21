@@ -190,7 +190,7 @@ correctly, regardless of the underlying compliance check that generated it.
 
 ### 3.4 Estate catalogue constraints (Phase 1.1)
 
-- Catalogue files are parsed with a YAML 1.2 loader so ambiguous scalars such
+- Catalogue files are parsed with a YAML 1.2 loader, so ambiguous scalars such
   as `on` stay as strings. This avoids silent type flips when repository
   branches or labels resemble boolean values.
 - Projects, programmes, and components use globally unique, lowercase slug

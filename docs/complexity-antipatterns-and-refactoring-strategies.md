@@ -776,7 +776,7 @@ maintainable, and adaptable to future changes.
   testable units.
 - Declarative approaches and structural pattern matching lower cognitive load by
   expressing intent directly.
-- Refactoring toward clearer abstractions prepares teams for the broader
+- Refactoring towards clearer abstractions prepares teams for the broader
   conclusions that follow.
 
 ## 6. Conclusion: towards a more maintainable and understandable codebase

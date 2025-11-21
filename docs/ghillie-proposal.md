@@ -27,7 +27,7 @@ Pull structured “events” from GitHub for each repo:
 
 - Repositories
 - Logical projects / programmes (Wildside, Limela, mxd, Episodic, etc.)
-- Components (including those that doesn’t yet have repos)
+- Components (including those that don’t yet have repos)
 - Explicit relationships: “this repo belongs to Wildside”, “this component
   depends on that repo”, etc.
 
@@ -340,8 +340,8 @@ For each repo + time window, build an “evidence bundle”, e.g.:
 Compress noisy details before hitting the model. For instance:
 
 - Instead of full diffs, give: “Modified files: [list of paths]” and a very
-  short summarised description of changes (which the system can get via a first
-  small LLM call if the system like).
+  short summarized description of changes (which the system can obtain via a
+  first small LLM call if required).
 
 ### 6.2 Prompt shape (conceptual)
 
@@ -354,7 +354,7 @@ In pseudo‑JSON for the responses API:
   "input": [
     {
       "role": "system",
-      "content": "The system are generating concise engineering status reports..."
+      "content": "The system is generating concise engineering status reports..."
     },
     {
       "role": "user",
@@ -438,19 +438,19 @@ The system model them exactly like real components, just with:
 - `external_links` to whatever artefacts exist: RFCS, initial tickets,
   spreadsheets if the system is unlucky.
 
-For these, events won’t come from GitHub; at first they’ll be static. Two
+For these, events won’t come from GitHub; at first, they’ll be static. Two
 options:
 
 1. **Manual updates**
-For now, the system let humans attach a short free‑text status to such
+For now, the system lets humans attach a short free‑text status to such
 components in the catalogue. The system ingests that as synthetic “events”.
 2. **Later: multi‑source ingestion**
 Extend the ingestion to e.g. JIRA/YouTrack/whatever to pull tickets for those
-components. The system still treats them as events; they just doesn’t belong to
-a repo.
+components. The system still treats them as events; they just don’t belong to a
+repo.
 
-Either way, the project‑level summariser can talk intelligently about
-components that doesn’t have code yet.
+Either way, the project‑level summarizer can talk intelligently about
+components that do not have code yet.
 
 ______________________________________________________________________
 
@@ -463,7 +463,7 @@ estate-level report becomes cheap:
 
 - Project statuses (with `status` and top risks).
 - Maybe a small slice of metrics (PR throughput, lead time, incident count per
-  project if the system track that elsewhere).
+  project if the system tracks that elsewhere).
 
 Push everything into the big context model and ask for:
 
@@ -533,7 +533,7 @@ benchmark:
 
 ### 9.3 Security/compliance reality check
 
-Given the kind of org the system work for:
+Given the kind of org the system works for:
 
 Sending the entire internal GitHub estate to _any_ external model needs serious
 scrutiny:
@@ -547,11 +547,11 @@ scrutiny:
 Architecturally:
 
 - Encapsulate the LLM calls behind a narrow interface (above).
-- Make the infra pluggable so the system can swap:
+- Make the infra pluggable, so the system can swap:
 
 - Cloud LLM → on‑prem / VPC deployment
 - One vendor → another
-- Keep as much summarisation as possible within the perimeter (e.g. first
+- Keep as much summarization as possible within the perimeter (e.g. first
   pass: reduce raw events down before calling any external model).
 
 ______________________________________________________________________
@@ -594,8 +594,8 @@ Very roughly:
 - Writes Markdown to:
 
 - A “status” repo per estate (e.g. `status/2025-11-20.md`).
-- Optionally a `STATUS.md` in each project meta repo.
-- Also pushes to Slack / email / Teams if the system fancy.
+- Optionally, a `STATUS.md` in each project meta repo.
+- Also pushes to Slack / email / Teams if the system fancies.
 - **Service C – UI & API (optional)**
 
 - Simple web UI showing:
@@ -616,7 +616,7 @@ ______________________________________________________________________
 - The system wants the model to consider several weeks of history to detect
   trends.
 - **Estate‑level:** big contexts shine for an “annual review”‑style report
-  where the system feed in:
+  where the system feeds in:
 
 - 6–12 months of project summaries
 - Organisational / roadmap docs
@@ -629,6 +629,6 @@ ______________________________________________________________________
 
 Bottom line: treat this as a data+domain modelling problem with an LLM bolted
 on the front, not an LLM problem with some GitHub seasoning. Once the system
-have clean events and a clear model of Wildside/Limela/mxd/Episodic as
+has clean events and a clear model of Wildside/Limela/mxd/Episodic as
 _projects_ with explicit components and dependencies, the choice of GPT‑5.1 vs
 Gemini becomes an implementation detail rather than an architectural constraint.

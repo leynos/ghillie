@@ -2,10 +2,10 @@
 
 This module provides Python fallbacks used when the optional Rust extension is
 unavailable. Importing `hello` yields a simple greeting string as a sanity
-check entrypoint.
+check entry point.
 
-Example:
--------
+Examples
+--------
 >>> from ghillie.pure import hello
 >>> hello()
 'hello from Python'

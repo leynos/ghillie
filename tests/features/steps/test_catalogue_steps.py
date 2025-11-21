@@ -57,28 +57,31 @@ def context() -> StepContext:
     return {}
 
 
-@given('the catalogue example at "examples/wildside-catalogue.yaml"')
-def catalogue_example(context: StepContext) -> Path:
-    path = Path("examples/wildside-catalogue.yaml")
-    assert path.exists(), "Expected example catalogue to exist"
+def _load_catalogue_fixture(context: StepContext, path_str: str) -> Path:
+    """Resolve a catalogue fixture path, assert it exists, and store it."""
+    path = Path(path_str)
+    assert path.exists(), f"Expected catalogue fixture at {path_str} to exist"
     context["catalogue_path"] = path
     return path
+
+
+@given('the catalogue example at "examples/wildside-catalogue.yaml"')
+def catalogue_example(context: StepContext) -> Path:
+    return _load_catalogue_fixture(context, "examples/wildside-catalogue.yaml")
 
 
 @given('the catalogue example at "tests/fixtures/catalogues/duplicate-component.yaml"')
 def duplicate_catalogue_example(context: StepContext) -> Path:
-    path = Path("tests/fixtures/catalogues/duplicate-component.yaml")
-    assert path.exists(), "Expected duplicate component fixture to exist"
-    context["catalogue_path"] = path
-    return path
+    return _load_catalogue_fixture(
+        context, "tests/fixtures/catalogues/duplicate-component.yaml"
+    )
 
 
 @given('the catalogue example at "tests/fixtures/catalogues/invalid-slug.yaml"')
 def invalid_slug_catalogue_example(context: StepContext) -> Path:
-    path = Path("tests/fixtures/catalogues/invalid-slug.yaml")
-    assert path.exists(), "Expected invalid slug fixture to exist"
-    context["catalogue_path"] = path
-    return path
+    return _load_catalogue_fixture(
+        context, "tests/fixtures/catalogues/invalid-slug.yaml"
+    )
 
 
 @when("I lint the catalogue with the built in validator")
@@ -105,8 +108,9 @@ def planned_component_present(context: StepContext) -> None:
     assert "catalogue" in context
     catalogue: Catalogue = context["catalogue"]
     wildside = next(
-        project for project in catalogue.projects if project.key == "wildside"
+        (project for project in catalogue.projects if project.key == "wildside"), None
     )
+    assert wildside is not None, "Expected project 'wildside' not found in catalogue"
     component = next(
         (comp for comp in wildside.components if comp.key == "wildside-ingestion"),
         None,

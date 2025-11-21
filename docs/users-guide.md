@@ -10,8 +10,8 @@ validated with `msgspec` and exposed as a JSON Schema for external linters.
 
 - Use lowercase, dash-separated keys for programmes, projects, and components
   (for example, `wildside-engine`). Keys must be unique across the estate.
-- Components may omit `repository` when they are planned work. When present,
-  repositories require `owner`, `name`, and `default_branch`.
+- Components may omit `repository` when they represent planned work. When
+  present, repositories require `owner`, `name`, and `default_branch`.
 - Capture relationships with `depends_on`, `blocked_by`, and
   `emits_events_to`. Each entry includes the target `component` and an optional
   `kind` (`runtime`, `dev`, `test`, `ops`) plus a short rationale.
@@ -56,5 +56,5 @@ The catalogue example models Wildside as a multi-repository project:
 - `wildside-ingestion` is marked `lifecycle: planned` to represent work with
   no repository yet.
 
-Noise controls ignore dependency bots and generated documentation paths so the
+Noise controls ignore dependency bots and generated documentation paths, so the
 ingestion pipeline can focus on meaningful events.

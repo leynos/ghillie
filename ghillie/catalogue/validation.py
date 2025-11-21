@@ -84,6 +84,7 @@ def validate_catalogue(catalogue: Catalogue) -> Catalogue:
 
 
 def _validate_programme(programme: Programme, state: ValidationState) -> None:
+    """Check programme slug, uniqueness, and presence of a name."""
     _validate_slug(programme.key, "programme.key", state.issues)
 
     if programme.key in state.programme_index:
@@ -99,6 +100,7 @@ def _validate_project(
     project: Project,
     state: ValidationState,
 ) -> None:
+    """Validate a project's identity, programme reference, and components."""
     _validate_slug(project.key, "project.key", state.issues)
 
     if project.key in state.project_index:
@@ -123,6 +125,7 @@ def _validate_component(
     component: Component,
     state: ValidationState,
 ) -> None:
+    """Ensure component identity is valid and delegate repository checks."""
     _validate_slug(component.key, "component.key", state.issues)
 
     if component.key in state.component_index:
@@ -143,6 +146,7 @@ def _validate_component(
 def _validate_repository(
     component_key: str, repository: Repository, issues: list[str]
 ) -> None:
+    """Validate repository segments and default branch for a component."""
     for field_name in ["owner", "name"]:
         value = getattr(repository, field_name)
         if not _REPO_SEGMENT_PATTERN.match(value):
@@ -163,6 +167,7 @@ def _validate_relationships(
     component: Component,
     state: ValidationState,
 ) -> None:
+    """Validate component relationship edges against the known estate."""
     if state.known_components is None:
         message = (
             "internal error: known_components not set before relationship validation"
@@ -185,6 +190,7 @@ def _validate_relationships(
 
 
 def _validate_edge(context: EdgeContext, edge_name: str, edge: ComponentLink) -> None:
+    """Validate a single component edge for self-reference and existence."""
     if edge.component == context.component_key:
         message = (
             f"component {context.component_key} in project {context.project_key} "
@@ -205,6 +211,7 @@ def _validate_programme_membership(
     project_index: dict[str, Project],
     issues: list[str],
 ) -> None:
+    """Ensure each programme references only known projects."""
     for programme in programmes:
         missing_projects = [
             project_key
@@ -218,6 +225,7 @@ def _validate_programme_membership(
 
 
 def _validate_slug(value: str, label: str, issues: list[str]) -> None:
+    """Record an issue when a slug fails validation."""
     if not _SLUG_PATTERN.match(value):
         issues.append(
             f"{label} '{value}' must match {_SLUG_PATTERN.pattern} "
