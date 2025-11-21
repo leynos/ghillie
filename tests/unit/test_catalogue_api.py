@@ -1,5 +1,4 @@
 """API surface tests for ghillie.catalogue."""
-# ruff: noqa: D103
 
 from __future__ import annotations
 
@@ -14,6 +13,7 @@ import ghillie.catalogue as cat
 
 
 def test_package_exports_available() -> None:
+    """All documented catalogue exports should exist on the package."""
     expected = {
         "Catalogue",
         "CatalogueValidationError",
@@ -30,6 +30,7 @@ def test_package_exports_available() -> None:
 
 
 def test_example_catalogue_loads() -> None:
+    """Example catalogue should lint and contain the wildside project."""
     example_path = Path("examples/wildside-catalogue.yaml")
     assert example_path.exists(), f"Example catalogue missing at {example_path}"
 
@@ -44,6 +45,7 @@ def test_example_catalogue_loads() -> None:
 
 
 def test_example_catalogue_json_matches_schema(tmp_path: Path) -> None:
+    """Example catalogue JSON should validate against the generated schema."""
     example_path = Path("examples/wildside-catalogue.yaml")
     assert example_path.exists()
 

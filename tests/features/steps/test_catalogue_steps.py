@@ -1,5 +1,4 @@
 """Behavioural regression tests for catalogue linting."""
-# ruff: noqa: D103
 
 from __future__ import annotations
 
@@ -54,6 +53,7 @@ def test_invalid_slug_bdd() -> None:
 
 @pytest.fixture
 def context() -> StepContext:
+    """Provide shared state between BDD steps."""
     return {}
 
 
@@ -67,11 +67,13 @@ def _load_catalogue_fixture(context: StepContext, path_str: str) -> Path:
 
 @given('the catalogue example at "examples/wildside-catalogue.yaml"')
 def catalogue_example(context: StepContext) -> Path:
+    """Load the canonical example catalogue."""
     return _load_catalogue_fixture(context, "examples/wildside-catalogue.yaml")
 
 
 @given('the catalogue example at "tests/fixtures/catalogues/duplicate-component.yaml"')
 def duplicate_catalogue_example(context: StepContext) -> Path:
+    """Load the duplicate-component fixture catalogue."""
     return _load_catalogue_fixture(
         context, "tests/fixtures/catalogues/duplicate-component.yaml"
     )
@@ -79,6 +81,7 @@ def duplicate_catalogue_example(context: StepContext) -> Path:
 
 @given('the catalogue example at "tests/fixtures/catalogues/invalid-slug.yaml"')
 def invalid_slug_catalogue_example(context: StepContext) -> Path:
+    """Load the invalid-slug fixture catalogue."""
     return _load_catalogue_fixture(
         context, "tests/fixtures/catalogues/invalid-slug.yaml"
     )
@@ -86,6 +89,7 @@ def invalid_slug_catalogue_example(context: StepContext) -> Path:
 
 @when("I lint the catalogue with the built in validator")
 def lint_catalogue_file(context: StepContext) -> None:
+    """Lint the catalogue, expecting success."""
     assert "catalogue_path" in context
     catalogue_path = context["catalogue_path"]
     context["catalogue"] = lint_catalogue(catalogue_path)
@@ -93,6 +97,7 @@ def lint_catalogue_file(context: StepContext) -> None:
 
 @when("I lint the catalogue expecting failure")
 def lint_catalogue_failure(context: StepContext) -> None:
+    """Lint the catalogue, expecting validation to fail."""
     assert "catalogue_path" in context
     catalogue_path = context["catalogue_path"]
     with pytest.raises(CatalogueValidationError) as excinfo:
@@ -105,6 +110,7 @@ def lint_catalogue_failure(context: StepContext) -> None:
     '"wildside-ingestion" without a repository'
 )
 def planned_component_present(context: StepContext) -> None:
+    """Assert the planned Wildside component is retained without repository."""
     assert "catalogue" in context
     catalogue: Catalogue = context["catalogue"]
     wildside = next(
@@ -124,6 +130,7 @@ def planned_component_present(context: StepContext) -> None:
 
 @then('the component "wildside-core" depends on "wildside-engine"')
 def dependency_present(context: StepContext) -> None:
+    """Assert wildside-core depends on wildside-engine."""
     assert "catalogue" in context
     catalogue: Catalogue = context["catalogue"]
     component = next(
@@ -144,6 +151,7 @@ def dependency_present(context: StepContext) -> None:
 
 @then("the catalogue conforms to the JSON schema via pajv")
 def schema_validation(context: StepContext, tmp_path: Path) -> None:
+    """Validate the linted catalogue against the generated JSON Schema via pajv."""
     pajv_path = shutil.which("pajv")
     if pajv_path is None:
         pytest.fail(
@@ -181,11 +189,13 @@ def schema_validation(context: StepContext, tmp_path: Path) -> None:
 
 @then('validation reports contain "duplicate component key"')
 def validation_reports_duplicate(context: StepContext) -> None:
+    """Ensure duplicate key errors are surfaced."""
     assert "error" in context
     assert "duplicate component key" in context["error"].lower()
 
 
 @then('validation reports contain "slug"')
 def validation_reports_slug(context: StepContext) -> None:
+    """Ensure slug validation errors are surfaced."""
     assert "error" in context
     assert "slug" in context["error"].lower()
