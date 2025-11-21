@@ -11,6 +11,7 @@ from .models import Catalogue
 
 if typ.TYPE_CHECKING:
     from pathlib import Path
+
 SCHEMA_ID = "https://ghillie.example/schemas/catalogue.json"
 
 

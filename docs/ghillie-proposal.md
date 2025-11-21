@@ -506,7 +506,7 @@ much better than “just shove everything in, YOLO”.
 
 ### 9.2 Model abstraction
 
-This design would design a simple abstraction:
+This proposal specifies a simple abstraction:
 
 ```python
 class StatusModel(Protocol):
@@ -608,7 +608,7 @@ ______________________________________________________________________
 
 ## 11. Where the big contexts actually help
 
-- **Repo‑level:** the system doesn’t need huge context here; the system is
+- **Repo‑level:** the system doesn’t need extensive context here; the system is
   looking at <= 1 week of events.
 - **Project‑level:** context window matters if:
 

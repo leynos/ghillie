@@ -1,5 +1,4 @@
 """Unit tests for catalogue schema validation."""
-# ruff: noqa: D103
 
 from __future__ import annotations
 
@@ -24,6 +23,7 @@ from ghillie.catalogue import (
 
 
 def test_lint_catalogue_rejects_unknown_component(tmp_path: Path) -> None:
+    """Unknown component references should fail linting."""
     catalogue_file = tmp_path / "invalid-catalogue.yaml"
     catalogue_file.write_text(
         """
@@ -59,6 +59,7 @@ projects:
 
 
 def test_lint_catalogue_rejects_duplicate_component_keys(tmp_path: Path) -> None:
+    """Duplicate component keys should be rejected."""
     catalogue_file = tmp_path / "duplicate-components.yaml"
     catalogue_file.write_text(
         """
@@ -96,6 +97,7 @@ projects:
 
 
 def test_yaml_loader_respects_yaml_1_2(tmp_path: Path) -> None:
+    """Ensure YAML 1.2 loader preserves scalars like 'on' as strings."""
     catalogue_file = tmp_path / "yaml-12.yaml"
     catalogue_file.write_text(
         """
@@ -128,6 +130,7 @@ projects:
 
 
 def test_yaml_loader_invalid_yaml_syntax(tmp_path: Path) -> None:
+    """Invalid YAML should raise during linting."""
     catalogue_file = tmp_path / "invalid.yaml"
     catalogue_file.write_text(
         """
@@ -160,6 +163,7 @@ projects:
 
 
 def test_yaml_loader_empty_file(tmp_path: Path) -> None:
+    """Empty catalogue files should raise a validation error."""
     catalogue_file = tmp_path / "empty.yaml"
     catalogue_file.write_text("", encoding="utf-8")
 
@@ -170,6 +174,7 @@ def test_yaml_loader_empty_file(tmp_path: Path) -> None:
 
 
 def test_generated_schema_mentions_projects() -> None:
+    """Generated schema must include projects property."""
     schema = build_catalogue_schema()
 
     assert isinstance(schema, dict)
@@ -179,12 +184,14 @@ def test_generated_schema_mentions_projects() -> None:
 
 
 def test_schema_id_assigned() -> None:
+    """Generated schema should set the expected $id."""
     schema = build_catalogue_schema()
 
     assert schema["$id"] == "https://ghillie.example/schemas/catalogue.json"
 
 
 def test_schema_validates_simple_catalogue(tmp_path: Path) -> None:
+    """Simple in-memory catalogue should validate against the schema."""
     schema_path = tmp_path / "schema.json"
     write_catalogue_schema(schema_path)
 
@@ -197,7 +204,7 @@ def test_schema_validates_simple_catalogue(tmp_path: Path) -> None:
         pytest.skip("pajv is not installed; skipping JSON Schema validation")
 
     try:
-        subprocess.run(  # noqa: S603  # ticket: schema-validation-static-command; args are constant
+        subprocess.run(  # noqa: S603  # rationale: static pajv invocation with constant args
             [pajv_path, "-s", str(schema_path), "-d", str(data_path)],
             text=True,
             capture_output=True,
@@ -209,6 +216,7 @@ def test_schema_validates_simple_catalogue(tmp_path: Path) -> None:
 
 
 def test_lint_catalogue_returns_catalogue(tmp_path: Path) -> None:
+    """Successful linting should return a Catalogue instance."""
     catalogue_file = tmp_path / "lintable.yaml"
     catalogue_file.write_text(
         """
@@ -240,6 +248,7 @@ projects:
 
 
 def test_lint_catalogue_rejects_unknown_programme(tmp_path: Path) -> None:
+    """Project referencing unknown programme should fail."""
     catalogue_file = tmp_path / "unknown-programme.yaml"
     catalogue_file.write_text(
         """

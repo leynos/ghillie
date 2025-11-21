@@ -58,7 +58,7 @@ def test_example_catalogue_json_matches_schema(tmp_path: Path) -> None:
         pytest.fail("pajv must be installed to validate the catalogue schema")
 
     try:
-        subprocess.run(  # noqa: S603  # ticket: schema-validation-static-command; args are constant
+        subprocess.run(  # noqa: S603  # rationale: static pajv invocation with constant args
             [pajv_path, "-s", str(schema_path), "-d", str(json_path)],
             text=True,
             capture_output=True,

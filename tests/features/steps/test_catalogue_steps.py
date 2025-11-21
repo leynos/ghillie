@@ -160,7 +160,7 @@ def schema_validation(context: StepContext, tmp_path: Path) -> None:
     data_path.write_bytes(msgspec.json.encode(catalogue))
 
     try:
-        subprocess.run(  # noqa: S603  # ticket: schema-validation-static-command; args are constant
+        subprocess.run(  # noqa: S603  # rationale: static pajv invocation with constant args
             [
                 pajv_path,
                 "-s",
