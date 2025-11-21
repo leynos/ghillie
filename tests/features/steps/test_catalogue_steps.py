@@ -146,7 +146,10 @@ def dependency_present(context: StepContext) -> None:
 def schema_validation(context: StepContext, tmp_path: Path) -> None:
     pajv_path = shutil.which("pajv")
     if pajv_path is None:
-        pytest.fail("pajv must be installed to validate the catalogue schema")
+        pytest.fail(
+            "pajv must be installed for behavioural schema validation; "
+            "unit tests skip this when the binary is absent"
+        )
 
     schema_path = tmp_path / "catalogue.schema.json"
     write_catalogue_schema(schema_path)
@@ -157,7 +160,7 @@ def schema_validation(context: StepContext, tmp_path: Path) -> None:
     data_path.write_bytes(msgspec.json.encode(catalogue))
 
     try:
-        subprocess.run(  # noqa: S603 - command and args are static
+        subprocess.run(  # noqa: S603  # ticket: schema-validation-static-command; args are constant
             [
                 pajv_path,
                 "-s",

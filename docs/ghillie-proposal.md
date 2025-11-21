@@ -619,7 +619,7 @@ ______________________________________________________________________
   where the system feeds in:
 
 - 6–12 months of project summaries
-- Organisational / roadmap docs
+- Organizational / roadmap docs
 - And ask for a narrative about trajectory and systemic risks.
 
 But for weekly/monthly operational reporting, a hierarchical design with

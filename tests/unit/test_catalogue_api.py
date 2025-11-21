@@ -24,17 +24,23 @@ def test_package_exports_available() -> None:
     }
 
     for name in expected:
-        assert hasattr(cat, name)
+        assert hasattr(cat, name), (
+            f"Expected export '{name}' not found in ghillie.catalogue"
+        )
 
 
 def test_example_catalogue_loads() -> None:
     example_path = Path("examples/wildside-catalogue.yaml")
-    assert example_path.exists()
+    assert example_path.exists(), f"Example catalogue missing at {example_path}"
 
     catalogue = cat.lint_catalogue(example_path)
 
-    assert catalogue.version == 1
-    assert any(project.key == "wildside" for project in catalogue.projects)
+    assert catalogue.version == 1, (
+        f"Expected catalogue version 1, got {catalogue.version}"
+    )
+    assert any(project.key == "wildside" for project in catalogue.projects), (
+        "Expected a project with key 'wildside' in the example catalogue"
+    )
 
 
 def test_example_catalogue_json_matches_schema(tmp_path: Path) -> None:
@@ -52,7 +58,7 @@ def test_example_catalogue_json_matches_schema(tmp_path: Path) -> None:
         pytest.fail("pajv must be installed to validate the catalogue schema")
 
     try:
-        subprocess.run(  # noqa: S603  # SAFE: static pajv invocation is safe here
+        subprocess.run(  # noqa: S603  # ticket: schema-validation-static-command; args are constant
             [pajv_path, "-s", str(schema_path), "-d", str(json_path)],
             text=True,
             capture_output=True,

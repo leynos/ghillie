@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import json
 import typing as typ
-from pathlib import Path  # noqa: TC003
 
 import msgspec
 
 from .models import Catalogue
 
+if typ.TYPE_CHECKING:
+    from pathlib import Path
 SCHEMA_ID = "https://ghillie.example/schemas/catalogue.json"
 
 
