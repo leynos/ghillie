@@ -108,8 +108,11 @@ def planned_component_present(context: StepContext) -> None:
         project for project in catalogue.projects if project.key == "wildside"
     )
     component = next(
-        comp for comp in wildside.components if comp.key == "wildside-ingestion"
+        (comp for comp in wildside.components if comp.key == "wildside-ingestion"),
+        None,
     )
+
+    assert component is not None, "Expected component 'wildside-ingestion' not found"
 
     assert component.repository is None
     assert component.lifecycle == "planned"
@@ -120,11 +123,16 @@ def dependency_present(context: StepContext) -> None:
     assert "catalogue" in context
     catalogue: Catalogue = context["catalogue"]
     component = next(
-        comp
-        for project in catalogue.projects
-        for comp in project.components
-        if comp.key == "wildside-core"
+        (
+            comp
+            for project in catalogue.projects
+            for comp in project.components
+            if comp.key == "wildside-core"
+        ),
+        None,
     )
+
+    assert component is not None, "Expected component 'wildside-core' not found"
 
     dependencies = {edge.component for edge in component.depends_on}
     assert "wildside-engine" in dependencies

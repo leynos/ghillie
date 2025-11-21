@@ -37,8 +37,8 @@ class EdgeContext(typ.NamedTuple):
     issues: list[str]
 
 
-SLUG_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
-REPO_SEGMENT_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
+_SLUG_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+_REPO_SEGMENT_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 
 class CatalogueValidationError(ValueError):
@@ -144,7 +144,7 @@ def _validate_repository(
     component_key: str, repository: Repository, issues: list[str]
 ) -> None:
     for field_name, value in ("owner", repository.owner), ("name", repository.name):
-        if not REPO_SEGMENT_PATTERN.match(value):
+        if not _REPO_SEGMENT_PATTERN.match(value):
             issues.append(
                 f"component {component_key} repository {field_name} '{value}' "
                 "must contain only letters, digits, dots, underscores, or dashes"
@@ -217,8 +217,8 @@ def _validate_programme_membership(
 
 
 def _validate_slug(value: str, label: str, issues: list[str]) -> None:
-    if not SLUG_PATTERN.match(value):
+    if not _SLUG_PATTERN.match(value):
         issues.append(
-            f"{label} '{value}' must match {SLUG_PATTERN.pattern} "
+            f"{label} '{value}' must match {_SLUG_PATTERN.pattern} "
             "(lowercase slug with dashes)"
         )

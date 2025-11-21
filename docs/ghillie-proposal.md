@@ -255,9 +255,9 @@ Each item becomes an `events` row with a `type` and `payload`.
 
 The system _really_ want this configurable:
 
-- Ignore PRs with labels like `dependencies`, `ci`, `chore`.
-- Ignore issues with `triage` labels if still untriaged.
-- Ignore commits from bots (dependabot, renovate, etc.) unless explicitly
+- Disregard PRs carrying labels such as `dependencies`, `ci`, or `chore`.
+- Skip issues marked `triage` while they remain untriaged.
+- Exclude commits from bots (dependabot, renovate, etc.) unless explicitly
   requested.
 
 Store noise filters per repo / per project in the catalogue YAML.

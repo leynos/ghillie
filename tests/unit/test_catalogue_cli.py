@@ -11,6 +11,7 @@ import msgspec
 
 
 def _run_cli(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+    """Run the catalogue CLI with the given arguments and return the result."""
     return subprocess.run(  # noqa: S603 - fixed argv
         [sys.executable, "-m", "ghillie.catalogue.cli", *args],
         cwd=cwd,

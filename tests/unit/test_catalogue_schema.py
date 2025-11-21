@@ -194,16 +194,18 @@ def test_schema_validates_simple_catalogue(tmp_path: Path) -> None:
 
     pajv_path = shutil.which("pajv")
     if pajv_path is None:
-        pytest.skip("pajv not installed")
+        pytest.fail("pajv must be installed to validate the catalogue schema")
 
-    result = subprocess.run(  # noqa: S603
-        [pajv_path, "-s", str(schema_path), "-d", str(data_path)],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-    assert result.returncode == 0, result.stderr
+    try:
+        subprocess.run(  # noqa: S603
+            [pajv_path, "-s", str(schema_path), "-d", str(data_path)],
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        message = f"Schema validation failed: stdout={exc.stdout}\nstderr={exc.stderr}"
+        raise AssertionError(message) from exc
 
 
 def test_lint_catalogue_returns_catalogue(tmp_path: Path) -> None:

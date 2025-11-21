@@ -1,4 +1,27 @@
-"""Estate catalogue schema and validation utilities."""
+"""Estate catalogue schema and validation utilities.
+
+This package exposes typed models, YAML loading helpers, validation rules, and
+JSON Schema generation for the Ghillie estate catalogue format.
+
+Examples
+--------
+Load and validate a catalogue file::
+
+    >>> from ghillie.catalogue import lint_catalogue
+    >>> catalogue = lint_catalogue("examples/wildside-catalogue.yaml")
+
+Generate and export the JSON Schema::
+
+    >>> from ghillie.catalogue import build_catalogue_schema
+    >>> schema = build_catalogue_schema()
+
+Perform programmatic validation::
+
+    >>> from ghillie.catalogue import load_catalogue, validate_catalogue
+    >>> catalogue = load_catalogue("path/to/catalogue.yaml")
+    >>> validated = validate_catalogue(catalogue)
+
+"""
 
 from __future__ import annotations
 
