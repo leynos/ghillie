@@ -27,7 +27,7 @@ Pull structured “events” from GitHub for each repo:
 
 - Repositories
 - Logical projects / programmes (Wildside, Limela, mxd, Episodic, etc.)
-- Components (including those that don’t yet have repos)
+- Components (including those that doesn’t yet have repos)
 - Explicit relationships: “this repo belongs to Wildside”, “this component
   depends on that repo”, etc.
 
@@ -109,7 +109,7 @@ reports
 
 ```
 
-The system also want:
+The system also wants:
 
 ```text
 report_coverage
@@ -168,8 +168,8 @@ project:
 
 ```
 
-For a multi-repo project like Episodic, the system just list all component→repo
-mappings, plus any planned components with `has_repo: false`.
+For a multi-repo project like Episodic, the system just lists all
+component→repo mappings, plus any planned components with `has_repo: false`.
 
 A small daemon in the system watches this config repo:
 
@@ -241,10 +241,10 @@ For each repo, since `last_ingested_at`:
 - **Previous status reports**
 
 - If the system commit generated reports back into `STATUS.md` or similar, the
-  system can ingest them too, but the system probably don’t need to; the system
-  already have them in the DB.
+  system can ingest them too, but the system need not; the system already has
+  them in the DB.
 
-Implementation‑wise, the system’d probably use:
+Implementation‑wise, the system would likely use:
 
 - GitHub GraphQL for efficiency (one query to fetch PRs, issues, etc.)
 - REST for diff/patch where needed.
@@ -253,7 +253,7 @@ Each item becomes an `events` row with a `type` and `payload`.
 
 ### 4.3 Noise control
 
-The system _really_ want this configurable:
+The system _really_ wants this configurable:
 
 - Disregard PRs carrying labels such as `dependencies`, `ci`, or `chore`.
 - Skip issues marked `triage` while they remain untriaged.
@@ -282,12 +282,12 @@ When querying `events`, filter by:
 
 Then mark included events as covered in `report_coverage`.
 
-This guarantees the system don’t re‑use the same raw events in two reports.
+This guarantees the system doesn’t re‑use the same raw events in two reports.
 That alone avoids most repetition.
 
 ### 5.2 Directional context
 
-To give continuity, the system also include:
+To give continuity, the system also includes:
 
 - The **last 1–2 reports** for that repo/project as context for the LLM.
 
@@ -388,7 +388,7 @@ In pseudo‑JSON for the responses API:
 ```
 <!-- markdownlint-enable MD013 -->
 
-The system then render `summary/highlights/risks` as human Markdown, and store
+The system then renders `summary/highlights/risks` as human Markdown, and store
 the full JSON in `machine_summary`.
 
 ______________________________________________________________________
@@ -446,17 +446,17 @@ For now, the system let humans attach a short free‑text status to such
 components in the catalogue. The system ingests that as synthetic “events”.
 2. **Later: multi‑source ingestion**
 Extend the ingestion to e.g. JIRA/YouTrack/whatever to pull tickets for those
-components. The system still treats them as events; they just don’t belong to a
-repo.
+components. The system still treats them as events; they just doesn’t belong to
+a repo.
 
 Either way, the project‑level summariser can talk intelligently about
-components that don’t have code yet.
+components that doesn’t have code yet.
 
 ______________________________________________________________________
 
 ## 8. Estate‑level overview
 
-Once the system have repo‑ and project‑level structured summaries, an
+Once the system has repo‑ and project‑level structured summaries, an
 estate-level report becomes cheap:
 
 - Gather:
@@ -472,7 +472,7 @@ Push everything into the big context model and ask for:
 - Projects drifting vs roadmap.
 - Emerging themes (e.g. too many teams blocked on one core library).
 
-Because the system already have structured machine summaries, the estate call
+Because the system already has structured machine summaries, the estate call
 doesn’t need to read raw GitHub data at all.
 
 ______________________________________________________________________
@@ -494,14 +494,14 @@ A few points to keep it honest:
 - Several prior reports
 - A nice chunk of structured event data
 - 1.05M is fun for “stuff the universe in and see what happens”, but at that
-  scale the system often hit:
+  scale the system often hits:
 
 - Higher cost
 - Higher latency
 - More variability in what the model actually pays attention to
 
 Given the system is _already_ building a structured event + summary layer, the
-system don’t need million‑token contexts. A hierarchical approach scales much
+system doesn’t need million‑token contexts. A hierarchical approach scales much
 better than “just shove everything in, YOLO”.
 
 ### 9.2 Model abstraction
@@ -608,7 +608,7 @@ ______________________________________________________________________
 
 ## 11. Where the big contexts actually help
 
-- **Repo‑level:** the system don’t need huge context here; the system is
+- **Repo‑level:** the system doesn’t need huge context here; the system is
   looking at <= 1 week of events.
 - **Project‑level:** context window matters if:
 

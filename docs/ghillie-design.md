@@ -389,7 +389,7 @@ contextualize the engineering progress with the compliance debt. The resulting
 narrative might read: _“The Payments Team delivered the new Checkout API
 (Feature), achieving 99.9% availability. However, the repository currently
 carries a Critical Compliance Violation regarding unencrypted secrets, which
-must be remediated prior to the next release cycle.”_ This integration ensures
+must be remediated prior to the next release cycle.” This integration ensures
 that velocity is never reported in isolation from risk, reinforcing a culture
 where compliance is a prerequisite for success.30
 
@@ -681,7 +681,7 @@ managed, but understood.
 39. Design a Developer Self-Service Foundation | Microsoft Learn, accessed on
     November 20, 2025,
     [https://learn.microsoft.com/en-us/platform-engineering/developer-self-service](https://learn.microsoft.com/en-us/platform-engineering/developer-self-service)
-40. It Asset Management Database Database Structure and Schema, accessed on
+40. It Asset Management Database Structure and Schema, accessed on
     November 20, 2025,
     [https://databasesample.com/database/it-asset-management-database-database](https://databasesample.com/database/it-asset-management-database-database)
 41. REST API endpoints for issues - GitHub Docs, accessed on November 20, 2025,

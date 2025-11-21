@@ -770,7 +770,7 @@ Thoughtfully apply these refactoring strategies to significantly reduce
 cognitive complexity, and to create codebases that are more understandable,
 maintainable, and adaptable to future changes.
 
-### 5.4 Key takeaways before concluding
+### 5.D Key takeaways before concluding
 
 - Command and dispatcher patterns replace sprawling conditionals with cohesive,
   testable units.

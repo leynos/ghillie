@@ -143,7 +143,8 @@ def _validate_component(
 def _validate_repository(
     component_key: str, repository: Repository, issues: list[str]
 ) -> None:
-    for field_name, value in ("owner", repository.owner), ("name", repository.name):
+    for field_name in ["owner", "name"]:
+        value = getattr(repository, field_name)
         if not _REPO_SEGMENT_PATTERN.match(value):
             issues.append(
                 f"component {component_key} repository {field_name} '{value}' "

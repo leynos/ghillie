@@ -1,4 +1,16 @@
-"""Fallback Python implementations."""
+"""Fallback Python implementations.
+
+This module provides Python fallbacks used when the optional Rust extension is
+unavailable. Importing `hello` yields a simple greeting string as a sanity
+check entrypoint.
+
+Example:
+-------
+>>> from ghillie.pure import hello
+>>> hello()
+'hello from Python'
+
+"""
 
 from __future__ import annotations
 

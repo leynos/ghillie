@@ -40,7 +40,7 @@ strings) and referential integrity between components.
    pajv -s schemas/catalogue.schema.json -d .cache/catalogue.json
    ```
 
-3. A non-zero exit code indicates structural errors such as missing
+3. A non-zero exit code indicates structural errors, such as missing
    components in dependency lists or duplicate keys.
 
 ### Example: Wildside
