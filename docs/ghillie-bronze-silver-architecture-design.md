@@ -1,9 +1,8 @@
 # Bronze and Silver Layer Design for Ghillie
 
-Here’s a concrete design you can build from. I’ll keep it anchored in the
-Medallion model from the Ghillie docs, but grounded in the stack you named:
-Granian, async Falcon, msgspec, Postgres, async SQLAlchemy 2.x, async Dramatiq,
-pytest, pytest-bdd.
+This document presents a concrete design, anchored in the Medallion model from
+the Ghillie docs and grounded in the named stack: Granian, async Falcon,
+msgspec, Postgres, async SQLAlchemy 2.x, async Dramatiq, pytest, pytest-bdd.
 
 ______________________________________________________________________
 
@@ -71,7 +70,7 @@ ______________________________________________________________________
 
 ## 3. Database schemas
 
-### 3.1 Bronze: ,`raw_events`
+### 3.1 Bronze: `raw_events`
 
 **Purpose:** preserve an immutable history of everything we saw from external
 systems, with minimal assumptions, while giving the Silver layer enough hooks
@@ -353,7 +352,7 @@ A Dramatiq actor (synchronous wrapper around async code):
 ```python
 import asyncio
 import dramatiq
-from github import GitHubClient  # your own client using httpx/GraphQL
+from github import GitHubClient  # project client using httpx/GraphQL
 
 from .services import persist_raw_event
 from ..db.base import get_async_session
@@ -382,8 +381,8 @@ async def _ingest_github_repo_async(repo_external_id: str) -> None:
 
 ```
 
-You can schedule `ingest_github_repo` via cron, another orchestrator, or a
-simple periodic loop actor.
+Schedule `ingest_github_repo` via cron, another orchestrator, or a simple
+periodic loop actor.
 
 ### 5.3 Bronze persistence service
 
@@ -913,7 +912,7 @@ ______________________________________________________________________
 
 ## 10. How this ties back to the roadmap
 
-This design gives you concrete implementations for:
+This design provides concrete implementations for:
 
 - **Task 1.2.a – Bronze raw event store**: `raw_events` schema,
   `github_ingestion_offsets`, `persist_raw_event`.
@@ -930,5 +929,5 @@ From here, plugging in Gold/reporting is mostly a matter of:
 - building evidence bundles (again via msgspec),
 - and calling the status model.
 
-Bronze and Silver then stay boring, deterministic plumbing you can trust while
-you pile the clever stuff on top.
+Bronze and Silver then stay predictable, deterministic plumbing while the
+clever layers are added on top.

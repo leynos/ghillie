@@ -201,7 +201,7 @@ correctly, regardless of the underlying compliance check that generated it.
   `test`, `ops`) to signal how ingestion noise filters should treat them.
 - The schema is defined with `msgspec` structures and exported as a JSON Schema
   consumed by `pajv`. The shipped example catalogue
-  (`examples/wildside- catalogue.yaml`) exercises multi-repo projects, planned
+  (`examples/wildside-catalogue.yaml`) exercises multi-repo projects, planned
   components without repositories, and cross-project dependencies into the df12
   shared libraries.
 

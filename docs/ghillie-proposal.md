@@ -241,9 +241,8 @@ For each repo, since `last_ingested_at`:
 - **Previous status reports**
 
 - If the system commit generated reports back into `STATUS.md` or similar, the
-  system can
-  ingest them too, but the system probably don’t need to; the system already
-  have them in the DB.
+  system can ingest them too, but the system probably don’t need to; the system
+  already have them in the DB.
 
 Implementation‑wise, the system’d probably use:
 
@@ -610,8 +609,7 @@ ______________________________________________________________________
 ## 11. Where the big contexts actually help
 
 - **Repo‑level:** the system don’t need huge context here; the system is
-  looking at <= 1 week
-  of events.
+  looking at <= 1 week of events.
 - **Project‑level:** context window matters if:
 
 - The project spans many repos, _and_
