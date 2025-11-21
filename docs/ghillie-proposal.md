@@ -501,8 +501,8 @@ A few points to keep it honest:
 - More variability in what the model actually pays attention to
 
 Given the system is _already_ building a structured event + summary layer, the
-system doesn’t need million‑token contexts. A hierarchical approach scales much
-better than “just shove everything in, YOLO”.
+system doesn’t need a million‑token context. A hierarchical approach scales
+much better than “just shove everything in, YOLO”.
 
 ### 9.2 Model abstraction
 
@@ -533,7 +533,7 @@ benchmark:
 
 ### 9.3 Security/compliance reality check
 
-Given the kind of org the system works for:
+Given the kind of org the system works for,
 
 Sending the entire internal GitHub estate to _any_ external model needs serious
 scrutiny:
