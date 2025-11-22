@@ -25,6 +25,12 @@ Perform programmatic validation::
 
 from __future__ import annotations
 
+from .importer import (
+    CatalogueImporter,
+    CatalogueImportResult,
+    build_importer_from_url,
+    import_catalogue_job,
+)
 from .loader import lint_catalogue, load_catalogue
 from .models import (
     Catalogue,
@@ -37,19 +43,39 @@ from .models import (
     StatusSettings,
 )
 from .schema import build_catalogue_schema, write_catalogue_schema
+from .storage import (
+    ComponentEdgeRecord,
+    ComponentRecord,
+    Estate,
+    ProjectRecord,
+    RepositoryRecord,
+    init_catalogue_storage,
+)
 from .validation import CatalogueValidationError, validate_catalogue
+from .watch import GitCatalogueWatcher
 
 __all__ = [
     "Catalogue",
+    "CatalogueImportResult",
+    "CatalogueImporter",
     "CatalogueValidationError",
     "Component",
+    "ComponentEdgeRecord",
     "ComponentLink",
+    "ComponentRecord",
+    "Estate",
+    "GitCatalogueWatcher",
     "NoiseFilters",
     "Programme",
     "Project",
+    "ProjectRecord",
     "Repository",
+    "RepositoryRecord",
     "StatusSettings",
     "build_catalogue_schema",
+    "build_importer_from_url",
+    "import_catalogue_job",
+    "init_catalogue_storage",
     "lint_catalogue",
     "load_catalogue",
     "validate_catalogue",

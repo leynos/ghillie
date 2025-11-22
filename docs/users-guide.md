@@ -58,3 +58,40 @@ The catalogue example models Wildside as a multi-repository project:
 
 Noise controls ignore dependency bots and generated documentation paths, so the
 ingestion pipeline can focus on meaningful events.
+
+### Importing a catalogue into the database
+
+The catalogue importer reconciles the YAML file into relational tables for
+estates, projects, components, repositories, and component edges. Imports run
+inside a single transaction: invalid catalogues fail fast and do not leave
+partial rows behind. Re-running the same commit is idempotent and will prune
+entries removed from the source catalogue.
+
+Example: load the example catalogue into a SQLite database using the
+asynchronous importer:
+
+```python
+import asyncio
+from pathlib import Path
+
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from ghillie.catalogue import CatalogueImporter, init_catalogue_storage
+
+
+async def main() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///catalogue.db")
+    await init_catalogue_storage(engine)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    importer = CatalogueImporter(session_factory, estate_key="wildside")
+    await importer.import_path(Path("examples/wildside-catalogue.yaml"), commit_sha="abc123")
+
+
+asyncio.run(main())
+```
+
+In deployments that already run Dramatiq workers, use the
+`ghillie.catalogue.importer.import_catalogue_job` actor. It accepts the
+catalogue path, database URL, estate key, optional estate name, and commit SHA
+so scheduling systems can enqueue work without importing Python modules.
