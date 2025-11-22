@@ -1,0 +1,316 @@
+{
+  "$ref": "#/$defs/Catalogue",
+  "$defs": {
+    "Catalogue": {
+      "title": "Catalogue",
+      "description": "Top-level estate catalogue.",
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer"
+        },
+        "projects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Project"
+          }
+        },
+        "programmes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Programme"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "version",
+        "projects"
+      ]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "Project definition with components and configuration.",
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "programme": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Component"
+          }
+        },
+        "noise": {
+          "$ref": "#/$defs/NoiseFilters"
+        },
+        "status": {
+          "$ref": "#/$defs/StatusSettings"
+        },
+        "documentation_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "key",
+        "name",
+        "components"
+      ]
+    },
+    "Component": {
+      "title": "Component",
+      "description": "Component within a project, with optional repository mapping.",
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "default": "service"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "lifecycle": {
+          "enum": [
+            "active",
+            "deprecated",
+            "planned"
+          ],
+          "default": "active"
+        },
+        "repository": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/Repository"
+            }
+          ],
+          "default": null
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ComponentLink"
+          },
+          "default": []
+        },
+        "blocked_by": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ComponentLink"
+          },
+          "default": []
+        },
+        "emits_events_to": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ComponentLink"
+          },
+          "default": []
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "key",
+        "name"
+      ]
+    },
+    "Repository": {
+      "title": "Repository",
+      "description": "Repository mapping and default branch information.",
+      "type": "object",
+      "properties": {
+        "owner": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "default_branch": {
+          "type": "string",
+          "default": "main"
+        }
+      },
+      "required": [
+        "owner",
+        "name"
+      ]
+    },
+    "ComponentLink": {
+      "title": "ComponentLink",
+      "description": "Directed edge between components.",
+      "type": "object",
+      "properties": {
+        "component": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "dev",
+            "ops",
+            "runtime",
+            "test"
+          ],
+          "default": "runtime"
+        },
+        "rationale": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "component"
+      ]
+    },
+    "NoiseFilters": {
+      "title": "NoiseFilters",
+      "description": "Noise control for ingestion and reporting.",
+      "type": "object",
+      "properties": {
+        "ignore_authors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "ignore_labels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "ignore_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "ignore_title_prefixes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": []
+    },
+    "StatusSettings": {
+      "title": "StatusSettings",
+      "description": "Status generation preferences per project.",
+      "type": "object",
+      "properties": {
+        "summarise_dependency_prs": {
+          "type": "boolean",
+          "default": false
+        },
+        "emphasise_documentation": {
+          "type": "boolean",
+          "default": false
+        },
+        "prefer_long_form": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": []
+    },
+    "Programme": {
+      "title": "Programme",
+      "description": "A programme groups related projects under a strategic umbrella.",
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "projects": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "key",
+        "name"
+      ]
+    }
+  },
+  "$id": "https://ghillie.example/schemas/catalogue.json"
+}
