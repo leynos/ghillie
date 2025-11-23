@@ -1,8 +1,8 @@
 """Unit tests for the git-based catalogue watcher."""
-# ruff: noqa: D103,S603,S607
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import typing as typ
 
@@ -18,21 +18,41 @@ if typ.TYPE_CHECKING:
 
 
 def _init_repo(repo_path: pathlib.Path) -> str:
-    subprocess.run(["git", "init", str(repo_path)], check=True, capture_output=True)
-    subprocess.run(
-        ["git", "-C", str(repo_path), "config", "user.email", "ghillie@example.com"],
+    git_executable = shutil.which("git")
+    if git_executable is None:
+        message = "git binary required for watcher tests"
+        raise FileNotFoundError(message)
+
+    subprocess.run(  # noqa: S603  # fixed git init in local temp repo
+        [git_executable, "init", str(repo_path)],
         check=True,
         capture_output=True,
+        timeout=5,
     )
-    subprocess.run(
-        ["git", "-C", str(repo_path), "config", "user.name", "Ghillie"],
+    subprocess.run(  # noqa: S603  # fixed git config
+        [
+            git_executable,
+            "-C",
+            str(repo_path),
+            "config",
+            "user.email",
+            "ghillie@example.com",
+        ],
         check=True,
         capture_output=True,
+        timeout=5,
     )
-    subprocess.run(
-        ["git", "-C", str(repo_path), "checkout", "-b", "main"],
+    subprocess.run(  # noqa: S603  # fixed git config
+        [git_executable, "-C", str(repo_path), "config", "user.name", "Ghillie"],
         check=True,
         capture_output=True,
+        timeout=5,
+    )
+    subprocess.run(  # noqa: S603  # fixed git checkout
+        [git_executable, "-C", str(repo_path), "checkout", "-b", "main"],
+        check=True,
+        capture_output=True,
+        timeout=5,
     )
     (repo_path / "catalogue.yaml").write_text(
         """
@@ -44,33 +64,37 @@ projects:
 """,
         encoding="utf-8",
     )
-    subprocess.run(
-        ["git", "-C", str(repo_path), "add", "catalogue.yaml"],
+    subprocess.run(  # noqa: S603  # fixed git add
+        [git_executable, "-C", str(repo_path), "add", "catalogue.yaml"],
         check=True,
         capture_output=True,
+        timeout=5,
     )
-    subprocess.run(
-        ["git", "-C", str(repo_path), "commit", "-m", "init"],
+    subprocess.run(  # noqa: S603  # fixed git commit
+        [git_executable, "-C", str(repo_path), "commit", "-m", "init"],
         check=True,
         capture_output=True,
+        timeout=5,
     )
-    commit = subprocess.run(
-        ["git", "-C", str(repo_path), "rev-parse", "main"],
+    commit = subprocess.run(  # noqa: S603  # fixed git rev-parse
+        [git_executable, "-C", str(repo_path), "rev-parse", "main"],
         check=True,
         capture_output=True,
         text=True,
+        timeout=5,
     )
     return commit.stdout.strip()
 
 
 @pytest.fixture(autouse=True)
 def stub_broker() -> StubBroker:
+    """Provide a stub Dramatiq broker for watcher tests."""
     broker = StubBroker()
     dramatiq.set_broker(broker)
     return broker
 
 
-def test_watcher_enqueues_on_new_commit(
+def test_watcher_enqueues_on_new_commit(  # noqa: D103
     tmp_path: pathlib.Path, stub_broker: StubBroker
 ) -> None:
     repo_path = tmp_path / "repo"
@@ -92,13 +116,15 @@ def test_watcher_enqueues_on_new_commit(
     )
 
     first = watcher.tick()
-    assert first is True
+    assert first is True, "tick should enqueue on first unseen commit"
 
     queue = broker.queues[fake_import.queue_name]
-    assert queue.qsize() == 1
+    assert queue.qsize() == 1, "queue should have one message after first tick"
     decoded = Message.decode(queue.get_nowait())
-    assert decoded.kwargs["commit_sha"] == commit
+    assert decoded.kwargs["commit_sha"] == commit, (
+        "enqueued message should carry commit sha"
+    )
 
     second = watcher.tick()
-    assert second is False
-    assert queue.qsize() == 0
+    assert second is False, "tick should not enqueue when commit unchanged"
+    assert queue.qsize() == 0, "queue should be empty after reading the only message"

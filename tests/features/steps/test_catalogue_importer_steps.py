@@ -164,15 +164,22 @@ def dependency_edge_present(import_context: ImportContext) -> None:
 def row_counts(import_context: ImportContext) -> None:
     """Confirm expected row counts after initial import."""
     projects, components, edges, repos = _counts(import_context["session_factory"])
-    assert projects == EXPECTED_PROJECTS
-    assert components == EXPECTED_COMPONENTS
-    assert edges == EXPECTED_EDGES
-    assert repos == EXPECTED_REPOS
+    assert projects == EXPECTED_PROJECTS, (
+        f"expected {EXPECTED_PROJECTS} projects, got {projects}"
+    )
+    assert components == EXPECTED_COMPONENTS, (
+        f"expected {EXPECTED_COMPONENTS} components, got {components}"
+    )
+    assert edges == EXPECTED_EDGES, f"expected {EXPECTED_EDGES} edges, got {edges}"
+    assert repos == EXPECTED_REPOS, f"expected {EXPECTED_REPOS} repos, got {repos}"
 
 
 @then("no catalogue rows are duplicated")
 def idempotent_counts(import_context: ImportContext) -> None:
     """Validate that the second import leaves counts unchanged."""
     projects, components, edges, repos = _counts(import_context["session_factory"])
-    assert "first_counts" in import_context
-    assert (projects, components, edges, repos) == import_context["first_counts"]
+    assert "first_counts" in import_context, "first_counts not recorded in context"
+    assert (projects, components, edges, repos) == import_context["first_counts"], (
+        f"expected idempotent counts {import_context['first_counts']} "
+        f"but got {(projects, components, edges, repos)}"
+    )

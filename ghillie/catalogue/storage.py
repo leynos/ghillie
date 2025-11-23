@@ -20,7 +20,6 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
-    func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -130,7 +129,9 @@ class ComponentRecord(Base):
     """Component definition tied to a project."""
 
     __tablename__ = "components"
-    __table_args__ = (UniqueConstraint("key", name="uq_component_key"),)
+    __table_args__ = (
+        UniqueConstraint("project_id", "key", name="uq_component_key_per_project"),
+    )
 
     id: Mapped[str] = mapped_column(
         String(36),
@@ -205,21 +206,41 @@ class ComponentEdgeRecord(Base):
 
 
 class CatalogueImportRecord(Base):
-    """Audit log of processed catalogue commits."""
+    """Audit log of processed catalogue commits per estate."""
 
     __tablename__ = "catalogue_imports"
+    __table_args__ = (
+        UniqueConstraint("estate_id", "commit_sha", name="uq_catalogue_import_commit"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     estate_id: Mapped[str] = mapped_column(ForeignKey("estates.id", ondelete="CASCADE"))
-    commit_sha: Mapped[str | None] = mapped_column(String(64), unique=True)
+    commit_sha: Mapped[str | None] = mapped_column(String(64))
     imported_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True), default=_utcnow
     )
 
     estate: Mapped[Estate] = relationship()
 
 
 async def init_catalogue_storage(engine: AsyncEngine) -> None:
-    """Create catalogue tables if they do not already exist."""
+    """Create catalogue tables if they do not already exist.
+
+    Parameters
+    ----------
+    engine:
+        Async SQLAlchemy engine bound to the target database.
+
+    Returns
+    -------
+    None
+
+    Examples
+    --------
+    >>> from sqlalchemy.ext.asyncio import create_async_engine
+    >>> engine = create_async_engine("sqlite+aiosqlite:///catalogue.db")
+    >>> await init_catalogue_storage(engine)
+
+    """
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

@@ -1,22 +1,45 @@
 """Catalogue importer and reconciler.
 
-The importer watches a version-controlled catalogue file and reconciles its
-projects, components, repositories, and component edges into relational
-tables. Reconciliation is idempotent and wrapped in a single transaction so a
-failing catalogue cannot partially update state.
+Usage
+-----
+Import a catalogue file asynchronously::
+
+    from pathlib import Path
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from ghillie.catalogue import CatalogueImporter, init_catalogue_storage
+
+    engine = create_async_engine("sqlite+aiosqlite:///catalogue.db")
+    await init_catalogue_storage(engine)
+    importer = CatalogueImporter(async_sessionmaker(engine, expire_on_commit=False))
+    await importer.import_path(
+        Path("examples/wildside-catalogue.yaml"), commit_sha="abc123"
+    )
+
+Run the same import synchronously (CLI / worker startup)::
+
+    importer.run_sync(Path("examples/wildside-catalogue.yaml"), commit_sha="abc123")
+
+The importer:
+
+    * wraps each reconciliation in a **single transaction** to avoid partial writes;
+    * is **idempotent per estate + commit_sha**; repeated imports of the same
+      commit for the same estate are skipped; and
+    * prunes components, edges, and repositories only when they are no longer
+      referenced within or across estates.
 """
 
 from __future__ import annotations
 
 import asyncio
 import dataclasses
+import os
 import typing as typ
 from pathlib import Path
 
 import dramatiq
 import msgspec
 from dramatiq.brokers.stub import StubBroker
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -44,7 +67,22 @@ SessionFactory = async_sessionmaker[AsyncSession]
 
 @dataclasses.dataclass(slots=True)
 class CatalogueImportResult:
-    """Summary of a catalogue reconciliation run."""
+    """Summary of a catalogue reconciliation run.
+
+    Parameters
+    ----------
+    estate_key:
+        Slug of the estate processed.
+    commit_sha:
+        Commit SHA used to identify this import attempt.
+    projects_created/updated/deleted, components_created/updated/deleted,
+    repositories_created/updated/deleted, edges_created/updated/deleted:
+        Counters describing reconciliation effects.
+    skipped:
+        True when the commit was already processed for this estate and work was
+        short-circuited.
+
+    """
 
     estate_key: str
     commit_sha: str | None
@@ -72,7 +110,25 @@ def _set_if_changed(model: object, attr: str, value: object) -> bool:
 
 
 class CatalogueImporter:
-    """Import catalogue files into the persistence layer."""
+    """Import catalogue files into the persistence layer.
+
+    Parameters
+    ----------
+    session_factory:
+        Async session factory (or zero-arg callable returning one) bound to the
+        target database.
+    estate_key:
+        Slug for the estate being reconciled.
+    estate_name:
+        Optional display name for the estate.
+
+    Notes
+    -----
+    Each call to :meth:`import_catalogue` or :meth:`import_path` runs inside a
+    single transaction, is idempotent per estate+commit, and prunes only records
+    no longer referenced within the same estate.
+
+    """
 
     def __init__(
         self,
@@ -89,14 +145,49 @@ class CatalogueImporter:
     async def import_path(
         self, catalogue_path: Path, *, commit_sha: str | None = None
     ) -> CatalogueImportResult:
-        """Load and import a catalogue file from disk."""
+        """Load and import a catalogue file from disk.
+
+        Parameters
+        ----------
+        catalogue_path:
+            Path to the YAML catalogue.
+        commit_sha:
+            Optional commit SHA for idempotency tracking.
+
+        Returns
+        -------
+        CatalogueImportResult
+            Summary of the reconciliation run.
+
+        """
         catalogue = load_catalogue(catalogue_path)
         return await self.import_catalogue(catalogue, commit_sha=commit_sha)
 
     async def import_catalogue(
         self, catalogue: Catalogue, *, commit_sha: str | None = None
     ) -> CatalogueImportResult:
-        """Validate and reconcile an in-memory catalogue instance."""
+        """Validate and reconcile an in-memory catalogue instance.
+
+        Parameters
+        ----------
+        catalogue:
+            Parsed catalogue instance.
+        commit_sha:
+            Optional commit SHA for idempotency tracking.
+
+        Returns
+        -------
+        CatalogueImportResult
+            Summary of reconciliation effects.
+
+        Raises
+        ------
+        CatalogueValidationError
+            If the catalogue is structurally invalid.
+        RuntimeError
+            If estate validation preconditions fail.
+
+        """
         result = CatalogueImportResult(self.estate_key, commit_sha)
 
         async with self._session_factory() as session, session.begin():  # type: ignore[call-arg]
@@ -105,17 +196,19 @@ class CatalogueImporter:
             if commit_sha:
                 existing_import = await session.scalar(
                     select(CatalogueImportRecord).where(
-                        CatalogueImportRecord.commit_sha == commit_sha
+                        CatalogueImportRecord.commit_sha == commit_sha,
+                        CatalogueImportRecord.estate_id == estate.id,
                     )
                 )
                 if existing_import:
                     result.skipped = True
+                    return result
 
             project_index = await self._reconcile_projects(
                 session, estate, catalogue, result
             )
             component_index = await self._reconcile_components(
-                session, project_index, catalogue, result
+                session, project_index, estate.id, catalogue, result
             )
             await self._reconcile_edges(session, component_index, catalogue, result)
 
@@ -132,7 +225,11 @@ class CatalogueImporter:
     def run_sync(
         self, catalogue_path: Path, *, commit_sha: str | None = None
     ) -> CatalogueImportResult:
-        """Run the importer synchronously for blocking contexts."""
+        """Run the importer synchronously for blocking contexts.
+
+        This helper wraps :meth:`import_path` with ``asyncio.run`` for CLI usage
+        or Dramatiq actors that execute in synchronous contexts.
+        """
         return asyncio.run(self.import_path(catalogue_path, commit_sha=commit_sha))
 
     async def _ensure_estate(self, session: AsyncSession) -> Estate:
@@ -216,10 +313,11 @@ class CatalogueImporter:
 
         return existing_projects
 
-    async def _reconcile_components(
+    async def _reconcile_components(  # noqa: PLR0913
         self,
         session: AsyncSession,
         project_index: dict[str, ProjectRecord],
+        estate_id: str,
         catalogue: Catalogue,
         result: CatalogueImportResult,
     ) -> dict[str, ComponentRecord]:
@@ -270,17 +368,15 @@ class CatalogueImporter:
                     )
                     changed |= _set_if_changed(
                         comp_record,
-                        "repository_id",
-                        repository_record.id if repository_record else None,
+                        "repository",
+                        repository_record,
                     )
                     if changed:
                         result.components_updated += 1
                 else:
                     comp_record = ComponentRecord(
                         project_id=record.id,
-                        repository_id=(
-                            repository_record.id if repository_record else None
-                        ),
+                        repository=repository_record,
                         key=component.key,
                         name=component.name,
                         type=component.type,
@@ -304,6 +400,7 @@ class CatalogueImporter:
             session,
             repo_index,
             component_index,
+            estate_id,
             result,
         )
 
@@ -340,11 +437,12 @@ class CatalogueImporter:
             result.repositories_updated += 1
         return repository
 
-    async def _prune_unreferenced_repositories(
+    async def _prune_unreferenced_repositories(  # noqa: PLR0913
         self,
         session: AsyncSession,
         repo_index: dict[str, RepositoryRecord],
         component_index: dict[str, ComponentRecord],
+        estate_id: str,
         result: CatalogueImportResult,
     ) -> None:
         existing_repo_ids = getattr(self, "_existing_repo_ids", set())
@@ -358,6 +456,17 @@ class CatalogueImporter:
                 repository.id in existing_repo_ids
                 and repository.id not in desired_repo_ids
             ):
+                other_usage = await session.scalar(
+                    select(func.count())
+                    .select_from(ComponentRecord)
+                    .join(ProjectRecord, ComponentRecord.project_id == ProjectRecord.id)
+                    .where(
+                        ComponentRecord.repository_id == repository.id,
+                        ProjectRecord.estate_id != estate_id,
+                    )
+                )
+                if other_usage and other_usage > 0:
+                    continue
                 await session.delete(repository)
                 result.repositories_deleted += 1
                 repo_index.pop(slug, None)
@@ -408,6 +517,7 @@ class CatalogueImporter:
         catalogue: Catalogue,
         result: CatalogueImportResult,
     ) -> None:
+        await session.flush()
         component_ids = {component.id for component in component_index.values()}
         if not component_ids:
             return
@@ -453,7 +563,42 @@ def build_importer_from_url(
     estate_key: str = "default",
     estate_name: str | None = None,
 ) -> CatalogueImporter:
-    """Construct an importer from a database URL and ensure schema exists."""
+    """Construct an importer from a database URL in synchronous contexts.
+
+    Parameters
+    ----------
+    database_url:
+        SQLAlchemy URL for the catalogue database.
+    estate_key:
+        Slug identifying the estate to reconcile.
+    estate_name:
+        Human-friendly estate name; defaults to ``estate_key`` when omitted.
+
+    Returns
+    -------
+    CatalogueImporter
+        An importer bound to a session factory for the given database.
+
+    Notes
+    -----
+    This helper calls ``asyncio.run`` to initialise the schema and should only
+    be used from synchronous startup or worker bootstrap code where no event
+    loop is running. In asynchronous contexts, construct an ``AsyncEngine``,
+    ``await init_catalogue_storage(engine)``, and pass an ``async_sessionmaker``
+    into :class:`CatalogueImporter` directly.
+
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+    else:  # pragma: no cover - sanity guard
+        message = (
+            "build_importer_from_url must be called from sync code; use an "
+            "AsyncEngine + init_catalogue_storage + CatalogueImporter in async contexts"
+        )
+        raise RuntimeError(message)
+
     engine = create_async_engine(database_url, future=True)
     asyncio.run(init_catalogue_storage(engine))
     return CatalogueImporter(
@@ -469,7 +614,19 @@ except ModuleNotFoundError:
     _current_broker = None
 
 if _current_broker is None:
-    dramatiq.set_broker(StubBroker())
+    allow_stub = os.environ.get("GHILLIE_ALLOW_STUB_BROKER", "")
+    running_tests = any(
+        key in os.environ
+        for key in ["PYTEST_CURRENT_TEST", "PYTEST_XDIST_WORKER", "PYTEST_ADDOPTS"]
+    )
+    if allow_stub.lower() in {"1", "true", "yes"} or running_tests:
+        dramatiq.set_broker(StubBroker())
+    else:  # pragma: no cover - guard for prod misconfigurations
+        message = (
+            "No Dramatiq broker configured. Set GHILLIE_ALLOW_STUB_BROKER=1 for "
+            "local/test runs or configure a real broker."
+        )
+        raise RuntimeError(message)
 
 
 @dramatiq.actor
@@ -480,7 +637,25 @@ def import_catalogue_job(
     commit_sha: str | None = None,
     estate: tuple[str, str | None] | None = None,
 ) -> None:
-    """Dramatiq actor for asynchronous catalogue reconciliation."""
+    """Dramatiq actor for asynchronous catalogue reconciliation.
+
+    Parameters
+    ----------
+    catalogue_path:
+        Absolute path to the catalogue file to import.
+    database_url:
+        SQLAlchemy URL for the catalogue database.
+    commit_sha:
+        Optional commit SHA used for idempotency.
+    estate:
+        Tuple of (estate_key, estate_name) to scope the import.
+
+    Notes
+    -----
+    Intended for use by background workers; delegates to
+    :func:`build_importer_from_url` which must run in synchronous contexts.
+
+    """
     estate_key, estate_name = estate if estate else ("default", None)
     importer = build_importer_from_url(
         database_url, estate_key=estate_key, estate_name=estate_name
