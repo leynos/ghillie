@@ -84,7 +84,7 @@ def _counts(
 def bdd_catalogue_path(import_context: ImportContext) -> Path:
     """Persist the path to the example catalogue for later steps."""
     path = Path("examples/wildside-catalogue.yaml")
-    assert path.exists()
+    assert path.exists(), f"expected example catalogue at {path}"
     import_context["catalogue_path"] = path
     return path
 
@@ -92,13 +92,15 @@ def bdd_catalogue_path(import_context: ImportContext) -> Path:
 @given("a fresh catalogue database")
 def fresh_database(import_context: ImportContext) -> None:
     """Validate the importer fixture was initialised."""
-    assert "importer" in import_context
+    assert "importer" in import_context, (
+        "import_context should contain an importer instance"
+    )
 
 
 @when('the catalogue importer processes commit "abc123"')
 def run_import(import_context: ImportContext) -> None:
     """Import the catalogue with the reference commit identifier."""
-    assert "catalogue_path" in import_context
+    assert "catalogue_path" in import_context, "catalogue_path missing from context"
     importer = import_context["importer"]
     asyncio.run(
         importer.import_path(import_context["catalogue_path"], commit_sha=COMMIT_SHA)
@@ -109,7 +111,7 @@ def run_import(import_context: ImportContext) -> None:
 @when('the catalogue importer processes commit "abc123" again')
 def run_import_again(import_context: ImportContext) -> None:
     """Re-run the import to check idempotency."""
-    assert "catalogue_path" in import_context
+    assert "catalogue_path" in import_context, "catalogue_path missing from context"
     importer = import_context["importer"]
     asyncio.run(
         importer.import_path(import_context["catalogue_path"], commit_sha=COMMIT_SHA)
@@ -128,8 +130,11 @@ def repository_present(import_context: ImportContext) -> None:
                     RepositoryRecord.name == "wildside",
                 )
             )
-            assert repo is not None
-            assert repo.default_branch == "main"
+            assert repo is not None, "expected repository leynos/wildside to exist"
+            assert repo.default_branch == "main", (
+                "expected default_branch main, got "
+                f"{getattr(repo, 'default_branch', None)}"
+            )
 
     asyncio.run(_assert_repo())
 
@@ -146,8 +151,8 @@ def dependency_edge_present(import_context: ImportContext) -> None:
             engine = await session.scalar(
                 select(ComponentRecord).where(ComponentRecord.key == "wildside-engine")
             )
-            assert core is not None
-            assert engine is not None
+            assert core is not None, "expected component wildside-core"
+            assert engine is not None, "expected component wildside-engine"
             edge = await session.scalar(
                 select(ComponentEdgeRecord).where(
                     ComponentEdgeRecord.from_component_id == core.id,
@@ -155,7 +160,9 @@ def dependency_edge_present(import_context: ImportContext) -> None:
                     ComponentEdgeRecord.relationship_type == "depends_on",
                 )
             )
-            assert edge is not None
+            assert edge is not None, (
+                "expected depends_on edge wildside-core -> wildside-engine"
+            )
 
     asyncio.run(_assert_edge())
 

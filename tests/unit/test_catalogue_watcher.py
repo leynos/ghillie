@@ -18,18 +18,19 @@ if typ.TYPE_CHECKING:
 
 
 def _init_repo(repo_path: pathlib.Path) -> str:
+    """Initialise a temporary git repo containing a minimal catalogue file."""
     git_executable = shutil.which("git")
     if git_executable is None:
         message = "git binary required for watcher tests"
         raise FileNotFoundError(message)
 
-    subprocess.run(  # noqa: S603  # fixed git init in local temp repo
+    subprocess.run(  # noqa: S603  # fixed git init in local temp repo with controlled args
         [git_executable, "init", str(repo_path)],
         check=True,
         capture_output=True,
         timeout=5,
     )
-    subprocess.run(  # noqa: S603  # fixed git config
+    subprocess.run(  # noqa: S603  # fixed git config in temp repo with controlled args
         [
             git_executable,
             "-C",
@@ -42,13 +43,13 @@ def _init_repo(repo_path: pathlib.Path) -> str:
         capture_output=True,
         timeout=5,
     )
-    subprocess.run(  # noqa: S603  # fixed git config
+    subprocess.run(  # noqa: S603  # fixed git config in temp repo with controlled args
         [git_executable, "-C", str(repo_path), "config", "user.name", "Ghillie"],
         check=True,
         capture_output=True,
         timeout=5,
     )
-    subprocess.run(  # noqa: S603  # fixed git checkout
+    subprocess.run(  # noqa: S603  # fixed git checkout in temp repo with controlled args
         [git_executable, "-C", str(repo_path), "checkout", "-b", "main"],
         check=True,
         capture_output=True,
@@ -64,19 +65,19 @@ projects:
 """,
         encoding="utf-8",
     )
-    subprocess.run(  # noqa: S603  # fixed git add
+    subprocess.run(  # noqa: S603  # fixed git add in temp repo with controlled args
         [git_executable, "-C", str(repo_path), "add", "catalogue.yaml"],
         check=True,
         capture_output=True,
         timeout=5,
     )
-    subprocess.run(  # noqa: S603  # fixed git commit
+    subprocess.run(  # noqa: S603  # fixed git commit in temp repo with controlled args
         [git_executable, "-C", str(repo_path), "commit", "-m", "init"],
         check=True,
         capture_output=True,
         timeout=5,
     )
-    commit = subprocess.run(  # noqa: S603  # fixed git rev-parse
+    commit = subprocess.run(  # noqa: S603  # fixed git rev-parse in temp repo with controlled args
         [git_executable, "-C", str(repo_path), "rev-parse", "main"],
         check=True,
         capture_output=True,
@@ -94,9 +95,10 @@ def stub_broker() -> StubBroker:
     return broker
 
 
-def test_watcher_enqueues_on_new_commit(  # noqa: D103
+def test_watcher_enqueues_on_new_commit(
     tmp_path: pathlib.Path, stub_broker: StubBroker
 ) -> None:
+    """Ensure watcher enqueues once per new commit and not twice."""
     repo_path = tmp_path / "repo"
     repo_path.mkdir()
     commit = _init_repo(repo_path)

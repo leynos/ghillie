@@ -24,8 +24,8 @@ The importer:
     * wraps each reconciliation in a **single transaction** to avoid partial writes;
     * is **idempotent per estate + commit_sha**; repeated imports of the same
       commit for the same estate are skipped; and
-    * prunes components, edges, and repositories only when they are no longer
-      referenced within or across estates.
+    * prunes components and edges only within the current estate, and prunes
+      repositories only when they are unused across *all* estates.
 """
 
 from __future__ import annotations
@@ -33,6 +33,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import os
+import sys
 import typing as typ
 from pathlib import Path
 
@@ -189,6 +190,13 @@ class CatalogueImporter:
 
         """
         result = CatalogueImportResult(self.estate_key, commit_sha)
+
+        # Defensive: callers passing in-memory catalogues may bypass loader
+        # validation; enforce structural checks here to guarantee global
+        # component-key uniqueness across the estate and valid edges.
+        from .validation import validate_catalogue  # local import to avoid cycles
+
+        validate_catalogue(catalogue)
 
         async with self._session_factory() as session, session.begin():  # type: ignore[call-arg]
             estate = await self._ensure_estate(session)
@@ -615,7 +623,7 @@ except ModuleNotFoundError:
 
 if _current_broker is None:
     allow_stub = os.environ.get("GHILLIE_ALLOW_STUB_BROKER", "")
-    running_tests = any(
+    running_tests = "pytest" in sys.modules or any(
         key in os.environ
         for key in ["PYTEST_CURRENT_TEST", "PYTEST_XDIST_WORKER", "PYTEST_ADDOPTS"]
     )
