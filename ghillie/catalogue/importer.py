@@ -329,6 +329,8 @@ class CatalogueImporter:
         catalogue: Catalogue,
         result: CatalogueImportResult,
     ) -> dict[str, ComponentRecord]:
+        # Catalogue validation enforces global component key uniqueness across
+        # an estate. Component indexing here depends on that invariant.
         repo_index = {
             repo.slug: repo
             for repo in (await session.scalars(select(RepositoryRecord))).all()
@@ -454,11 +456,12 @@ class CatalogueImporter:
         result: CatalogueImportResult,
     ) -> None:
         existing_repo_ids = getattr(self, "_existing_repo_ids", set())
-        desired_repo_ids = {
-            comp.repository_id
-            for comp in component_index.values()
-            if comp.repository_id
-        }
+        desired_repo_ids: set[str] = set()
+        for comp in component_index.values():
+            repo = comp.repository
+            repo_id = getattr(repo, "id", None)
+            if repo_id is not None:
+                desired_repo_ids.add(repo_id)
         for slug, repository in list(repo_index.items()):
             if (
                 repository.id in existing_repo_ids
@@ -503,6 +506,10 @@ class CatalogueImporter:
         component_index: dict[str, ComponentRecord],
         catalogue: Catalogue,
     ) -> dict[tuple[str, str, str], ComponentLink]:
+        # Edge resolution assumes component keys are globally unique within an
+        # estate and present in ``component_index``.
+        from .validation import CatalogueValidationError
+
         desired_edges: dict[tuple[str, str, str], ComponentLink] = {}
         for project in catalogue.projects:
             for comp in project.components:
@@ -513,7 +520,15 @@ class CatalogueImporter:
                     ("emits_events_to", comp.emits_events_to),
                 ):
                     for edge in edges:
-                        target = component_index[edge.component]
+                        try:
+                            target = component_index[edge.component]
+                        except KeyError as exc:
+                            message = (
+                                f"edge from {comp.key} references unknown component "
+                                f"{edge.component}; catalogue must maintain globally "
+                                "unique component keys"
+                            )
+                            raise CatalogueValidationError([message]) from exc
                         desired_edges[(source.id, target.id, edge_name)] = edge
 
         return desired_edges
