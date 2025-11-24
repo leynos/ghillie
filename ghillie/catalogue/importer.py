@@ -186,8 +186,6 @@ class CatalogueImporter:
         ------
         CatalogueValidationError
             If the catalogue is structurally invalid.
-        RuntimeError
-            If estate validation preconditions fail.
 
         """
         result = CatalogueImportResult(self.estate_key, commit_sha)
@@ -236,8 +234,24 @@ class CatalogueImporter:
     ) -> CatalogueImportResult:
         """Run the importer synchronously for blocking contexts.
 
-        This helper wraps :meth:`import_path` with ``asyncio.run`` for CLI usage
-        or Dramatiq actors that execute in synchronous contexts.
+        Parameters
+        ----------
+        catalogue_path:
+            Path to the YAML catalogue to import.
+        commit_sha:
+            Optional commit SHA to record for idempotency tracking.
+
+        Returns
+        -------
+        CatalogueImportResult
+            Summary of reconciliation effects.
+
+        Notes
+        -----
+        This helper wraps :meth:`import_path` with ``asyncio.run`` and must be
+        called only from synchronous code paths where no event loop is running
+        (for example, CLI entrypoints or Dramatiq actors).
+
         """
         return asyncio.run(self.import_path(catalogue_path, commit_sha=commit_sha))
 
@@ -339,7 +353,7 @@ class CatalogueImporter:
             repo.slug: repo
             for repo in (await session.scalars(select(RepositoryRecord))).all()
         }
-        self._existing_repo_ids = {repo.id for repo in repo_index.values()}
+        existing_repo_ids = {repo.id for repo in repo_index.values()}
 
         component_index: dict[str, ComponentRecord] = {}
 
@@ -415,6 +429,7 @@ class CatalogueImporter:
             repo_index,
             component_index,
             estate_id,
+            existing_repo_ids,
             result,
         )
 
@@ -458,10 +473,10 @@ class CatalogueImporter:
         repo_index: dict[str, RepositoryRecord],
         component_index: dict[str, ComponentRecord],
         estate_id: str,
+        existing_repo_ids: set[str],
         result: CatalogueImportResult,
     ) -> None:
         """Delete repositories unreferenced by any component across estates."""
-        existing_repo_ids = getattr(self, "_existing_repo_ids", set())
         desired_repo_ids: set[str] = set()
         for comp in component_index.values():
             repo = comp.repository
@@ -641,6 +656,9 @@ def build_importer_from_url(
     )
 
 
+_IMPORTER_CACHE: dict[tuple[str, str, str | None], CatalogueImporter] = {}
+
+
 try:  # pragma: no cover - exercised in tests and CLI usage
     _current_broker = dramatiq.get_broker()
 except ModuleNotFoundError:
@@ -690,7 +708,11 @@ def import_catalogue_job(
 
     """
     estate_key, estate_name = estate if estate else ("default", None)
-    importer = build_importer_from_url(
-        database_url, estate_key=estate_key, estate_name=estate_name
-    )
+    cache_key = (database_url, estate_key, estate_name)
+    importer = _IMPORTER_CACHE.get(cache_key)
+    if importer is None:
+        importer = build_importer_from_url(
+            database_url, estate_key=estate_key, estate_name=estate_name
+        )
+        _IMPORTER_CACHE[cache_key] = importer
     importer.run_sync(Path(catalogue_path), commit_sha=commit_sha)
