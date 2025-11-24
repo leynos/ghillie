@@ -908,6 +908,19 @@ A few practical constraints you’ll want to bake into the design up front:
 - disable ingestion for some repos,
 - or scale Dramatiq workers horizontally.
 
+### 9.1 Catalogue importer and reconciliation (Phase 1.1.b)
+
+The catalogue importer materializes the YAML catalogue into `estates`,
+`projects`, `components`, `component_edges`, and `repositories`. It runs inside
+one transaction per commit, so validation errors roll back cleanly. Imports are
+idempotent: projects/components/repos are upserted by key, missing entries are
+pruned, and component edges are rebuilt from the catalogue graph each run.
+Processed commits are recorded in `catalogue_imports` for audit purposes, while
+allowing replays when operators want to reassert catalogue truth. A Dramatiq
+actor (`import_catalogue_job`) executes the importer asynchronously, and a
+`GitCatalogueWatcher` polls `git rev-parse` to enqueue new imports whenever the
+catalogue repository’s HEAD moves.
+
 ______________________________________________________________________
 
 ## 10. How this ties back to the roadmap

@@ -43,7 +43,7 @@ components, repositories, and their relationships.
   repositories, and the schema is validated by a documented linter or JSON
   Schema.
 
-- [ ] **Task 1.1.b – Implement catalogue importer and reconciler**  
+- [x] **Task 1.1.b – Implement catalogue importer and reconciler**  
   Implement a background service that watches the catalogue repository, parses
   project definitions, and reconciles them into the database tables for
   estates, projects, components, component edges, and repositories.

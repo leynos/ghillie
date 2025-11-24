@@ -133,8 +133,7 @@ def start_app_scheduler() -> None:
     scheduler.start()
 ```
 
-The scheduler runs as a sidecar process in lightweight deployments, for
-example:
+The scheduler runs as a sidecar process in lightweight deployments, for example:
 
 ```plaintext
 python -m ghillie.scheduler.app_scheduler
@@ -313,8 +312,8 @@ The following guidance can help select an appropriate driver.
   - jobs benefit from independent scaling, or
   - platform teams prefer cluster-native observability and control.
 
-Jobs can change driver by modifying the configuration. The application code
-and Dramatiq actor implementation remain unchanged.
+Jobs can change driver by modifying the configuration. The application code and
+Dramatiq actor implementation remain unchanged.
 
 ### Operational considerations
 
@@ -346,10 +345,10 @@ CPU-bound tasks called from async Dramatiq actors.
 
 ### Using loky with run_in_executor
 
-[loky](https://loky.readthedocs.io/) provides a robust
-`ProcessPoolExecutor` implementation with a `get_reusable_executor` helper that
-returns a process-local pool. Reusing the pool avoids the overhead of creating
-new processes for every task.
+[loky](https://loky.readthedocs.io/) provides a robust `ProcessPoolExecutor`
+implementation with a `get_reusable_executor` helper that returns a
+process-local pool. Reusing the pool avoids the overhead of creating new
+processes for every task.
 
 The following helper module defines an `async` function that submits a callable
 and arguments to loky and awaits the result:
@@ -440,8 +439,8 @@ async def analyse_repo(repo_id: str) -> None:
 ```
 
 The actor uses native async functions for remote calls and storage, while the
-pure CPU work executes in a separate process. From the perspective of the
-actor implementation, the CPU-bound section appears as a single `await`.
+pure CPU work executes in a separate process. From the perspective of the actor
+implementation, the CPU-bound section appears as a single `await`.
 
 ### Error handling and timeouts
 
@@ -508,4 +507,3 @@ scheduled work and CPU-bound tasks in Ghillie:
 
 Both patterns prioritise configuration-driven behaviour, isolation of
 responsibilities, and operational observability.
-
