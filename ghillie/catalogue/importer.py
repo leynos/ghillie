@@ -103,6 +103,7 @@ class CatalogueImportResult:
 
 
 def _set_if_changed(model: object, attr: str, value: object) -> bool:
+    """Update an attribute when the incoming value differs."""
     current = getattr(model, attr)
     if current == value:
         return False
@@ -241,6 +242,7 @@ class CatalogueImporter:
         return asyncio.run(self.import_path(catalogue_path, commit_sha=commit_sha))
 
     async def _ensure_estate(self, session: AsyncSession) -> Estate:
+        """Upsert the estate record and return the managed instance."""
         estate = await session.scalar(
             select(Estate).where(Estate.key == self.estate_key)
         )
@@ -261,6 +263,7 @@ class CatalogueImporter:
         catalogue: Catalogue,
         result: CatalogueImportResult,
     ) -> dict[str, ProjectRecord]:
+        """Upsert and prune project records for the given estate."""
         existing_projects = {
             project.key: project
             for project in (
@@ -329,6 +332,7 @@ class CatalogueImporter:
         catalogue: Catalogue,
         result: CatalogueImportResult,
     ) -> dict[str, ComponentRecord]:
+        """Upsert components per project and prune missing ones, then prune repos."""
         # Catalogue validation enforces global component key uniqueness across
         # an estate. Component indexing here depends on that invariant.
         repo_index = {
@@ -423,6 +427,7 @@ class CatalogueImporter:
         component: Component,
         result: CatalogueImportResult,
     ) -> RepositoryRecord | None:
+        """Upsert a repository for the component; return None when absent."""
         if component.repository is None:
             return None
 
@@ -455,6 +460,7 @@ class CatalogueImporter:
         estate_id: str,
         result: CatalogueImportResult,
     ) -> None:
+        """Delete repositories unreferenced by any component across estates."""
         existing_repo_ids = getattr(self, "_existing_repo_ids", set())
         desired_repo_ids: set[str] = set()
         for comp in component_index.values():
@@ -487,6 +493,7 @@ class CatalogueImporter:
         session: AsyncSession,
         component_ids: set[str],
     ) -> dict[tuple[str, str, str], ComponentEdgeRecord]:
+        """Load existing edges originating from the provided component IDs."""
         edges = await session.scalars(
             select(ComponentEdgeRecord).where(
                 ComponentEdgeRecord.from_component_id.in_(component_ids)
@@ -506,6 +513,7 @@ class CatalogueImporter:
         component_index: dict[str, ComponentRecord],
         catalogue: Catalogue,
     ) -> dict[tuple[str, str, str], ComponentLink]:
+        """Build desired edge set from the catalogue, raising on unknown targets."""
         # Edge resolution assumes component keys are globally unique within an
         # estate and present in ``component_index``.
         from .validation import CatalogueValidationError
@@ -540,6 +548,7 @@ class CatalogueImporter:
         catalogue: Catalogue,
         result: CatalogueImportResult,
     ) -> None:
+        """Upsert and prune component edges for the current estate."""
         await session.flush()
         component_ids = {component.id for component in component_index.values()}
         if not component_ids:
@@ -577,6 +586,7 @@ class CatalogueImporter:
 
 
 def _session_factory_from_engine(engine: AsyncEngine) -> SessionFactory:
+    """Create an async session factory with expire_on_commit disabled."""
     return async_sessionmaker(engine, expire_on_commit=False)
 
 
