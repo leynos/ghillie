@@ -21,7 +21,7 @@ validated with `msgspec` and exposed as a JSON Schema for external linters.
   dependency update pull requests should be ignored in downstream summaries.
 - Record documentation paths at both project level (`documentation_paths`) and
   per repository (`repository.documentation_paths`) so roadmaps and ADRs are
-  discoverable to ingestion and summarisation jobs.
+  discoverable to ingestion and summarization jobs.
 - See `examples/wildside-catalogue.yaml` for a complete multi-repository
   project with planned components and cross-project dependencies.
 
@@ -77,7 +77,7 @@ services can consume them without parsing YAML at runtime.
 
 > Operational note: existing deployments must add a JSON
 > `documentation_paths` column to the `repositories` table before enabling
-> this feature, because `Base.metadata.create_all` will not alter existing
+> this feature because `Base.metadata.create_all` will not alter existing
 > tables in place.
 
 Example: load the example catalogue into a SQLite database using the
