@@ -202,6 +202,8 @@ def test_schema_validates_simple_catalogue(tmp_path: Path) -> None:
     pajv_path = shutil.which("pajv")
     if pajv_path is None:
         pytest.skip("pajv is not installed; skipping JSON Schema validation")
+        return
+    assert pajv_path is not None
 
     try:
         subprocess.run(  # noqa: S603  # rationale: static pajv invocation with constant args
@@ -231,6 +233,8 @@ projects:
           owner: org
           name: gamma
           default_branch: main
+          documentation_paths:
+            - docs/adr/
     noise:
       ignore_authors: ["bots"]
       ignore_labels: ["chore/deps"]
@@ -245,6 +249,19 @@ projects:
 
     assert isinstance(catalogue, Catalogue)
     assert catalogue.projects[0].noise.ignore_labels == ["chore/deps"]
+    repository = catalogue.projects[0].components[0].repository
+    assert repository is not None
+    assert repository.documentation_paths == ["docs/adr/"]
+
+
+def test_schema_includes_repository_documentation_paths() -> None:
+    """Generated schema should include repository documentation paths."""
+    schema = build_catalogue_schema()
+
+    repository_schema = schema["$defs"]["Repository"]
+    assert "documentation_paths" in repository_schema["properties"]
+    doc_paths = repository_schema["properties"]["documentation_paths"]
+    assert doc_paths["items"]["type"] == "string"
 
 
 def test_lint_catalogue_rejects_unknown_programme(tmp_path: Path) -> None:

@@ -108,6 +108,7 @@ class RepositoryRecord(Base):
     name: Mapped[str] = mapped_column(String(255))
     default_branch: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    documentation_paths: Mapped[list[str]] = mapped_column(JSON, default=list)
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow
     )

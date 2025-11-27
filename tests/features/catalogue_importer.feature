@@ -7,5 +7,7 @@ Feature: Catalogue importer reconciliation
     Then the repository table contains "leynos/wildside" on branch "main"
     And the component graph includes "wildside-core" depends_on "wildside-engine"
     And the catalogue row counts are 2 projects, 7 components, 6 repositories
+    And project "wildside" retains catalogue configuration
+    And repository "leynos/wildside" exposes documentation paths
     When the catalogue importer processes commit "abc123" again
     Then no catalogue rows are duplicated

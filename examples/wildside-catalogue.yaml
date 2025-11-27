@@ -47,6 +47,9 @@ projects:
           owner: leynos
           name: wildside
           default_branch: main
+          documentation_paths:
+            - docs/roadmap.md
+            - docs/adr/
         depends_on:
           - component: wildside-engine
             kind: runtime

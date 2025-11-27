@@ -447,12 +447,14 @@ class CatalogueImporter:
             return None
 
         slug = component.repository.slug
+        documentation_paths = list(component.repository.documentation_paths)
         repository = repo_index.get(slug)
         if repository is None:
             repository = RepositoryRecord(
                 owner=component.repository.owner,
                 name=component.repository.name,
                 default_branch=component.repository.default_branch,
+                documentation_paths=documentation_paths,
             )
             session.add(repository)
             repo_index[slug] = repository
@@ -462,6 +464,9 @@ class CatalogueImporter:
         changed = False
         changed |= _set_if_changed(
             repository, "default_branch", component.repository.default_branch
+        )
+        changed |= _set_if_changed(
+            repository, "documentation_paths", documentation_paths
         )
         if changed:
             result.repositories_updated += 1

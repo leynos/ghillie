@@ -15,6 +15,7 @@ from ghillie.catalogue import (
     CatalogueImporter,
     ComponentEdgeRecord,
     ComponentRecord,
+    ProjectRecord,
     RepositoryRecord,
     init_catalogue_storage,
 )
@@ -190,3 +191,43 @@ def idempotent_counts(import_context: ImportContext) -> None:
         f"expected idempotent counts {import_context['first_counts']} "
         f"but got {(projects, components, edges, repos)}"
     )
+
+
+@then('project "wildside" retains catalogue configuration')
+def project_configuration_persisted(import_context: ImportContext) -> None:
+    """Ensure project-level noise, docs, and status preferences are stored."""
+
+    async def _assert_project() -> None:
+        async with import_context["session_factory"]() as session:
+            project = await session.scalar(
+                select(ProjectRecord).where(ProjectRecord.key == "wildside")
+            )
+
+            assert project is not None, "expected project wildside to be imported"
+            assert "chore/deps" in project.noise.get("ignore_labels", [])
+            assert "docs/roadmap.md" in project.documentation_paths
+            assert project.status_preferences.get("summarise_dependency_prs") is False
+
+    asyncio.run(_assert_project())
+
+
+@then('repository "leynos/wildside" exposes documentation paths')
+def repository_documentation_paths(import_context: ImportContext) -> None:
+    """Validate repository-level documentation paths are persisted."""
+
+    async def _assert_repo_docs() -> None:
+        async with import_context["session_factory"]() as session:
+            repository = await session.scalar(
+                select(RepositoryRecord).where(
+                    RepositoryRecord.owner == "leynos",
+                    RepositoryRecord.name == "wildside",
+                )
+            )
+
+            assert repository is not None, "expected repository leynos/wildside"
+            assert repository.documentation_paths == [
+                "docs/roadmap.md",
+                "docs/adr/",
+            ]
+
+    asyncio.run(_assert_repo_docs())
