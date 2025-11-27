@@ -7,7 +7,7 @@ import typing as typ
 from pathlib import Path
 
 import pytest
-from pytest_bdd import given, scenario, then, when
+from pytest_bdd import given, parsers, scenario, then, when
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -225,9 +225,27 @@ def repository_documentation_paths(import_context: ImportContext) -> None:
             )
 
             assert repository is not None, "expected repository leynos/wildside"
-            assert repository.documentation_paths == [
-                "docs/roadmap.md",
-                "docs/adr/",
-            ]
+            assert repository.documentation_paths == ["docs/adr/", "docs/roadmap.md"]
 
     asyncio.run(_assert_repo_docs())
+
+
+@then(parsers.parse('repository "{owner}/{name}" has no documentation paths'))
+def repository_without_documentation_paths(
+    import_context: ImportContext, owner: str, name: str
+) -> None:
+    """Validate repositories without documentation config default to empty paths."""
+
+    async def _assert_repo_no_docs() -> None:
+        async with import_context["session_factory"]() as session:
+            repository = await session.scalar(
+                select(RepositoryRecord).where(
+                    RepositoryRecord.owner == owner,
+                    RepositoryRecord.name == name,
+                )
+            )
+
+            assert repository is not None, f"expected repository {owner}/{name}"
+            assert repository.documentation_paths == []
+
+    asyncio.run(_assert_repo_no_docs())

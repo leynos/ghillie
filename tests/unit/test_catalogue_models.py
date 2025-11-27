@@ -32,6 +32,33 @@ def test_repository_documentation_paths_default() -> None:
     assert repository.documentation_paths == []
 
 
+def test_repository_round_trip_defaults() -> None:
+    catalogue = Catalogue(
+        version=1,
+        programmes=[],
+        projects=[
+            Project(
+                key="proj",
+                name="Project",
+                components=[
+                    Component(
+                        key="comp",
+                        name="Component",
+                        repository=Repository(owner="org", name="repo"),
+                    )
+                ],
+            )
+        ],
+    )
+
+    encoded = msgspec.json.encode(catalogue)
+    decoded = msgspec.json.decode(encoded, type=Catalogue)
+    repository = decoded.projects[0].components[0].repository
+
+    assert repository is not None
+    assert repository.documentation_paths == []
+
+
 def test_component_defaults() -> None:
     component = Component(key="comp", name="Component")
 

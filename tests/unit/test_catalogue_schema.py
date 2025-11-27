@@ -202,7 +202,6 @@ def test_schema_validates_simple_catalogue(tmp_path: Path) -> None:
     pajv_path = shutil.which("pajv")
     if pajv_path is None:
         pytest.skip("pajv is not installed; skipping JSON Schema validation")
-        return
     assert pajv_path is not None
 
     try:
@@ -254,6 +253,38 @@ projects:
     assert repository.documentation_paths == ["docs/adr/"]
 
 
+def test_lint_catalogue_defaults_repository_doc_paths(tmp_path: Path) -> None:
+    """Repository documentation_paths should default to empty when omitted."""
+    catalogue_file = tmp_path / "lintable-no-docs.yaml"
+    catalogue_file.write_text(
+        """
+version: 1
+projects:
+  - key: gamma
+    name: Gamma
+    components:
+      - key: gamma-api
+        name: Gamma API
+        repository:
+          owner: org
+          name: gamma
+    noise:
+      ignore_authors: []
+      ignore_labels: []
+      ignore_paths: []
+    status:
+      summarise_dependency_prs: false
+        """,
+        encoding="utf-8",
+    )
+
+    catalogue = lint_catalogue(catalogue_file)
+
+    repository = catalogue.projects[0].components[0].repository
+    assert repository is not None
+    assert repository.documentation_paths == []
+
+
 def test_schema_includes_repository_documentation_paths() -> None:
     """Generated schema should include repository documentation paths."""
     schema = build_catalogue_schema()
@@ -261,6 +292,8 @@ def test_schema_includes_repository_documentation_paths() -> None:
     repository_schema = schema["$defs"]["Repository"]
     assert "documentation_paths" in repository_schema["properties"]
     doc_paths = repository_schema["properties"]["documentation_paths"]
+    assert doc_paths["type"] == "array"
+    assert doc_paths.get("default", []) == []
     assert doc_paths["items"]["type"] == "string"
 
 

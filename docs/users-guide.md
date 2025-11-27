@@ -75,6 +75,11 @@ Project noise filters, status preferences, and documentation paths are
 persisted alongside projects and repositories, so ingestion and reporting
 services can consume them without parsing YAML at runtime.
 
+> Operational note: existing deployments must add a JSON
+> `documentation_paths` column to the `repositories` table before enabling
+> this feature, because `Base.metadata.create_all` will not alter existing
+> tables in place.
+
 Example: load the example catalogue into a SQLite database using the
 asynchronous importer:
 

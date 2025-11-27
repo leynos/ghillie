@@ -9,5 +9,6 @@ Feature: Catalogue importer reconciliation
     And the catalogue row counts are 2 projects, 7 components, 6 repositories
     And project "wildside" retains catalogue configuration
     And repository "leynos/wildside" exposes documentation paths
+    And repository "leynos/wildside-engine" has no documentation paths
     When the catalogue importer processes commit "abc123" again
     Then no catalogue rows are duplicated
