@@ -297,6 +297,25 @@ def test_schema_includes_repository_documentation_paths() -> None:
     assert doc_paths["items"]["type"] == "string"
 
 
+def test_component_type_enum_matches_model() -> None:
+    """Component.type enum in the schema should mirror the model Literal values."""
+    schema = build_catalogue_schema()
+    component_schema = schema["$defs"]["Component"]
+    enum_values = component_schema["properties"]["type"]["enum"]
+
+    expected = {
+        "service",
+        "ui",
+        "library",
+        "data-pipeline",
+        "job",
+        "tooling",
+        "other",
+    }
+
+    assert set(enum_values) == expected
+
+
 def test_lint_catalogue_rejects_unknown_programme(tmp_path: Path) -> None:
     """Project referencing unknown programme should fail."""
     catalogue_file = tmp_path / "unknown-programme.yaml"
