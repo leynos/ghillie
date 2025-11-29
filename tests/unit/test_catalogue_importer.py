@@ -13,10 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from ghillie.catalogue import (
     CatalogueImporter,
     CatalogueImportRecord,
+    CatalogueImportResult,
     CatalogueValidationError,
+    Component,
     ComponentEdgeRecord,
     ComponentRecord,
     ProjectRecord,
+    Repository,
     RepositoryRecord,
     init_catalogue_storage,
 )
@@ -240,6 +243,89 @@ projects:
 
     branch = asyncio.run(_check_branch())
     assert branch == "develop"
+
+
+def test_ensure_repository_normalises_documentation_paths(  # noqa: D103
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    importer = CatalogueImporter(session_factory)
+
+    async def _create_repo(doc_paths: list[str]) -> RepositoryRecord:
+        async with session_factory() as session, session.begin():
+            repo_index: dict[str, RepositoryRecord] = {}
+            component = Component(
+                key="alpha-api",
+                name="Alpha API",
+                repository=Repository(
+                    owner="org",
+                    name="alpha",
+                    documentation_paths=doc_paths,
+                ),
+            )
+            result = CatalogueImportResult("default", None)
+            repository = importer._ensure_repository(  # type: ignore[attr-defined]
+                session, repo_index, component, result
+            )
+            assert repository is not None
+            await session.flush()
+            return repository
+
+    repository = asyncio.run(
+        _create_repo(["docs/roadmap.md", "docs/adr/", "docs/adr/"])
+    )
+    assert repository.documentation_paths == [
+        "docs/roadmap.md",
+        "docs/adr/",
+    ], "documentation_paths should preserve first-seen order and drop duplicates"
+
+
+def test_ensure_repository_updates_documentation_paths(  # noqa: D103
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    importer = CatalogueImporter(session_factory)
+
+    async def _create_and_update_repo() -> tuple[
+        CatalogueImportResult, CatalogueImportResult, list[str]
+    ]:
+        async with session_factory() as session, session.begin():
+            repo_index: dict[str, RepositoryRecord] = {}
+            component = Component(
+                key="alpha-api",
+                name="Alpha API",
+                repository=Repository(
+                    owner="org",
+                    name="alpha",
+                    documentation_paths=["docs/adr/"],
+                ),
+            )
+            first_result = CatalogueImportResult("default", None)
+            repository = importer._ensure_repository(  # type: ignore[attr-defined]
+                session, repo_index, component, first_result
+            )
+            assert repository is not None
+            await session.flush()
+
+            assert component.repository is not None
+            component.repository.documentation_paths = [
+                "docs/roadmap.md",
+                "docs/adr/",
+            ]
+            second_result = CatalogueImportResult("default", None)
+            importer._ensure_repository(  # type: ignore[attr-defined]
+                session, repo_index, component, second_result
+            )
+            await session.flush()
+
+            return first_result, second_result, repository.documentation_paths
+
+    first, second, stored_paths = asyncio.run(_create_and_update_repo())
+
+    assert first.repositories_created == 1
+    assert second.repositories_updated == 1
+    assert stored_paths == [
+        "docs/roadmap.md",
+        "docs/adr/",
+    ], "documentation_paths should update to the new normalized order"
 
 
 def test_prune_respects_other_estates(  # noqa: D103

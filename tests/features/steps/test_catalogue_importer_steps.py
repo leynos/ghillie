@@ -225,7 +225,18 @@ def repository_documentation_paths(import_context: ImportContext) -> None:
             )
 
             assert repository is not None, "expected repository leynos/wildside"
-            assert repository.documentation_paths == ["docs/adr/", "docs/roadmap.md"]
+            documentation_paths = repository.documentation_paths
+
+            assert documentation_paths == [
+                "docs/roadmap.md",
+                "docs/adr/",
+            ], (
+                "documentation_paths should preserve first-seen order and drop"
+                " duplicates"
+            )
+            assert len(documentation_paths) == len(set(documentation_paths)), (
+                "documentation_paths should not contain duplicates"
+            )
 
     asyncio.run(_assert_repo_docs())
 

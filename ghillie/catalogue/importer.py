@@ -447,7 +447,9 @@ class CatalogueImporter:
             return None
 
         slug = component.repository.slug
-        documentation_paths = sorted(set(component.repository.documentation_paths))
+        documentation_paths = list(
+            dict.fromkeys(component.repository.documentation_paths)
+        )
         repository = repo_index.get(slug)
         if repository is None:
             repository = RepositoryRecord(
