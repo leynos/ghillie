@@ -202,7 +202,6 @@ def test_schema_validates_simple_catalogue(tmp_path: Path) -> None:
     pajv_path = shutil.which("pajv")
     if pajv_path is None:
         pytest.skip("pajv is not installed; skipping JSON Schema validation")
-    assert pajv_path is not None
 
     try:
         subprocess.run(  # noqa: S603  # rationale: static pajv invocation with constant args
@@ -292,11 +291,17 @@ def test_schema_includes_repository_documentation_paths() -> None:
     schema = build_catalogue_schema()
 
     repository_schema = schema["$defs"]["Repository"]
-    assert "documentation_paths" in repository_schema["properties"]
+    assert "documentation_paths" in repository_schema["properties"], (
+        "Repository schema must define 'documentation_paths' property"
+    )
     doc_paths = repository_schema["properties"]["documentation_paths"]
-    assert doc_paths["type"] == "array"
-    assert doc_paths.get("default", []) == []
-    assert doc_paths["items"]["type"] == "string"
+    assert doc_paths["type"] == "array", "documentation_paths must be an array"
+    assert doc_paths.get("default", []) == [], (
+        "documentation_paths should default to an empty list"
+    )
+    assert doc_paths["items"]["type"] == "string", (
+        "documentation_paths items must be strings"
+    )
 
 
 def test_component_type_enum_matches_model() -> None:
