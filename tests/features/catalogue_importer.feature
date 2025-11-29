@@ -12,3 +12,9 @@ Feature: Catalogue importer reconciliation
     And repository "leynos/wildside-engine" has no documentation paths
     When the catalogue importer processes commit "abc123" again
     Then no catalogue rows are duplicated
+
+  Scenario: Documentation paths are normalised during import
+    Given a fresh catalogue database
+    And the importer uses catalogue at "tests/fixtures/catalogues/wildside-docs-dup.yaml"
+    When the catalogue importer processes commit "dupdocs"
+    Then repository "leynos/wildside" exposes documentation paths

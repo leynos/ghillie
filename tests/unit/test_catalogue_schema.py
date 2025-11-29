@@ -202,7 +202,6 @@ def test_schema_validates_simple_catalogue(tmp_path: Path) -> None:
     pajv_path = shutil.which("pajv")
     if pajv_path is None:
         pytest.skip("pajv is not installed; skipping JSON Schema validation")
-        return
 
     try:
         subprocess.run(  # noqa: S603  # rationale: static pajv invocation with constant args
