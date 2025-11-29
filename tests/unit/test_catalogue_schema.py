@@ -282,9 +282,9 @@ projects:
 
     repository = catalogue.projects[0].components[0].repository
     assert repository is not None, "Repository should be present for gamma-api"
-    assert (
-        repository.documentation_paths == []
-    ), "Repository.documentation_paths should default to [] when omitted in YAML"
+    assert repository.documentation_paths == [], (
+        "Repository.documentation_paths should default to [] when omitted in YAML"
+    )
 
 
 def test_schema_includes_repository_documentation_paths() -> None:
@@ -316,8 +316,12 @@ def test_component_type_enum_matches_model() -> None:
         "other",
     }
 
-    assert set(enum_values) == expected, "Component.type enum values should mirror model Literal"
-    assert type_prop["default"] == "service", "Component.type default should be 'service'"
+    assert set(enum_values) == expected, (
+        "Component.type enum values should mirror model Literal"
+    )
+    assert type_prop["default"] == "service", (
+        "Component.type default should be 'service'"
+    )
 
 
 def test_lint_catalogue_rejects_unknown_programme(tmp_path: Path) -> None:
