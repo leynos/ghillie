@@ -108,3 +108,63 @@ In deployments that already run Dramatiq workers, use the
 `ghillie.catalogue.importer.import_catalogue_job` actor. It accepts the
 catalogue path, database URL, estate key, optional estate name, and commit SHA
 so scheduling systems can enqueue work without importing Python modules.
+
+## Bronze raw event store (Phase 1.2)
+
+The Bronze layer retains unmodified GitHub payloads so Silver transforms can be
+replayed deterministically. Events are written to the `raw_events` table with:
+
+- `source_system`, `event_type`, and optional `source_event_id`,
+- optional `repo_external_id` (for example `owner/name`),
+- `occurred_at` (timezone aware) and `ingested_at`,
+- a JSON `payload`, stored exactly as received.
+
+### Ingesting events
+
+Use `RawEventWriter` to append events. A SHA-256 `dedupe_key` prevents webhook
+retries or overlapping pollers from writing duplicates.
+
+```python
+import asyncio
+import datetime as dt
+
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from ghillie.bronze import RawEventWriter, init_bronze_storage
+from ghillie.silver import RawEventTransformer, init_silver_storage
+
+
+async def main() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///bronze.db")
+    await init_bronze_storage(engine)
+    await init_silver_storage(engine)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    writer = RawEventWriter(session_factory)
+    await writer.ingest(
+        source_system="github",
+        source_event_id="evt-1",
+        event_type="github.push",
+        repo_external_id="acme/api",
+        occurred_at=dt.datetime.now(dt.timezone.utc),
+        payload={"ref": "refs/heads/main", "after": "abc123"},
+    )
+
+    transformer = RawEventTransformer(session_factory)
+    await transformer.process_pending()
+
+
+asyncio.run(main())
+```
+
+`RawEventWriter.ingest` deep-copies the payload to prevent caller mutations
+leaking into storage. If an event already exists, the existing row is returned
+without updating timestamps, preserving the append-only contract.
+
+### Reprocessing and idempotency
+
+`RawEventTransformer` copies Bronze payloads into the Silver `event_facts`
+staging table and marks the source row as processed. Re-running a transform
+over the same `raw_event_id` is idempotent: if the `event_facts` payload
+differs from Bronze, the transform is marked failed so operators can
+investigate drift; otherwise no additional rows are created.
