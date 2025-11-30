@@ -131,6 +131,22 @@ CREATE TABLE github_ingestion_offsets (
 
 ```
 
+### 3.1.1 Implementation status (November 2025)
+
+- `raw_events` is implemented in `ghillie.bronze.storage.RawEvent` with a
+  hashed `dedupe_key` derived from source system, event type, source event id,
+  repository slug, occurred timestamp (UTC), and a stable hash of the payload.
+  `RawEventWriter.ingest` deep copies payloads, enforces timezone-aware
+  `occurred_at`, and returns the existing row on conflicts to keep the store
+  append-only.
+- `github_ingestion_offsets` is present for pollers to record cursors but is
+  not yet wired into a worker loop.
+- A minimal Silver staging table, `event_facts`, reuses the Bronze declarative
+  base. `RawEventTransformer` copies Bronze payloads into `event_facts`, marks
+  `transform_state` as processed, and verifies on reprocessing that the stored
+  payload matches. This satisfies the Task 1.2.a requirement that re-running
+  transforms produces identical Silver outputs.
+
 ### 3.2 Silver: core tables
 
 This deliberately mirrors the high-level design doc: the Silver layer manages
