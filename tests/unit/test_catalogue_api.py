@@ -60,10 +60,12 @@ def test_example_catalogue_json_matches_schema(tmp_path: Path) -> None:
         pytest.skip("pajv must be installed to validate the catalogue schema")
 
     try:
-        subprocess.run(  # noqa: S603  # rationale: static pajv invocation with constant args
+        subprocess.run(  # type: ignore[arg-type]  # noqa: S603 - static pajv invocation
             [pajv_path, "-s", str(schema_path), "-d", str(json_path)],
             text=True,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            encoding="utf-8",
             check=True,
         )
     except subprocess.CalledProcessError as exc:

@@ -168,7 +168,9 @@ def schema_validation(context: StepContext, tmp_path: Path) -> None:
     data_path.write_bytes(msgspec.json.encode(catalogue))
 
     try:
-        subprocess.run(  # noqa: S603  # rationale: static pajv invocation with constant args
+        subprocess.run(  # type: ignore[arg-type]  # noqa: S603 - static pajv invocation
+            # pyright/mypy overloads lack a variant with stdout/stderr pipes + text=True
+            # for CompletedProcess[str]; this call is valid at runtime.
             [
                 pajv_path,
                 "-s",
@@ -177,9 +179,11 @@ def schema_validation(context: StepContext, tmp_path: Path) -> None:
                 str(data_path),
             ],
             check=True,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-        )
+            encoding="utf-8",
+        )  # type: ignore[arg-type]
     except subprocess.CalledProcessError as exc:
         message = (
             f"pajv rejected the catalogue: stdout={exc.stdout}\nstderr={exc.stderr}"
