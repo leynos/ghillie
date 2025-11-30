@@ -15,9 +15,13 @@ validated with `msgspec` and exposed as a JSON Schema for external linters.
 - Capture relationships with `depends_on`, `blocked_by`, and
   `emits_events_to`. Each entry includes the target `component` and an optional
   `kind` (`runtime`, `dev`, `test`, `ops`) plus a short rationale.
-- Configure per-project noise and status preferences under `noise` and
-  `status` blocks so ingestion and reporting can ignore bot traffic or
-  dependency-only pull requests.
+- Configure per-project noise filters (`ignore_authors`, `ignore_labels`,
+  `ignore_paths`, `ignore_title_prefixes`) and status preferences under `noise`
+  and `status`. Setting `summarise_dependency_prs: false` signals that
+  dependency update pull requests should be ignored in downstream summaries.
+- Record documentation paths at both project level (`documentation_paths`) and
+  per repository (`repository.documentation_paths`) so roadmaps and ADRs are
+  discoverable to ingestion and summarization jobs.
 - See `examples/wildside-catalogue.yaml` for a complete multi-repository
   project with planned components and cross-project dependencies.
 
@@ -66,6 +70,15 @@ estates, projects, components, repositories, and component edges. Imports run
 inside a single transaction: invalid catalogues fail fast and do not leave
 partial rows behind. Re-running the same commit is idempotent and will prune
 entries removed from the source catalogue.
+
+Project noise filters, status preferences, and documentation paths are
+persisted alongside projects and repositories, so ingestion and reporting
+services can consume them without parsing YAML at runtime.
+
+> Operational note: existing deployments must add a JSON
+> `documentation_paths` column to the `repositories` table before enabling
+> this feature because `Base.metadata.create_all` will not alter existing
+> tables in place.
 
 Example: load the example catalogue into a SQLite database using the
 asynchronous importer:

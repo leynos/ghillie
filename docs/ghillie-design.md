@@ -199,6 +199,12 @@ correctly, regardless of the underlying compliance check that generated it.
 - Components capture directed links via `depends_on`, `blocked_by`, and
   `emits_events_to`, each with an optional dependency `kind` (`runtime`, `dev`,
   `test`, `ops`) to signal how ingestion noise filters should treat them.
+- Repository entries may declare `documentation_paths` so ingestion can follow
+  repository-scoped roadmaps and ADR directories instead of relying only on
+  project-level documentation paths.
+- Noise filters and status preferences live in the catalogue and are persisted
+  onto project rows during import. Setting `summarise_dependency_prs: false`
+  tells downstream reporting jobs to drop dependency-only pull requests.
 - The schema is defined with `msgspec` structures and exported as a JSON Schema
   consumed by `pajv`. The shipped example catalogue
   (`examples/wildside-catalogue.yaml`) exercises multi-repo projects, planned
@@ -246,6 +252,7 @@ classDiagram
         +str owner
         +str name
         +str default_branch
+        +List~str~ documentation_paths
         +slug()
     }
     class ComponentLink {

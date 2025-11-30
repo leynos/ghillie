@@ -158,6 +158,8 @@ def schema_validation(context: StepContext, tmp_path: Path) -> None:
             "pajv must be installed for behavioural schema validation; "
             "unit tests skip this when the binary is absent"
         )
+    else:
+        assert pajv_path is not None
 
     schema_path = tmp_path / "catalogue.schema.json"
     write_catalogue_schema(schema_path)
@@ -168,7 +170,9 @@ def schema_validation(context: StepContext, tmp_path: Path) -> None:
     data_path.write_bytes(msgspec.json.encode(catalogue))
 
     try:
-        subprocess.run(  # noqa: S603  # rationale: static pajv invocation with constant args
+        subprocess.run(  # type: ignore[arg-type]  # noqa: S603 - static pajv invocation
+            # pyright/mypy overloads lack a variant with stdout/stderr pipes + text=True
+            # for CompletedProcess[str]; this call is valid at runtime.
             [
                 pajv_path,
                 "-s",
@@ -179,7 +183,8 @@ def schema_validation(context: StepContext, tmp_path: Path) -> None:
             check=True,
             capture_output=True,
             text=True,
-        )
+            encoding="utf-8",
+        )  # type: ignore[arg-type]
     except subprocess.CalledProcessError as exc:
         message = (
             f"pajv rejected the catalogue: stdout={exc.stdout}\nstderr={exc.stderr}"

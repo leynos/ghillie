@@ -50,6 +50,7 @@ projects:
           documentation_paths:
             - docs/roadmap.md
             - docs/adr/
+            - docs/adr/
         depends_on:
           - component: wildside-engine
             kind: runtime
@@ -76,9 +77,6 @@ projects:
           owner: leynos
           name: wildside-engine
           default_branch: main
-        blocked_by:
-          - component: ortho-config
-            rationale: Requires config releases for rollout.
       - key: wildside-mockup
         name: Wildside Mockup
         type: ui

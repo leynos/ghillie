@@ -40,12 +40,15 @@ class Repository(msgspec.Struct, kw_only=True):
         Repository name.
     default_branch : str
         Default branch name used for ingestion and status reporting.
+    documentation_paths : list[str]
+        Repository-specific documentation locations to track (roadmaps, ADRs).
 
     """
 
     owner: str
     name: str
     default_branch: str = "main"
+    documentation_paths: list[str] = msgspec.field(default_factory=list)
 
     @property
     def slug(self) -> str:

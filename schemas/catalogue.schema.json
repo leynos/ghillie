@@ -3,7 +3,7 @@
   "$defs": {
     "Catalogue": {
       "title": "Catalogue",
-      "description": "Top-level estate catalogue.",
+      "description": "Top-level estate catalogue.\n\n    Attributes\n    ----------\n    version\n        Schema version number for the catalogue file.\n\n    projects\n        Managed projects in the estate.\n    programmes\n        Optional programmes that group projects.",
       "type": "object",
       "properties": {
         "version": {
@@ -30,7 +30,7 @@
     },
     "Project": {
       "title": "Project",
-      "description": "Project definition with components and configuration.",
+      "description": "Project definition with components and configuration.\n\n    Attributes\n    ----------\n    key\n        Project slug.\n    name\n        Human-readable project name.\n    description\n        Optional description.\n    programme\n        Optional programme key if the project rolls up to a programme.\n    components\n        Component definitions for the project.\n    noise\n        Noise filters that apply to this project.\n    status\n        Status generation preferences for this project.\n    documentation_paths\n        Paths to roadmap/ADR/design docs relevant to the project.",
       "type": "object",
       "properties": {
         "key": {
@@ -89,7 +89,7 @@
     },
     "Component": {
       "title": "Component",
-      "description": "Component within a project, with optional repository mapping.",
+      "description": "Component within a project, with optional repository mapping.\n\n    Attributes\n    ----------\n    key : str\n        Lowercase slug identifying the component.\n    name : str\n        Human-readable component name.\n    type : Literal[\n        \"service\", \"ui\", \"library\", \"data-pipeline\", \"job\", \"tooling\", \"other\"\n    ]\n        Component classification.\n    description : str, optional\n        Optional description of the component's purpose.\n    lifecycle : Literal[\"planned\", \"active\", \"deprecated\"]\n        Current stage of the component.\n    repository : Repository, optional\n        GitHub repository mapping when the component has code.\n    depends_on : list[ComponentLink]\n        Downstream dependencies required at runtime or during development.\n    blocked_by : list[ComponentLink]\n        Dependencies that currently block progress.\n    emits_events_to : list[ComponentLink]\n        Components that consume events emitted by this component.\n    notes : list[str]\n        Free-form notes preserved for downstream consumers.",
       "type": "object",
       "properties": {
         "key": {
@@ -99,7 +99,15 @@
           "type": "string"
         },
         "type": {
-          "type": "string",
+          "enum": [
+            "data-pipeline",
+            "job",
+            "library",
+            "other",
+            "service",
+            "tooling",
+            "ui"
+          ],
           "default": "service"
         },
         "description": {
@@ -168,7 +176,7 @@
     },
     "Repository": {
       "title": "Repository",
-      "description": "Repository mapping and default branch information.",
+      "description": "Repository mapping and default branch information.\n\n    Attributes\n    ----------\n    owner : str\n        GitHub owner or organisation.\n    name : str\n        Repository name.\n    default_branch : str\n        Default branch name used for ingestion and status reporting.\n    documentation_paths : list[str]\n        Repository-specific documentation locations to track (roadmaps, ADRs).",
       "type": "object",
       "properties": {
         "owner": {
@@ -180,6 +188,13 @@
         "default_branch": {
           "type": "string",
           "default": "main"
+        },
+        "documentation_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
         }
       },
       "required": [
@@ -189,7 +204,7 @@
     },
     "ComponentLink": {
       "title": "ComponentLink",
-      "description": "Directed edge between components.",
+      "description": "Directed edge between components.\n\n    Attributes\n    ----------\n    component : str\n        Target component key.\n    kind : Literal[\"runtime\", \"dev\", \"test\", \"ops\"]\n        Relationship type for the edge.\n    rationale : str, optional\n        Optional explanation of the dependency.",
       "type": "object",
       "properties": {
         "component": {
@@ -222,7 +237,7 @@
     },
     "NoiseFilters": {
       "title": "NoiseFilters",
-      "description": "Noise control for ingestion and reporting.",
+      "description": "Noise control for ingestion and reporting.\n\n    Attributes\n    ----------\n    ignore_authors\n        Authors whose commits/issues/PRs should be skipped.\n    ignore_labels\n        Labels that should suppress events.\n    ignore_paths\n        Path globs for files to ignore.\n    ignore_title_prefixes\n        Title prefixes whose events should be skipped.",
       "type": "object",
       "properties": {
         "ignore_authors": {
@@ -258,7 +273,7 @@
     },
     "StatusSettings": {
       "title": "StatusSettings",
-      "description": "Status generation preferences per project.",
+      "description": "Status generation preferences per project.\n\n    Attributes\n    ----------\n    summarise_dependency_prs\n        Whether to include dependency PRs in summaries.\n    emphasise_documentation\n        Whether to highlight documentation changes.\n    prefer_long_form\n        Whether to generate longer-form status text.",
       "type": "object",
       "properties": {
         "summarise_dependency_prs": {
@@ -278,7 +293,7 @@
     },
     "Programme": {
       "title": "Programme",
-      "description": "A programme groups related projects under a strategic umbrella.",
+      "description": "Programme groups related projects.\n\n    Attributes\n    ----------\n    key : str\n        Lowercase slug identifier for the programme.\n    name : str\n        Human-readable programme name.\n    description : str, optional\n        Optional narrative about the programme intent.\n    projects : list[str]\n        Project keys that belong to this programme.",
       "type": "object",
       "properties": {
         "key": {

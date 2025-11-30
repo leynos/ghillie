@@ -204,10 +204,11 @@ def test_schema_validates_simple_catalogue(tmp_path: Path) -> None:
         pytest.skip("pajv is not installed; skipping JSON Schema validation")
 
     try:
-        subprocess.run(  # noqa: S603  # rationale: static pajv invocation with constant args
+        subprocess.run(  # type: ignore[arg-type]  # noqa: S603 - static pajv invocation
             [pajv_path, "-s", str(schema_path), "-d", str(data_path)],
             text=True,
             capture_output=True,
+            encoding="utf-8",
             check=True,
         )
     except subprocess.CalledProcessError as exc:
@@ -231,6 +232,8 @@ projects:
           owner: org
           name: gamma
           default_branch: main
+          documentation_paths:
+            - docs/adr/
     noise:
       ignore_authors: ["bots"]
       ignore_labels: ["chore/deps"]
@@ -245,6 +248,86 @@ projects:
 
     assert isinstance(catalogue, Catalogue)
     assert catalogue.projects[0].noise.ignore_labels == ["chore/deps"]
+    repository = catalogue.projects[0].components[0].repository
+    assert repository is not None
+    assert repository.documentation_paths == ["docs/adr/"]
+
+
+def test_lint_catalogue_defaults_repository_doc_paths(tmp_path: Path) -> None:
+    """Repository documentation_paths should default to empty when omitted."""
+    catalogue_file = tmp_path / "lintable-no-docs.yaml"
+    catalogue_file.write_text(
+        """
+version: 1
+projects:
+  - key: gamma
+    name: Gamma
+    components:
+      - key: gamma-api
+        name: Gamma API
+        repository:
+          owner: org
+          name: gamma
+    noise:
+      ignore_authors: []
+      ignore_labels: []
+      ignore_paths: []
+    status:
+      summarise_dependency_prs: false
+        """,
+        encoding="utf-8",
+    )
+
+    catalogue = lint_catalogue(catalogue_file)
+
+    repository = catalogue.projects[0].components[0].repository
+    assert repository is not None, "Repository should be present for gamma-api"
+    assert repository.documentation_paths == [], (
+        "Repository.documentation_paths should default to [] when omitted in YAML"
+    )
+
+
+def test_schema_includes_repository_documentation_paths() -> None:
+    """Generated schema should include repository documentation paths."""
+    schema = build_catalogue_schema()
+
+    repository_schema = schema["$defs"]["Repository"]
+    assert "documentation_paths" in repository_schema["properties"], (
+        "Repository schema must define 'documentation_paths' property"
+    )
+    doc_paths = repository_schema["properties"]["documentation_paths"]
+    assert doc_paths["type"] == "array", "documentation_paths must be an array"
+    assert doc_paths.get("default", []) == [], (
+        "documentation_paths should default to an empty list"
+    )
+    assert doc_paths["items"]["type"] == "string", (
+        "documentation_paths items must be strings"
+    )
+
+
+def test_component_type_enum_matches_model() -> None:
+    """Component.type enum in the schema should mirror the model Literal values."""
+    schema = build_catalogue_schema()
+    component_schema = schema["$defs"]["Component"]
+    type_prop = component_schema["properties"]["type"]
+    enum_values = type_prop["enum"]
+
+    expected = {
+        "service",
+        "ui",
+        "library",
+        "data-pipeline",
+        "job",
+        "tooling",
+        "other",
+    }
+
+    assert set(enum_values) == expected, (
+        "Component.type enum values should mirror model Literal"
+    )
+    assert type_prop["default"] == "service", (
+        "Component.type default should be 'service'"
+    )
 
 
 def test_lint_catalogue_rejects_unknown_programme(tmp_path: Path) -> None:

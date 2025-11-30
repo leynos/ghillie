@@ -52,7 +52,7 @@ components, repositories, and their relationships.
   updates the database idempotently. Invalid configuration fails fast with a
   clear error and does not partially update state.
 
-- [ ] **Task 1.1.c – Support per-project noise control and status settings**  
+- [x] **Task 1.1.c – Support per-project noise control and status settings**  
   Extend the catalogue schema to store:
   - labels, authors, and paths to ignore when creating events,
   - any repository-specific documentation paths (for example,
