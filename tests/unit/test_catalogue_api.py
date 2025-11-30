@@ -63,8 +63,7 @@ def test_example_catalogue_json_matches_schema(tmp_path: Path) -> None:
         subprocess.run(  # type: ignore[arg-type]  # noqa: S603 - static pajv invocation
             [pajv_path, "-s", str(schema_path), "-d", str(json_path)],
             text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             encoding="utf-8",
             check=True,
         )

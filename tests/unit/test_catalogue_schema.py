@@ -207,8 +207,7 @@ def test_schema_validates_simple_catalogue(tmp_path: Path) -> None:
         subprocess.run(  # type: ignore[arg-type]  # noqa: S603 - static pajv invocation
             [pajv_path, "-s", str(schema_path), "-d", str(data_path)],
             text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             encoding="utf-8",
             check=True,
         )

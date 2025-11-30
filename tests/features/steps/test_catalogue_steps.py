@@ -179,8 +179,7 @@ def schema_validation(context: StepContext, tmp_path: Path) -> None:
                 str(data_path),
             ],
             check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             encoding="utf-8",
         )  # type: ignore[arg-type]
