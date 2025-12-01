@@ -112,5 +112,12 @@ class RawEventTransformer:
         try:
             await session.flush()
         except IntegrityError as exc:
+            await session.rollback()
+            with session.no_autoflush:
+                existing = await session.scalar(
+                    select(EventFact).where(EventFact.raw_event_id == raw_event.id)
+                )
+            if existing is not None:
+                return existing
             raise RawEventTransformError.concurrent_insert() from exc
         return fact

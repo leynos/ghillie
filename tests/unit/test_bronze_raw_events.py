@@ -9,11 +9,8 @@ import typing as typ
 
 import pytest
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import (
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 if typ.TYPE_CHECKING:
     from pathlib import Path
@@ -86,7 +83,11 @@ def test_ingest_preserves_payload_and_timestamps(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     writer = RawEventWriter(session_factory)
-    payload = {"key": "value", "nested": {"list": [1, 2, 3]}}
+    payload = {
+        "key": "value",
+        "nested": {"list": [1, 2, 3]},
+        "when": dt.datetime(2024, 6, 1, 8, 30, tzinfo=dt.timezone.utc),
+    }
     occurred_at = dt.datetime(2024, 6, 1, 8, 30, tzinfo=dt.timezone.utc)
 
     async def _run() -> RawEvent:
@@ -110,7 +111,10 @@ def test_ingest_preserves_payload_and_timestamps(
             return stored
 
     stored_event = asyncio.run(_load())
-    assert stored_event.payload == payload
+    expected_payload = dict(payload)
+    expected_payload["when"] = expected_payload["when"].isoformat()
+
+    assert stored_event.payload == expected_payload
     assert stored_event.occurred_at == occurred_at
     assert stored_event.ingested_at is not None
     assert stored_event.transform_state == RawEventState.PENDING.value
@@ -198,3 +202,67 @@ def test_transformer_is_idempotent(
             assert stored_event.transform_error is None
 
     asyncio.run(_assert_state())
+
+
+async def _insert_event_fact(
+    session_factory: async_sessionmaker[AsyncSession],
+    raw_event_id: int,
+    payload: dict[str, object] | None = None,
+) -> None:
+    async with session_factory() as session, session.begin():
+        fact = EventFact(
+            raw_event_id=raw_event_id,
+            repo_external_id="org/repo",
+            event_type="github.push",
+            occurred_at=dt.datetime(2024, 6, 1, tzinfo=dt.timezone.utc),
+            payload=payload or {"value": 3},
+        )
+        session.add(fact)
+
+
+def test_transformer_handles_concurrent_insert(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Treat uniqueness conflicts as already-processed instead of failures."""
+    writer = RawEventWriter(session_factory)
+    transformer = RawEventTransformer(session_factory)
+    payload = {"id": "evt-race"}
+    occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.timezone.utc)
+
+    async def _run() -> None:
+        raw_event = await writer.ingest(
+            RawEventEnvelope(
+                source_system="github",
+                source_event_id="evt-race",
+                event_type="github.push",
+                repo_external_id="org/repo",
+                occurred_at=occurred_at,
+                payload=payload,
+            )
+        )
+        await _insert_event_fact(session_factory, raw_event.id, payload)
+        async with session_factory() as session:
+            stored_event = await session.get(RawEvent, raw_event.id)
+            assert stored_event is not None
+
+            flush_orig = session.flush
+
+            async def flush_wrapper(
+                objects: typ.Sequence[object] | None = None,
+            ) -> None:
+                raise IntegrityError(
+                    "",
+                    {},
+                    Exception("duplicate"),
+                    connection_invalidated=False,
+                )
+
+            session.flush = flush_wrapper  # type: ignore[assignment]
+            # Should not raise; should treat as already-processed because fact exists.
+            fact = await transformer._upsert_event_fact(session, stored_event)
+            session.flush = flush_orig  # type: ignore[assignment]
+
+            assert fact.raw_event_id == raw_event.id
+            assert fact.payload == payload
+
+    asyncio.run(_run())

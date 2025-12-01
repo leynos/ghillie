@@ -58,6 +58,23 @@ class RawEventEnvelope:
     repo_external_id: str | None = None
 
 
+def _normalise_payload(payload: Payload) -> Payload:
+    """Deep-copy payload converting datetimes to ISO-8601 strings."""
+
+    def _convert(value: object) -> object:
+        if isinstance(value, dict):
+            return {k: _convert(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [_convert(item) for item in value]
+        if isinstance(value, dt.datetime):
+            if value.tzinfo is None:
+                raise TimezoneAwareRequiredError.for_payload()
+            return value.astimezone(dt.timezone.utc).isoformat()
+        return copy.deepcopy(value)
+
+    return typ.cast("Payload", _convert(payload))
+
+
 def _serialise_for_hash(payload: Payload) -> str:
     """Return a deterministic JSON string for hashing payloads."""
 
@@ -112,7 +129,7 @@ class RawEventWriter:
         if envelope.occurred_at.tzinfo is None:
             raise TimezoneAwareRequiredError.for_occurrence()
 
-        payload_copy: Payload = copy.deepcopy(envelope.payload)
+        payload_copy = _normalise_payload(envelope.payload)
         envelope_copy = dc.replace(envelope, payload=payload_copy)
         dedupe_key = make_dedupe_key(envelope_copy)
 
