@@ -401,6 +401,23 @@ def test_transformer_handles_concurrent_insert(
     asyncio.run(_run())
 
 
+async def _verify_transformation_failure(
+    session_factory: async_sessionmaker[AsyncSession],
+    transformer: RawEventTransformer,
+    raw_event: RawEvent,
+    expected_error_keyword: str,
+) -> None:
+    processed_ids = await transformer.process_raw_event_ids([raw_event.id])
+    assert raw_event.id not in processed_ids
+
+    async with session_factory() as session:
+        reloaded = await session.get(RawEvent, raw_event.id)
+        assert reloaded is not None
+        assert reloaded.transform_state == RawEventState.FAILED.value
+        assert reloaded.transform_error is not None
+        assert expected_error_keyword in reloaded.transform_error.lower()
+
+
 def test_transformer_marks_failed_on_payload_mismatch(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
@@ -425,24 +442,13 @@ def test_transformer_marks_failed_on_payload_mismatch(
         await _insert_event_fact(session_factory, raw_event.id, conflicting_payload)
         return raw_event
 
-    raw_event = asyncio.run(_setup_conflict())
+    async def _run() -> None:
+        raw_event = await _setup_conflict()
+        await _verify_transformation_failure(
+            session_factory, transformer, raw_event, "payload"
+        )
 
-    async def _process() -> list[int]:
-        return await transformer.process_raw_event_ids([raw_event.id])
-
-    processed_ids = asyncio.run(_process())
-    assert raw_event.id not in processed_ids
-
-    async def _reload() -> RawEvent:
-        async with session_factory() as session:
-            reloaded = await session.get(RawEvent, raw_event.id)
-            assert reloaded is not None
-            return reloaded
-
-    reloaded_raw = asyncio.run(_reload())
-    assert reloaded_raw.transform_state == RawEventState.FAILED.value
-    assert reloaded_raw.transform_error is not None
-    assert "payload" in reloaded_raw.transform_error.lower()
+    asyncio.run(_run())
 
 
 def test_transformer_marks_failed_on_concurrent_insert_integrity_error(
@@ -467,8 +473,6 @@ def test_transformer_marks_failed_on_concurrent_insert_integrity_error(
             )
         )
 
-    raw_event = asyncio.run(_ingest())
-
     async def _failing_upsert(*_: object, **__: object) -> EventFact:
         raise RawEventTransformError.concurrent_insert()
 
@@ -476,22 +480,13 @@ def test_transformer_marks_failed_on_concurrent_insert_integrity_error(
         transformer, "_upsert_event_fact", _failing_upsert, raising=True
     )
 
-    async def _process() -> list[int]:
-        return await transformer.process_raw_event_ids([raw_event.id])
+    async def _run() -> None:
+        raw_event = await _ingest()
+        await _verify_transformation_failure(
+            session_factory, transformer, raw_event, "concurrent"
+        )
 
-    processed_ids = asyncio.run(_process())
-    assert raw_event.id not in processed_ids
-
-    async def _reload() -> RawEvent:
-        async with session_factory() as session:
-            reloaded = await session.get(RawEvent, raw_event.id)
-            assert reloaded is not None
-            return reloaded
-
-    reloaded_raw = asyncio.run(_reload())
-    assert reloaded_raw.transform_state == RawEventState.FAILED.value
-    assert reloaded_raw.transform_error is not None
-    assert "concurrent" in reloaded_raw.transform_error.lower()
+    asyncio.run(_run())
 
 
 def test_process_pending_respects_limit(

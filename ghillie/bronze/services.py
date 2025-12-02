@@ -52,18 +52,30 @@ def _normalise_payload(payload: Payload) -> Payload:
     deterministic and JSON-safe.
     """
 
-    def _convert(value: object) -> object:
-        if isinstance(value, dict):
-            return {k: _convert(v) for k, v in value.items()}
-        if isinstance(value, list):
-            return [_convert(item) for item in value]
-        if isinstance(value, dt.datetime):
-            if value.tzinfo is None:
-                raise TimezoneAwareRequiredError.for_payload()
-            return value.astimezone(dt.timezone.utc).isoformat()
+    def _convert_dict(value: dict) -> dict:
+        return {k: _convert(v) for k, v in value.items()}
+
+    def _convert_list(value: list) -> list:
+        return [_convert(item) for item in value]
+
+    def _convert_datetime(value: dt.datetime) -> str:
+        if value.tzinfo is None:
+            raise TimezoneAwareRequiredError.for_payload()
+        return value.astimezone(dt.timezone.utc).isoformat()
+
+    def _convert_primitive(value: object) -> object:
         if isinstance(value, (str, int, float, bool)) or value is None:
             return copy.deepcopy(value)
         raise UnsupportedPayloadTypeError(type(value).__name__)
+
+    def _convert(value: object) -> object:
+        if isinstance(value, dict):
+            return _convert_dict(value)
+        if isinstance(value, list):
+            return _convert_list(value)
+        if isinstance(value, dt.datetime):
+            return _convert_datetime(value)
+        return _convert_primitive(value)
 
     return typ.cast("Payload", _convert(payload))
 
