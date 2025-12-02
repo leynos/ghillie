@@ -80,6 +80,21 @@ def test_make_dedupe_key_changes_when_inputs_change() -> None:
     assert base != changed_payload
 
 
+def test_make_dedupe_key_rejects_naive_occurred_at() -> None:
+    envelope = RawEventEnvelope(
+        source_system="github",
+        event_type="github.push",
+        source_event_id="evt-naive",
+        repo_external_id="org/repo",
+        occurred_at=dt.datetime(2024, 1, 1, 12, 0),  # noqa: DTZ001
+        payload={"a": 1},
+    )
+
+    with pytest.raises(TimezoneAwareRequiredError) as excinfo:
+        make_dedupe_key(envelope)
+    assert "occurred_at" in str(excinfo.value)
+
+
 def test_make_dedupe_key_normalizes_occurred_at_timezones() -> None:
     instant_utc = dt.datetime(2024, 1, 1, 12, 0, tzinfo=dt.timezone.utc)
     instant_offset = instant_utc.astimezone(dt.timezone(dt.timedelta(hours=1)))
