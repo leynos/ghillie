@@ -1,7 +1,7 @@
-MDLINT ?= $(shell which markdownlint-cli2)
-NIXIE ?= $(shell which nixie)
-MDFORMAT_ALL ?= $(shell which mdformat-all)
-TOOLS = $(MDFORMAT_ALL) ruff ty $(MDLINT) $(NIXIE) uv
+MDLINT ?= markdownlint-cli2
+NIXIE ?= nixie
+MDFORMAT_ALL ?= mdformat-all
+TOOLS = $(MDFORMAT_ALL) ruff ty $(MDLINT) uv
 VENV_TOOLS = pytest
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
 
@@ -10,7 +10,7 @@ UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
 
 .DEFAULT_GOAL := all
 
-all: build check-fmt test typecheck
+all: build check-fmt lint typecheck test
 
 .venv: pyproject.toml
 	$(UV_ENV) uv venv --clear
@@ -72,7 +72,8 @@ typecheck: build ty ## Run typechecking
 markdownlint: $(MDLINT) ## Lint Markdown files
 	$(MDLINT) '**/*.md'
 
-nixie: $(NIXIE) ## Validate Mermaid diagrams
+nixie: ## Validate Mermaid diagrams
+	$(call ensure_tool,nixie)
 	$(NIXIE) --no-sandbox
 
 test: build uv $(VENV_TOOLS) ## Run tests
