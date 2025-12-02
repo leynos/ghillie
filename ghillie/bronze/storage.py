@@ -22,6 +22,8 @@ if typ.TYPE_CHECKING:
     from sqlalchemy.engine import Dialect
     from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ghillie.bronze.errors import TimezoneAwareRequiredError
+
 
 def _utcnow() -> dt.datetime:
     """Return an aware UTC timestamp suitable for timestamp defaults."""
@@ -42,14 +44,6 @@ class Base(DeclarativeBase):
     metadata: typ.Any
 
 
-class NaiveDateTimeError(ValueError):
-    """Raised when a datetime value is missing tzinfo."""
-
-    def __init__(self) -> None:
-        """Attach a consistent error message for missing tzinfo."""
-        super().__init__("datetime values must include timezone information")
-
-
 class UTCDateTime(TypeDecorator[dt.datetime]):
     """DateTime wrapper that round-trips UTC tzinfo even on SQLite."""
 
@@ -63,7 +57,7 @@ class UTCDateTime(TypeDecorator[dt.datetime]):
         if value is None:
             return None
         if value.tzinfo is None:
-            raise NaiveDateTimeError
+            raise TimezoneAwareRequiredError.for_occurrence()
         return value.astimezone(dt.timezone.utc)
 
     def process_result_value(

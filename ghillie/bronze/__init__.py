@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+from .errors import TimezoneAwareRequiredError
 from .services import (
     RawEventEnvelope,
     RawEventPersistError,
     RawEventWriter,
-    TimezoneAwareRequiredError,
     make_dedupe_key,
 )
 from .storage import GithubIngestionOffset, RawEvent, RawEventState, init_bronze_storage

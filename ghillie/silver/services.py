@@ -15,6 +15,7 @@ if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 ProcessedIds = list[int]
+BATCH_SIZE = 100
 
 
 class RawEventTransformError(Exception):
@@ -46,10 +47,20 @@ class RawEventTransformer:
                 .where(RawEvent.transform_state == RawEventState.PENDING.value)
                 .order_by(RawEvent.id)
             )
-            if limit is not None:
-                stmt = stmt.limit(limit)
-            events = (await session.scalars(stmt)).all()
-            processed = await self._process_events(session, events)
+            remaining = limit
+            processed: ProcessedIds = []
+            stream = await session.stream_scalars(
+                stmt.limit(limit) if limit is not None else stmt
+            )
+            async for raw_event in stream:
+                processed.extend(await self._process_events(session, [raw_event]))
+                if remaining is not None:
+                    remaining -= 1
+                    if remaining <= 0:
+                        break
+                # commit every batch to release memory/backlog
+                if len(processed) % BATCH_SIZE == 0:
+                    await session.commit()
             await session.commit()
             return processed
 
@@ -66,8 +77,10 @@ class RawEventTransformer:
                 .where(RawEvent.id.in_(raw_event_ids))
                 .order_by(RawEvent.id)
             )
-            events = (await session.scalars(stmt)).all()
-            processed = await self._process_events(session, events)
+            processed: ProcessedIds = []
+            stream = await session.stream_scalars(stmt)
+            async for raw_event in stream:
+                processed.extend(await self._process_events(session, [raw_event]))
             await session.commit()
             return processed
 

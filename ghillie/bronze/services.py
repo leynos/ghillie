@@ -12,30 +12,16 @@ import typing as typ
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
+from ghillie.bronze.errors import (
+    TimezoneAwareRequiredError,
+    UnsupportedPayloadTypeError,
+)
 from ghillie.bronze.storage import RawEvent
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 Payload = dict[str, typ.Any]
-
-
-class TimezoneAwareRequiredError(ValueError):
-    """Raised when datetime inputs lack timezone information."""
-
-    def __init__(self, context: str) -> None:
-        """Attach a consistent error message for the failing context."""
-        super().__init__(f"{context} must be timezone aware")
-
-    @classmethod
-    def for_payload(cls) -> TimezoneAwareRequiredError:
-        """Return an error indicating payload timestamps were naive."""
-        return cls("payload datetime values")
-
-    @classmethod
-    def for_occurrence(cls) -> TimezoneAwareRequiredError:
-        """Return an error indicating occurred_at was naive."""
-        return cls("occurred_at")
 
 
 class RawEventPersistError(RuntimeError):
@@ -59,7 +45,12 @@ class RawEventEnvelope:
 
 
 def _normalise_payload(payload: Payload) -> Payload:
-    """Deep-copy payload converting datetimes to ISO-8601 strings."""
+    """Deep-copy payload converting datetimes and rejecting unsupported types.
+
+    Supported types: dict, list, str, int, float, bool, None, and datetime
+    (timezone-aware). Any other type raises a ValueError to keep hashing
+    deterministic and JSON-safe.
+    """
 
     def _convert(value: object) -> object:
         if isinstance(value, dict):
@@ -70,24 +61,17 @@ def _normalise_payload(payload: Payload) -> Payload:
             if value.tzinfo is None:
                 raise TimezoneAwareRequiredError.for_payload()
             return value.astimezone(dt.timezone.utc).isoformat()
-        return copy.deepcopy(value)
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            return copy.deepcopy(value)
+        raise UnsupportedPayloadTypeError(type(value).__name__)
 
     return typ.cast("Payload", _convert(payload))
 
 
 def _serialise_for_hash(payload: Payload) -> str:
     """Return a deterministic JSON string for hashing payloads."""
-
-    def _default(value: object) -> object:
-        if isinstance(value, dt.datetime):
-            if value.tzinfo is None:
-                raise TimezoneAwareRequiredError.for_payload()
-            return value.astimezone(dt.timezone.utc).isoformat()
-        return str(value)
-
     return json.dumps(
-        payload,
-        default=_default,
+        _normalise_payload(payload),
         sort_keys=True,
         separators=(",", ":"),
     )
