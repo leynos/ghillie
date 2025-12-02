@@ -41,8 +41,6 @@ class RawEventState(enum.IntEnum):
 class Base(DeclarativeBase):
     """Base declarative class for Bronze models."""
 
-    metadata: typ.Any
-
 
 class UTCDateTime(TypeDecorator[dt.datetime]):
     """DateTime wrapper that round-trips UTC tzinfo even on SQLite."""
@@ -112,6 +110,6 @@ class GithubIngestionOffset(Base):
 
 
 async def init_bronze_storage(engine: AsyncEngine) -> None:
-    """Create Bronze tables if they are absent."""
+    """Create all tables registered with Base if they are absent."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

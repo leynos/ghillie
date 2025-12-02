@@ -1,5 +1,4 @@
 """Unit tests for the Bronze raw event store and transform helpers."""
-# ruff: noqa: D103
 
 from __future__ import annotations
 
@@ -10,12 +9,8 @@ import typing as typ
 import pytest
 import sqlalchemy as sa
 from sqlalchemy import func, select
+from sqlalchemy.exc import StatementError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
-if typ.TYPE_CHECKING:
-    from pathlib import Path
-else:  # pragma: no cover - hints only
-    Path = typ.Any
 
 from ghillie.bronze import (
     RawEvent,
@@ -24,16 +19,20 @@ from ghillie.bronze import (
     RawEventWriter,
     TimezoneAwareRequiredError,
     init_bronze_storage,
+    make_dedupe_key,
 )
-from ghillie.bronze.services import make_dedupe_key
 from ghillie.silver import EventFact, RawEventTransformer, init_silver_storage
 from ghillie.silver.services import RawEventTransformError
+
+if typ.TYPE_CHECKING:
+    from pathlib import Path
 
 
 @pytest.fixture
 def session_factory(
     tmp_path: Path,
 ) -> typ.Iterator[async_sessionmaker[AsyncSession]]:
+    """Yield a fresh async session factory backed by sqlite."""
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'bronze.db'}")
     asyncio.run(init_bronze_storage(engine))
     asyncio.run(init_silver_storage(engine))
@@ -44,6 +43,7 @@ def session_factory(
 
 
 def test_make_dedupe_key_changes_when_inputs_change() -> None:
+    """Dedupe key changes when any input dimension changes."""
     occurred_at = dt.datetime(2024, 1, 1, tzinfo=dt.timezone.utc)
     base = make_dedupe_key(
         RawEventEnvelope(
@@ -81,6 +81,7 @@ def test_make_dedupe_key_changes_when_inputs_change() -> None:
 
 
 def test_make_dedupe_key_rejects_naive_occurred_at() -> None:
+    """Naive occurred_at values are rejected for dedupe key generation."""
     envelope = RawEventEnvelope(
         source_system="github",
         event_type="github.push",
@@ -96,6 +97,7 @@ def test_make_dedupe_key_rejects_naive_occurred_at() -> None:
 
 
 def test_make_dedupe_key_normalizes_occurred_at_timezones() -> None:
+    """occurred_at hashes the same for equal instants across timezones."""
     instant_utc = dt.datetime(2024, 1, 1, 12, 0, tzinfo=dt.timezone.utc)
     instant_offset = instant_utc.astimezone(dt.timezone(dt.timedelta(hours=1)))
 
@@ -120,6 +122,7 @@ def test_make_dedupe_key_normalizes_occurred_at_timezones() -> None:
 
 
 def test_make_dedupe_key_payload_determinism_and_timezone_awareness() -> None:
+    """Payload hashing is deterministic and rejects naive datetimes."""
     occurred_at = dt.datetime(2024, 1, 1, tzinfo=dt.timezone.utc)
     payload_a = {"a": 1, "b": 2}
     payload_b = {"b": 2, "a": 1}
@@ -174,6 +177,7 @@ def test_make_dedupe_key_payload_determinism_and_timezone_awareness() -> None:
 def test_ingest_preserves_payload_and_timestamps(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
+    """Ingestion stores payload verbatim and timestamps with UTC tzinfo."""
     writer = RawEventWriter(session_factory)
     payload = {
         "key": "value",
@@ -215,6 +219,7 @@ def test_ingest_preserves_payload_and_timestamps(
 def test_ingest_rejects_naive_occurred_at(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
+    """Ingestion rejects naive occurred_at timestamps."""
     writer = RawEventWriter(session_factory)
     payload = {"ref": "refs/heads/main"}
     occurred_at = dt.datetime(2024, 6, 1, 8, 30)  # noqa: DTZ001
@@ -238,6 +243,7 @@ def test_ingest_rejects_naive_occurred_at(
 def test_utc_datetime_normalises_results(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
+    """SQLite returns UTC-aware datetimes via the UTCDateTime type."""
     naive_str = "2024-06-01 12:00:00"
 
     async def _seed() -> None:
@@ -266,9 +272,62 @@ def test_utc_datetime_normalises_results(
     assert raw_event.occurred_at.utcoffset() == dt.timedelta(0)
 
 
+def test_utc_datetime_bind_rejects_naive(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Binding naive datetimes raises a timezone-required error."""
+
+    async def _run() -> None:
+        async with session_factory() as session, session.begin():
+            session.add(
+                RawEvent(
+                    source_system="github",
+                    event_type="push",
+                    occurred_at=dt.datetime(2024, 6, 1, 12, 0),  # noqa: DTZ001
+                    ingested_at=dt.datetime(2024, 6, 1, 12, 0, tzinfo=dt.timezone.utc),
+                    dedupe_key="key",
+                    payload={},
+                )
+            )
+
+    with pytest.raises(StatementError) as excinfo:
+        asyncio.run(_run())
+    assert isinstance(excinfo.value.__cause__, TimezoneAwareRequiredError)
+
+
+def test_utc_datetime_bind_normalises_non_utc(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Binding non-UTC datetimes stores and reads back as UTC."""
+    occurred_local = dt.datetime(
+        2024, 6, 1, 12, 0, tzinfo=dt.timezone(dt.timedelta(hours=3))
+    )
+    expected_utc = occurred_local.astimezone(dt.timezone.utc)
+
+    async def _run() -> RawEvent:
+        async with session_factory() as session, session.begin():
+            raw_event = RawEvent(
+                source_system="github",
+                event_type="push",
+                occurred_at=occurred_local,
+                ingested_at=expected_utc,
+                dedupe_key="key-norm",
+                payload={},
+            )
+            session.add(raw_event)
+        async with session_factory() as session:
+            return (await session.execute(select(RawEvent))).scalar_one()
+
+    stored = asyncio.run(_run())
+    assert stored.occurred_at.tzinfo is not None
+    assert stored.occurred_at == expected_utc
+    assert stored.occurred_at.utcoffset() == dt.timedelta(0)
+
+
 def test_ingest_is_idempotent(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
+    """Repeated ingests of the same event return the existing row."""
     writer = RawEventWriter(session_factory)
     payload = {"id": "evt-dup"}
     occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.timezone.utc)
@@ -312,6 +371,7 @@ def test_ingest_is_idempotent(
 def test_transformer_is_idempotent(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
+    """Transformer produces one fact and marks raw event processed."""
     writer = RawEventWriter(session_factory)
     transformer = RawEventTransformer(session_factory)
     payload = {"id": "evt-dup", "value": 3}
@@ -421,6 +481,7 @@ async def _verify_transformation_failure(
 def test_transformer_marks_failed_on_payload_mismatch(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
+    """Payload drift between EventFact and RawEvent marks failure."""
     writer = RawEventWriter(session_factory)
     transformer = RawEventTransformer(session_factory)
 
@@ -451,18 +512,19 @@ def test_transformer_marks_failed_on_payload_mismatch(
     asyncio.run(_run())
 
 
-def test_transformer_marks_failed_on_concurrent_insert_integrity_error(
+def test_transformer_treats_concurrent_insert_as_processed(
     session_factory: async_sessionmaker[AsyncSession],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """IntegrityError race is treated as success when another worker won."""
     writer = RawEventWriter(session_factory)
     transformer = RawEventTransformer(session_factory)
 
     payload = {"id": "evt-concurrent-insert", "value": 42}
     occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.timezone.utc)
 
-    async def _ingest() -> RawEvent:
-        return await writer.ingest(
+    async def _setup() -> RawEvent:
+        raw_event = await writer.ingest(
             RawEventEnvelope(
                 source_system="github",
                 source_event_id="evt-concurrent-insert",
@@ -472,19 +534,31 @@ def test_transformer_marks_failed_on_concurrent_insert_integrity_error(
                 payload=payload,
             )
         )
+        await _insert_event_fact(session_factory, raw_event.id, payload)
+        return raw_event
 
-    async def _failing_upsert(*_: object, **__: object) -> EventFact:
+    raw_event = asyncio.run(_setup())
+
+    async def _raise_concurrent(*_: object, **__: object) -> EventFact:
         raise RawEventTransformError.concurrent_insert()
 
     monkeypatch.setattr(
-        transformer, "_upsert_event_fact", _failing_upsert, raising=True
+        transformer, "_upsert_event_fact", _raise_concurrent, raising=True
     )
 
     async def _run() -> None:
-        raw_event = await _ingest()
-        await _verify_transformation_failure(
-            session_factory, transformer, raw_event, "concurrent"
-        )
+        processed_ids = await transformer.process_raw_event_ids([raw_event.id])
+        assert processed_ids == [raw_event.id]
+
+        async with session_factory() as session:
+            stored_event = await session.get(RawEvent, raw_event.id)
+            assert stored_event is not None
+            assert stored_event.transform_state == RawEventState.PROCESSED.value
+            assert stored_event.transform_error is None
+
+            facts = (await session.scalars(select(EventFact))).all()
+            assert len(facts) == 1
+            assert facts[0].payload == payload
 
     asyncio.run(_run())
 
@@ -492,6 +566,7 @@ def test_transformer_marks_failed_on_concurrent_insert_integrity_error(
 def test_process_pending_respects_limit(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
+    """process_pending limit processes only the requested batch size."""
     writer = RawEventWriter(session_factory)
     transformer = RawEventTransformer(session_factory)
 
@@ -537,6 +612,7 @@ def test_process_pending_respects_limit(
 def test_process_raw_event_ids_empty_input_noop(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
+    """Empty input to process_raw_event_ids performs no work."""
     writer = RawEventWriter(session_factory)
     transformer = RawEventTransformer(session_factory)
 

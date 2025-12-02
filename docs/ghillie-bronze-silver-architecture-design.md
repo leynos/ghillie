@@ -918,6 +918,15 @@ A few practical constraints you’ll want to bake into the design up front:
 - Bronze: log ingestion failures, event sizes, and dedupe rates.
 - Silver: log transform failures per event type, and maintain a simple
   `transform_failures` dashboard.
+- **Timezone discipline and payload safety:** ingestion and hashing enforce
+  timezone-aware datetimes. Naive values raise `TimezoneAwareRequiredError`,
+  payload datetimes are normalised to UTC ISO strings before persistence, and
+  unsupported payload types raise `UnsupportedPayloadTypeError` to keep dedupe
+  hashes deterministic and JSON-serialisable.
+- **Concurrent transforms:** Silver transforms treat uniqueness races as
+  benign. If an `IntegrityError` occurs because another worker already inserted
+  an `event_facts` row, the late worker re-reads the row and marks the
+  `raw_event` as processed instead of failing.
 - **Back-pressure:** if Silver can’t keep up, you can:
 
 - slow down pollers (GitHub),

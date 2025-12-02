@@ -21,7 +21,7 @@ from ghillie.bronze.storage import RawEvent
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-Payload = dict[str, typ.Any]
+Payload: typ.TypeAlias = dict[str, typ.Any]
 
 
 class RawEventPersistError(RuntimeError):
@@ -48,53 +48,50 @@ def _normalise_payload(payload: Payload) -> Payload:
     """Deep-copy payload converting datetimes and rejecting unsupported types.
 
     Supported types: dict, list, str, int, float, bool, None, and datetime
-    (timezone-aware). Any other type raises a ValueError to keep hashing
-    deterministic and JSON-safe.
+    (timezone-aware). Any other type raises UnsupportedPayloadTypeError to keep
+    hashing deterministic and JSON-safe.
     """
-
-    def _convert_dict(value: dict) -> dict:
-        return {k: _convert(v) for k, v in value.items()}
-
-    def _convert_list(value: list) -> list:
-        return [_convert(item) for item in value]
 
     def _convert_datetime(value: dt.datetime) -> str:
         if value.tzinfo is None:
             raise TimezoneAwareRequiredError.for_payload()
         return value.astimezone(dt.timezone.utc).isoformat()
 
-    def _convert_primitive(value: object) -> object:
-        if isinstance(value, (str, int, float, bool)) or value is None:
-            return copy.deepcopy(value)
-        raise UnsupportedPayloadTypeError(type(value).__name__)
-
     def _convert(value: object) -> object:
-        if isinstance(value, dict):
-            return _convert_dict(value)
-        if isinstance(value, list):
-            return _convert_list(value)
-        if isinstance(value, dt.datetime):
-            return _convert_datetime(value)
-        return _convert_primitive(value)
+        match value:
+            case dict():
+                return {k: _convert(v) for k, v in value.items()}
+            case list():
+                return [_convert(item) for item in value]
+            case dt.datetime():
+                return _convert_datetime(value)
+            case None | bool() | int() | float() | str():
+                return copy.deepcopy(value)
+            case _:
+                raise UnsupportedPayloadTypeError(type(value).__name__)
 
     return typ.cast("Payload", _convert(payload))
 
 
-def _serialise_for_hash(payload: Payload) -> str:
+def _serialise_for_hash(payload: Payload, *, is_normalised: bool = False) -> str:
     """Return a deterministic JSON string for hashing payloads."""
     return json.dumps(
-        _normalise_payload(payload),
+        payload if is_normalised else _normalise_payload(payload),
         sort_keys=True,
         separators=(",", ":"),
     )
 
 
-def make_dedupe_key(envelope: RawEventEnvelope) -> str:
+def make_dedupe_key(
+    envelope: RawEventEnvelope, *, payload_is_normalised: bool = False
+) -> str:
     """Construct a stable dedupe key used to avoid duplicate rows."""
     if envelope.occurred_at.tzinfo is None:
         raise TimezoneAwareRequiredError.for_occurrence()
 
-    canonical_payload = _serialise_for_hash(envelope.payload)
+    canonical_payload = _serialise_for_hash(
+        envelope.payload, is_normalised=payload_is_normalised
+    )
     material = "|".join(
         [
             envelope.source_system,
@@ -127,7 +124,7 @@ class RawEventWriter:
 
         payload_copy = _normalise_payload(envelope.payload)
         envelope_copy = dc.replace(envelope, payload=payload_copy)
-        dedupe_key = make_dedupe_key(envelope_copy)
+        dedupe_key = make_dedupe_key(envelope_copy, payload_is_normalised=True)
 
         async with self._session_factory() as session:
             raw_event = RawEvent(
@@ -143,11 +140,11 @@ class RawEventWriter:
 
             try:
                 await session.commit()
-            except IntegrityError:
+            except IntegrityError as exc:
                 await session.rollback()
                 existing = await self._load_existing(session, envelope_copy, dedupe_key)
                 if existing is None:
-                    raise RawEventPersistError from None
+                    raise RawEventPersistError from exc
                 return existing
 
             await session.refresh(raw_event)

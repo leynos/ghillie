@@ -36,6 +36,6 @@ class EventFact(Base):
 
 
 async def init_silver_storage(engine: AsyncEngine) -> None:
-    """Create Silver tables if they are absent."""
+    """Create all tables registered with Base if they are absent."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

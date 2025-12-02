@@ -111,8 +111,9 @@ so scheduling systems can enqueue work without importing Python modules.
 
 ## Bronze raw event store (Phase 1.2)
 
-The Bronze layer retains unmodified GitHub payloads so Silver transforms can be
-replayed deterministically. Events are written to the `raw_events` table with:
+The Bronze layer retains unmodified GitHub payloads, so Silver transforms can
+be replayed deterministically. Events are written to the `raw_events` table
+with:
 
 - `source_system`, `event_type`, and optional `source_event_id`,
 - optional `repo_external_id` (for example `owner/name`),
@@ -121,7 +122,7 @@ replayed deterministically. Events are written to the `raw_events` table with:
 
 ### Ingesting events
 
-Use `RawEventWriter` to append events. A SHA-256 `dedupe_key` prevents webhook
+Use `RawEventWriter` to append events. An SHA-256 `dedupe_key` prevents webhook
 retries or overlapping pollers from writing duplicates.
 
 ```python
@@ -161,10 +162,18 @@ asyncio.run(main())
 leaking into storage. If an event already exists, the existing row is returned
 without updating timestamps, preserving the append-only contract.
 
+All timestamps must be timezone aware. `RawEventWriter` rejects naive
+`occurred_at` values and normalises any payload datetimes to UTC ISO-8601
+strings before persisting to JSON, ensuring hashes and database writes remain
+deterministic. Payloads containing unsupported types raise
+`UnsupportedPayloadTypeError`.
+
 ### Reprocessing and idempotency
 
 `RawEventTransformer` copies Bronze payloads into the Silver `event_facts`
 staging table and marks the source row as processed. Re-running a transform
 over the same `raw_event_id` is idempotent: if the `event_facts` payload
-differs from Bronze, the transform is marked failed so operators can
-investigate drift; otherwise no additional rows are created.
+differs from Bronze, the transform is marked as failed, so operators can
+investigate drift; otherwise, no additional rows are created. If two workers
+race to insert the same event fact, the late worker re-reads the row and marks
+the raw event as processed instead of failing the transform.

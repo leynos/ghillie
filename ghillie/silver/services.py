@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 import typing as typ
 
 from sqlalchemy import select
@@ -16,6 +17,7 @@ if typ.TYPE_CHECKING:
 
 ProcessedIds = list[int]
 BATCH_SIZE = 100
+logger = logging.getLogger(__name__)
 
 
 class RawEventTransformError(Exception):
@@ -58,9 +60,6 @@ class RawEventTransformer:
                     remaining -= 1
                     if remaining <= 0:
                         break
-                # commit every batch to release memory/backlog
-                if len(processed) % BATCH_SIZE == 0:
-                    await session.commit()
             await session.commit()
             return processed
 
@@ -92,8 +91,23 @@ class RawEventTransformer:
             try:
                 await self._upsert_event_fact(session, raw_event)
             except RawEventTransformError as exc:
+                if "concurrent" in str(exc).lower():
+                    existing = await session.scalar(
+                        select(EventFact).where(EventFact.raw_event_id == raw_event.id)
+                    )
+                    if existing is not None:
+                        raw_event.transform_state = RawEventState.PROCESSED.value
+                        raw_event.transform_error = None
+                        processed.append(raw_event.id)
+                        continue
                 raw_event.transform_state = RawEventState.FAILED.value
                 raw_event.transform_error = str(exc)
+                logger.warning(
+                    "RawEvent %s (%s) failed transform: %s",
+                    raw_event.id,
+                    raw_event.event_type,
+                    exc,
+                )
                 continue
 
             raw_event.transform_state = RawEventState.PROCESSED.value
@@ -106,8 +120,10 @@ class RawEventTransformer:
     async def _upsert_event_fact(
         session: AsyncSession, raw_event: RawEvent
     ) -> EventFact:
+        raw_event_id = raw_event.id
+
         existing = await session.scalar(
-            select(EventFact).where(EventFact.raw_event_id == raw_event.id)
+            select(EventFact).where(EventFact.raw_event_id == raw_event_id)
         )
         if existing is not None:
             if existing.payload != raw_event.payload:
@@ -115,22 +131,24 @@ class RawEventTransformer:
             return existing
 
         fact = EventFact(
-            raw_event_id=raw_event.id,
+            raw_event_id=raw_event_id,
             repo_external_id=raw_event.repo_external_id,
             event_type=raw_event.event_type,
             occurred_at=raw_event.occurred_at,
             payload=copy.deepcopy(raw_event.payload),
         )
-        session.add(fact)
+
         try:
-            await session.flush()
+            async with session.begin_nested():
+                session.add(fact)
+                await session.flush()
         except IntegrityError as exc:
-            await session.rollback()
             with session.no_autoflush:
                 existing = await session.scalar(
-                    select(EventFact).where(EventFact.raw_event_id == raw_event.id)
+                    select(EventFact).where(EventFact.raw_event_id == raw_event_id)
                 )
             if existing is not None:
                 return existing
             raise RawEventTransformError.concurrent_insert() from exc
+
         return fact

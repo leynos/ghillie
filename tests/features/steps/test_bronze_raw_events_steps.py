@@ -17,8 +17,6 @@ from sqlalchemy.ext.asyncio import (
 
 if typ.TYPE_CHECKING:
     from pathlib import Path
-else:  # pragma: no cover - hints only
-    Path = typ.Any
 
 from ghillie.bronze import (
     RawEvent,
