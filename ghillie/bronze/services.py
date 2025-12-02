@@ -22,6 +22,29 @@ if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 Payload: typ.TypeAlias = dict[str, typ.Any]
+JSONValue: typ.TypeAlias = (
+    dict[str, typ.Any]
+    | list[typ.Any]
+    | str
+    | int
+    | float
+    | bool
+    | None
+)
+
+
+def _normalise_datetime_for_payload(value: dt.datetime) -> str:
+    if value.tzinfo is None:
+        raise TimezoneAwareRequiredError.for_payload()
+    return value.astimezone(dt.timezone.utc).isoformat()
+
+
+def _normalise_mapping(value: dict[typ.Any, typ.Any]) -> dict[str, JSONValue]:
+    return {str(k): _normalise_payload(v) for k, v in value.items()}
+
+
+def _normalise_sequence(value: list[typ.Any]) -> list[JSONValue]:
+    return [_normalise_payload(item) for item in value]
 
 
 class RawEventPersistError(RuntimeError):
@@ -44,33 +67,24 @@ class RawEventEnvelope:
     repo_external_id: str | None = None
 
 
-def _normalise_payload(payload: Payload) -> Payload:
+def _normalise_payload(payload: object) -> JSONValue:
     """Deep-copy payload converting datetimes and rejecting unsupported types.
 
     Supported types: dict, list, str, int, float, bool, None, and datetime
     (timezone-aware). Any other type raises UnsupportedPayloadTypeError to keep
     hashing deterministic and JSON-safe.
     """
-
-    def _convert_datetime(value: dt.datetime) -> str:
-        if value.tzinfo is None:
-            raise TimezoneAwareRequiredError.for_payload()
-        return value.astimezone(dt.timezone.utc).isoformat()
-
-    def _convert(value: object) -> object:
-        match value:
-            case dict():
-                return {k: _convert(v) for k, v in value.items()}
-            case list():
-                return [_convert(item) for item in value]
-            case dt.datetime():
-                return _convert_datetime(value)
-            case None | bool() | int() | float() | str():
-                return copy.deepcopy(value)
-            case _:
-                raise UnsupportedPayloadTypeError(type(value).__name__)
-
-    return typ.cast("Payload", _convert(payload))
+    match payload:
+        case dict():
+            return _normalise_mapping(payload)
+        case list():
+            return _normalise_sequence(payload)
+        case dt.datetime():
+            return _normalise_datetime_for_payload(payload)
+        case None | bool() | int() | float() | str():
+            return copy.deepcopy(payload)
+        case _:
+            raise UnsupportedPayloadTypeError(type(payload).__name__)
 
 
 def _serialise_for_hash(payload: Payload, *, is_normalised: bool = False) -> str:

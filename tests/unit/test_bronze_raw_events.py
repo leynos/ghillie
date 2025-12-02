@@ -9,7 +9,7 @@ import typing as typ
 import pytest
 import sqlalchemy as sa
 from sqlalchemy import func, select
-from sqlalchemy.exc import StatementError
+from sqlalchemy.exc import IntegrityError, StatementError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from ghillie.bronze import (
@@ -559,6 +559,72 @@ def test_transformer_treats_concurrent_insert_as_processed(
             facts = (await session.scalars(select(EventFact))).all()
             assert len(facts) == 1
             assert facts[0].payload == payload
+
+    asyncio.run(_run())
+
+
+def test_process_events_integrity_error_does_not_rollback_prior_events(
+    session_factory: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """IntegrityError on one event should not discard earlier successes."""
+    writer = RawEventWriter(session_factory)
+    transformer = RawEventTransformer(session_factory)
+
+    payload = {"id": "evt-batch"}
+    occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.timezone.utc)
+
+    async def _ingest() -> list[RawEvent]:
+        return [
+            await writer.ingest(
+                RawEventEnvelope(
+                    source_system="github",
+                    source_event_id=f"evt-batch-{i}",
+                    event_type="github.push",
+                    repo_external_id="org/repo",
+                    occurred_at=occurred_at,
+                    payload=payload | {"value": i},
+                )
+            )
+            for i in range(2)
+        ]
+
+    raw_events = asyncio.run(_ingest())
+
+    original_flush = AsyncSession.flush
+    flush_calls = {"count": 0, "fail_at": 2}
+
+    async def _flaky_flush(
+        self: AsyncSession, objects: typ.Sequence[object] | None = None
+    ) -> None:
+        flush_calls["count"] += 1
+        if flush_calls["count"] == flush_calls["fail_at"]:
+            raise IntegrityError(None, None, Exception("simulated duplicate"))
+        return await original_flush(self, objects)
+
+    monkeypatch.setattr(AsyncSession, "flush", _flaky_flush, raising=True)
+
+    async def _run() -> None:
+        async with session_factory() as session:
+            events = (
+                await session.scalars(select(RawEvent).order_by(RawEvent.id))
+            ).all()
+            processed = await transformer._process_events(session, events)
+            await session.commit()
+
+        assert processed == [raw_events[0].id]
+
+        async with session_factory() as session:
+            facts = (await session.scalars(select(EventFact))).all()
+            assert len(facts) == 1
+            assert facts[0].raw_event_id == raw_events[0].id
+
+            first = await session.get(RawEvent, raw_events[0].id)
+            second = await session.get(RawEvent, raw_events[1].id)
+            assert first is not None
+            assert second is not None
+            assert first.transform_state == RawEventState.PROCESSED.value
+            assert second.transform_state == RawEventState.FAILED.value
 
     asyncio.run(_run())
 
