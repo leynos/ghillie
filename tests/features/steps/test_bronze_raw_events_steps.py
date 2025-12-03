@@ -28,6 +28,13 @@ SOURCE_EVENT_ID = "evt-123"
 REPO_SLUG = "octo/reef"
 
 
+def _run_async[T](
+    coro_func: typ.Callable[[], typ.Coroutine[typ.Any, typ.Any, T]]
+) -> T:
+    """Execute an async callable within the test context."""
+    return asyncio.run(coro_func())
+
+
 class BronzeContext(typ.TypedDict, total=False):
     """Shared mutable scenario state."""
 
@@ -137,7 +144,7 @@ def ingest_raw_event_twice(bronze_context: BronzeContext) -> None:
         bronze_context["raw_event_id"] = first.id
         assert first.id == second.id, "duplicate ingests should resolve to same row"
 
-    asyncio.run(_ingest())
+    _run_async(_ingest)
 
 
 @when("I ingest the raw event expecting a timezone error")
@@ -161,7 +168,7 @@ def ingest_raw_event_timezone_error(bronze_context: BronzeContext) -> None:
         )
 
     with pytest.raises(TimezoneAwareRequiredError) as excinfo:
-        asyncio.run(_ingest())
+        _run_async(_ingest)
     bronze_context["error"] = excinfo.value
 
 
@@ -174,7 +181,7 @@ def assert_single_raw_event(bronze_context: BronzeContext) -> None:
             rows = (await session.scalars(select(RawEvent))).all()
             return len(rows)
 
-    count = asyncio.run(_count())
+    count = _run_async(_count)
     assert count == 1, f"expected 1 raw event row but found {count}"
 
 
@@ -191,7 +198,7 @@ def assert_payload_preserved(bronze_context: BronzeContext) -> None:
             assert raw_event is not None, "raw event missing from database"
             return raw_event
 
-    raw_event = asyncio.run(_load())
+    raw_event = _run_async(_load)
     assert raw_event.payload == expected_payload, (
         "Bronze payload should be preserved verbatim"
     )
@@ -201,14 +208,14 @@ def assert_payload_preserved(bronze_context: BronzeContext) -> None:
 @when("I transform pending raw events")
 def transform_pending(bronze_context: BronzeContext) -> None:
     """Run the Bronze→Silver transform once."""
-    asyncio.run(bronze_context["transformer"].process_pending())
+    _run_async(bronze_context["transformer"].process_pending)
 
 
 @when("I transform pending raw events again")
 def transform_pending_again(bronze_context: BronzeContext) -> None:
     """Re-run the transform to validate idempotency."""
-    asyncio.run(
-        bronze_context["transformer"].process_raw_event_ids(
+    _run_async(
+        lambda: bronze_context["transformer"].process_raw_event_ids(
             [bronze_context["raw_event_id"]]
         )
     )
@@ -225,7 +232,7 @@ def corrupt_raw_event_payload(bronze_context: BronzeContext) -> None:
             raw.payload = {"after": "corrupted"}
             raw.transform_state = RawEventState.PENDING.value
 
-    asyncio.run(_mutate())
+    _run_async(_mutate)
 
 
 @then("a single event fact exists for the raw event")
@@ -239,7 +246,7 @@ def assert_single_event_fact(bronze_context: BronzeContext) -> None:
             assert raw_event is not None, "raw event should still exist"
             return len(facts), raw_event.transform_state
 
-    fact_count, transform_state = asyncio.run(_count())
+    fact_count, transform_state = _run_async(_count)
     assert fact_count == 1, f"expected 1 event fact, got {fact_count}"
     assert transform_state == RawEventState.PROCESSED.value
 
@@ -256,7 +263,7 @@ def assert_event_fact_payload(bronze_context: BronzeContext) -> None:
             assert raw_event is not None, "expected raw event row"
             return raw_event.payload, fact.payload
 
-    bronze_payload, fact_payload = asyncio.run(_load())
+    bronze_payload, fact_payload = _run_async(_load)
     assert bronze_payload == fact_payload, (
         "Silver event facts should mirror Bronze payloads"
     )
@@ -279,7 +286,7 @@ def assert_raw_event_marked_failed(bronze_context: BronzeContext) -> None:
             assert raw is not None
             return raw
 
-    raw_event = asyncio.run(_load())
+    raw_event = _run_async(_load)
     assert raw_event.transform_state == RawEventState.FAILED.value
     assert raw_event.transform_error is not None
     assert "payload" in raw_event.transform_error.lower()
@@ -293,5 +300,5 @@ def assert_event_fact_count_one(bronze_context: BronzeContext) -> None:
         async with bronze_context["session_factory"]() as session:
             return len((await session.scalars(select(EventFact))).all())
 
-    count = asyncio.run(_count())
+    count = _run_async(_count)
     assert count == 1
