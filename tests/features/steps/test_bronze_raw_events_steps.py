@@ -9,15 +9,9 @@ import typing as typ
 import pytest
 from pytest_bdd import given, scenario, then, when
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
 
 if typ.TYPE_CHECKING:
-    from pathlib import Path
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ghillie.bronze import (
     RawEvent,
@@ -25,9 +19,8 @@ from ghillie.bronze import (
     RawEventState,
     RawEventWriter,
     TimezoneAwareRequiredError,
-    init_bronze_storage,
 )
-from ghillie.silver import EventFact, RawEventTransformer, init_silver_storage
+from ghillie.silver import EventFact, RawEventTransformer
 
 EVENT_TYPE = "github.push"
 SOURCE_SYSTEM = "github"
@@ -38,7 +31,6 @@ REPO_SLUG = "octo/reef"
 class BronzeContext(typ.TypedDict, total=False):
     """Shared mutable scenario state."""
 
-    engine: AsyncEngine
     session_factory: async_sessionmaker[AsyncSession]
     writer: RawEventWriter
     transformer: RawEventTransformer
@@ -72,30 +64,19 @@ def test_bronze_raw_event_mismatch_marks_failed() -> None:
     """Mismatched payloads should mark raw events failed."""
 
 
-def _build_session_factory(
-    tmp_path: Path,
-) -> tuple[AsyncEngine, async_sessionmaker[AsyncSession]]:
-    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'bronze-bdd.db'}")
-    asyncio.run(init_bronze_storage(engine))
-    asyncio.run(init_silver_storage(engine))
-    return engine, async_sessionmaker(engine, expire_on_commit=False)
-
-
 @pytest.fixture
-def bronze_context(tmp_path: Path) -> typ.Iterator[BronzeContext]:
+def bronze_context(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> BronzeContext:
     """Provision a fresh database and helpers for the scenario."""
-    engine, session_factory = _build_session_factory(tmp_path)
     writer = RawEventWriter(session_factory)
     transformer = RawEventTransformer(session_factory)
 
-    yield {
-        "engine": engine,
+    return {
         "session_factory": session_factory,
         "writer": writer,
         "transformer": transformer,
     }
-
-    asyncio.run(engine.dispose())
 
 
 @given("an empty Bronze and Silver store")

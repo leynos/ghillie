@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import dataclasses as dc
 import datetime as dt
 import hashlib
@@ -26,18 +27,40 @@ JSONValue: typ.TypeAlias = (
 )
 
 
-def _normalise_datetime_for_payload(value: dt.datetime) -> str:
-    if value.tzinfo is None:
-        raise TimezoneAwareRequiredError.for_payload()
-    return value.astimezone(dt.timezone.utc).isoformat()
+def _normalise_payload(payload: Payload) -> Payload:  # noqa: C901
+    """Deep-copy payload converting datetimes and rejecting unsupported types.
 
+    Supported types: dict, list, str, int, float, bool, None, and datetime
+    (timezone-aware). Any other type raises a ValueError to keep hashing
+    deterministic and JSON-safe.
+    """
 
-def _normalise_mapping(value: dict[typ.Any, typ.Any]) -> dict[str, JSONValue]:
-    return {str(k): _normalise_payload(v) for k, v in value.items()}
+    def _convert_dict(value: dict) -> dict:
+        return {k: _convert(v) for k, v in value.items()}
 
+    def _convert_list(value: list) -> list:
+        return [_convert(item) for item in value]
 
-def _normalise_sequence(value: list[typ.Any]) -> list[JSONValue]:
-    return [_normalise_payload(item) for item in value]
+    def _convert_datetime(value: dt.datetime) -> str:
+        if value.tzinfo is None:
+            raise TimezoneAwareRequiredError.for_payload()
+        return value.astimezone(dt.timezone.utc).isoformat()
+
+    def _convert_primitive(value: object) -> object:
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            return copy.deepcopy(value)
+        raise UnsupportedPayloadTypeError(type(value).__name__)
+
+    def _convert(value: object) -> object:
+        if isinstance(value, dict):
+            return _convert_dict(value)
+        if isinstance(value, list):
+            return _convert_list(value)
+        if isinstance(value, dt.datetime):
+            return _convert_datetime(value)
+        return _convert_primitive(value)
+
+    return typ.cast("Payload", _convert(payload))
 
 
 class RawEventPersistError(RuntimeError):
@@ -58,26 +81,6 @@ class RawEventEnvelope:
     payload: Payload
     source_event_id: str | None = None
     repo_external_id: str | None = None
-
-
-def _normalise_payload(payload: object) -> JSONValue:
-    """Deep-copy payload converting datetimes and rejecting unsupported types.
-
-    Supported types: dict, list, str, int, float, bool, None, and datetime
-    (timezone-aware). Any other type raises UnsupportedPayloadTypeError to keep
-    hashing deterministic and JSON-safe.
-    """
-    match payload:
-        case dict():
-            return _normalise_mapping(payload)
-        case list():
-            return _normalise_sequence(payload)
-        case dt.datetime():
-            return _normalise_datetime_for_payload(payload)
-        case None | bool() | int() | float() | str():
-            return payload
-        case _:
-            raise UnsupportedPayloadTypeError(type(payload).__name__)
 
 
 def _serialise_for_hash(payload: Payload, *, is_normalised: bool = False) -> str:

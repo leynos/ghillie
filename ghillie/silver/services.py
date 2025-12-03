@@ -113,7 +113,7 @@ class RawEventTransformer:
         self, session: AsyncSession, raw_event: RawEvent, exc: RawEventTransformError
     ) -> int | None:
         """Handle transform errors, possibly recovering from concurrent inserts."""
-        if getattr(exc, "reason", None) == "concurrent_insert":
+        if "concurrent" in str(exc).lower():
             recovered_id = await self._try_recover_concurrent_insert(session, raw_event)
             if recovered_id is not None:
                 return recovered_id
