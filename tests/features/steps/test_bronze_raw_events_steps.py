@@ -82,6 +82,8 @@ def bronze_context(
 @given("an empty Bronze and Silver store")
 def given_empty_store(bronze_context: BronzeContext) -> None:
     """Ensure Bronze/Silver storage is initialised for the scenario."""
+    # Fixture setup already provides a clean database per scenario.
+    pass
 
 
 @given("a raw GitHub push event payload")
