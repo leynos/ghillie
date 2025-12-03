@@ -86,35 +86,63 @@ class RawEventTransformer:
     async def _process_events(
         self, session: AsyncSession, events: typ.Sequence[RawEvent]
     ) -> ProcessedIds:
+        """Process a sequence of raw events, collecting successfully processed IDs."""
         processed: ProcessedIds = []
         for raw_event in events:
-            try:
-                await self._upsert_event_fact(session, raw_event)
-            except RawEventTransformError as exc:
-                if "concurrent" in str(exc).lower():
-                    existing = await session.scalar(
-                        select(EventFact).where(EventFact.raw_event_id == raw_event.id)
-                    )
-                    if existing is not None:
-                        raw_event.transform_state = RawEventState.PROCESSED.value
-                        raw_event.transform_error = None
-                        processed.append(raw_event.id)
-                        continue
-                raw_event.transform_state = RawEventState.FAILED.value
-                raw_event.transform_error = str(exc)
-                logger.warning(
-                    "RawEvent %s (%s) failed transform: %s",
-                    raw_event.id,
-                    raw_event.event_type,
-                    exc,
-                )
-                continue
-
-            raw_event.transform_state = RawEventState.PROCESSED.value
-            raw_event.transform_error = None
-            processed.append(raw_event.id)
-
+            processed_id = await self._process_single_event(session, raw_event)
+            if processed_id is not None:
+                processed.append(processed_id)
         return processed
+
+    async def _process_single_event(
+        self, session: AsyncSession, raw_event: RawEvent
+    ) -> int | None:
+        """Process a single raw event, returning its ID if processed successfully."""
+        try:
+            await self._upsert_event_fact(session, raw_event)
+            return self._mark_processed(raw_event)
+        except RawEventTransformError as exc:
+            return await self._handle_transform_error(session, raw_event, exc)
+
+    async def _handle_transform_error(
+        self, session: AsyncSession, raw_event: RawEvent, exc: RawEventTransformError
+    ) -> int | None:
+        """Handle transform errors, possibly recovering from concurrent inserts."""
+        if "concurrent" in str(exc).lower():
+            recovered_id = await self._try_recover_concurrent_insert(session, raw_event)
+            if recovered_id is not None:
+                return recovered_id
+
+        self._mark_failed(raw_event, exc)
+        return None
+
+    async def _try_recover_concurrent_insert(
+        self, session: AsyncSession, raw_event: RawEvent
+    ) -> int | None:
+        """Try to recover from a concurrent insert by checking if EventFact exists."""
+        existing = await session.scalar(
+            select(EventFact).where(EventFact.raw_event_id == raw_event.id)
+        )
+        if existing is not None:
+            return self._mark_processed(raw_event)
+        return None
+
+    def _mark_processed(self, raw_event: RawEvent) -> int:
+        """Mark raw event as processed and return its ID."""
+        raw_event.transform_state = RawEventState.PROCESSED.value
+        raw_event.transform_error = None
+        return raw_event.id
+
+    def _mark_failed(self, raw_event: RawEvent, exc: RawEventTransformError) -> None:
+        """Mark raw event as failed and log the error."""
+        raw_event.transform_state = RawEventState.FAILED.value
+        raw_event.transform_error = str(exc)
+        logger.warning(
+            "RawEvent %s (%s) failed transform: %s",
+            raw_event.id,
+            raw_event.event_type,
+            exc,
+        )
 
     @staticmethod
     async def _upsert_event_fact(

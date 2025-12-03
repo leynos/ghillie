@@ -23,13 +23,7 @@ if typ.TYPE_CHECKING:
 
 Payload: typ.TypeAlias = dict[str, typ.Any]
 JSONValue: typ.TypeAlias = (
-    dict[str, typ.Any]
-    | list[typ.Any]
-    | str
-    | int
-    | float
-    | bool
-    | None
+    dict[str, typ.Any] | list[typ.Any] | str | int | float | bool | None
 )
 
 
