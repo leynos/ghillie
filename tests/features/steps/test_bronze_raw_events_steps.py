@@ -98,9 +98,7 @@ def raw_github_payload(bronze_context: BronzeContext) -> None:
         "ref": "refs/heads/main",
         "pusher": {"name": "marina"},
     }
-    bronze_context["occurred_at"] = dt.datetime(
-        2024, 7, 1, 12, 0, tzinfo=dt.UTC
-    )
+    bronze_context["occurred_at"] = dt.datetime(2024, 7, 1, 12, 0, tzinfo=dt.UTC)
 
 
 @given("a raw GitHub push event payload with a naive occurred_at")

@@ -66,9 +66,7 @@ def test_ingest_preserves_payload_and_timestamps(
         "occurred_at should round-trip unchanged"
     )
     assert stored_event.ingested_at is not None, "ingested_at should be set on insert"
-    assert stored_event.ingested_at.tzinfo == dt.UTC, (
-        "ingested_at must be UTC-aware"
-    )
+    assert stored_event.ingested_at.tzinfo == dt.UTC, "ingested_at must be UTC-aware"
     assert stored_event.transform_state == RawEventState.PENDING.value, (
         "raw event starts pending"
     )

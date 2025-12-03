@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import dataclasses as dc
 import datetime as dt
 import hashlib
@@ -24,40 +25,49 @@ type Payload = dict[str, typ.Any]
 type JSONValue = dict[str, typ.Any] | list[typ.Any] | str | int | float | bool | None
 
 
-def _normalise_payload(payload: Payload) -> Payload:  # noqa: C901
+def _convert_dict(value: dict, converter: typ.Callable[[object], object]) -> dict:
+    """Convert dict by recursively converting all values."""
+    return {k: converter(v) for k, v in value.items()}
+
+
+def _convert_list(value: list, converter: typ.Callable[[object], object]) -> list:
+    """Convert list by recursively converting all items."""
+    return [converter(item) for item in value]
+
+
+def _convert_datetime(value: dt.datetime) -> str:
+    """Convert timezone-aware datetime to UTC ISO string."""
+    if value.tzinfo is None:
+        raise TimezoneAwareRequiredError.for_payload()
+    return value.astimezone(dt.UTC).isoformat()
+
+
+def _convert_primitive(value: object) -> object:
+    """Deep-copy primitives or raise for unsupported types."""
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return copy.deepcopy(value)
+    raise UnsupportedPayloadTypeError(type(value).__name__)
+
+
+def _convert_value(value: object) -> object:
+    """Recursively convert value, handling dicts, lists, datetimes, and primitives."""
+    if isinstance(value, dict):
+        return _convert_dict(value, _convert_value)
+    if isinstance(value, list):
+        return _convert_list(value, _convert_value)
+    if isinstance(value, dt.datetime):
+        return _convert_datetime(value)
+    return _convert_primitive(value)
+
+
+def _normalise_payload(payload: Payload) -> Payload:
     """Deep-copy payload converting datetimes and rejecting unsupported types.
 
     Supported types: dict, list, str, int, float, bool, None, and datetime
-    (timezone-aware). Any other type raises UnsupportedPayloadTypeError to keep hashing
+    (timezone-aware). Any other type raises a ValueError to keep hashing
     deterministic and JSON-safe.
     """
-
-    def _convert_dict(value: dict) -> dict:
-        return {k: _convert(v) for k, v in value.items()}
-
-    def _convert_list(value: list) -> list:
-        return [_convert(item) for item in value]
-
-    def _convert_datetime(value: dt.datetime) -> str:
-        if value.tzinfo is None:
-            raise TimezoneAwareRequiredError.for_payload()
-        return value.astimezone(dt.UTC).isoformat()
-
-    def _convert_primitive(value: object) -> object:
-        if isinstance(value, (str, int, float, bool)) or value is None:
-            return value
-        raise UnsupportedPayloadTypeError(type(value).__name__)
-
-    def _convert(value: object) -> object:
-        if isinstance(value, dict):
-            return _convert_dict(value)
-        if isinstance(value, list):
-            return _convert_list(value)
-        if isinstance(value, dt.datetime):
-            return _convert_datetime(value)
-        return _convert_primitive(value)
-
-    return typ.cast("Payload", _convert(payload))
+    return typ.cast("Payload", _convert_value(payload))
 
 
 class RawEventPersistError(RuntimeError):
