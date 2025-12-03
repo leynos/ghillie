@@ -188,7 +188,9 @@ def assert_single_raw_event(bronze_context: BronzeContext) -> None:
 @then("the stored payload matches the submitted payload")
 def assert_payload_preserved(bronze_context: BronzeContext) -> None:
     """Verify Bronze retains the payload exactly as ingested."""
-    assert "payload" in bronze_context
+    assert "payload" in bronze_context, (
+        "expected 'payload' key in bronze_context but it was missing"
+    )
     expected_payload = bronze_context["payload"]
     raw_event_id = bronze_context["raw_event_id"]
 
