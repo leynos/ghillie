@@ -59,10 +59,19 @@ def test_ingest_preserves_payload_and_timestamps(
     expected_payload = dict(payload)
     expected_payload["when"] = expected_payload["when"].isoformat()
 
-    assert stored_event.payload == expected_payload
-    assert stored_event.occurred_at == occurred_at
-    assert stored_event.ingested_at is not None
-    assert stored_event.transform_state == RawEventState.PENDING.value
+    assert stored_event.payload == expected_payload, (
+        "payload persisted verbatim in JSON form"
+    )
+    assert stored_event.occurred_at == occurred_at, (
+        "occurred_at should round-trip unchanged"
+    )
+    assert stored_event.ingested_at is not None, "ingested_at should be set on insert"
+    assert stored_event.ingested_at.tzinfo == dt.timezone.utc, (
+        "ingested_at must be UTC-aware"
+    )
+    assert stored_event.transform_state == RawEventState.PENDING.value, (
+        "raw event starts pending"
+    )
 
 
 def test_ingest_rejects_naive_occurred_at(
@@ -122,6 +131,41 @@ def test_ingest_is_idempotent(
 
     first, second = asyncio.run(_run())
     assert first.id == second.id
+
+    async def _count_rows() -> int:
+        async with session_factory() as session:
+            return int(
+                await session.scalar(select(func.count()).select_from(RawEvent)) or 0
+            )
+
+    count = asyncio.run(_count_rows())
+    assert count == 1
+
+
+def test_ingest_is_idempotent_under_concurrency(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Concurrent ingests of the same envelope still produce one row."""
+    writer = RawEventWriter(session_factory)
+    payload = {"id": "evt-dup"}
+    occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.timezone.utc)
+
+    envelope = RawEventEnvelope(
+        source_system="github",
+        source_event_id="evt-dup",
+        event_type="github.push",
+        repo_external_id="org/repo",
+        occurred_at=occurred_at,
+        payload=payload,
+    )
+
+    async def _run_concurrent() -> list[RawEvent]:
+        tasks = [writer.ingest(envelope) for _ in range(5)]
+        return await asyncio.gather(*tasks)
+
+    results = asyncio.run(_run_concurrent())
+    ids = {event.id for event in results}
+    assert len(ids) == 1
 
     async def _count_rows() -> int:
         async with session_factory() as session:

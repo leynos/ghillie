@@ -16,7 +16,6 @@ if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 ProcessedIds: typ.TypeAlias = list[int]
-BATCH_SIZE = 100
 logger = logging.getLogger(__name__)
 
 

@@ -267,7 +267,7 @@ def assert_single_event_fact(bronze_context: BronzeContext) -> None:
 def assert_event_fact_payload(bronze_context: BronzeContext) -> None:
     """Cross-check payload fidelity between Bronze and Silver."""
 
-    async def _load() -> tuple[dict[str, typ.Any], dict[str, typ.Any]]:
+    async def _load() -> tuple[dict[str, object], dict[str, object]]:
         async with bronze_context["session_factory"]() as session:
             fact = await session.scalar(select(EventFact))
             raw_event = await session.get(RawEvent, bronze_context["raw_event_id"])
