@@ -2,11 +2,26 @@
 
 from __future__ import annotations
 
+from .errors import RawEventTransformError
 from .services import RawEventTransformer
-from .storage import EventFact, init_silver_storage
+from .storage import (
+    Commit,
+    DocumentationChange,
+    EventFact,
+    Issue,
+    PullRequest,
+    Repository,
+    init_silver_storage,
+)
 
 __all__ = [
+    "Commit",
+    "DocumentationChange",
     "EventFact",
+    "Issue",
+    "PullRequest",
+    "RawEventTransformError",
     "RawEventTransformer",
+    "Repository",
     "init_silver_storage",
 ]

@@ -248,6 +248,23 @@ CREATE TABLE event_facts (
 This gives you a structured, queryable linkage from Bronze to Silver without
 forcing every consumer to understand all the entity tables.
 
+### 3.2.1 Implementation status (December 2025)
+
+- SQLAlchemy models now cover `repositories`, `commits`, `pull_requests`,
+  `issues`, and `documentation_changes`, using JSON columns for metadata and
+  uniqueness on `(repo_id, number)` for PRs/issues and
+  `(repo_id, commit_sha, path)` for documentation changes.
+- `RawEventTransformer` routes `github.commit`, `github.pull_request`,
+  `github.issue`, and `github.doc_change` events through msgspec-validated
+  structs before upserting Silver rows. Repository rows are auto-created with a
+  default branch of `main` when absent and updated if a payload provides a new
+  default.
+- Documentation changes deduplicate on commit + path and create a lightweight
+  commit stub when a doc change arrives before its commit record.
+- EventFact staging remains in place and is written in the same transaction as
+  entity rows, so replaying raw events keeps foreign keys consistent while
+  preserving deterministic payload checks.
+
 ______________________________________________________________________
 
 ## 4. Python package layout
