@@ -204,7 +204,10 @@ def assert_payload_preserved(bronze_context: BronzeContext) -> None:
     assert raw_event.payload == expected_payload, (
         "Bronze payload should be preserved verbatim"
     )
-    assert raw_event.transform_state == RawEventState.PENDING.value
+    assert raw_event.transform_state == RawEventState.PENDING.value, (
+        f"expected transform_state PENDING ({RawEventState.PENDING.value}) "
+        f"but got {raw_event.transform_state}"
+    )
 
 
 @when("I transform pending raw events")
@@ -250,7 +253,10 @@ def assert_single_event_fact(bronze_context: BronzeContext) -> None:
 
     fact_count, transform_state = _run_async(_count)
     assert fact_count == 1, f"expected 1 event fact, got {fact_count}"
-    assert transform_state == RawEventState.PROCESSED.value
+    assert transform_state == RawEventState.PROCESSED.value, (
+        f"expected transform_state PROCESSED ({RawEventState.PROCESSED.value}) "
+        f"but got {transform_state}"
+    )
 
 
 @then("the event fact payload matches the Bronze payload")
@@ -289,7 +295,10 @@ def assert_raw_event_marked_failed(bronze_context: BronzeContext) -> None:
             return raw
 
     raw_event = _run_async(_load)
-    assert raw_event.transform_state == RawEventState.FAILED.value
+    assert raw_event.transform_state == RawEventState.FAILED.value, (
+        f"expected transform_state FAILED ({RawEventState.FAILED.value}) "
+        f"but got {raw_event.transform_state}"
+    )
     assert raw_event.transform_error is not None, (
         "transform_error should be populated on failure"
     )
