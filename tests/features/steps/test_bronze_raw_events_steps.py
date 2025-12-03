@@ -10,6 +10,7 @@ import pytest
 from pytest_bdd import given, scenario, then, when
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
@@ -37,11 +38,11 @@ REPO_SLUG = "octo/reef"
 class BronzeContext(typ.TypedDict, total=False):
     """Shared mutable scenario state."""
 
-    engine: typ.Any
+    engine: AsyncEngine
     session_factory: async_sessionmaker[AsyncSession]
     writer: RawEventWriter
     transformer: RawEventTransformer
-    payload: dict[str, typ.Any]
+    payload: dict[str, object]
     occurred_at: dt.datetime
     raw_event_id: int
     error: Exception

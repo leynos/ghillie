@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import dataclasses as dc
 import datetime as dt
 import hashlib
@@ -76,7 +75,7 @@ def _normalise_payload(payload: object) -> JSONValue:
         case dt.datetime():
             return _normalise_datetime_for_payload(payload)
         case None | bool() | int() | float() | str():
-            return copy.deepcopy(payload)
+            return payload
         case _:
             raise UnsupportedPayloadTypeError(type(payload).__name__)
 

@@ -163,7 +163,7 @@ leaking into storage. If an event already exists, the existing row is returned
 without updating timestamps, preserving the append-only contract.
 
 All timestamps must be timezone aware. `RawEventWriter` rejects naive
-`occurred_at` values and normalises any payload datetimes to UTC ISO-8601
+`occurred_at` values and normalizes any payload datetimes to UTC ISO-8601
 strings before persisting to JSON, ensuring hashes and database writes remain
 deterministic. Payloads containing unsupported types raise
 `UnsupportedPayloadTypeError`.

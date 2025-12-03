@@ -139,8 +139,8 @@ CREATE TABLE github_ingestion_offsets (
   `RawEventWriter.ingest` deep copies payloads, enforces timezone-aware
   `occurred_at`, and returns the existing row on conflicts to keep the store
   append-only.
-- `github_ingestion_offsets` is present for pollers to record cursors but is
-  not yet wired into a worker loop.
+- `github_ingestion_offsets` is present for pollers to record cursors, but it
+  is not yet wired into a worker loop.
 - A minimal Silver staging table, `event_facts`, reuses the Bronze declarative
   base. `RawEventTransformer` copies Bronze payloads into `event_facts`, marks
   `transform_state` as processed, and verifies on reprocessing that the stored
@@ -922,7 +922,7 @@ A few practical constraints you’ll want to bake into the design up front:
   timezone-aware datetimes. Naive values raise `TimezoneAwareRequiredError`,
   payload datetimes are normalised to UTC ISO strings before persistence, and
   unsupported payload types raise `UnsupportedPayloadTypeError` to keep dedupe
-  hashes deterministic and JSON-serialisable.
+  hashes deterministic and JSON-serializable.
 - **Concurrent transforms:** Silver transforms treat uniqueness races as
   benign. If an `IntegrityError` occurs because another worker already inserted
   an `event_facts` row, the late worker re-reads the row and marks the

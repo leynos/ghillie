@@ -15,7 +15,7 @@ from ghillie.silver.storage import EventFact
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-ProcessedIds = list[int]
+ProcessedIds: typ.TypeAlias = list[int]
 BATCH_SIZE = 100
 logger = logging.getLogger(__name__)
 
@@ -23,15 +23,26 @@ logger = logging.getLogger(__name__)
 class RawEventTransformError(Exception):
     """Raised when a raw event cannot be transformed deterministically."""
 
+    def __init__(self, message: str, reason: str | None = None) -> None:
+        """Store a machine-readable reason for programmatic handling."""
+        super().__init__(message)
+        self.reason = reason
+
     @classmethod
     def payload_mismatch(cls) -> RawEventTransformError:
         """Create a payload drift error."""
-        return cls("existing event fact payload no longer matches Bronze")
+        return cls(
+            "existing event fact payload no longer matches Bronze",
+            reason="payload_mismatch",
+        )
 
     @classmethod
     def concurrent_insert(cls) -> RawEventTransformError:
         """Create an error for concurrent inserts."""
-        return cls("failed to insert event fact; concurrent transform?")
+        return cls(
+            "failed to insert event fact; concurrent transform?",
+            reason="concurrent_insert",
+        )
 
 
 class RawEventTransformer:
@@ -108,7 +119,7 @@ class RawEventTransformer:
         self, session: AsyncSession, raw_event: RawEvent, exc: RawEventTransformError
     ) -> int | None:
         """Handle transform errors, possibly recovering from concurrent inserts."""
-        if "concurrent" in str(exc).lower():
+        if getattr(exc, "reason", None) == "concurrent_insert":
             recovered_id = await self._try_recover_concurrent_insert(session, raw_event)
             if recovered_id is not None:
                 return recovered_id
