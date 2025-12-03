@@ -29,7 +29,7 @@ if typ.TYPE_CHECKING:
 
 def _utcnow() -> dt.datetime:
     """Return an aware UTC timestamp for default columns."""
-    return dt.datetime.now(dt.timezone.utc)
+    return dt.datetime.now(dt.UTC)
 
 
 class Base(DeclarativeBase):

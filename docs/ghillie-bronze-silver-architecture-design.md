@@ -131,6 +131,22 @@ CREATE TABLE github_ingestion_offsets (
 
 ```
 
+### 3.1.1 Implementation status (November 2025)
+
+- `raw_events` is implemented in `ghillie.bronze.storage.RawEvent` with a
+  hashed `dedupe_key` derived from source system, event type, source event id,
+  repository slug, occurred timestamp (UTC), and a stable hash of the payload.
+  `RawEventWriter.ingest` deep copies payloads, enforces timezone-aware
+  `occurred_at`, and returns the existing row on conflicts to keep the store
+  append-only.
+- `github_ingestion_offsets` is present for pollers to record cursors, but it
+  is not yet wired into a worker loop.
+- A minimal Silver staging table, `event_facts`, reuses the Bronze declarative
+  base. `RawEventTransformer` copies Bronze payloads into `event_facts`, marks
+  `transform_state` as processed, and verifies on reprocessing that the stored
+  payload matches. This satisfies the Task 1.2.a requirement that re-running
+  transforms produces identical Silver outputs.
+
 ### 3.2 Silver: core tables
 
 This deliberately mirrors the high-level design doc: the Silver layer manages
@@ -902,6 +918,15 @@ A few practical constraints you’ll want to bake into the design up front:
 - Bronze: log ingestion failures, event sizes, and dedupe rates.
 - Silver: log transform failures per event type, and maintain a simple
   `transform_failures` dashboard.
+- **Timezone discipline and payload safety:** ingestion and hashing enforce
+  timezone-aware datetimes. Naive values raise `TimezoneAwareRequiredError`,
+  payload datetimes are normalised to UTC ISO strings before persistence, and
+  unsupported payload types raise `UnsupportedPayloadTypeError` to keep dedupe
+  hashes deterministic and JSON-serializable.
+- **Concurrent transforms:** Silver transforms treat uniqueness races as
+  benign. If an `IntegrityError` occurs because another worker already inserted
+  an `event_facts` row, the late worker re-reads the row and marks the
+  `raw_event` as processed instead of failing.
 - **Back-pressure:** if Silver can’t keep up, you can:
 
 - slow down pollers (GitHub),

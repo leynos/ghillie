@@ -69,7 +69,7 @@ components, repositories, and their relationships.
 **Goal:** Provide a storage model that separates raw events from refined
 entities and reporting outputs, enabling replay and reprocessing.
 
-- [ ] **Task 1.2.a – Implement Bronze raw event store**  
+- [x] **Task 1.2.a – Implement Bronze raw event store**  
   Introduce an append-only `raw_events` store that captures unmodified payloads
   from GitHub (and later Concordat), tagged with event type, repository
   identity, and ingestion timestamp.
