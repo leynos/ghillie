@@ -33,7 +33,7 @@ async def _insert_event_fact(
             raw_event_id=raw_event_id,
             repo_external_id="org/repo",
             event_type="github.push",
-            occurred_at=dt.datetime(2024, 6, 1, tzinfo=dt.timezone.utc),
+            occurred_at=dt.datetime(2024, 6, 1, tzinfo=dt.UTC),
             payload=payload or {"value": 3},
         )
         session.add(fact)
@@ -63,7 +63,7 @@ def test_transformer_is_idempotent(
     writer = RawEventWriter(session_factory)
     transformer = RawEventTransformer(session_factory)
     payload = {"id": "evt-dup", "value": 3}
-    occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.timezone.utc)
+    occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.UTC)
 
     async def _ingest_and_transform() -> RawEvent:
         raw_event = await writer.ingest(
@@ -105,7 +105,7 @@ def test_transformer_handles_concurrent_insert(
     writer = RawEventWriter(session_factory)
     transformer = RawEventTransformer(session_factory)
     payload = {"id": "evt-race"}
-    occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.timezone.utc)
+    occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.UTC)
 
     async def _run() -> None:
         raw_event = await writer.ingest(
@@ -142,7 +142,7 @@ def test_transformer_marks_failed_on_payload_mismatch(
 
     original_payload = {"id": "evt-conflict", "value": 1}
     conflicting_payload = {"id": "evt-conflict", "value": 999}
-    occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.timezone.utc)
+    occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.UTC)
 
     async def _setup_conflict() -> RawEvent:
         raw_event = await writer.ingest(
@@ -176,7 +176,7 @@ def test_transformer_treats_concurrent_insert_as_processed(
     transformer = RawEventTransformer(session_factory)
 
     payload = {"id": "evt-concurrent-insert", "value": 42}
-    occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.timezone.utc)
+    occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.UTC)
 
     async def _setup() -> RawEvent:
         raw_event = await writer.ingest(
@@ -227,7 +227,7 @@ def test_process_events_integrity_error_does_not_rollback_prior_events(
     transformer = RawEventTransformer(session_factory)
 
     payload = {"id": "evt-batch"}
-    occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.timezone.utc)
+    occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.UTC)
 
     async def _ingest() -> list[RawEvent]:
         return [
@@ -298,7 +298,7 @@ def test_process_pending_respects_limit(
                 event_type="push",
                 source_event_id=f"evt-limit-{i}",
                 repo_external_id="org/repo",
-                occurred_at=dt.datetime(2024, 6, 1, tzinfo=dt.timezone.utc),
+                occurred_at=dt.datetime(2024, 6, 1, tzinfo=dt.UTC),
                 payload={"id": f"evt-limit-{i}"},
             )
             for i in range(3)
@@ -343,7 +343,7 @@ def test_process_raw_event_ids_empty_input_noop(
             event_type="push",
             source_event_id="evt-empty-input",
             repo_external_id="org/repo",
-            occurred_at=dt.datetime(2024, 6, 1, tzinfo=dt.timezone.utc),
+            occurred_at=dt.datetime(2024, 6, 1, tzinfo=dt.UTC),
             payload={"id": "evt-empty-input"},
         )
         stored = await writer.ingest(envelope)

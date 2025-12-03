@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import dataclasses as dc
 import datetime as dt
 import hashlib
@@ -21,17 +20,15 @@ from ghillie.bronze.storage import RawEvent
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-Payload: typ.TypeAlias = dict[str, typ.Any]
-JSONValue: typ.TypeAlias = (
-    dict[str, typ.Any] | list[typ.Any] | str | int | float | bool | None
-)
+type Payload = dict[str, typ.Any]
+type JSONValue = dict[str, typ.Any] | list[typ.Any] | str | int | float | bool | None
 
 
 def _normalise_payload(payload: Payload) -> Payload:  # noqa: C901
     """Deep-copy payload converting datetimes and rejecting unsupported types.
 
     Supported types: dict, list, str, int, float, bool, None, and datetime
-    (timezone-aware). Any other type raises a ValueError to keep hashing
+    (timezone-aware). Any other type raises UnsupportedPayloadTypeError to keep hashing
     deterministic and JSON-safe.
     """
 
@@ -44,11 +41,11 @@ def _normalise_payload(payload: Payload) -> Payload:  # noqa: C901
     def _convert_datetime(value: dt.datetime) -> str:
         if value.tzinfo is None:
             raise TimezoneAwareRequiredError.for_payload()
-        return value.astimezone(dt.timezone.utc).isoformat()
+        return value.astimezone(dt.UTC).isoformat()
 
     def _convert_primitive(value: object) -> object:
         if isinstance(value, (str, int, float, bool)) or value is None:
-            return copy.deepcopy(value)
+            return value
         raise UnsupportedPayloadTypeError(type(value).__name__)
 
     def _convert(value: object) -> object:
@@ -108,7 +105,7 @@ def make_dedupe_key(
             envelope.event_type,
             envelope.source_event_id or "",
             envelope.repo_external_id or "",
-            envelope.occurred_at.astimezone(dt.timezone.utc).isoformat(),
+            envelope.occurred_at.astimezone(dt.UTC).isoformat(),
             hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest(),
         ]
     )

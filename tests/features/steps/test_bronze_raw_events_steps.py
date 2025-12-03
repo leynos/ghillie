@@ -99,7 +99,7 @@ def raw_github_payload(bronze_context: BronzeContext) -> None:
         "pusher": {"name": "marina"},
     }
     bronze_context["occurred_at"] = dt.datetime(
-        2024, 7, 1, 12, 0, tzinfo=dt.timezone.utc
+        2024, 7, 1, 12, 0, tzinfo=dt.UTC
     )
 
 
@@ -119,7 +119,7 @@ def ingest_raw_event_twice(bronze_context: BronzeContext) -> None:
     assert "payload" in bronze_context
     payload = bronze_context["payload"]
     occurred_at = bronze_context.get(
-        "occurred_at", dt.datetime(2024, 7, 1, 12, 0, tzinfo=dt.timezone.utc)
+        "occurred_at", dt.datetime(2024, 7, 1, 12, 0, tzinfo=dt.UTC)
     )
     envelope = RawEventEnvelope(
         source_system=SOURCE_SYSTEM,

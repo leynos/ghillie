@@ -61,7 +61,7 @@ def test_utc_datetime_bind_rejects_naive(
                     source_system="github",
                     event_type="push",
                     occurred_at=dt.datetime(2024, 6, 1, 12, 0),  # noqa: DTZ001
-                    ingested_at=dt.datetime(2024, 6, 1, 12, 0, tzinfo=dt.timezone.utc),
+                    ingested_at=dt.datetime(2024, 6, 1, 12, 0, tzinfo=dt.UTC),
                     dedupe_key="key",
                     payload={},
                 )
@@ -79,7 +79,7 @@ def test_utc_datetime_bind_normalises_non_utc(
     occurred_local = dt.datetime(
         2024, 6, 1, 12, 0, tzinfo=dt.timezone(dt.timedelta(hours=3))
     )
-    expected_utc = occurred_local.astimezone(dt.timezone.utc)
+    expected_utc = occurred_local.astimezone(dt.UTC)
 
     async def _run() -> RawEvent:
         async with session_factory() as session, session.begin():

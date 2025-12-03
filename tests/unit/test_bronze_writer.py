@@ -29,9 +29,9 @@ def test_ingest_preserves_payload_and_timestamps(
     payload = {
         "key": "value",
         "nested": {"list": [1, 2, 3]},
-        "when": dt.datetime(2024, 6, 1, 8, 30, tzinfo=dt.timezone.utc),
+        "when": dt.datetime(2024, 6, 1, 8, 30, tzinfo=dt.UTC),
     }
-    occurred_at = dt.datetime(2024, 6, 1, 8, 30, tzinfo=dt.timezone.utc)
+    occurred_at = dt.datetime(2024, 6, 1, 8, 30, tzinfo=dt.UTC)
 
     async def _run() -> RawEvent:
         return await writer.ingest(
@@ -66,7 +66,7 @@ def test_ingest_preserves_payload_and_timestamps(
         "occurred_at should round-trip unchanged"
     )
     assert stored_event.ingested_at is not None, "ingested_at should be set on insert"
-    assert stored_event.ingested_at.tzinfo == dt.timezone.utc, (
+    assert stored_event.ingested_at.tzinfo == dt.UTC, (
         "ingested_at must be UTC-aware"
     )
     assert stored_event.transform_state == RawEventState.PENDING.value, (
@@ -104,7 +104,7 @@ def test_ingest_is_idempotent(
     """Repeated ingests of the same event return the existing row."""
     writer = RawEventWriter(session_factory)
     payload = {"id": "evt-dup"}
-    occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.timezone.utc)
+    occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.UTC)
 
     async def _run() -> tuple[RawEvent, RawEvent]:
         first = await writer.ingest(
@@ -148,7 +148,7 @@ def test_ingest_is_idempotent_under_concurrency(
     """Concurrent ingests of the same envelope still produce one row."""
     writer = RawEventWriter(session_factory)
     payload = {"id": "evt-dup"}
-    occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.timezone.utc)
+    occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.UTC)
 
     envelope = RawEventEnvelope(
         source_system="github",

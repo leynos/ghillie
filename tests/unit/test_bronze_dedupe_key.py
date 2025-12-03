@@ -11,7 +11,7 @@ from ghillie.bronze import RawEventEnvelope, TimezoneAwareRequiredError, make_de
 
 def test_make_dedupe_key_changes_when_inputs_change() -> None:
     """Dedupe key changes when any input dimension changes."""
-    occurred_at = dt.datetime(2024, 1, 1, tzinfo=dt.timezone.utc)
+    occurred_at = dt.datetime(2024, 1, 1, tzinfo=dt.UTC)
     base = make_dedupe_key(
         RawEventEnvelope(
             source_system="github",
@@ -65,7 +65,7 @@ def test_make_dedupe_key_rejects_naive_occurred_at() -> None:
 
 def test_make_dedupe_key_normalizes_occurred_at_timezones() -> None:
     """occurred_at hashes the same for equal instants across timezones."""
-    instant_utc = dt.datetime(2024, 1, 1, 12, 0, tzinfo=dt.timezone.utc)
+    instant_utc = dt.datetime(2024, 1, 1, 12, 0, tzinfo=dt.UTC)
     instant_offset = instant_utc.astimezone(dt.timezone(dt.timedelta(hours=1)))
 
     envelope_utc = RawEventEnvelope(
@@ -90,7 +90,7 @@ def test_make_dedupe_key_normalizes_occurred_at_timezones() -> None:
 
 def test_make_dedupe_key_payload_determinism_and_timezone_awareness() -> None:
     """Payload hashing is deterministic and rejects naive datetimes."""
-    occurred_at = dt.datetime(2024, 1, 1, tzinfo=dt.timezone.utc)
+    occurred_at = dt.datetime(2024, 1, 1, tzinfo=dt.UTC)
     payload_a = {"a": 1, "b": 2}
     payload_b = {"b": 2, "a": 1}
 
@@ -120,7 +120,7 @@ def test_make_dedupe_key_payload_determinism_and_timezone_awareness() -> None:
         repo_external_id="org/repo",
         occurred_at=occurred_at,
         payload={
-            "timestamp": dt.datetime(2024, 1, 1, 12, 0, tzinfo=dt.timezone.utc),
+            "timestamp": dt.datetime(2024, 1, 1, 12, 0, tzinfo=dt.UTC),
             "value": 42,
         },
     )

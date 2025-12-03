@@ -27,7 +27,7 @@ from ghillie.bronze.errors import TimezoneAwareRequiredError
 
 def _utcnow() -> dt.datetime:
     """Return an aware UTC timestamp suitable for timestamp defaults."""
-    return dt.datetime.now(dt.timezone.utc)
+    return dt.datetime.now(dt.UTC)
 
 
 class RawEventState(enum.IntEnum):
@@ -56,7 +56,7 @@ class UTCDateTime(TypeDecorator[dt.datetime]):
             return None
         if value.tzinfo is None:
             raise TimezoneAwareRequiredError.for_occurrence()
-        return value.astimezone(dt.timezone.utc)
+        return value.astimezone(dt.UTC)
 
     def process_result_value(
         self, value: dt.datetime | None, dialect: Dialect
@@ -65,8 +65,8 @@ class UTCDateTime(TypeDecorator[dt.datetime]):
         if value is None:
             return None
         if value.tzinfo is None:
-            return value.replace(tzinfo=dt.timezone.utc)
-        return value.astimezone(dt.timezone.utc)
+            return value.replace(tzinfo=dt.UTC)
+        return value.astimezone(dt.UTC)
 
 
 class RawEvent(Base):

@@ -15,7 +15,7 @@ from ghillie.silver.storage import EventFact
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-ProcessedIds: typ.TypeAlias = list[int]
+type ProcessedIds = list[int]
 logger = logging.getLogger(__name__)
 
 
@@ -113,7 +113,7 @@ class RawEventTransformer:
         self, session: AsyncSession, raw_event: RawEvent, exc: RawEventTransformError
     ) -> int | None:
         """Handle transform errors, possibly recovering from concurrent inserts."""
-        if "concurrent" in str(exc).lower():
+        if exc.reason == "concurrent_insert":
             recovered_id = await self._try_recover_concurrent_insert(session, raw_event)
             if recovered_id is not None:
                 return recovered_id
