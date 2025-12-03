@@ -72,14 +72,19 @@ def test_bronze_raw_event_mismatch_marks_failed() -> None:
     """Mismatched payloads should mark raw events failed."""
 
 
-@pytest.fixture
-def bronze_context(tmp_path: Path) -> typ.Iterator[BronzeContext]:
-    """Provision a fresh database and helpers for the scenario."""
+def _build_session_factory(
+    tmp_path: Path,
+) -> tuple[AsyncEngine, async_sessionmaker[AsyncSession]]:
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'bronze-bdd.db'}")
     asyncio.run(init_bronze_storage(engine))
     asyncio.run(init_silver_storage(engine))
-    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    return engine, async_sessionmaker(engine, expire_on_commit=False)
 
+
+@pytest.fixture
+def bronze_context(tmp_path: Path) -> typ.Iterator[BronzeContext]:
+    """Provision a fresh database and helpers for the scenario."""
+    engine, session_factory = _build_session_factory(tmp_path)
     writer = RawEventWriter(session_factory)
     transformer = RawEventTransformer(session_factory)
 
@@ -124,7 +129,7 @@ def raw_github_payload_naive(bronze_context: BronzeContext) -> None:
         "after": "abc123",
         "repository": {"full_name": REPO_SLUG},
     }
-    bronze_context["occurred_at"] = dt.datetime(2024, 7, 1, 12, 0)  # noqa: DTZ001
+    bronze_context["occurred_at"] = dt.datetime(2024, 7, 1, 12, 0)  # noqa: DTZ001 - intentional naive test payload
 
 
 @when("I ingest the raw event twice")

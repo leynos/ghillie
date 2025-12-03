@@ -46,6 +46,8 @@ def test_ingest_preserves_payload_and_timestamps(
         )
 
     raw_event = asyncio.run(_run())
+    # Ensure caller payload remains untouched after ingestion.
+    assert isinstance(payload["when"], dt.datetime)
 
     async def _load() -> RawEvent:
         async with session_factory() as session:

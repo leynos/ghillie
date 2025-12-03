@@ -131,7 +131,7 @@ import datetime as dt
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from ghillie.bronze import RawEventWriter, init_bronze_storage
+from ghillie.bronze import RawEventEnvelope, RawEventWriter, init_bronze_storage
 from ghillie.silver import RawEventTransformer, init_silver_storage
 
 
@@ -142,7 +142,7 @@ async def main() -> None:
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
     writer = RawEventWriter(session_factory)
-    await writer.ingest(
+    envelope = RawEventEnvelope(
         source_system="github",
         source_event_id="evt-1",
         event_type="github.push",
@@ -150,6 +150,7 @@ async def main() -> None:
         occurred_at=dt.datetime.now(dt.timezone.utc),
         payload={"ref": "refs/heads/main", "after": "abc123"},
     )
+    await writer.ingest(envelope)
 
     transformer = RawEventTransformer(session_factory)
     await transformer.process_pending()

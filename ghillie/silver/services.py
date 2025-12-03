@@ -60,17 +60,12 @@ class RawEventTransformer:
                 .where(RawEvent.transform_state == RawEventState.PENDING.value)
                 .order_by(RawEvent.id)
             )
-            remaining = limit
             processed: ProcessedIds = []
             stream = await session.stream_scalars(
                 stmt.limit(limit) if limit is not None else stmt
             )
             async for raw_event in stream:
                 processed.extend(await self._process_events(session, [raw_event]))
-                if remaining is not None:
-                    remaining -= 1
-                    if remaining <= 0:
-                        break
             await session.commit()
             return processed
 
