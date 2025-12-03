@@ -28,9 +28,7 @@ SOURCE_EVENT_ID = "evt-123"
 REPO_SLUG = "octo/reef"
 
 
-def _run_async[T](
-    coro_func: typ.Callable[[], typ.Coroutine[typ.Any, typ.Any, T]]
-) -> T:
+def _run_async[T](coro_func: typ.Callable[[], typ.Coroutine[typ.Any, typ.Any, T]]) -> T:
     """Execute an async callable within the test context."""
     return asyncio.run(coro_func())
 
@@ -123,7 +121,9 @@ def raw_github_payload_naive(bronze_context: BronzeContext) -> None:
 @when("I ingest the raw event twice")
 def ingest_raw_event_twice(bronze_context: BronzeContext) -> None:
     """Persist the same raw event twice to assert deduplication."""
-    assert "payload" in bronze_context
+    assert "payload" in bronze_context, (
+        "bronze_context must include payload before ingestion"
+    )
     payload = bronze_context["payload"]
     occurred_at = bronze_context.get(
         "occurred_at", dt.datetime(2024, 7, 1, 12, 0, tzinfo=dt.UTC)
@@ -150,7 +150,7 @@ def ingest_raw_event_twice(bronze_context: BronzeContext) -> None:
 @when("I ingest the raw event expecting a timezone error")
 def ingest_raw_event_timezone_error(bronze_context: BronzeContext) -> None:
     """Attempt ingestion that should fail due to naive datetime."""
-    assert "payload" in bronze_context
+    assert "payload" in bronze_context, "payload is required to attempt ingestion"
     occurred_at = bronze_context["occurred_at"]
     payload = bronze_context["payload"]
 
@@ -228,7 +228,7 @@ def corrupt_raw_event_payload(bronze_context: BronzeContext) -> None:
     async def _mutate() -> None:
         async with bronze_context["session_factory"]() as session, session.begin():
             raw = await session.get(RawEvent, bronze_context["raw_event_id"])
-            assert raw is not None
+            assert raw is not None, "expected raw event to exist before mutation"
             raw.payload = {"after": "corrupted"}
             raw.transform_state = RawEventState.PENDING.value
 
@@ -272,7 +272,7 @@ def assert_event_fact_payload(bronze_context: BronzeContext) -> None:
 @then("a timezone error is raised during ingestion")
 def assert_timezone_error(bronze_context: BronzeContext) -> None:
     """Confirm the stored error is a timezone awareness failure."""
-    assert "error" in bronze_context
+    assert "error" in bronze_context, "expected timezone error to be stored in context"
     assert isinstance(bronze_context["error"], TimezoneAwareRequiredError)
 
 
@@ -283,13 +283,17 @@ def assert_raw_event_marked_failed(bronze_context: BronzeContext) -> None:
     async def _load() -> RawEvent:
         async with bronze_context["session_factory"]() as session:
             raw = await session.get(RawEvent, bronze_context["raw_event_id"])
-            assert raw is not None
+            assert raw is not None, "expected raw event to be present for failure check"
             return raw
 
     raw_event = _run_async(_load)
     assert raw_event.transform_state == RawEventState.FAILED.value
-    assert raw_event.transform_error is not None
-    assert "payload" in raw_event.transform_error.lower()
+    assert raw_event.transform_error is not None, (
+        "transform_error should be populated on failure"
+    )
+    assert "payload" in raw_event.transform_error.lower(), (
+        "transform_error should mention payload"
+    )
 
 
 @then("the EventFact count remains one")
@@ -301,4 +305,4 @@ def assert_event_fact_count_one(bronze_context: BronzeContext) -> None:
             return len((await session.scalars(select(EventFact))).all())
 
     count = _run_async(_count)
-    assert count == 1
+    assert count == 1, "expected exactly one EventFact after mismatch handling"
