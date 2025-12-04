@@ -122,19 +122,29 @@ def _normalise_datetime(
     if value is None:
         return None
     if isinstance(value, dt.datetime):
-        if value.tzinfo is None:
-            raise RawEventTransformError.datetime_requires_timezone(field_name)
-        return value.astimezone(dt.UTC)
+        return _handle_datetime_object(value, field_name)
     if isinstance(value, str):
-        text = value.replace("Z", "+00:00")
-        try:
-            parsed = dt.datetime.fromisoformat(text)
-        except ValueError as exc:
-            raise RawEventTransformError.invalid_datetime_format(field_name) from exc
-        if parsed.tzinfo is None:
-            raise RawEventTransformError.missing_datetime_timezone(field_name)
-        return parsed.astimezone(dt.UTC)
+        return _handle_datetime_string(value, field_name)
     raise RawEventTransformError.unsupported_datetime_type(field_name)
+
+
+def _handle_datetime_object(value: dt.datetime, field_name: str) -> dt.datetime:
+    """Validate and normalise aware datetime objects."""
+    if value.tzinfo is None:
+        raise RawEventTransformError.datetime_requires_timezone(field_name)
+    return value.astimezone(dt.UTC)
+
+
+def _handle_datetime_string(value: str, field_name: str) -> dt.datetime:
+    """Parse and normalise ISO-8601 datetime strings."""
+    text = value.replace("Z", "+00:00")
+    try:
+        parsed = dt.datetime.fromisoformat(text)
+    except ValueError as exc:
+        raise RawEventTransformError.invalid_datetime_format(field_name) from exc
+    if parsed.tzinfo is None:
+        raise RawEventTransformError.missing_datetime_timezone(field_name)
+    return parsed.astimezone(dt.UTC)
 
 
 def _copy_metadata(metadata: dict[str, typ.Any] | None) -> dict[str, typ.Any]:
