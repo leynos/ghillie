@@ -232,34 +232,43 @@ def assert_commit_exists(silver_context: SilverContext) -> None:
     _run_async(_assert)
 
 
-@then('the Silver pull requests table includes number 17 for "octo/reef"')
-def assert_pull_request_exists(silver_context: SilverContext) -> None:
-    """Verify the pull request row exists and is linked."""
+def _assert_entity_with_state_and_labels(  # noqa: PLR0913
+    silver_context: SilverContext,
+    entity_type: type[Commit]
+    | type[PullRequest]
+    | type[Issue]
+    | type[DocumentationChange],
+    entity_id: int,
+    expected_state: str,
+    expected_labels: list[str],
+) -> None:
+    """Assert an entity exists with expected state and labels."""
 
     async def _assert() -> None:
         async with silver_context["session_factory"]() as session:
-            pr = await session.get(PullRequest, 17)
-            assert pr is not None
-            assert pr.repo_id is not None
-            assert pr.state == "merged"
-            assert pr.labels == ["feature", "roadmap"]
+            entity = await session.get(entity_type, entity_id)
+            assert entity is not None
+            assert entity.repo_id is not None
+            assert entity.state == expected_state
+            assert entity.labels == expected_labels
 
     _run_async(_assert)
+
+
+@then('the Silver pull requests table includes number 17 for "octo/reef"')
+def assert_pull_request_exists(silver_context: SilverContext) -> None:
+    """Verify the pull request row exists and is linked."""
+    _assert_entity_with_state_and_labels(
+        silver_context, PullRequest, 17, "merged", ["feature", "roadmap"]
+    )
 
 
 @then('the Silver issues table includes number 5 for "octo/reef"')
 def assert_issue_exists(silver_context: SilverContext) -> None:
     """Verify the issue row exists and is linked."""
-
-    async def _assert() -> None:
-        async with silver_context["session_factory"]() as session:
-            issue = await session.get(Issue, 5)
-            assert issue is not None
-            assert issue.repo_id is not None
-            assert issue.state == "closed"
-            assert issue.labels == ["documentation"]
-
-    _run_async(_assert)
+    _assert_entity_with_state_and_labels(
+        silver_context, Issue, 5, "closed", ["documentation"]
+    )
 
 
 @then(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses as dc
 import datetime as dt
 import typing as typ
 
@@ -22,73 +23,97 @@ if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
+@dc.dataclass(slots=True)
+class CommitEventConfig:
+    """Configuration for creating commit event envelopes."""
+
+    repo_slug: str
+    commit_sha: str
+    occurred_at: dt.datetime
+    source_event_id: str = "commit-1"
+    message: str = "initial commit"
+    committed_at: str = "2024-07-02T09:30:00Z"
+    metadata: dict[str, object] | None = None
+
+
+@dc.dataclass(slots=True)
+class DocChangeEventConfig:
+    """Configuration for creating documentation change event envelopes."""
+
+    repo_slug: str
+    commit_sha: str
+    occurred_at: dt.datetime
+    source_event_id: str
+    occurred_at_str: str
+    summary: str
+    is_roadmap: bool = True
+    is_adr: bool = False
+
+
+@dc.dataclass(slots=True)
+class PullRequestState:
+    """Configuration for creating pull request payloads."""
+
+    pr_id: int
+    number: int
+    state: str
+    created_at: str
+    merged_at: str | None
+    closed_at: str | None
+    labels: list[str] = dc.field(default_factory=list)
+    metadata: dict[str, object] = dc.field(default_factory=dict)
+
+
 def _run_async[T](coro_func: typ.Callable[[], typ.Coroutine[typ.Any, typ.Any, T]]) -> T:
     """Execute an async callable within the test context."""
     return asyncio.run(coro_func())
 
 
-def _make_commit_event_envelope(  # noqa: PLR0913
-    *,
-    repo_slug: str,
-    commit_sha: str,
-    occurred_at: dt.datetime,
-    source_event_id: str = "commit-1",
-    message: str = "initial commit",
-    committed_at: str = "2024-07-02T09:30:00Z",
-    metadata: dict[str, object] | None = None,
-) -> RawEventEnvelope:
+def _make_commit_event_envelope(config: CommitEventConfig) -> RawEventEnvelope:
     """Build a GitHub commit raw event envelope."""
-    owner, name = repo_slug.split("/")
+    owner, name = config.repo_slug.split("/")
     return RawEventEnvelope(
         source_system="github",
-        source_event_id=source_event_id,
+        source_event_id=config.source_event_id,
         event_type="github.commit",
-        repo_external_id=repo_slug,
-        occurred_at=occurred_at,
+        repo_external_id=config.repo_slug,
+        occurred_at=config.occurred_at,
         payload={
-            "sha": commit_sha,
-            "message": message,
+            "sha": config.commit_sha,
+            "message": config.message,
             "author_email": "dev@example.com",
             "author_name": "Marina",
             "authored_at": "2024-07-02T09:15:00Z",
-            "committed_at": committed_at,
+            "committed_at": config.committed_at,
             "repo_owner": owner,
             "repo_name": name,
             "default_branch": "main",
-            "metadata": metadata or {"ref": "refs/heads/main"},
+            "metadata": config.metadata or {"ref": "refs/heads/main"},
         },
     )
 
 
-def _make_doc_change_event_envelope(  # noqa: PLR0913
-    *,
-    repo_slug: str,
-    commit_sha: str,
-    occurred_at: dt.datetime,
-    source_event_id: str,
-    occurred_at_str: str,
-    summary: str,
-    is_roadmap: bool = True,
-    is_adr: bool = False,
+def _make_doc_change_event_envelope(
+    config: DocChangeEventConfig,
 ) -> RawEventEnvelope:
     """Build a GitHub documentation change raw event envelope."""
-    owner, name = repo_slug.split("/")
+    owner, name = config.repo_slug.split("/")
     return RawEventEnvelope(
         source_system="github",
-        source_event_id=source_event_id,
+        source_event_id=config.source_event_id,
         event_type="github.doc_change",
-        repo_external_id=repo_slug,
-        occurred_at=occurred_at,
+        repo_external_id=config.repo_slug,
+        occurred_at=config.occurred_at,
         payload={
-            "commit_sha": commit_sha,
+            "commit_sha": config.commit_sha,
             "path": "docs/roadmap.md",
             "change_type": "modified",
-            "is_roadmap": is_roadmap,
-            "is_adr": is_adr,
+            "is_roadmap": config.is_roadmap,
+            "is_adr": config.is_adr,
             "repo_owner": owner,
             "repo_name": name,
-            "occurred_at": occurred_at_str,
-            "metadata": {"summary": summary},
+            "occurred_at": config.occurred_at_str,
+            "metadata": {"summary": config.summary},
         },
     )
 
@@ -152,34 +177,24 @@ def test_commit_event_creates_repo_and_commit(
     _run_async(_assert)
 
 
-def _create_pr_payload(  # noqa: PLR0913
-    *,
-    pr_id: int,
-    number: int,
-    state: str,
-    created_at: str,
-    merged_at: str | None,
-    closed_at: str | None,
-    labels: list[str],
-    metadata: dict[str, object],
-) -> dict[str, object]:
+def _create_pr_payload(state: PullRequestState) -> dict[str, object]:
     """Build a pull request payload dict with the provided attributes."""
     return {
-        "id": pr_id,
-        "number": number,
+        "id": state.pr_id,
+        "number": state.number,
         "title": "Add release checklist",
         "author_login": "marina",
-        "state": state,
-        "created_at": created_at,
-        "merged_at": merged_at,
-        "closed_at": closed_at,
-        "labels": labels,
+        "state": state.state,
+        "created_at": state.created_at,
+        "merged_at": state.merged_at,
+        "closed_at": state.closed_at,
+        "labels": state.labels,
         "is_draft": False,
         "base_branch": "main",
         "head_branch": "feature/release-checklist",
         "repo_owner": "octo",
         "repo_name": "reef",
-        "metadata": metadata,
+        "metadata": state.metadata,
     }
 
 
@@ -219,14 +234,16 @@ def test_pull_request_events_update_existing_record(
                 repo_slug=repo_slug,
                 occurred_at=occurred_open,
                 payload=_create_pr_payload(
-                    pr_id=pr_id,
-                    number=17,
-                    state="open",
-                    created_at="2024-07-03T10:00:00Z",
-                    merged_at=None,
-                    closed_at=None,
-                    labels=["feature"],
-                    metadata={"mergeable": "unknown"},
+                    PullRequestState(
+                        pr_id=pr_id,
+                        number=17,
+                        state="open",
+                        created_at="2024-07-03T10:00:00Z",
+                        merged_at=None,
+                        closed_at=None,
+                        labels=["feature"],
+                        metadata={"mergeable": "unknown"},
+                    )
                 ),
             )
         )
@@ -236,14 +253,16 @@ def test_pull_request_events_update_existing_record(
                 repo_slug=repo_slug,
                 occurred_at=occurred_merge,
                 payload=_create_pr_payload(
-                    pr_id=pr_id,
-                    number=17,
-                    state="merged",
-                    created_at="2024-07-03T10:00:00Z",
-                    merged_at="2024-07-03T12:00:00Z",
-                    closed_at="2024-07-03T12:00:00Z",
-                    labels=["feature", "ready-for-release"],
-                    metadata={"merge_commit": "abc999"},
+                    PullRequestState(
+                        pr_id=pr_id,
+                        number=17,
+                        state="merged",
+                        created_at="2024-07-03T10:00:00Z",
+                        merged_at="2024-07-03T12:00:00Z",
+                        closed_at="2024-07-03T12:00:00Z",
+                        labels=["feature", "ready-for-release"],
+                        metadata={"merge_commit": "abc999"},
+                    )
                 ),
             )
         )
@@ -331,32 +350,38 @@ def test_documentation_change_is_upserted_by_commit_and_path(
     async def _run() -> None:
         await writer.ingest(
             _make_commit_event_envelope(
-                repo_slug=repo_slug,
-                commit_sha=commit_sha,
-                occurred_at=occurred_at,
-                source_event_id="commit-doc",
-                message="docs: roadmap update",
-                committed_at="2024-07-05T13:55:00Z",
+                CommitEventConfig(
+                    repo_slug=repo_slug,
+                    commit_sha=commit_sha,
+                    occurred_at=occurred_at,
+                    source_event_id="commit-doc",
+                    message="docs: roadmap update",
+                    committed_at="2024-07-05T13:55:00Z",
+                )
             )
         )
         await writer.ingest(
             _make_doc_change_event_envelope(
-                repo_slug=repo_slug,
-                commit_sha=commit_sha,
-                occurred_at=occurred_at,
-                source_event_id="doc-change-1",
-                occurred_at_str="2024-07-05T13:55:00Z",
-                summary="refresh milestones",
+                DocChangeEventConfig(
+                    repo_slug=repo_slug,
+                    commit_sha=commit_sha,
+                    occurred_at=occurred_at,
+                    source_event_id="doc-change-1",
+                    occurred_at_str="2024-07-05T13:55:00Z",
+                    summary="refresh milestones",
+                )
             )
         )
         await writer.ingest(
             _make_doc_change_event_envelope(
-                repo_slug=repo_slug,
-                commit_sha=commit_sha,
-                occurred_at=occurred_at,
-                source_event_id="doc-change-2",
-                occurred_at_str="2024-07-05T13:56:00Z",
-                summary="clarify deliverables",
+                DocChangeEventConfig(
+                    repo_slug=repo_slug,
+                    commit_sha=commit_sha,
+                    occurred_at=occurred_at,
+                    source_event_id="doc-change-2",
+                    occurred_at_str="2024-07-05T13:56:00Z",
+                    summary="clarify deliverables",
+                )
             )
         )
         await transformer.process_pending()
