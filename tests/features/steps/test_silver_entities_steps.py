@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses as dc
 import datetime as dt
 import typing as typ
 
@@ -232,25 +233,30 @@ def assert_commit_exists(silver_context: SilverContext) -> None:
     _run_async(_assert)
 
 
-def _assert_entity_with_state_and_labels(  # noqa: PLR0913
-    silver_context: SilverContext,
-    entity_type: type[Commit]
-    | type[PullRequest]
-    | type[Issue]
-    | type[DocumentationChange],
-    entity_id: int,
-    expected_state: str,
-    expected_labels: list[str],
+@dc.dataclass
+class ExpectedEntityState:
+    """Expected state for entity assertion."""
+
+    entity_type: (
+        type[Commit] | type[PullRequest] | type[Issue] | type[DocumentationChange]
+    )
+    entity_id: int
+    expected_state: str
+    expected_labels: list[str]
+
+
+def _assert_entity_with_state_and_labels(
+    silver_context: SilverContext, expected: ExpectedEntityState
 ) -> None:
     """Assert an entity exists with expected state and labels."""
 
     async def _assert() -> None:
         async with silver_context["session_factory"]() as session:
-            entity = await session.get(entity_type, entity_id)
+            entity = await session.get(expected.entity_type, expected.entity_id)
             assert entity is not None
             assert entity.repo_id is not None
-            assert entity.state == expected_state
-            assert entity.labels == expected_labels
+            assert entity.state == expected.expected_state
+            assert entity.labels == expected.expected_labels
 
     _run_async(_assert)
 
@@ -259,7 +265,13 @@ def _assert_entity_with_state_and_labels(  # noqa: PLR0913
 def assert_pull_request_exists(silver_context: SilverContext) -> None:
     """Verify the pull request row exists and is linked."""
     _assert_entity_with_state_and_labels(
-        silver_context, PullRequest, 17, "merged", ["feature", "roadmap"]
+        silver_context,
+        ExpectedEntityState(
+            PullRequest,
+            17,
+            "merged",
+            ["feature", "roadmap"],
+        ),
     )
 
 
@@ -267,7 +279,13 @@ def assert_pull_request_exists(silver_context: SilverContext) -> None:
 def assert_issue_exists(silver_context: SilverContext) -> None:
     """Verify the issue row exists and is linked."""
     _assert_entity_with_state_and_labels(
-        silver_context, Issue, 5, "closed", ["documentation"]
+        silver_context,
+        ExpectedEntityState(
+            Issue,
+            5,
+            "closed",
+            ["documentation"],
+        ),
     )
 
 
