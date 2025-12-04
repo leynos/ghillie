@@ -66,3 +66,8 @@ class RawEventTransformError(Exception):
         return cls.invalid_payload(
             f"{field} must be an ISO datetime string or datetime instance"
         )
+
+    @classmethod
+    def occurred_at_required(cls) -> RawEventTransformError:
+        """Signal missing occurred_at for documentation changes."""
+        return cls.invalid_payload("occurred_at is required for documentation changes")

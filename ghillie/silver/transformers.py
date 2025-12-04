@@ -210,7 +210,7 @@ async def _upsert_commit(
     existing.authored_at = authored_at or existing.authored_at
     existing.committed_at = committed_at or existing.committed_at
     existing.message = payload.message or existing.message
-    if metadata:
+    if payload.metadata is not None:
         existing.metadata_ = metadata
     return existing
 
@@ -237,7 +237,7 @@ async def _upsert_pull_request(
             merged_at=merged_at,
             closed_at=closed_at,
             created_at=created_at,
-            labels=labels,
+            labels=labels if labels is not None else [],
             is_draft=payload.is_draft,
             base_branch=payload.base_branch,
             head_branch=payload.head_branch,
@@ -259,7 +259,7 @@ async def _upsert_pull_request(
     existing.is_draft = payload.is_draft
     existing.base_branch = payload.base_branch
     existing.head_branch = payload.head_branch
-    if metadata is not None:
+    if payload.metadata is not None:
         existing.metadata_ = metadata
     return existing
 
@@ -284,7 +284,7 @@ async def _upsert_issue(
             state=payload.state,
             created_at=created_at,
             closed_at=closed_at,
-            labels=labels,
+            labels=labels if labels is not None else [],
             metadata_=metadata,
         )
         session.add(issue)
@@ -299,7 +299,7 @@ async def _upsert_issue(
     existing.closed_at = closed_at
     if labels is not None:
         existing.labels = labels
-    if metadata is not None:
+    if payload.metadata is not None:
         existing.metadata_ = metadata
     return existing
 
@@ -330,6 +330,8 @@ async def _upsert_documentation_change(
 ) -> DocumentationChange:
     """Insert or update documentation change rows keyed by commit+path."""
     occurred_at = _normalise_datetime(payload.occurred_at, "occurred_at")
+    if occurred_at is None:
+        raise RawEventTransformError.occurred_at_required()
     metadata = _copy_metadata(payload.metadata)
     await _ensure_commit_stub(session, repo, payload.commit_sha)
 
@@ -349,7 +351,7 @@ async def _upsert_documentation_change(
             is_roadmap=payload.is_roadmap,
             is_adr=payload.is_adr,
             metadata_=metadata,
-            occurred_at=occurred_at or dt.datetime.now(dt.UTC),
+            occurred_at=occurred_at,
         )
         session.add(doc_change)
         return doc_change
@@ -357,7 +359,8 @@ async def _upsert_documentation_change(
     existing.change_type = payload.change_type
     existing.is_roadmap = payload.is_roadmap
     existing.is_adr = payload.is_adr
-    existing.metadata_ = metadata or existing.metadata_
+    if payload.metadata is not None:
+        existing.metadata_ = metadata
     existing.occurred_at = occurred_at or existing.occurred_at
     return existing
 
