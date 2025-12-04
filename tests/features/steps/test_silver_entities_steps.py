@@ -339,7 +339,7 @@ async def _snapshot_entities(session: AsyncSession) -> dict[str, list[tuple]]:
     ]
     commit_snap = [
         (commit.sha, commit.repo_id, commit.message, commit.metadata_)
-        for commit in (await session.scalars(select(Commit))).all()
+        for commit in (await session.scalars(select(Commit).order_by(Commit.sha))).all()
     ]
     pr_snap = [
         (
@@ -351,11 +351,13 @@ async def _snapshot_entities(session: AsyncSession) -> dict[str, list[tuple]]:
             pr.merged_at,
             pr.closed_at,
         )
-        for pr in (await session.scalars(select(PullRequest))).all()
+        for pr in (
+            await session.scalars(select(PullRequest).order_by(PullRequest.id))
+        ).all()
     ]
     issue_snap = [
         (issue.id, issue.repo_id, issue.state, issue.labels, issue.metadata_)
-        for issue in (await session.scalars(select(Issue))).all()
+        for issue in (await session.scalars(select(Issue).order_by(Issue.id))).all()
     ]
     doc_snap = [
         (
@@ -367,7 +369,11 @@ async def _snapshot_entities(session: AsyncSession) -> dict[str, list[tuple]]:
             doc.metadata_,
             doc.occurred_at,
         )
-        for doc in (await session.scalars(select(DocumentationChange))).all()
+        for doc in (
+            await session.scalars(
+                select(DocumentationChange).order_by(DocumentationChange.id)
+            )
+        ).all()
     ]
     return {
         "repositories": repo_snap,
@@ -400,6 +406,8 @@ def assert_entity_state_stable(silver_context: SilverContext) -> None:
         assert snapshots_after == silver_context["snapshots_before_replay"]
 
     _run_async(_assert)
+
+
 @then(
     'the Silver documentation changes table includes "docs/roadmap.md" for '
     'commit "abc123"'

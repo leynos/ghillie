@@ -20,7 +20,6 @@ from ghillie.silver.storage import (
     Repository,
 )
 
-T = typ.TypeVar("T", bound=msgspec.Struct)
 EntityTransformer = typ.Callable[[AsyncSession, RawEvent], typ.Awaitable[None]]
 _registry: dict[str, EntityTransformer] = {}
 

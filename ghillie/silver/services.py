@@ -81,8 +81,9 @@ class RawEventTransformer:
     ) -> int | None:
         """Process a single raw event, returning its ID if processed successfully."""
         try:
-            await self._upsert_event_fact(session, raw_event)
-            await self._apply_entity_transform(session, raw_event)
+            async with session.begin_nested():
+                await self._upsert_event_fact(session, raw_event)
+                await self._apply_entity_transform(session, raw_event)
             return self._mark_processed(raw_event)
         except RawEventTransformError as exc:
             return await self._handle_transform_error(session, raw_event, exc)

@@ -357,3 +357,43 @@ def test_process_raw_event_ids_empty_input_noop(
             assert result.transform_state == RawEventState.PENDING.value
 
     asyncio.run(_run())
+
+
+def test_entity_transform_failure_rolls_back_silver_state(
+    session_factory: async_sessionmaker[AsyncSession], monkeypatch: MonkeyPatch
+) -> None:
+    """Failed entity transforms do not persist partial Silver rows."""
+    writer = RawEventWriter(session_factory)
+    transformer = RawEventTransformer(session_factory)
+    payload = {"id": "evt-fail", "value": 7}
+    occurred_at = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
+
+    async def _failing_transform(*_: object, **__: object) -> None:
+        raise RawEventTransformError("boom", reason="invalid_payload")
+
+    monkeypatch.setattr(
+        "ghillie.silver.transformers.get_entity_transformer",
+        lambda _: _failing_transform,
+    )
+
+    async def _run() -> None:
+        raw_event = await writer.ingest(
+            RawEventEnvelope(
+                source_system="github",
+                source_event_id="evt-fail",
+                event_type="github.commit",
+                repo_external_id="octo/reef",
+                occurred_at=occurred_at,
+                payload=payload,
+            )
+        )
+        await transformer.process_pending()
+
+        async with session_factory() as session:
+            facts = (await session.scalars(select(EventFact))).all()
+            assert facts == []
+            stored_event = await session.get(RawEvent, raw_event.id)
+            assert stored_event is not None
+            assert stored_event.transform_state == RawEventState.FAILED.value
+
+    asyncio.run(_run())

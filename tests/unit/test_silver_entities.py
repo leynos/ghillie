@@ -88,7 +88,11 @@ def _make_commit_event_envelope(config: CommitEventConfig) -> RawEventEnvelope:
             "repo_owner": owner,
             "repo_name": name,
             "default_branch": "main",
-            "metadata": config.metadata or {"ref": "refs/heads/main"},
+            "metadata": (
+                config.metadata
+                if config.metadata is not None
+                else {"ref": "refs/heads/main"}
+            ),
         },
     )
 
