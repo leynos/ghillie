@@ -27,6 +27,72 @@ def _run_async[T](coro_func: typ.Callable[[], typ.Coroutine[typ.Any, typ.Any, T]
     return asyncio.run(coro_func())
 
 
+def _make_commit_event_envelope(  # noqa: PLR0913
+    *,
+    repo_slug: str,
+    commit_sha: str,
+    occurred_at: dt.datetime,
+    source_event_id: str = "commit-1",
+    message: str = "initial commit",
+    committed_at: str = "2024-07-02T09:30:00Z",
+    metadata: dict[str, object] | None = None,
+) -> RawEventEnvelope:
+    """Build a GitHub commit raw event envelope."""
+    owner, name = repo_slug.split("/")
+    return RawEventEnvelope(
+        source_system="github",
+        source_event_id=source_event_id,
+        event_type="github.commit",
+        repo_external_id=repo_slug,
+        occurred_at=occurred_at,
+        payload={
+            "sha": commit_sha,
+            "message": message,
+            "author_email": "dev@example.com",
+            "author_name": "Marina",
+            "authored_at": "2024-07-02T09:15:00Z",
+            "committed_at": committed_at,
+            "repo_owner": owner,
+            "repo_name": name,
+            "default_branch": "main",
+            "metadata": metadata or {"ref": "refs/heads/main"},
+        },
+    )
+
+
+def _make_doc_change_event_envelope(  # noqa: PLR0913
+    *,
+    repo_slug: str,
+    commit_sha: str,
+    occurred_at: dt.datetime,
+    source_event_id: str,
+    occurred_at_str: str,
+    summary: str,
+    is_roadmap: bool = True,
+    is_adr: bool = False,
+) -> RawEventEnvelope:
+    """Build a GitHub documentation change raw event envelope."""
+    owner, name = repo_slug.split("/")
+    return RawEventEnvelope(
+        source_system="github",
+        source_event_id=source_event_id,
+        event_type="github.doc_change",
+        repo_external_id=repo_slug,
+        occurred_at=occurred_at,
+        payload={
+            "commit_sha": commit_sha,
+            "path": "docs/roadmap.md",
+            "change_type": "modified",
+            "is_roadmap": is_roadmap,
+            "is_adr": is_adr,
+            "repo_owner": owner,
+            "repo_name": name,
+            "occurred_at": occurred_at_str,
+            "metadata": {"summary": summary},
+        },
+    )
+
+
 def test_commit_event_creates_repo_and_commit(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
@@ -86,6 +152,55 @@ def test_commit_event_creates_repo_and_commit(
     _run_async(_assert)
 
 
+def _create_pr_payload(  # noqa: PLR0913
+    *,
+    pr_id: int,
+    number: int,
+    state: str,
+    created_at: str,
+    merged_at: str | None,
+    closed_at: str | None,
+    labels: list[str],
+    metadata: dict[str, object],
+) -> dict[str, object]:
+    """Build a pull request payload dict with the provided attributes."""
+    return {
+        "id": pr_id,
+        "number": number,
+        "title": "Add release checklist",
+        "author_login": "marina",
+        "state": state,
+        "created_at": created_at,
+        "merged_at": merged_at,
+        "closed_at": closed_at,
+        "labels": labels,
+        "is_draft": False,
+        "base_branch": "main",
+        "head_branch": "feature/release-checklist",
+        "repo_owner": "octo",
+        "repo_name": "reef",
+        "metadata": metadata,
+    }
+
+
+def _create_pr_envelope(
+    *,
+    event_id: str,
+    repo_slug: str,
+    occurred_at: dt.datetime,
+    payload: dict[str, object],
+) -> RawEventEnvelope:
+    """Wrap a pull request payload into a RawEventEnvelope."""
+    return RawEventEnvelope(
+        source_system="github",
+        source_event_id=event_id,
+        event_type="github.pull_request",
+        repo_external_id=repo_slug,
+        occurred_at=occurred_at,
+        payload=payload,
+    )
+
+
 def test_pull_request_events_update_existing_record(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
@@ -99,55 +214,37 @@ def test_pull_request_events_update_existing_record(
 
     async def _run() -> None:
         await writer.ingest(
-            RawEventEnvelope(
-                source_system="github",
-                source_event_id="pr-17-open",
-                event_type="github.pull_request",
-                repo_external_id=repo_slug,
+            _create_pr_envelope(
+                event_id="pr-17-open",
+                repo_slug=repo_slug,
                 occurred_at=occurred_open,
-                payload={
-                    "id": pr_id,
-                    "number": 17,
-                    "title": "Add release checklist",
-                    "author_login": "marina",
-                    "state": "open",
-                    "created_at": "2024-07-03T10:00:00Z",
-                    "merged_at": None,
-                    "closed_at": None,
-                    "labels": ["feature"],
-                    "is_draft": False,
-                    "base_branch": "main",
-                    "head_branch": "feature/release-checklist",
-                    "repo_owner": "octo",
-                    "repo_name": "reef",
-                    "metadata": {"mergeable": "unknown"},
-                },
+                payload=_create_pr_payload(
+                    pr_id=pr_id,
+                    number=17,
+                    state="open",
+                    created_at="2024-07-03T10:00:00Z",
+                    merged_at=None,
+                    closed_at=None,
+                    labels=["feature"],
+                    metadata={"mergeable": "unknown"},
+                ),
             )
         )
         await writer.ingest(
-            RawEventEnvelope(
-                source_system="github",
-                source_event_id="pr-17-merged",
-                event_type="github.pull_request",
-                repo_external_id=repo_slug,
+            _create_pr_envelope(
+                event_id="pr-17-merged",
+                repo_slug=repo_slug,
                 occurred_at=occurred_merge,
-                payload={
-                    "id": pr_id,
-                    "number": 17,
-                    "title": "Add release checklist",
-                    "author_login": "marina",
-                    "state": "merged",
-                    "created_at": "2024-07-03T10:00:00Z",
-                    "merged_at": "2024-07-03T12:00:00Z",
-                    "closed_at": "2024-07-03T12:00:00Z",
-                    "labels": ["feature", "ready-for-release"],
-                    "is_draft": False,
-                    "base_branch": "main",
-                    "head_branch": "feature/release-checklist",
-                    "repo_owner": "octo",
-                    "repo_name": "reef",
-                    "metadata": {"merge_commit": "abc999"},
-                },
+                payload=_create_pr_payload(
+                    pr_id=pr_id,
+                    number=17,
+                    state="merged",
+                    created_at="2024-07-03T10:00:00Z",
+                    merged_at="2024-07-03T12:00:00Z",
+                    closed_at="2024-07-03T12:00:00Z",
+                    labels=["feature", "ready-for-release"],
+                    metadata={"merge_commit": "abc999"},
+                ),
             )
         )
         await transformer.process_pending()
@@ -233,60 +330,33 @@ def test_documentation_change_is_upserted_by_commit_and_path(
 
     async def _run() -> None:
         await writer.ingest(
-            RawEventEnvelope(
-                source_system="github",
+            _make_commit_event_envelope(
+                repo_slug=repo_slug,
+                commit_sha=commit_sha,
+                occurred_at=occurred_at,
                 source_event_id="commit-doc",
-                event_type="github.commit",
-                repo_external_id=repo_slug,
-                occurred_at=occurred_at,
-                payload={
-                    "sha": commit_sha,
-                    "message": "docs: roadmap update",
-                    "repo_owner": "octo",
-                    "repo_name": "reef",
-                    "default_branch": "main",
-                    "committed_at": "2024-07-05T13:55:00Z",
-                },
+                message="docs: roadmap update",
+                committed_at="2024-07-05T13:55:00Z",
             )
         )
         await writer.ingest(
-            RawEventEnvelope(
-                source_system="github",
+            _make_doc_change_event_envelope(
+                repo_slug=repo_slug,
+                commit_sha=commit_sha,
+                occurred_at=occurred_at,
                 source_event_id="doc-change-1",
-                event_type="github.doc_change",
-                repo_external_id=repo_slug,
-                occurred_at=occurred_at,
-                payload={
-                    "commit_sha": commit_sha,
-                    "path": "docs/roadmap.md",
-                    "change_type": "modified",
-                    "is_roadmap": True,
-                    "is_adr": False,
-                    "repo_owner": "octo",
-                    "repo_name": "reef",
-                    "occurred_at": "2024-07-05T13:55:00Z",
-                    "metadata": {"summary": "refresh milestones"},
-                },
+                occurred_at_str="2024-07-05T13:55:00Z",
+                summary="refresh milestones",
             )
         )
         await writer.ingest(
-            RawEventEnvelope(
-                source_system="github",
-                source_event_id="doc-change-2",
-                event_type="github.doc_change",
-                repo_external_id=repo_slug,
+            _make_doc_change_event_envelope(
+                repo_slug=repo_slug,
+                commit_sha=commit_sha,
                 occurred_at=occurred_at,
-                payload={
-                    "commit_sha": commit_sha,
-                    "path": "docs/roadmap.md",
-                    "change_type": "modified",
-                    "is_roadmap": True,
-                    "is_adr": False,
-                    "repo_owner": "octo",
-                    "repo_name": "reef",
-                    "occurred_at": "2024-07-05T13:56:00Z",
-                    "metadata": {"summary": "clarify deliverables"},
-                },
+                source_event_id="doc-change-2",
+                occurred_at_str="2024-07-05T13:56:00Z",
+                summary="clarify deliverables",
             )
         )
         await transformer.process_pending()

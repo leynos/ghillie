@@ -65,6 +65,109 @@ def given_empty_store(
     }
 
 
+def _create_commit_event(
+    repo_slug: str, commit_sha: str, occurred_at: dt.datetime
+) -> RawEventEnvelope:
+    """Build a commit RawEventEnvelope for the scenario."""
+    return RawEventEnvelope(
+        source_system="github",
+        source_event_id="commit-silver",
+        event_type="github.commit",
+        repo_external_id=repo_slug,
+        occurred_at=occurred_at,
+        payload={
+            "sha": commit_sha,
+            "message": "docs: flesh out roadmap",
+            "author_email": "marina@example.com",
+            "author_name": "Marina",
+            "authored_at": "2024-07-06T11:10:00Z",
+            "committed_at": "2024-07-06T11:25:00Z",
+            "repo_owner": "octo",
+            "repo_name": "reef",
+            "default_branch": "main",
+            "metadata": {"ref": "refs/heads/main"},
+        },
+    )
+
+
+def _create_pull_request_event(
+    repo_slug: str, occurred_at: dt.datetime
+) -> RawEventEnvelope:
+    """Build a pull request RawEventEnvelope for the scenario."""
+    return RawEventEnvelope(
+        source_system="github",
+        source_event_id="pr-silver",
+        event_type="github.pull_request",
+        repo_external_id=repo_slug,
+        occurred_at=occurred_at,
+        payload={
+            "id": 17,
+            "number": 17,
+            "title": "Add quarterly roadmap",
+            "author_login": "marina",
+            "state": "merged",
+            "created_at": "2024-07-05T15:00:00Z",
+            "merged_at": "2024-07-06T10:55:00Z",
+            "closed_at": "2024-07-06T10:55:00Z",
+            "labels": ["feature", "roadmap"],
+            "is_draft": False,
+            "base_branch": "main",
+            "head_branch": "feature/roadmap",
+            "repo_owner": "octo",
+            "repo_name": "reef",
+            "metadata": {"reviewers": ["ghillie-admin"]},
+        },
+    )
+
+
+def _create_issue_event(repo_slug: str, occurred_at: dt.datetime) -> RawEventEnvelope:
+    """Build an issue RawEventEnvelope for the scenario."""
+    return RawEventEnvelope(
+        source_system="github",
+        source_event_id="issue-silver",
+        event_type="github.issue",
+        repo_external_id=repo_slug,
+        occurred_at=occurred_at,
+        payload={
+            "id": 5,
+            "number": 5,
+            "title": "Document new governance hooks",
+            "author_login": "compliance-team",
+            "state": "closed",
+            "created_at": "2024-07-04T18:00:00Z",
+            "closed_at": "2024-07-05T09:00:00Z",
+            "labels": ["documentation"],
+            "repo_owner": "octo",
+            "repo_name": "reef",
+            "metadata": {"triage": "needs-release-note"},
+        },
+    )
+
+
+def _create_doc_change_event(
+    repo_slug: str, commit_sha: str, occurred_at: dt.datetime
+) -> RawEventEnvelope:
+    """Build a documentation change RawEventEnvelope for the scenario."""
+    return RawEventEnvelope(
+        source_system="github",
+        source_event_id="doc-silver",
+        event_type="github.doc_change",
+        repo_external_id=repo_slug,
+        occurred_at=occurred_at,
+        payload={
+            "commit_sha": commit_sha,
+            "path": "docs/roadmap.md",
+            "change_type": "modified",
+            "is_roadmap": True,
+            "is_adr": False,
+            "repo_owner": "octo",
+            "repo_name": "reef",
+            "occurred_at": "2024-07-06T11:25:00Z",
+            "metadata": {"summary": "Q3 milestones added"},
+        },
+    )
+
+
 @when('I ingest GitHub entity events for "octo/reef"')
 def ingest_entity_events(silver_context: SilverContext) -> None:
     """Insert commit, pull request, issue, and doc change raw events."""
@@ -74,94 +177,11 @@ def ingest_entity_events(silver_context: SilverContext) -> None:
     occurred_at = dt.datetime(2024, 7, 6, 11, 30, tzinfo=dt.UTC)
 
     async def _run() -> None:
+        await writer.ingest(_create_commit_event(repo_slug, commit_sha, occurred_at))
+        await writer.ingest(_create_pull_request_event(repo_slug, occurred_at))
+        await writer.ingest(_create_issue_event(repo_slug, occurred_at))
         await writer.ingest(
-            RawEventEnvelope(
-                source_system="github",
-                source_event_id="commit-silver",
-                event_type="github.commit",
-                repo_external_id=repo_slug,
-                occurred_at=occurred_at,
-                payload={
-                    "sha": commit_sha,
-                    "message": "docs: flesh out roadmap",
-                    "author_email": "marina@example.com",
-                    "author_name": "Marina",
-                    "authored_at": "2024-07-06T11:10:00Z",
-                    "committed_at": "2024-07-06T11:25:00Z",
-                    "repo_owner": "octo",
-                    "repo_name": "reef",
-                    "default_branch": "main",
-                    "metadata": {"ref": "refs/heads/main"},
-                },
-            )
-        )
-        await writer.ingest(
-            RawEventEnvelope(
-                source_system="github",
-                source_event_id="pr-silver",
-                event_type="github.pull_request",
-                repo_external_id=repo_slug,
-                occurred_at=occurred_at,
-                payload={
-                    "id": 17,
-                    "number": 17,
-                    "title": "Add quarterly roadmap",
-                    "author_login": "marina",
-                    "state": "merged",
-                    "created_at": "2024-07-05T15:00:00Z",
-                    "merged_at": "2024-07-06T10:55:00Z",
-                    "closed_at": "2024-07-06T10:55:00Z",
-                    "labels": ["feature", "roadmap"],
-                    "is_draft": False,
-                    "base_branch": "main",
-                    "head_branch": "feature/roadmap",
-                    "repo_owner": "octo",
-                    "repo_name": "reef",
-                    "metadata": {"reviewers": ["ghillie-admin"]},
-                },
-            )
-        )
-        await writer.ingest(
-            RawEventEnvelope(
-                source_system="github",
-                source_event_id="issue-silver",
-                event_type="github.issue",
-                repo_external_id=repo_slug,
-                occurred_at=occurred_at,
-                payload={
-                    "id": 5,
-                    "number": 5,
-                    "title": "Document new governance hooks",
-                    "author_login": "compliance-team",
-                    "state": "closed",
-                    "created_at": "2024-07-04T18:00:00Z",
-                    "closed_at": "2024-07-05T09:00:00Z",
-                    "labels": ["documentation"],
-                    "repo_owner": "octo",
-                    "repo_name": "reef",
-                    "metadata": {"triage": "needs-release-note"},
-                },
-            )
-        )
-        await writer.ingest(
-            RawEventEnvelope(
-                source_system="github",
-                source_event_id="doc-silver",
-                event_type="github.doc_change",
-                repo_external_id=repo_slug,
-                occurred_at=occurred_at,
-                payload={
-                    "commit_sha": commit_sha,
-                    "path": "docs/roadmap.md",
-                    "change_type": "modified",
-                    "is_roadmap": True,
-                    "is_adr": False,
-                    "repo_owner": "octo",
-                    "repo_name": "reef",
-                    "occurred_at": "2024-07-06T11:25:00Z",
-                    "metadata": {"summary": "Q3 milestones added"},
-                },
-            )
+            _create_doc_change_event(repo_slug, commit_sha, occurred_at)
         )
 
     _run_async(_run)
