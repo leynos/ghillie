@@ -337,6 +337,56 @@ def test_issue_event_creates_issue(
     _run_async(_assert)
 
 
+def test_documentation_change_creates_stub_commit_when_missing(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Doc change before a commit creates a stub commit and links to it."""
+    writer = RawEventWriter(session_factory)
+    transformer = RawEventTransformer(session_factory)
+    repo_slug = "octo/reef"
+    commit_sha = "abcdef123456"
+    occurred_at = dt.datetime(2024, 7, 5, 15, 0, tzinfo=dt.UTC)
+
+    async def _run() -> None:
+        await writer.ingest(
+            _make_doc_change_event_envelope(
+                DocChangeEventConfig(
+                    repo_slug=repo_slug,
+                    commit_sha=commit_sha,
+                    occurred_at=occurred_at,
+                    source_event_id="doc-change-stub",
+                    occurred_at_str=occurred_at.isoformat(),
+                    summary="readme tweak",
+                    is_roadmap=False,
+                    is_adr=False,
+                )
+            )
+        )
+
+        await transformer.process_pending()
+
+        async with session_factory() as session:
+            commit = await session.get(Commit, commit_sha)
+            assert commit is not None
+            repo = await session.get(Repository, commit.repo_id)
+            assert repo is not None
+            assert repo.github_owner == "octo"
+            assert repo.github_name == "reef"
+            assert commit.metadata_ == {}
+
+            doc_changes = (
+                await session.scalars(
+                    select(DocumentationChange).where(
+                        DocumentationChange.commit_sha == commit_sha
+                    )
+                )
+            ).all()
+            assert len(doc_changes) == 1
+            assert doc_changes[0].path == "docs/roadmap.md"
+
+    _run_async(_run)
+
+
 def test_documentation_change_is_upserted_by_commit_and_path(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:

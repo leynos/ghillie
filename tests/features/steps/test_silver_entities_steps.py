@@ -37,6 +37,9 @@ class SilverContext(typ.TypedDict, total=False):
     transformer: RawEventTransformer
     repo_slug: str
     commit_sha: str
+    ingested_envelopes: list[RawEventEnvelope]
+    counts_before_replay: dict[str, int]
+    snapshots_before_replay: dict[str, list[tuple]]
 
 
 @scenario(
@@ -63,6 +66,7 @@ def given_empty_store(
         "transformer": transformer,
         "repo_slug": "octo/reef",
         "commit_sha": "abc123",
+        "ingested_envelopes": [],
     }
 
 
@@ -178,12 +182,15 @@ def ingest_entity_events(silver_context: SilverContext) -> None:
     occurred_at = dt.datetime(2024, 7, 6, 11, 30, tzinfo=dt.UTC)
 
     async def _run() -> None:
-        await writer.ingest(_create_commit_event(repo_slug, commit_sha, occurred_at))
-        await writer.ingest(_create_pull_request_event(repo_slug, occurred_at))
-        await writer.ingest(_create_issue_event(repo_slug, occurred_at))
-        await writer.ingest(
-            _create_doc_change_event(repo_slug, commit_sha, occurred_at)
-        )
+        envelopes = [
+            _create_commit_event(repo_slug, commit_sha, occurred_at),
+            _create_pull_request_event(repo_slug, occurred_at),
+            _create_issue_event(repo_slug, occurred_at),
+            _create_doc_change_event(repo_slug, commit_sha, occurred_at),
+        ]
+        for envelope in envelopes:
+            await writer.ingest(envelope)
+        silver_context["ingested_envelopes"] = envelopes
 
     _run_async(_run)
 
@@ -192,6 +199,25 @@ def ingest_entity_events(silver_context: SilverContext) -> None:
 def transform_pending_events(silver_context: SilverContext) -> None:
     """Run the Bronze→Silver transformation."""
     _run_async(silver_context["transformer"].process_pending)
+
+
+@when("the Silver transformer runs again on the same events")
+def rerun_transformer_on_same_events(silver_context: SilverContext) -> None:
+    """Reprocess the same ingested events to assert idempotency."""
+    writer = silver_context["writer"]
+    envelopes = silver_context.get("ingested_envelopes", [])
+
+    async def _run() -> None:
+        async with silver_context["session_factory"]() as session:
+            silver_context["counts_before_replay"] = await _snapshot_counts(session)
+            silver_context["snapshots_before_replay"] = await _snapshot_entities(
+                session
+            )
+        for envelope in envelopes:
+            await writer.ingest(envelope)
+        await silver_context["transformer"].process_pending()
+
+    _run_async(_run)
 
 
 @then('the Silver repositories table contains "octo/reef"')
@@ -289,6 +315,91 @@ def assert_issue_exists(silver_context: SilverContext) -> None:
     )
 
 
+async def _snapshot_counts(session: AsyncSession) -> dict[str, int]:
+    """Capture per-entity counts for idempotency checks."""
+    repositories = len((await session.scalars(select(Repository))).all())
+    commits = len((await session.scalars(select(Commit))).all())
+    prs = len((await session.scalars(select(PullRequest))).all())
+    issues = len((await session.scalars(select(Issue))).all())
+    docs = len((await session.scalars(select(DocumentationChange))).all())
+    return {
+        "repositories": repositories,
+        "commits": commits,
+        "pull_requests": prs,
+        "issues": issues,
+        "documentation_changes": docs,
+    }
+
+
+async def _snapshot_entities(session: AsyncSession) -> dict[str, list[tuple]]:
+    """Capture stable snapshots of entity state for idempotency checks."""
+    repo_snap = [
+        (repo.github_owner, repo.github_name, repo.default_branch, repo.is_active)
+        for repo in (await session.scalars(select(Repository))).all()
+    ]
+    commit_snap = [
+        (commit.sha, commit.repo_id, commit.message, commit.metadata_)
+        for commit in (await session.scalars(select(Commit))).all()
+    ]
+    pr_snap = [
+        (
+            pr.id,
+            pr.repo_id,
+            pr.state,
+            pr.labels,
+            pr.metadata_,
+            pr.merged_at,
+            pr.closed_at,
+        )
+        for pr in (await session.scalars(select(PullRequest))).all()
+    ]
+    issue_snap = [
+        (issue.id, issue.repo_id, issue.state, issue.labels, issue.metadata_)
+        for issue in (await session.scalars(select(Issue))).all()
+    ]
+    doc_snap = [
+        (
+            doc.id,
+            doc.repo_id,
+            doc.commit_sha,
+            doc.path,
+            doc.change_type,
+            doc.metadata_,
+            doc.occurred_at,
+        )
+        for doc in (await session.scalars(select(DocumentationChange))).all()
+    ]
+    return {
+        "repositories": repo_snap,
+        "commits": commit_snap,
+        "pull_requests": pr_snap,
+        "issues": issue_snap,
+        "documentation_changes": doc_snap,
+    }
+
+
+@then("the Silver entity counts do not increase")
+def assert_entity_counts_stable(silver_context: SilverContext) -> None:
+    """Ensure replay does not create extra rows."""
+
+    async def _assert() -> None:
+        async with silver_context["session_factory"]() as session:
+            counts_after = await _snapshot_counts(session)
+        assert counts_after == silver_context["counts_before_replay"]
+
+    _run_async(_assert)
+
+
+@then("the Silver entity state and metadata remain unchanged")
+def assert_entity_state_stable(silver_context: SilverContext) -> None:
+    """Ensure replay leaves entity state unchanged."""
+
+    async def _assert() -> None:
+        async with silver_context["session_factory"]() as session:
+            snapshots_after = await _snapshot_entities(session)
+        assert snapshots_after == silver_context["snapshots_before_replay"]
+
+    _run_async(_assert)
 @then(
     'the Silver documentation changes table includes "docs/roadmap.md" for '
     'commit "abc123"'

@@ -149,9 +149,7 @@ def _handle_datetime_string(value: str, field_name: str) -> dt.datetime:
 
 def _copy_metadata(metadata: dict[str, typ.Any] | None) -> dict[str, typ.Any]:
     """Return a deep-copied metadata dict."""
-    if metadata is None:
-        return {}
-    return copy.deepcopy(metadata)
+    return {} if metadata is None else copy.deepcopy(metadata)
 
 
 async def _ensure_repository(
@@ -226,7 +224,7 @@ async def _upsert_pull_request(
     created_at = _normalise_datetime(payload.created_at, "created_at")
     merged_at = _normalise_datetime(payload.merged_at, "merged_at")
     closed_at = _normalise_datetime(payload.closed_at, "closed_at")
-    labels = payload.labels or []
+    labels = payload.labels
 
     existing = await session.get(PullRequest, payload.id)
     if existing is None:
@@ -257,11 +255,12 @@ async def _upsert_pull_request(
     existing.merged_at = merged_at
     existing.closed_at = closed_at
     existing.created_at = created_at or existing.created_at
-    existing.labels = labels
+    if labels is not None:
+        existing.labels = labels
     existing.is_draft = payload.is_draft
     existing.base_branch = payload.base_branch
     existing.head_branch = payload.head_branch
-    if metadata:
+    if metadata is not None:
         existing.metadata_ = metadata
     return existing
 
@@ -273,7 +272,7 @@ async def _upsert_issue(
     metadata = _copy_metadata(payload.metadata)
     created_at = _normalise_datetime(payload.created_at, "created_at")
     closed_at = _normalise_datetime(payload.closed_at, "closed_at")
-    labels = payload.labels or []
+    labels = payload.labels
 
     existing = await session.get(Issue, payload.id)
     if existing is None:
@@ -299,8 +298,9 @@ async def _upsert_issue(
     existing.state = payload.state
     existing.created_at = created_at or existing.created_at
     existing.closed_at = closed_at
-    existing.labels = labels
-    if metadata:
+    if labels is not None:
+        existing.labels = labels
+    if metadata is not None:
         existing.metadata_ = metadata
     return existing
 
@@ -317,7 +317,7 @@ async def _ensure_commit_stub(
     commit = Commit(
         sha=commit_sha,
         repo_id=repo.id,
-        metadata={},
+        metadata_={},
     )
     session.add(commit)
     await session.flush()
