@@ -45,6 +45,14 @@ def test_silver_entity_hydration() -> None:
     """Wrap the pytest-bdd scenario."""
 
 
+@scenario(
+    "../silver_entities.feature",
+    "GitHub entity events are idempotent on replay",
+)
+def test_silver_entity_hydration_idempotent_replay() -> None:
+    """Verify Bronze→Silver hydration is idempotent when events are replayed."""
+
+
 @given(
     "an empty Bronze and Silver store for Silver entities",
     target_fixture="silver_context",

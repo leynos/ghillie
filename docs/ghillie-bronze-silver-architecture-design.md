@@ -9,7 +9,7 @@ Figure: Silver and Bronze class relationships for RawEvent transformation.
 ```mermaid
 classDiagram
     class RawEvent {
-        +str id
+        +int id
         +str source_system
         +str source_event_id
         +str event_type
@@ -108,9 +108,8 @@ classDiagram
 
     class EventFact {
         +int id
-        +str raw_event_id
-        +str source_system
-        +str source_event_id
+        +int raw_event_id
+        +str repo_external_id
         +str event_type
         +datetime occurred_at
         +dict payload

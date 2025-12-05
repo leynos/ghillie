@@ -181,8 +181,8 @@ the raw event as processed instead of failing the transform.
 
 ## Silver entity tables (Phase 1.2)
 
-Silver now materialises repositories, commits, pull requests, issues, and
-documentation changes from Bronze raw events. The transformer recognises
+Silver now materializes repositories, commits, pull requests, issues, and
+documentation changes from Bronze raw events. The transformer recognizes
 `github.commit`, `github.pull_request`, `github.issue`, and `github.doc_change`
 event types and applies deterministic upserts so reprocessing is safe.
 

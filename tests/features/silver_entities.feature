@@ -14,7 +14,6 @@ Feature: Silver entity tables
     Given an empty Bronze and Silver store for Silver entities
     When I ingest GitHub entity events for "octo/reef"
     And I transform pending raw events for Silver entities
-    And I ingest GitHub entity events for "octo/reef"
-    And I transform pending raw events for Silver entities
+    And the Silver transformer runs again on the same events
     Then the Silver entity counts do not increase
     And the Silver entity state and metadata remain unchanged
