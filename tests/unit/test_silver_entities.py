@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import dataclasses as dc
 import datetime as dt
 import typing as typ
@@ -18,6 +17,7 @@ from ghillie.silver import (
     RawEventTransformer,
     Repository,
 )
+from tests.helpers import run_async
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -62,11 +62,6 @@ class PullRequestState:
     closed_at: str | None
     labels: list[str] = dc.field(default_factory=list)
     metadata: dict[str, object] = dc.field(default_factory=dict)
-
-
-def _run_async[T](coro_func: typ.Callable[[], typ.Coroutine[typ.Any, typ.Any, T]]) -> T:
-    """Execute an async callable within the test context."""
-    return asyncio.run(coro_func())
 
 
 def _make_commit_event_envelope(config: CommitEventConfig) -> RawEventEnvelope:
@@ -157,7 +152,7 @@ def test_commit_event_creates_repo_and_commit(
         )
         await transformer.process_pending()
 
-    _run_async(_run)
+    run_async(_run)
 
     async def _assert() -> None:
         async with session_factory() as session:
@@ -178,7 +173,7 @@ def test_commit_event_creates_repo_and_commit(
             assert commit.metadata_ == {"ref": "refs/heads/main"}
             assert commit.committed_at == dt.datetime(2024, 7, 2, 9, 30, tzinfo=dt.UTC)
 
-    _run_async(_assert)
+    run_async(_assert)
 
 
 def _create_pr_payload(state: PullRequestState) -> dict[str, object]:
@@ -272,7 +267,7 @@ def test_pull_request_events_update_existing_record(
         )
         await transformer.process_pending()
 
-    _run_async(_run)
+    run_async(_run)
 
     async def _assert() -> None:
         async with session_factory() as session:
@@ -288,7 +283,7 @@ def test_pull_request_events_update_existing_record(
             )
             assert repo_count == 1
 
-    _run_async(_assert)
+    run_async(_assert)
 
 
 def test_issue_event_creates_issue(
@@ -326,7 +321,7 @@ def test_issue_event_creates_issue(
         )
         await transformer.process_pending()
 
-    _run_async(_run)
+    run_async(_run)
 
     async def _assert() -> None:
         async with session_factory() as session:
@@ -338,7 +333,7 @@ def test_issue_event_creates_issue(
             repo = await session.get(Repository, issue.repo_id)
             assert repo is not None
 
-    _run_async(_assert)
+    run_async(_assert)
 
 
 def test_documentation_change_creates_stub_commit_when_missing(
@@ -388,7 +383,7 @@ def test_documentation_change_creates_stub_commit_when_missing(
             assert len(doc_changes) == 1
             assert doc_changes[0].path == "docs/roadmap.md"
 
-    _run_async(_run)
+    run_async(_run)
 
 
 def test_documentation_change_is_upserted_by_commit_and_path(
@@ -440,7 +435,7 @@ def test_documentation_change_is_upserted_by_commit_and_path(
         )
         await transformer.process_pending()
 
-    _run_async(_run)
+    run_async(_run)
 
     async def _assert() -> None:
         async with session_factory() as session:
@@ -454,4 +449,4 @@ def test_documentation_change_is_upserted_by_commit_and_path(
                 2024, 7, 5, 13, 56, tzinfo=dt.UTC
             )
 
-    _run_async(_assert)
+    run_async(_assert)

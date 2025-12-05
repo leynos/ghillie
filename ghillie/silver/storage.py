@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime as dt  # used in annotations at runtime
+import datetime as dt  # noqa: TC003
 import typing as typ
 import uuid
 
@@ -18,14 +18,10 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ghillie.bronze.storage import Base, RawEvent, UTCDateTime
+from ghillie.common.time import utcnow
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
-
-
-def _utcnow() -> dt.datetime:
-    """Return an aware UTC timestamp suitable for timestamp defaults."""
-    return dt.datetime.now(dt.UTC)
 
 
 class Repository(Base):
@@ -46,9 +42,9 @@ class Repository(Base):
     github_name: Mapped[str] = mapped_column(String(255))
     default_branch: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[dt.datetime] = mapped_column(UTCDateTime(), default=_utcnow)
+    created_at: Mapped[dt.datetime] = mapped_column(UTCDateTime(), default=utcnow)
     updated_at: Mapped[dt.datetime] = mapped_column(
-        UTCDateTime(), default=_utcnow, onupdate=_utcnow
+        UTCDateTime(), default=utcnow, onupdate=utcnow
     )
 
     commits: Mapped[list[Commit]] = relationship(back_populates="repository")
@@ -77,7 +73,7 @@ class Commit(Base):
     metadata_: Mapped[dict[str, typ.Any]] = mapped_column(
         "metadata", JSON, default=dict
     )
-    first_seen_at: Mapped[dt.datetime] = mapped_column(UTCDateTime(), default=_utcnow)
+    first_seen_at: Mapped[dt.datetime] = mapped_column(UTCDateTime(), default=utcnow)
 
     repository: Mapped[Repository] = relationship(back_populates="commits")
     documentation_changes: Mapped[list[DocumentationChange]] = relationship(

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import dataclasses as dc
 import datetime as dt
 import typing as typ
@@ -19,14 +18,10 @@ from ghillie.silver import (
     RawEventTransformer,
     Repository,
 )
+from tests.helpers import run_async
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
-
-def _run_async[T](coro_func: typ.Callable[[], typ.Coroutine[typ.Any, typ.Any, T]]) -> T:
-    """Execute an async callable within the test context."""
-    return asyncio.run(coro_func())
 
 
 class SilverContext(typ.TypedDict, total=False):
@@ -192,13 +187,13 @@ def ingest_entity_events(silver_context: SilverContext) -> None:
             await writer.ingest(envelope)
         silver_context["ingested_envelopes"] = envelopes
 
-    _run_async(_run)
+    run_async(_run)
 
 
 @when("I transform pending raw events for Silver entities")
 def transform_pending_events(silver_context: SilverContext) -> None:
     """Run the Bronze→Silver transformation."""
-    _run_async(silver_context["transformer"].process_pending)
+    run_async(silver_context["transformer"].process_pending)
 
 
 @when("the Silver transformer runs again on the same events")
@@ -217,7 +212,7 @@ def rerun_transformer_on_same_events(silver_context: SilverContext) -> None:
             await writer.ingest(envelope)
         await silver_context["transformer"].process_pending()
 
-    _run_async(_run)
+    run_async(_run)
 
 
 @then('the Silver repositories table contains "octo/reef"')
@@ -235,7 +230,7 @@ def assert_repository_exists(silver_context: SilverContext) -> None:
             assert repo is not None
             assert repo.default_branch == "main"
 
-    _run_async(_assert)
+    run_async(_assert)
 
 
 @then('the Silver commits table includes commit "abc123" for "octo/reef"')
@@ -256,16 +251,14 @@ def assert_commit_exists(silver_context: SilverContext) -> None:
             assert commit.repo_id == repo.id
             assert commit.message == "docs: flesh out roadmap"
 
-    _run_async(_assert)
+    run_async(_assert)
 
 
 @dc.dataclass
 class ExpectedEntityState:
     """Expected state for entity assertion."""
 
-    entity_type: (
-        type[Commit] | type[PullRequest] | type[Issue] | type[DocumentationChange]
-    )
+    entity_type: type[PullRequest] | type[Issue]
     entity_id: int
     expected_state: str
     expected_labels: list[str]
@@ -284,7 +277,7 @@ def _assert_entity_with_state_and_labels(
             assert entity.state == expected.expected_state
             assert entity.labels == expected.expected_labels
 
-    _run_async(_assert)
+    run_async(_assert)
 
 
 @then('the Silver pull requests table includes number 17 for "octo/reef"')
@@ -335,7 +328,13 @@ async def _snapshot_entities(session: AsyncSession) -> dict[str, list[tuple]]:
     """Capture stable snapshots of entity state for idempotency checks."""
     repo_snap = [
         (repo.github_owner, repo.github_name, repo.default_branch, repo.is_active)
-        for repo in (await session.scalars(select(Repository))).all()
+        for repo in (
+            await session.scalars(
+                select(Repository).order_by(
+                    Repository.github_owner, Repository.github_name
+                )
+            )
+        ).all()
     ]
     commit_snap = [
         (commit.sha, commit.repo_id, commit.message, commit.metadata_)
@@ -393,7 +392,7 @@ def assert_entity_counts_stable(silver_context: SilverContext) -> None:
             counts_after = await _snapshot_counts(session)
         assert counts_after == silver_context["counts_before_replay"]
 
-    _run_async(_assert)
+    run_async(_assert)
 
 
 @then("the Silver entity state and metadata remain unchanged")
@@ -405,7 +404,7 @@ def assert_entity_state_stable(silver_context: SilverContext) -> None:
             snapshots_after = await _snapshot_entities(session)
         assert snapshots_after == silver_context["snapshots_before_replay"]
 
-    _run_async(_assert)
+    run_async(_assert)
 
 
 @then(
@@ -427,4 +426,4 @@ def assert_documentation_change_exists(silver_context: SilverContext) -> None:
             assert doc_change.is_roadmap is True
             assert doc_change.is_adr is False
 
-    _run_async(_assert)
+    run_async(_assert)
