@@ -235,8 +235,8 @@ def assert_repository_exists(silver_context: SilverContext) -> None:
                     Repository.github_name == "reef",
                 )
             )
-            assert repo is not None
-            assert repo.default_branch == "main"
+            assert repo is not None, 'expected repo "octo/reef" to exist'
+            assert repo.default_branch == "main", "expected default_branch to be 'main'"
 
     run_async(_assert)
 
@@ -253,11 +253,17 @@ def assert_commit_exists(silver_context: SilverContext) -> None:
                     Repository.github_name == "reef",
                 )
             )
-            assert repo is not None
+            assert repo is not None, 'expected repo "octo/reef" to exist'
             commit = await session.get(Commit, silver_context["commit_sha"])
-            assert commit is not None
-            assert commit.repo_id == repo.id
-            assert commit.message == "docs: flesh out roadmap"
+            assert commit is not None, (
+                f"expected commit {silver_context['commit_sha']} to exist"
+            )
+            assert commit.repo_id == repo.id, (
+                f"commit {commit.sha} should be linked to repo {repo.id}"
+            )
+            assert commit.message == "docs: flesh out roadmap", (
+                "expected commit message to be 'docs: flesh out roadmap'"
+            )
 
     run_async(_assert)
 
@@ -280,10 +286,18 @@ def _assert_entity_with_state_and_labels(
     async def _assert() -> None:
         async with silver_context["session_factory"]() as session:
             entity = await session.get(expected.entity_type, expected.entity_id)
-            assert entity is not None
-            assert entity.repo_id is not None
-            assert entity.state == expected.expected_state
-            assert entity.labels == expected.expected_labels
+            assert entity is not None, (
+                f"expected entity id {expected.entity_id} to exist"
+            )
+            assert entity.repo_id is not None, (
+                f"entity {expected.entity_id} should have a repo_id"
+            )
+            assert entity.state == expected.expected_state, (
+                f"expected state {expected.expected_state}"
+            )
+            assert entity.labels == expected.expected_labels, (
+                f"expected labels {expected.expected_labels}"
+            )
 
     run_async(_assert)
 
@@ -398,7 +412,9 @@ def assert_entity_counts_stable(silver_context: SilverContext) -> None:
     async def _assert() -> None:
         async with silver_context["session_factory"]() as session:
             counts_after = await _snapshot_counts(session)
-        assert counts_after == silver_context["counts_before_replay"]
+        assert counts_after == silver_context["counts_before_replay"], (
+            "counts should remain unchanged after replay"
+        )
 
     run_async(_assert)
 
@@ -410,7 +426,9 @@ def assert_entity_state_stable(silver_context: SilverContext) -> None:
     async def _assert() -> None:
         async with silver_context["session_factory"]() as session:
             snapshots_after = await _snapshot_entities(session)
-        assert snapshots_after == silver_context["snapshots_before_replay"]
+        assert snapshots_after == silver_context["snapshots_before_replay"], (
+            "snapshots should remain unchanged after replay"
+        )
 
     run_async(_assert)
 
@@ -430,8 +448,14 @@ def assert_documentation_change_exists(silver_context: SilverContext) -> None:
                     DocumentationChange.path == "docs/roadmap.md",
                 )
             )
-            assert doc_change is not None
-            assert doc_change.is_roadmap is True
-            assert doc_change.is_adr is False
+            assert doc_change is not None, (
+                'expected documentation change for path "docs/roadmap.md"'
+            )
+            assert doc_change.is_roadmap is True, (
+                "expected documentation change to be marked as roadmap"
+            )
+            assert doc_change.is_adr is False, (
+                "expected documentation change to not be marked as ADR"
+            )
 
     run_async(_assert)

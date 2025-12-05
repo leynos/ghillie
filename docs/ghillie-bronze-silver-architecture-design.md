@@ -495,7 +495,7 @@ forcing every consumer to understand all the entity tables.
 - `RawEventTransformer` routes `github.commit`, `github.pull_request`,
   `github.issue`, and `github.doc_change` events through msgspec-validated
   structs before upserting Silver rows. Repository rows are auto-created with a
-  default branch of `main` when absent and updated if a payload provides a new
+  default branch of `main` when absent, and updated if a payload provides a new
   default.
 - Documentation changes deduplicate on commit + path and create a lightweight
   commit stub when a doc change arrives before its commit record.
