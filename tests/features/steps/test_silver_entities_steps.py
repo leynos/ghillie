@@ -332,17 +332,14 @@ def assert_issue_exists(silver_context: SilverContext) -> None:
 
 async def _snapshot_counts(session: AsyncSession) -> dict[str, int]:
     """Capture per-entity counts for idempotency checks."""
-    repositories = len((await session.scalars(select(Repository))).all())
-    commits = len((await session.scalars(select(Commit))).all())
-    prs = len((await session.scalars(select(PullRequest))).all())
-    issues = len((await session.scalars(select(Issue))).all())
-    docs = len((await session.scalars(select(DocumentationChange))).all())
     return {
-        "repositories": repositories,
-        "commits": commits,
-        "pull_requests": prs,
-        "issues": issues,
-        "documentation_changes": docs,
+        "repositories": len((await session.scalars(select(Repository))).all()),
+        "commits": len((await session.scalars(select(Commit))).all()),
+        "pull_requests": len((await session.scalars(select(PullRequest))).all()),
+        "issues": len((await session.scalars(select(Issue))).all()),
+        "documentation_changes": len(
+            (await session.scalars(select(DocumentationChange))).all()
+        ),
     }
 
 
@@ -392,7 +389,11 @@ async def _snapshot_entities(session: AsyncSession) -> dict[str, list[tuple]]:
         )
         for doc in (
             await session.scalars(
-                select(DocumentationChange).order_by(DocumentationChange.id)
+                select(DocumentationChange).order_by(
+                    DocumentationChange.repo_id,
+                    DocumentationChange.commit_sha,
+                    DocumentationChange.path,
+                )
             )
         ).all()
     ]
