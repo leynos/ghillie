@@ -89,7 +89,7 @@ entities and reporting outputs, enabling replay and reprocessing.
   correct foreign keys to repositories and stable identifiers for later
   reporting.
 
-- [ ] **Task 1.2.c – Implement Gold report metadata schema**  
+- [x] **Task 1.2.c – Implement Gold report metadata schema**  
   Define tables for reports and report coverage, including fields for scope
   (repository, project, estate), reporting window, and machine summaries.
 
