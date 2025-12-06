@@ -8,7 +8,7 @@ PostgreSQL in production.
 
 from __future__ import annotations
 
-import datetime as dt
+import datetime as dt  # noqa: TC003
 import typing as typ
 import uuid
 
@@ -23,13 +23,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from ghillie.common.time import utcnow
+
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
-
-
-def _utcnow() -> dt.datetime:
-    """Return an aware UTC timestamp for default columns."""
-    return dt.datetime.now(dt.UTC)
 
 
 class Base(DeclarativeBase):
@@ -52,10 +49,10 @@ class Estate(Base):
     name: Mapped[str] = mapped_column(String(255))
     description: Mapped[str | None] = mapped_column(Text(), default=None)
     created_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), default=_utcnow
+        DateTime(timezone=True), default=utcnow
     )
     updated_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
 
     projects: Mapped[list[ProjectRecord]] = relationship(
@@ -83,10 +80,10 @@ class ProjectRecord(Base):
     status_preferences: Mapped[dict[str, typ.Any]] = mapped_column(JSON, default=dict)
     documentation_paths: Mapped[list[str]] = mapped_column(JSON, default=list)
     created_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), default=_utcnow
+        DateTime(timezone=True), default=utcnow
     )
     updated_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
 
     estate: Mapped[Estate] = relationship(back_populates="projects")
@@ -110,10 +107,10 @@ class RepositoryRecord(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     documentation_paths: Mapped[list[str]] = mapped_column(JSON, default=list)
     created_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), default=_utcnow
+        DateTime(timezone=True), default=utcnow
     )
     updated_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
 
     components: Mapped[list[ComponentRecord]] = relationship(
@@ -152,10 +149,10 @@ class ComponentRecord(Base):
     description: Mapped[str | None] = mapped_column(Text(), default=None)
     notes: Mapped[list[str]] = mapped_column(JSON, default=list)
     created_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), default=_utcnow
+        DateTime(timezone=True), default=utcnow
     )
     updated_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
 
     project: Mapped[ProjectRecord] = relationship(back_populates="components")
@@ -218,7 +215,7 @@ class CatalogueImportRecord(Base):
     estate_id: Mapped[str] = mapped_column(ForeignKey("estates.id", ondelete="CASCADE"))
     commit_sha: Mapped[str | None] = mapped_column(String(64))
     imported_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), default=_utcnow
+        DateTime(timezone=True), default=utcnow
     )
 
     estate: Mapped[Estate] = relationship()

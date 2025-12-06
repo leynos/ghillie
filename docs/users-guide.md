@@ -178,3 +178,77 @@ differs from Bronze, the transform is marked as failed, so operators can
 investigate drift; otherwise, no additional rows are created. If two workers
 race to insert the same event fact, the late worker re-reads the row and marks
 the raw event as processed instead of failing the transform.
+
+## Silver entity tables (Phase 1.2)
+
+Silver now materializes repositories, commits, pull requests, issues, and
+documentation changes from Bronze raw events. The transformer recognizes
+`github.commit`, `github.pull_request`, `github.issue`, and `github.doc_change`
+event types and applies deterministic upserts so reprocessing is safe.
+
+- Repositories are auto-created with a default branch of `main` when no prior
+  record exists. If a payload supplies `default_branch`, it updates the stored
+  value to keep downstream consumers aligned with GitHub.
+- Labels for pull requests and issues are stored as JSON arrays for SQLite
+  compatibility while remaining Postgres friendly.
+- Documentation changes deduplicate on `(repo, commit_sha, path)` and insert a
+  lightweight commit stub if a documentation event arrives before the commit
+  record.
+
+### Hydrating Silver from Bronze
+
+The same `RawEventTransformer` instance now populates both `event_facts` and
+the entity tables in a single transaction.
+
+```python
+import asyncio
+import datetime as dt
+
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from ghillie.bronze import RawEventEnvelope, RawEventWriter, init_bronze_storage
+from ghillie.silver import (
+    Commit,
+    RawEventTransformer,
+    init_silver_storage,
+)
+
+
+async def main() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///silver.db")
+    await init_bronze_storage(engine)
+    await init_silver_storage(engine)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    writer = RawEventWriter(session_factory)
+    await writer.ingest(
+        RawEventEnvelope(
+            source_system="github",
+            source_event_id="commit-1",
+            event_type="github.commit",
+            repo_external_id="octo/reef",
+            occurred_at=dt.datetime.now(dt.timezone.utc),
+            payload={
+                "sha": "abc123",
+                "message": "docs: refresh roadmap",
+                "repo_owner": "octo",
+                "repo_name": "reef",
+                "default_branch": "main",
+                "committed_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+            },
+        )
+    )
+
+    transformer = RawEventTransformer(session_factory)
+    await transformer.process_pending()
+
+    async with session_factory() as session:
+        commit = await session.get(Commit, "abc123")
+        assert commit is not None
+
+
+asyncio.run(main())
+```
+
+Running the example leaves `repositories`, `commits`, and `event_facts`
+populated for the pilot repository without duplicating rows on replay.

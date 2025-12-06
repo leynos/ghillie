@@ -10,38 +10,15 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from ghillie.bronze.storage import RawEvent, RawEventState
+from ghillie.silver.errors import RawEventTransformError
 from ghillie.silver.storage import EventFact
+from ghillie.silver.transformers import get_entity_transformer
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 type ProcessedIds = list[int]
 logger = logging.getLogger(__name__)
-
-
-class RawEventTransformError(Exception):
-    """Raised when a raw event cannot be transformed deterministically."""
-
-    def __init__(self, message: str, reason: str | None = None) -> None:
-        """Store a machine-readable reason for programmatic handling."""
-        super().__init__(message)
-        self.reason = reason
-
-    @classmethod
-    def payload_mismatch(cls) -> RawEventTransformError:
-        """Create a payload drift error."""
-        return cls(
-            "existing event fact payload no longer matches Bronze",
-            reason="payload_mismatch",
-        )
-
-    @classmethod
-    def concurrent_insert(cls) -> RawEventTransformError:
-        """Create an error for concurrent inserts."""
-        return cls(
-            "failed to insert event fact; concurrent transform?",
-            reason="concurrent_insert",
-        )
 
 
 class RawEventTransformer:
@@ -104,10 +81,27 @@ class RawEventTransformer:
     ) -> int | None:
         """Process a single raw event, returning its ID if processed successfully."""
         try:
-            await self._upsert_event_fact(session, raw_event)
+            async with session.begin_nested():
+                await self._upsert_event_fact(session, raw_event)
+                await self._apply_entity_transform(session, raw_event)
             return self._mark_processed(raw_event)
         except RawEventTransformError as exc:
             return await self._handle_transform_error(session, raw_event, exc)
+
+    async def _apply_entity_transform(
+        self, session: AsyncSession, raw_event: RawEvent
+    ) -> None:
+        """Apply an entity-specific transformation when one is registered."""
+        transformer = get_entity_transformer(raw_event.event_type)
+        if transformer is None:
+            return
+
+        try:
+            await transformer(session, raw_event)
+        except RawEventTransformError:
+            raise
+        except Exception as exc:
+            raise RawEventTransformError.entity_transform_failed(exc) from exc
 
     async def _handle_transform_error(
         self, session: AsyncSession, raw_event: RawEvent, exc: RawEventTransformError

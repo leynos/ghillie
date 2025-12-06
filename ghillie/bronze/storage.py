@@ -23,11 +23,7 @@ if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ghillie.bronze.errors import TimezoneAwareRequiredError
-
-
-def _utcnow() -> dt.datetime:
-    """Return an aware UTC timestamp suitable for timestamp defaults."""
-    return dt.datetime.now(dt.UTC)
+from ghillie.common.time import utcnow
 
 
 class RawEventState(enum.IntEnum):
@@ -85,7 +81,7 @@ class RawEvent(Base):
     event_type: Mapped[str] = mapped_column(String(64))
     repo_external_id: Mapped[str | None] = mapped_column(String(255), default=None)
     occurred_at: Mapped[dt.datetime] = mapped_column(UTCDateTime())
-    ingested_at: Mapped[dt.datetime] = mapped_column(UTCDateTime(), default=_utcnow)
+    ingested_at: Mapped[dt.datetime] = mapped_column(UTCDateTime(), default=utcnow)
     dedupe_key: Mapped[str] = mapped_column(String(128))
     payload: Mapped[dict[str, typ.Any]] = mapped_column(JSON)
     transform_state: Mapped[int] = mapped_column(
@@ -105,7 +101,7 @@ class GithubIngestionOffset(Base):
     last_issue_cursor: Mapped[str | None] = mapped_column(String(255), default=None)
     last_pr_cursor: Mapped[str | None] = mapped_column(String(255), default=None)
     updated_at: Mapped[dt.datetime] = mapped_column(
-        UTCDateTime(), default=_utcnow, onupdate=_utcnow
+        UTCDateTime(), default=utcnow, onupdate=utcnow
     )
 
 

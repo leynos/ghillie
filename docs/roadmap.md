@@ -78,7 +78,7 @@ entities and reporting outputs, enabling replay and reprocessing.
   Bronze store. Re-running the transformation job on the same events produces
   identical Silver-layer records.
 
-- [ ] **Task 1.2.b – Implement Silver entity tables**  
+- [x] **Task 1.2.b – Implement Silver entity tables**  
   Define relational tables for repositories, commits, pull requests, issues,
   and documentation changes, alongside JSON-capable columns for flexible
   payloads where necessary. Implement transformation jobs that hydrate these

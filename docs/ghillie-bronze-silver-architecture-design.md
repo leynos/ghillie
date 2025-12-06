@@ -4,6 +4,244 @@ This document presents a concrete design, anchored in the Medallion model from
 the Ghillie docs and grounded in the named stack: Granian, async Falcon,
 msgspec, Postgres, async SQLAlchemy 2.x, async Dramatiq, pytest, pytest-bdd.
 
+Figure: Silver and Bronze class relationships for RawEvent transformation.
+
+```mermaid
+classDiagram
+    class RawEvent {
+        +int id
+        +str source_system
+        +str source_event_id
+        +str event_type
+        +str repo_external_id
+        +datetime occurred_at
+        +dict payload
+    }
+
+    class RawEventTransformError {
+        +str reason
+        +RawEventTransformError payload_mismatch()
+        +RawEventTransformError concurrent_insert()
+        +RawEventTransformError invalid_payload(message)
+        +RawEventTransformError repository_mismatch()
+        +RawEventTransformError entity_transform_failed(exc)
+        +RawEventTransformError datetime_requires_timezone(field)
+        +RawEventTransformError invalid_datetime_format(field)
+        +RawEventTransformError missing_datetime_timezone(field)
+        +RawEventTransformError unsupported_datetime_type(field)
+    }
+
+    class Repository {
+        +str id
+        +str estate_id
+        +str github_owner
+        +str github_name
+        +str default_branch
+        +bool is_active
+        +datetime created_at
+        +datetime updated_at
+        +list~Commit~ commits
+        +list~PullRequest~ pull_requests
+        +list~Issue~ issues
+        +list~DocumentationChange~ documentation_changes
+    }
+
+    class Commit {
+        +str sha
+        +str repo_id
+        +str author_email
+        +str author_name
+        +datetime authored_at
+        +datetime committed_at
+        +str message
+        +dict metadata_
+        +datetime first_seen_at
+        +Repository repository
+        +list~DocumentationChange~ documentation_changes
+    }
+
+    class PullRequest {
+        +int id
+        +str repo_id
+        +int number
+        +str title
+        +str author_login
+        +str state
+        +datetime merged_at
+        +datetime closed_at
+        +datetime created_at
+        +list~str~ labels
+        +bool is_draft
+        +str base_branch
+        +str head_branch
+        +dict metadata_
+        +Repository repository
+    }
+
+    class Issue {
+        +int id
+        +str repo_id
+        +int number
+        +str title
+        +str author_login
+        +str state
+        +datetime created_at
+        +datetime closed_at
+        +list~str~ labels
+        +dict metadata_
+        +Repository repository
+    }
+
+    class DocumentationChange {
+        +int id
+        +str repo_id
+        +str commit_sha
+        +str path
+        +str change_type
+        +bool is_roadmap
+        +bool is_adr
+        +dict metadata_
+        +datetime occurred_at
+        +Repository repository
+        +Commit commit
+    }
+
+    class EventFact {
+        +int id
+        +int raw_event_id
+        +str repo_external_id
+        +str event_type
+        +datetime occurred_at
+        +dict payload
+    }
+
+    class GithubCommitPayload {
+        +str sha
+        +str repo_owner
+        +str repo_name
+        +str message
+        +str author_email
+        +str author_name
+        +str authored_at
+        +str committed_at
+        +str default_branch
+        +dict metadata
+    }
+
+    class GithubPullRequestPayload {
+        +int id
+        +int number
+        +str title
+        +str state
+        +str base_branch
+        +str head_branch
+        +str repo_owner
+        +str repo_name
+        +str created_at
+        +str author_login
+        +str merged_at
+        +str closed_at
+        +list~str~ labels
+        +bool is_draft
+        +dict metadata
+    }
+
+    class GithubIssuePayload {
+        +int id
+        +int number
+        +str title
+        +str state
+        +str repo_owner
+        +str repo_name
+        +str created_at
+        +str author_login
+        +str closed_at
+        +list~str~ labels
+        +dict metadata
+    }
+
+    class GithubDocumentationChangePayload {
+        +str commit_sha
+        +str path
+        +str change_type
+        +str repo_owner
+        +str repo_name
+        +str occurred_at
+        +bool is_roadmap
+        +bool is_adr
+        +dict metadata
+    }
+
+    class RawEventTransformer {
+        -async _process_single_event(session, raw_event) int
+        -async _upsert_event_fact(session, raw_event) void
+        -async _apply_entity_transform(session, raw_event) void
+        -async _handle_transform_error(session, raw_event, exc) int
+        +async process_pending() void
+    }
+
+    class TransformersRegistry {
+        -dict~str, EntityTransformer~ _registry
+        +register(event_type) EntityTransformer
+        +get_entity_transformer(event_type) EntityTransformer
+    }
+
+    class EntityTransformer {
+        <<interface>>
+        +async __call__(session, raw_event) void
+    }
+
+    class GithubCommitTransformer {
+        +async transform_github_commit(session, raw_event) void
+    }
+
+    class GithubPullRequestTransformer {
+        +async transform_github_pull_request(session, raw_event) void
+    }
+
+    class GithubIssueTransformer {
+        +async transform_github_issue(session, raw_event) void
+    }
+
+    class GithubDocChangeTransformer {
+        +async transform_github_doc_change(session, raw_event) void
+    }
+
+    RawEventTransformer --> EventFact : upserts
+    RawEventTransformer --> RawEvent : consumes
+    RawEventTransformer --> RawEventTransformError : raises
+    RawEventTransformer --> TransformersRegistry : uses
+    TransformersRegistry --> EntityTransformer : returns
+
+    GithubCommitTransformer ..|> EntityTransformer
+    GithubPullRequestTransformer ..|> EntityTransformer
+    GithubIssueTransformer ..|> EntityTransformer
+    GithubDocChangeTransformer ..|> EntityTransformer
+
+    GithubCommitTransformer --> GithubCommitPayload
+    GithubCommitTransformer --> Repository
+    GithubCommitTransformer --> Commit
+
+    GithubPullRequestTransformer --> GithubPullRequestPayload
+    GithubPullRequestTransformer --> Repository
+    GithubPullRequestTransformer --> PullRequest
+
+    GithubIssueTransformer --> GithubIssuePayload
+    GithubIssueTransformer --> Repository
+    GithubIssueTransformer --> Issue
+
+    GithubDocChangeTransformer --> GithubDocumentationChangePayload
+    GithubDocChangeTransformer --> Repository
+    GithubDocChangeTransformer --> DocumentationChange
+    GithubDocChangeTransformer --> Commit
+
+    Repository "1" o-- "*" Commit
+    Repository "1" o-- "*" PullRequest
+    Repository "1" o-- "*" Issue
+    Repository "1" o-- "*" DocumentationChange
+    Commit "1" o-- "*" DocumentationChange
+```
+
 ______________________________________________________________________
 
 ## 1. Scope and goals
@@ -247,6 +485,23 @@ CREATE TABLE event_facts (
 
 This gives you a structured, queryable linkage from Bronze to Silver without
 forcing every consumer to understand all the entity tables.
+
+### 3.2.1 Implementation status (December 2025)
+
+- SQLAlchemy models now cover `repositories`, `commits`, `pull_requests`,
+  `issues`, and `documentation_changes`, using JSON columns for metadata and
+  uniqueness on `(repo_id, number)` for PRs/issues and
+  `(repo_id, commit_sha, path)` for documentation changes.
+- `RawEventTransformer` routes `github.commit`, `github.pull_request`,
+  `github.issue`, and `github.doc_change` events through msgspec-validated
+  structs before upserting Silver rows. Repository rows are auto-created with a
+  default branch of `main` when absent, and updated if a payload provides a new
+  default.
+- Documentation changes deduplicate on commit + path and create a lightweight
+  commit stub when a doc change arrives before its commit record.
+- EventFact staging remains in place and is written in the same transaction as
+  entity rows, so replaying raw events keeps foreign keys consistent while
+  preserving deterministic payload checks.
 
 ______________________________________________________________________
 
