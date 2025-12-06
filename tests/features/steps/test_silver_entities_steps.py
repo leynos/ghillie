@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses as dc
 import datetime as dt
 import typing as typ
@@ -18,7 +19,6 @@ from ghillie.silver import (
     RawEventTransformer,
     Repository,
 )
-from tests.helpers import run_async
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -195,13 +195,13 @@ def ingest_entity_events(silver_context: SilverContext) -> None:
             await writer.ingest(envelope)
         silver_context["ingested_envelopes"] = envelopes
 
-    run_async(_run)
+    asyncio.run(_run())
 
 
 @when("I transform pending raw events for Silver entities")
 def transform_pending_events(silver_context: SilverContext) -> None:
     """Run the Bronze→Silver transformation."""
-    run_async(silver_context["transformer"].process_pending)
+    asyncio.run(silver_context["transformer"].process_pending())
 
 
 @when("the Silver transformer runs again on the same events")
@@ -220,7 +220,7 @@ def rerun_transformer_on_same_events(silver_context: SilverContext) -> None:
             await writer.ingest(envelope)
         await silver_context["transformer"].process_pending()
 
-    run_async(_run)
+    asyncio.run(_run())
 
 
 @then('the Silver repositories table contains "octo/reef"')
@@ -238,7 +238,7 @@ def assert_repository_exists(silver_context: SilverContext) -> None:
             assert repo is not None, 'expected repo "octo/reef" to exist'
             assert repo.default_branch == "main", "expected default_branch to be 'main'"
 
-    run_async(_assert)
+    asyncio.run(_assert())
 
 
 @then('the Silver commits table includes commit "abc123" for "octo/reef"')
@@ -265,7 +265,7 @@ def assert_commit_exists(silver_context: SilverContext) -> None:
                 "expected commit message to be 'docs: flesh out roadmap'"
             )
 
-    run_async(_assert)
+    asyncio.run(_assert())
 
 
 @dc.dataclass
@@ -299,7 +299,7 @@ def _assert_entity_with_state_and_labels(
                 f"expected labels {expected.expected_labels}"
             )
 
-    run_async(_assert)
+    asyncio.run(_assert())
 
 
 @then('the Silver pull requests table includes number 17 for "octo/reef"')
@@ -417,7 +417,7 @@ def assert_entity_counts_stable(silver_context: SilverContext) -> None:
             "counts should remain unchanged after replay"
         )
 
-    run_async(_assert)
+    asyncio.run(_assert())
 
 
 @then("the Silver entity state and metadata remain unchanged")
@@ -431,7 +431,7 @@ def assert_entity_state_stable(silver_context: SilverContext) -> None:
             "snapshots should remain unchanged after replay"
         )
 
-    run_async(_assert)
+    asyncio.run(_assert())
 
 
 @then(
@@ -459,4 +459,4 @@ def assert_documentation_change_exists(silver_context: SilverContext) -> None:
                 "expected documentation change to not be marked as ADR"
             )
 
-    run_async(_assert)
+    asyncio.run(_assert())
