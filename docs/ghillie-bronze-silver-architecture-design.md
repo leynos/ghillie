@@ -1211,16 +1211,29 @@ This design provides concrete implementations for:
   `github_ingestion_offsets`, `persist_raw_event`.
 - **Task 1.2.b – Silver entity tables**: `repositories`, `commits`,
   `pull_requests`, `issues`, `documentation_changes`, plus transformers.
+- **Task 1.2.c – Gold report metadata schema**: `reports`, `report_projects`,
+  and `report_coverage` tables with scope-aware constraints.
 - **Task 1.3 – GitHub ingestion service**: Granian/Falcon API (for Concordat),
   async Dramatiq pollers for GitHub.
 - **Task 4.1 – Concordat CloudEvents ingestion**: `CloudEvent` msgspec struct
   and `/ingest/concordat` endpoint.
 
-From here, plugging in Gold/reporting is mostly a matter of:
+### 10.1 Gold report metadata schema (Phase 1.2.c)
 
-- querying Silver tables for the reporting window,
-- building evidence bundles (again via msgspec),
-- and calling the status model.
+The Gold layer now persists report metadata separately from event ingestion:
 
-Bronze and Silver then stay predictable, deterministic plumbing while the
-clever layers are added on top.
+- `reports` captures scope (`repository`, `project`, `estate`), reporting
+  window, generator (`model`), rendered text, and a machine-readable summary
+  payload. Window bounds are constrained to enforce `window_end > window_start`
+  and repository/project scopes must include the corresponding identifiers.
+- `report_projects` is a lightweight dimension keyed by `key` and `id` so
+  project-scoped reports do not depend on the catalogue database (which uses a
+  conflicting `repositories` schema). An optional `estate_id` keeps alignment
+  with repository rows that already carry `estate_id`.
+- `report_coverage` maps reports to `event_facts` rather than `raw_events`.
+  Using Silver’s deterministic event ids keeps replay idempotent even if Bronze
+  payload dedupe rules evolve.
+
+With Bronze, Silver, and the Gold metadata tables in place, the remaining
+Gold/reporting work centres on querying Silver for reporting windows, building
+evidence bundles, and invoking the status model.

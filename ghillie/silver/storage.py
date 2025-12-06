@@ -22,6 +22,7 @@ from ghillie.common.time import utcnow
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
+    from ghillie.gold.storage import Report
 
 
 class Repository(Base):
@@ -53,6 +54,7 @@ class Repository(Base):
     documentation_changes: Mapped[list[DocumentationChange]] = relationship(
         back_populates="repository"
     )
+    reports: Mapped[list[Report]] = relationship(back_populates="repository")
 
 
 class Commit(Base):
