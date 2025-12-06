@@ -8,6 +8,7 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from ghillie.bronze import init_bronze_storage
+from ghillie.gold import init_gold_storage
 from ghillie.silver import init_silver_storage
 
 if typ.TYPE_CHECKING:
@@ -22,6 +23,7 @@ async def session_factory(
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'bronze.db'}")
     await init_bronze_storage(engine)
     await init_silver_storage(engine)
+    await init_gold_storage(engine)
 
     factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
