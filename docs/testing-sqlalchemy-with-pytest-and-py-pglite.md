@@ -53,24 +53,26 @@ database URL or start a server manually** – simply including the fixture will
 trigger py-pglite to launch an in-memory Postgres and yield a connection. For
 example, a basic test might look like:
 
-```
-pythonCopy code`# models.py – define an example model
+```python
+# models.py – define an example model
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
 
 class Base(DeclarativeBase):
     pass
+
 
 class User(Base):
     __tablename__ = "users"
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str]
     email: Mapped[str]
-`
 ```
 
-```
-pythonCopy code`# test_models.py
+```python
+# test_models.py
 from sqlalchemy import select
+
 
 def test_user_creation(pglite_session):
     # Ensure the test database has the schema (e.g., run migrations or create tables)
@@ -87,7 +89,6 @@ def test_user_creation(pglite_session):
 
     assert user.email == "[email protected]"
     assert user.id is not None
-`
 ```
 
 When this test runs, `pglite_session` provides a **fully configured Session**
@@ -134,13 +135,15 @@ steps are:
 
 Below is an illustrative async test setup:
 
-```
-pythonCopy code`from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+```python
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+
 
 @pytest.mark.asyncio
 async def test_async_insert_and_query():
     # Start a PGlite instance manually and get connection details
-    from py_pglite import PGliteManager, PGliteConfig
+    from py_pglite import PGliteConfig, PGliteManager
+
     config = PGliteConfig(tcp_port=54321, tcp_host="127.0.0.1")  # use TCP mode on a free port
     async with PGliteManager(config) as pg_manager:  # start the Postgres WASM instance
         # Build an AsyncEngine using asyncpg driver
@@ -160,7 +163,6 @@ async def test_async_insert_and_query():
             assert bob.email == "[email protected]"
         # Dispose engine (closing all connections)
         await async_engine.dispose()
-`
 ```
 
 In this example we manually manage the PGlite lifecycle with `PGliteManager`
@@ -261,9 +263,10 @@ your test setup:
   once the py-pglite engine is up. If using `pglite_engine` fixture, you might
   write another fixture that depends on it:
 
-```
-pythonCopy code`import alembic
+```python
+import alembic
 from alembic.config import Config
+
 
 @pytest.fixture(scope="session")
 def migrated_engine(pglite_engine):
@@ -273,7 +276,6 @@ def migrated_engine(pglite_engine):
     alembic.command.upgrade(alembic_cfg, "head")
     yield pglite_engine
     # (Optionally, downgrade or clean after tests)
-`
 ```
 
 Then use `migrated_engine` in tests instead of `pglite_engine` to ensure schema
@@ -318,23 +320,24 @@ instead of your real database. Here’s how you can do that:
   to get a Session. In your test, request the `pglite_engine` fixture and then
   override `get_db` to yield a Session from that engine. For example:
 
-```
-pythonCopy code`from fastapi.testclient import TestClient
+```python
+from fastapi.testclient import TestClient
 from myapp.main import app, get_db  # the FastAPI app and the original dependency
 from sqlalchemy.orm import Session
+
 
 def test_create_user_api(pglite_engine):
     # Override get_db to use pglite_engine
     def override_get_db():
         with Session(pglite_engine) as session:
             yield session
+
     app.dependency_overrides[get_db] = override_get_db
 
     client = TestClient(app)
     resp = client.post("/users/", json={"name": "Bob", "email": "[email protected]"})
     assert resp.status_code == 200
     # ... further assertions ...
-`
 ```
 
 In this snippet, we inject a new Session bound to the `pglite_engine` for each
@@ -378,12 +381,13 @@ application, factories and fake data can make tests more concise and robust:
   `SQLAlchemyModelFactory` which can even handle session persistence. For
   example, using the `User` model above, we can define a factory:
 
-```
-pythonCopy code`import factory
+```python
+import factory
 from factory.alchemy import SQLAlchemyModelFactory
 from faker import Faker
 
 fake = Faker()
+
 
 class UserFactory(SQLAlchemyModelFactory):
     class Meta:
@@ -393,7 +397,6 @@ class UserFactory(SQLAlchemyModelFactory):
 
     name = factory.LazyAttribute(lambda _: fake.name())
     email = factory.LazyAttribute(lambda _: fake.safe_email())
-`
 ```
 
 This factory will generate a `name` and `email` using Faker whenever a
@@ -409,11 +412,10 @@ inject the actual session at test time.
   approach([5](https://medium.com/@aasispaudelthp2/factoryboy-tutorial-with-sqlalchemy-and-pytest-1cda908d783a#:~:text=%40pytest,my_factory._meta.sqlalchemy_session%20%3D%20session)).
    For example:
 
-```
-pythonCopy code`@pytest.fixture(autouse=True)
+```python
+@pytest.fixture(autouse=True)
 def _set_factory_session(pglite_session):
     UserFactory._meta.sqlalchemy_session = pglite_session
-`
 ```
 
 Now, whenever you call `UserFactory()`, it will use the provided session to
