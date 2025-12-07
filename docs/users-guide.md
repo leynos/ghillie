@@ -347,3 +347,12 @@ asyncio.run(main())
 The example records both the report metadata and the event coverage. Because
 coverage references `event_facts`, reprocessing the same raw events does not
 create duplicate coverage rows.
+
+### Running tests against Postgres with py-pglite
+
+The test fixtures now attempt to start a py-pglite Postgres instance by
+default so behavioural and unit tests exercise real Postgres semantics.
+If py-pglite cannot start (for example, Node.js is missing), the fixtures
+automatically fall back to SQLite to keep the suite runnable. To force SQLite
+explicitly, set `GHILLIE_TEST_DB=sqlite` before invoking `make test`. See
+`docs/testing-sqlalchemy-with-pytest-and-py-pglite.md` for full guidance.

@@ -19,6 +19,8 @@ dev = [
     "pytest-bdd",
     "pytest-asyncio",
     "pytest-xdist",
+    "py-pglite[asyncpg]",
+    "asyncpg",
     "ruff",
     "pyright",
     "ty>=0.0.1a21",
