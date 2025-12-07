@@ -55,9 +55,9 @@ required:
 
 These libraries can typically be installed using pip:
 
-Bash
-
+```bash
 pip install falcon pytest pytest-asyncio httpx pytest-mock asyncmock
+```
 
 It is important to note that the source of AsyncMock—whether from the
 unittest.mock standard library or the external asyncmock package—is contingent
@@ -106,9 +106,11 @@ pytest-asyncio discovers and runs asynchronous tests. Common modes include:
 
 An example pytest.ini configuration for auto mode:
 
-Ini, TOML
-
-\[pytest\] asyncio\_mode \= auto asyncio_default_fixture_loop_scope = function
+```ini
+[pytest]
+asyncio_mode = auto
+asyncio_default_fixture_loop_scope = function
+```
 
 While auto mode can reduce boilerplate, it may obscure the asynchronous nature
 of a test to readers unfamiliar with the project's configuration, especially in
@@ -696,14 +698,17 @@ class ExternalService:
         # Simulates a real network call
         await asyncio.sleep(0.1)
         return f"Data for {item_id} from external service"
+```
+
 ```python
 # src/app_with_service.py
-import falcon import falcon.asgi
+import falcon
+import falcon.asgi
 
 from .services import ExternalService
 
 # Assume service is instantiated and used by resources
-# This could be a global instance or injected. For simplicity, let's assume global.
+# This could be a global instance or injected. For simplicity, assume global.
 service_instance = ExternalService()
 
 
@@ -715,29 +720,30 @@ class ServiceResource:
         resp.status = falcon.HTTP_200
 
 
-app_svc = falcon.asgi.App() app_svc.add_route("/items/{item_id}",
-ServiceResource())
+app_svc = falcon.asgi.App()
+app_svc.add_route("/items/{item_id}", ServiceResource())
 ```
 
 **Test File (tests/test\_app\_with\_service.py):**
 
 ```python
-import pytest from httpx import ASGITransport, AsyncClient from unittest.mock
-import AsyncMock, patch
+import pytest
+from httpx import ASGITransport, AsyncClient
+from unittest.mock import AsyncMock, patch
 
 # Or: from asyncmock import AsyncMock, patch
-from src.app_with_service import app_svc  # Your Falcon ASGI app
+from src.app_with_service import app_svc  # Falcon ASGI app
 
 
-@pytest.fixture def client_svc(event_loop):  # event_loop fixture from
-pytest-asyncio
+@pytest.fixture
+def client_svc(event_loop):  # event_loop fixture from pytest-asyncio
     return AsyncClient(
-        transport=ASGITransport(app=app_svc), base_url="<http://test>"
+        transport=ASGITransport(app=app_svc), base_url="http://test"
     )
 
 
-@pytest.mark.asyncio async def test_get_item_with_mocked_service(client_svc,
-mocker):
+@pytest.mark.asyncio
+async def test_get_item_with_mocked_service(client_svc, mocker):
     mocked_service_data = "Mocked data for item_789"
 
     # Patch the 'fetch_data' method of the 'service_instance'
@@ -854,7 +860,8 @@ async def authenticate_request_async(req, resp, resource, params):
 
 ```python
 # src/app_with_hooks.py
-import falcon import falcon.asgi
+import falcon
+import falcon.asgi
 
 from .hooks import authenticate_request_async
 
@@ -868,45 +875,46 @@ class ProtectedResource:
         resp.status = falcon.HTTP_200
 
 
-app_hooks = falcon.asgi.App() app_hooks.add_route("/protected-info",
-ProtectedResource())
+app_hooks = falcon.asgi.App()
+app_hooks.add_route("/protected-info", ProtectedResource())
 ```
 
 **Test File (tests/test\_hooks.py):**
 
 ```python
 # tests/test_hooks.py
-import falcon  # For falcon.HTTP_OK, falcon.HTTP_UNAUTHORIZED import pytest
+import falcon  # For falcon.HTTP_OK, falcon.HTTP_UNAUTHORIZED
+import pytest
 from httpx import ASGITransport, AsyncClient
 
 # Assuming app_hooks is available, e.g., from a fixture or direct import
 from src.app_with_hooks import app_hooks
 
 
-@pytest.fixture(scope="module") def hooked_app_client(event_loop):  #
-event_loop from pytest-asyncio
+@pytest.fixture(scope="module")
+def hooked_app_client(event_loop):  # event_loop from pytest-asyncio
     return AsyncClient(
-        transport=ASGITransport(app=app_hooks), base_url="<http://test>"
+        transport=ASGITransport(app=app_hooks), base_url="http://test"
     )
 
 
-@pytest.mark.asyncio async def
-test_protected_resource_no_token(hooked_app_client):
+@pytest.mark.asyncio
+async def test_protected_resource_no_token(hooked_app_client):
     response = await hooked_app_client.get("/protected-info")
     assert response.status_code == falcon.HTTP_UNAUTHORIZED
     response_json = response.json()
     assert response_json["title"] == "Authentication required"
 
 
-@pytest.mark.asyncio async def
-test_protected_resource_invalid_token(hooked_app_client):
+@pytest.mark.asyncio
+async def test_protected_resource_invalid_token(hooked_app_client):
     headers = {"Authorization": "Bearer invalid-token"}
     response = await hooked_app_client.get("/protected-info", headers=headers)
     assert response.status_code == falcon.HTTP_UNAUTHORIZED
 
 
-@pytest.mark.asyncio async def
-test_protected_resource_valid_token(hooked_app_client):
+@pytest.mark.asyncio
+async def test_protected_resource_valid_token(hooked_app_client):
     headers = {"Authorization": "Bearer secret-token-123"}
     response = await hooked_app_client.get("/protected-info", headers=headers)
     assert response.status_code == falcon.HTTP_OK
