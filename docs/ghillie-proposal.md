@@ -16,27 +16,28 @@ Conceptually, the system uses three layers:
 1. **Ingest & normalise**
 Pull structured “events” from GitHub for each repo:
 
-- roadmap docs
-- design docs / ADRs
-- recent commits to default branch
-- open PRs with recent activity
-- new / updated issues
-- previous status reports
+   - roadmap docs
+   - design docs / ADRs
+   - recent commits to default branch
+   - open PRs with recent activity
+   - new / updated issues
+   - previous status reports
 
-1. **Model the estate**
+2. **Model the estate**
 
-- Repositories
-- Logical projects / programmes (Wildside, Limela, mxd, Episodic, etc.)
-- Components (including those that don’t yet have repos)
-- Explicit relationships: “this repo belongs to Wildside”, “this component
-  depends on that repo”, etc.
+   - Repositories
+   - Logical projects / programmes (Wildside, Limela, mxd, Episodic, etc.)
+   - Components (including those that don’t yet have repos)
+   - Explicit relationships: “this repo belongs to Wildside”, “this component
+     depends on that repo”, etc.
 
-1. **Generate statuses**
+3. **Generate statuses**
 
-- Per‑repo status updates, only about _new_ developments since the last report,
-  but with directional context.
-- Per‑project summary across multiple repos + planned components.
-- Optional “estate overview” (top risks, big movements).
+   - Per‑repo status updates, only about _new_ developments since the last
+     report,
+     but with directional context.
+   - Per‑project summary across multiple repos + planned components.
+   - Optional “estate overview” (top risks, big movements).
 
 LLMs sit in layer 3, but the system derives most of the value from getting
 layers 1 and 2 right.
@@ -578,31 +579,31 @@ Very roughly:
 
 1. For each repo with events in window:
 
-- Build `RepoEvidence`.
-- Call `StatusModel.summarize_repo`.
-- Store `reports` and `report_coverage`.
+   - Build `RepoEvidence`.
+   - Call `StatusModel.summarize_repo`.
+   - Store `reports` and `report_coverage`.
 
-1. For each project:
+2. For each project:
 
-- Gather latest repo reports + component config.
-- Build `ProjectEvidence`.
-- Call `StatusModel.summarize_project`.
-- Store project report.
+   - Gather latest repo reports + component config.
+   - Build `ProjectEvidence`.
+   - Call `StatusModel.summarize_project`.
+   - Store project report.
 
-1. Build estate evidence and call `summarize_estate`.
+3. Build estate evidence and call `summarize_estate`.
 
-- Writes Markdown to:
+   - Writes Markdown to:
 
-- A “status” repo per estate (e.g. `status/2025-11-20.md`).
-- Optionally, a `STATUS.md` in each project meta repo.
-- Also pushes to Slack / email / Teams if the system fancies.
-- **Service C – UI & API (optional)**
+     - A “status” repo per estate (e.g. `status/2025-11-20.md`).
+     - Optionally, a `STATUS.md` in each project meta repo.
+     - Also pushes to Slack / email / Teams if the system fancies.
+     - **Service C – UI & API (optional)**
 
-- Simple web UI showing:
+   - Simple web UI showing:
 
-- Repo list with status.
-- Project overviews.
-- History of reports per scope.
+     - Repo list with status.
+     - Project overviews.
+     - History of reports per scope.
 
 ______________________________________________________________________
 
