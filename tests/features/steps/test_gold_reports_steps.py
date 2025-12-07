@@ -129,6 +129,7 @@ def when_create_repository_report(gold_context: GoldContext) -> None:
 @when("I create a project-level report")
 def when_create_project_report(gold_context: GoldContext) -> None:
     """Insert a project-scoped report with a machine summary payload."""
+
     async def _run() -> None:
         async with gold_context["session_factory"]() as session:
             project = ReportProject(key="wildside", name="Wildside")
@@ -155,6 +156,7 @@ def when_create_project_report(gold_context: GoldContext) -> None:
 @then("the Gold report records the repository scope and window")
 def then_report_has_scope_and_window(gold_context: GoldContext) -> None:
     """Assert that repository scoped report persisted scope and window metadata."""
+
     async def _assert() -> None:
         async with gold_context["session_factory"]() as session:
             report = await session.get(Report, gold_context["report_id"])
@@ -171,6 +173,7 @@ def then_report_has_scope_and_window(gold_context: GoldContext) -> None:
 @then("the Gold report coverage records the consumed events")
 def then_report_coverage_records_events(gold_context: GoldContext) -> None:
     """Verify coverage rows map the report to the transformed event facts."""
+
     async def _assert() -> None:
         async with gold_context["session_factory"]() as session:
             coverage = await session.scalar(select(ReportCoverage))
@@ -187,6 +190,7 @@ def then_report_coverage_records_events(gold_context: GoldContext) -> None:
 @then("the repository is linked to the Gold report")
 def then_repository_links_report(gold_context: GoldContext) -> None:
     """Ensure repository relationship exposes associated reports."""
+
     async def _assert() -> None:
         async with gold_context["session_factory"]() as session:
             repo = await session.scalar(select(Repository))
@@ -206,6 +210,7 @@ def then_repository_links_report(gold_context: GoldContext) -> None:
 @then("the Gold report stores the project scope and summary")
 def then_project_report_persists_scope_and_summary(gold_context: GoldContext) -> None:
     """Project-scoped reports retain machine summaries and linkage."""
+
     async def _assert() -> None:
         async with gold_context["session_factory"]() as session:
             report = await session.get(Report, gold_context["report_id"])

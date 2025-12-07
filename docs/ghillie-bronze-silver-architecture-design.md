@@ -1237,3 +1237,71 @@ The Gold layer now persists report metadata separately from event ingestion:
 With Bronze, Silver, and the Gold metadata tables in place, the remaining
 Gold/reporting work centres on querying Silver for reporting windows, building
 evidence bundles, and invoking the status model.
+
+Figure 10.1: Gold layer report metadata relationships.
+
+```mermaid
+classDiagram
+    class ReportScope {
+        <<enumeration>>
+        REPOSITORY
+        PROJECT
+        ESTATE
+    }
+
+    class ReportProject {
+        +String id
+        +String key
+        +String name
+        +String description
+        +String estate_id
+        +datetime created_at
+        +datetime updated_at
+        +list~Report~ reports
+    }
+
+    class Report {
+        +String id
+        +ReportScope scope
+        +String repository_id
+        +String project_id
+        +String estate_id
+        +datetime window_start
+        +datetime window_end
+        +datetime generated_at
+        +String model
+        +String human_text
+        +dict~str, Any~ machine_summary
+        +Repository repository
+        +ReportProject project
+        +list~ReportCoverage~ coverage_records
+    }
+
+    class ReportCoverage {
+        +int id
+        +String report_id
+        +int event_fact_id
+        +Report report
+        +EventFact event_fact
+    }
+
+    class Repository {
+        +String id
+        +String name
+        +String estate_id
+        +list~Report~ reports
+    }
+
+    class EventFact {
+        +int id
+        +String repository_id
+        +datetime occurred_at
+        +String event_type
+    }
+
+    ReportScope <.. Report : uses
+    ReportProject "1" o-- "*" Report : reports
+    Repository "1" o-- "*" Report : reports
+    Report "1" o-- "*" ReportCoverage : coverage_records
+    EventFact "1" o-- "*" ReportCoverage : coverage_for
+```
