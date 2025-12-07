@@ -1,7 +1,5 @@
 # **A Comprehensive Guide to Testing Asynchronous Falcon Endpoints with Pytest**
 
-<!-- markdownlint-disable MD046 -->
-
 ## **1\. Introduction**
 
 The Falcon framework is recognized for its high-performance capabilities in
@@ -74,14 +72,20 @@ environment setup and when writing import statements for mocking utilities.
 A conventional project structure enhances clarity and maintainability. A
 typical layout for a Falcon project with tests might be:
 
-my\_falcon\_project/ ├── src/                  \# Application source code │ ├──
-\_\_init\_\_.py │   ├── app.py            \# Falcon app definition │   └──
-resources.py      \# Falcon resources, hooks, middleware ├──
-tests/                \# Test code │   ├── \_\_init\_\_.py │   ├──
-conftest.py       \# Shared pytest fixtures │   └── test\_resources.py \# Test
-file for resources ├──.venv/                \# Virtual environment ├──
-pyproject.toml        \# Project metadata, dependencies, and PEP 735 groups
-managed by uv └── pytest.ini            \# Pytest configuration (optional)
+```text
+my_falcon_project/
+├── src/                  # Application source code
+│   ├── __init__.py
+│   ├── app.py            # Falcon app definition
+│   └── resources.py      # Falcon resources, hooks, middleware
+├── tests/                # Test code
+│   ├── __init__.py
+│   ├── conftest.py       # Shared pytest fixtures
+│   └── test_resources.py # Test file for resources
+├── .venv/                # Virtual environment
+├── pyproject.toml        # Project metadata, dependencies, and PEP 735 groups managed by uv
+└── pytest.ini            # Pytest configuration (optional)
+```
 
 This structure separates application code from test code, and conftest.py can
 house shared fixtures accessible across multiple test files. Dependencies and
@@ -334,8 +338,6 @@ database connections during process\_startup and close them during
 process\_shutdown; ASGIConductor facilitates the verification of such behavior.
 An example of its usage:
 
-Python
-
 ```python
 import asyncio
 
@@ -343,36 +345,40 @@ import falcon.asgi
 import pytest
 from falcon import testing
 
-    # Assume 'my_asgi_app' is a falcon.asgi.App instance provided by a fixture or created directly.
+# Assume 'my_asgi_app' is a falcon.asgi.App instance provided by a fixture or created directly.
+class StreamingResource:
+    async def on_get_stream(self, req, resp):
+        async def stream_data():
+            for i in range(3):
+                await asyncio.sleep(0.01)
+                yield f"data: Event {i}
 
-    class StreamingResource:
-        async def on_get_stream(self, req, resp):
-            async def stream_data():
-                for i in range(3):
-                    await asyncio.sleep(0.01)
-                    yield f"data: Event {i}\\r\\n\\r\\n".encode("utf-8")
+".encode("utf-8")
 
-            resp.sse = stream_data()  # Use resp.sse for Server-Sent Events
-            resp.content_type = falcon.MEDIA_SSE
+        resp.sse = stream_data()  # Use resp.sse for Server-Sent Events
+        resp.content_type = falcon.MEDIA_SSE
 
-    # Example app setup (could be in a fixture)
-    # my_asgi_app = falcon.asgi.App()
-    # my_asgi_app.add_route("/events", StreamingResource())
 
-    @pytest.mark.asyncio
-    async def test_example_with_conductor(my_asgi_app):  # my_asgi_app fixture
-        async with testing.ASGIConductor(my_asgi_app) as conductor:
-            # For non-streaming endpoints:
-            response = await conductor.get("/some_other_endpoint")  # Assuming this route exists
-            assert response.status_code == 200
+# Example app setup (could be in a fixture)
+# my_asgi_app = falcon.asgi.App()
+# my_asgi_app.add_route("/events", StreamingResource())
 
-            # For streaming endpoints (conceptual, actual iteration depends on endpoint):
-            # async with await conductor.simulate_get_stream("/events") as result:
-            #     events_received =
-            #     async for chunk in result.stream:  # result.stream is an async_iterator
-            #         events_received.append(chunk.decode("utf-8"))
-            #     assert len(events_received) == 3
-            #     assert "Event 0" in events_received
+
+@pytest.mark.asyncio
+async def test_example_with_conductor(my_asgi_app):  # my_asgi_app fixture
+    async with testing.ASGIConductor(my_asgi_app) as conductor:
+        # For non-streaming endpoints:
+        response = await conductor.get("/some_other_endpoint")  # Assuming this route exists
+        assert response.status_code == 200
+
+        # For streaming endpoints (conceptual, actual iteration depends on endpoint):
+        # async with await conductor.simulate_get_stream("/events") as result:
+        #     events_received =
+        #     async for chunk in result.stream:  # result.stream is an async_iterator
+        #         events_received.append(chunk.decode("utf-8"))
+        #     assert len(events_received) == 3
+        #     assert "Event 0" in events_received
+```
 
 The ASGIConductor ensures that process\_startup methods of any registered
 middleware are called upon entering the async with block, and process\_shutdown
@@ -506,14 +512,13 @@ of the async fixtures. This ensures that a single event loop instance is used
 for all tests within that scope, allowing broader-scoped async fixtures to
 operate correctly.
 
-Python
-
 ```python
-import asyncio import pytest
+import asyncio
+import pytest
 
 
-@pytest.fixture(scope="session")  # Or "module", "class" def
-event_loop(request):
+@pytest.fixture(scope="session")  # Or "module", "class"
+def event_loop(request):
     """Override the default function-scoped event loop.
     Creates an instance of the event loop for the specified scope.
     """
@@ -693,8 +698,7 @@ class ExternalService:
         return f"Data for {item_id} from external service"
 ```python
 # src/app_with_service.py
-import falcon
-import falcon.asgi
+import falcon import falcon.asgi
 
 from .services import ExternalService
 
@@ -711,30 +715,29 @@ class ServiceResource:
         resp.status = falcon.HTTP_200
 
 
-app_svc = falcon.asgi.App()
-app_svc.add_route("/items/{item_id}", ServiceResource())
+app_svc = falcon.asgi.App() app_svc.add_route("/items/{item_id}",
+ServiceResource())
 ```
 
 **Test File (tests/test\_app\_with\_service.py):**
 
 ```python
-import pytest
-from httpx import ASGITransport, AsyncClient
-from unittest.mock import AsyncMock, patch
+import pytest from httpx import ASGITransport, AsyncClient from unittest.mock
+import AsyncMock, patch
 
 # Or: from asyncmock import AsyncMock, patch
 from src.app_with_service import app_svc  # Your Falcon ASGI app
 
 
-@pytest.fixture
-def client_svc(event_loop):  # event_loop fixture from pytest-asyncio
+@pytest.fixture def client_svc(event_loop):  # event_loop fixture from
+pytest-asyncio
     return AsyncClient(
         transport=ASGITransport(app=app_svc), base_url="<http://test>"
     )
 
 
-@pytest.mark.asyncio
-async def test_get_item_with_mocked_service(client_svc, mocker):
+@pytest.mark.asyncio async def test_get_item_with_mocked_service(client_svc,
+mocker):
     mocked_service_data = "Mocked data for item_789"
 
     # Patch the 'fetch_data' method of the 'service_instance'
@@ -1050,8 +1053,7 @@ class DatabaseConnectionMiddleware:
 
 ```python
 # src/app_with_middleware.py
-import falcon
-import falcon.asgi
+import falcon import falcon.asgi
 
 from .middleware import DatabaseConnectionMiddleware
 
@@ -1079,15 +1081,14 @@ app_mw.add_route("/data", DataResource())
 
 ```python
 # tests/test_middleware.py
-import pytest
-from falcon import testing
+import pytest from falcon import testing
 
 # Import your app and the middleware instance to check its state from the module
 from src.app_with_middleware import app_mw, db_middleware_instance
 
 
-@pytest.mark.asyncio
-async def test_database_middleware_lifespan(event_loop):  # event_loop from pytest-asyncio
+@pytest.mark.asyncio async def test_database_middleware_lifespan(event_loop):
+# event_loop from pytest-asyncio
     # Ensure initial state
     assert not db_middleware_instance.startup_complete
     assert not db_middleware_instance.shutdown_complete
@@ -1166,8 +1167,8 @@ Example: If a resource expects a 'name' field in a POST request:
 #     resp.media = {"id": "new_id", "name": media['name']}
 
 # In the test file:
-@pytest.mark.asyncio
-async def test_post_item_missing_name(async_test_client):  # httpx.AsyncClient fixture
+@pytest.mark.asyncio async def test_post_item_missing_name(async_test_client):
+# httpx.AsyncClient fixture
     response = await async_test_client.post(
         "/items", json={"value": 42}
     )  # Missing 'name'
@@ -1184,8 +1185,7 @@ Falcon's HTTP exceptions) are expected to be raised from asynchronous code,
 pytest.raises is the appropriate tool. It functions as a context manager:
 
 ```python
-import falcon
-import pytest
+import falcon import pytest
 
 # async def some_utility_that_might_fail_async():
 #     raise ValueError("An internal problem occurred")
@@ -1202,8 +1202,8 @@ import pytest
     #                 description=f"Internal processing error: {e}",
     #             )
 
-@pytest.mark.asyncio
-async def test_operation_raises_specific_exception(mocker, async_test_client):
+@pytest.mark.asyncio async def test_operation_raises_specific_exception(mocker,
+async_test_client):
     # Mock the utility to ensure it raises the expected underlying error
     mocker.patch(
         "path.to.some_utility_that_might_fail_async",
@@ -1216,12 +1216,14 @@ async def test_operation_raises_specific_exception(mocker, async_test_client):
     assert "Simulated problem" in response.json().get("description", "")
 ```
 
-    \# If testing a function that should directly raise an exception (not caught by Falcon yet):  
-    \# async def my\_raw\_async\_function():  
-    \#    raise TypeError("Specific type error")  
-    \#  
-    \# with pytest.raises(TypeError, match="Specific type error"):  
-    \#    await my\_raw\_async\_function()
+```python
+# If testing a function that should directly raise an exception (not caught by Falcon yet):
+# async def my_raw_async_function():
+#     raise TypeError("Specific type error")
+#
+# with pytest.raises(TypeError, match="Specific type error"):
+#     await my_raw_async_function()
+```
 
 This is particularly useful for testing custom error handling logic within
 responders, hooks, or middleware, or for verifying that unexpected errors are
@@ -1346,8 +1348,6 @@ itself. Continuous learning and adaptation will ensure that testing strategies
 remain effective and leverage the latest advancements in the field. For further
 information, the official documentation for Falcon (particularly its ASGI and
 testing sections), pytest, pytest-asyncio, and HTTPX are invaluable resources.
-
-<!-- markdownlint-enable MD046 -->
 
 ### **Works cited**
 
