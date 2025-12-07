@@ -92,12 +92,12 @@ testing.postgresql.Postgresql class.
 A new, temporary PostgreSQL server instance is launched upon instantiation of
 the Postgresql class:
 
-Python
-
+```python
 import testing.postgresql
 
-\# This line executes initdb and starts a new PostgreSQL server
-postgresql\_instance \= testing.postgresql.Postgresql()
+# This line executes initdb and starts a new PostgreSQL server
+postgresql_instance = testing.postgresql.Postgresql()
+```
 
 This single line encapsulates the creation of a temporary data directory,
 initialization of a new PostgreSQL cluster within it using initdb, and the
@@ -110,10 +110,10 @@ Postgresql object provides a url() method that returns a DSN (Data Source Name)
 or connection string suitable for use with database drivers and ORMs like
 SQLAlchemy:
 
-Python
-
-db\_url \= postgresql\_instance.url() \# Example output:
-'postgresql://user:password@host:port/database'
+```python
+db_url = postgresql_instance.url()
+# Example output: 'postgresql://user:password@host:port/database'
+```
 
 This URL contains all the necessary information (host, port, username, database
 name) to establish a connection to the temporary PostgreSQL server.1
@@ -128,9 +128,9 @@ testing.postgresql offers robust mechanisms for this.
 
 The server can be stopped explicitly by calling the stop() method:
 
-Python
-
-postgresql\_instance.stop()
+```python
+postgresql_instance.stop()
+```
 
 Invoking stop() terminates the PostgreSQL server process and removes the
 temporary working directory it created.2
@@ -141,15 +141,15 @@ For more idiomatic and safer resource management, testing.postgresql supports
 the Python context manager protocol. This is the recommended way to ensure
 cleanup, even if errors occur:
 
-Python
-
+```python
 import testing.postgresql
 
-with testing.postgresql.Postgresql() as postgresql\_instance:
-    \# Use postgresql\_instance.url() to connect and perform tests  
-    \#…  
-\# PostgreSQL server is automatically stopped, and resources are cleaned up
-here \# when exiting the 'with' block.
+with testing.postgresql.Postgresql() as postgresql_instance:
+    # Use postgresql_instance.url() to connect and perform tests
+    # …
+# PostgreSQL server is automatically stopped, and resources are cleaned up here
+# when exiting the 'with' block.
+```
 
 This pattern ensures that the stop() method (or its equivalent for cleanup) is
 called automatically upon exiting the with block.2 Additionally, the Postgresql
@@ -174,13 +174,13 @@ Object-Relational Mapper (ORM) for Python.
 SQLAlchemy's engine is the starting point for database communication. It can be
 configured using the URL provided by the Postgresql instance:
 
-Python
+```python
+from sqlalchemy import create_engine
 
-from sqlalchemy import create\_engine
-
-with testing.postgresql.Postgresql() as pg\_server:
-    engine \= create\_engine(pg\_server.url())  
-    \# The 'engine' can now be used for SQLAlchemy operations
+with testing.postgresql.Postgresql() as pg_server:
+    engine = create_engine(pg_server.url())
+    # The 'engine' can now be used for SQLAlchemy operations
+```
 
 This direct usage of the url() output with create\_engine is a core aspect of
 the library's ease of use.1 The abstraction provided by testing.postgresql
@@ -196,18 +196,19 @@ involves using declarative\_base and defining classes that map to database
 tables. While testing.postgresql itself is agnostic to the schema, a schema is
 necessary for any meaningful database interaction.
 
-Python
+```python
+from sqlalchemy import Column, Integer, String
+from sqlalchemy.ext.declarative import declarative_base
 
-from sqlalchemy.ext.declarative import declarative\_base from sqlalchemy import
-Column, Integer, String
+Base = declarative_base()
 
-Base \= declarative\_base()
 
 class Item(Base):
-    \_\_tablename\_\_ \= 'items'  
-    id \= Column(Integer, primary\_key=True, autoincrement=True)  
-    name \= Column(String(100), nullable=False)  
-    description \= Column(String(255))
+    __tablename__ = "items"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False)
+    description = Column(String(255))
+```
 
 SQLAlchemy supports a wide array of PostgreSQL-specific data types (e.g.,
 ARRAY, JSONB, HSTORE, various range types 4), which can be used in model
@@ -219,10 +220,10 @@ Once the engine is created and models are defined, the database schema (tables,
 indexes, etc.) must be created in the temporary PostgreSQL instance.
 SQLAlchemy's metadata object facilitates this:
 
-Python
-
-\# Assuming 'engine' and 'Base' are defined as above
-Base.metadata.create\_all(engine)
+```python
+# Assuming 'engine' and 'Base' are defined as above
+Base.metadata.create_all(engine)
+```
 
 This command iterates through all table definitions associated with the Base
 metadata and issues CREATE TABLE statements to the database connected via
@@ -233,17 +234,20 @@ engine. This step is crucial before any data manipulation or querying can occur.
 Database operations in SQLAlchemy are typically performed within a Session. A
 session factory is usually created and bound to the engine:
 
-Python
-
+```python
 from sqlalchemy.orm import sessionmaker
 
-Session \= sessionmaker(bind=engine) session \= Session()
+Session = sessionmaker(bind=engine)
+session = Session()
 
-\# Perform database operations using 'session' \# e.g., new\_item \=
-Item(name="Test Item", description="A sample item") \# session.add(new\_item)
-\#       session.commit()
+# Perform database operations using 'session'
+# e.g.,
+# new_item = Item(name="Test Item", description="A sample item")
+# session.add(new_item)
+# session.commit()
 
 session.close()
+```
 
 The session provides an identity map for objects and manages transaction
 boundaries.
@@ -260,73 +264,81 @@ setup/teardown within the setUp and tearDown methods of a unittest.TestCase
 subclass. This ensures that each test method runs with a fresh database
 instance if desired.
 
-Python
+```python
+import unittest
 
-import unittest import testing.postgresql from sqlalchemy import
-create\_engine, Column, Integer, String from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.declarative import declarative\_base
+import testing.postgresql
+from sqlalchemy import Column, Integer, String, create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 
-\# Define SQLAlchemy Base and Model (as shown previously) Base \=
-declarative\_base() class User(Base):
-    \_\_tablename\_\_ \= 'users'  
-    id \= Column(Integer, primary\_key=True)  
-    name \= Column(String(50))
+# Define SQLAlchemy Base and Model (as shown previously)
+Base = declarative_base()
+
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True)
+    name = Column(String(50))
+
 
 class TestUserOperations(unittest.TestCase):
-    def setUp(self):  
-        \# Launch new PostgreSQL server for each test  
-        self.postgresql \= testing.postgresql.Postgresql()  
-        self.engine \= create\_engine(self.postgresql.url())  
-        Base.metadata.create\_all(self.engine) \# Create tables
+    def setUp(self):
+        # Launch new PostgreSQL server for each test
+        self.postgresql = testing.postgresql.Postgresql()
+        self.engine = create_engine(self.postgresql.url())
+        Base.metadata.create_all(self.engine)  # Create tables
 
-        \# Create a session for this test  
-        Session\_factory \= sessionmaker(bind=self.engine)  
-        self.session \= Session\_factory()
+        # Create a session for this test
+        Session_factory = sessionmaker(bind=self.engine)
+        self.session = Session_factory()
 
-    def tearDown(self):  
-        self.session.close()  
-        \# Base.metadata.drop\_all(self.engine) \# Optional: explicitly drop tables  
-        self.postgresql.stop() \# Terminate PostgreSQL server
+    def tearDown(self):
+        self.session.close()
+        # Base.metadata.drop_all(self.engine)  # Optional: explicitly drop tables
+        self.postgresql.stop()  # Terminate PostgreSQL server
 
-    def test\_add\_and\_query\_user(self):  
-        new\_user \= User(name="Alice")  
-        self.session.add(new\_user)  
+    def test_add_and_query_user(self):
+        new_user = User(name="Alice")
+        self.session.add(new_user)
         self.session.commit()
 
-        retrieved\_user \= self.session.query(User).filter\_by(name="Alice").first()  
-        self.assertIsNotNone(retrieved\_user)  
-        self.assertEqual(retrieved\_user.name, "Alice")  
-        self.assertIsNotNone(retrieved\_user.id)
+        retrieved_user = self.session.query(User).filter_by(name="Alice").first()
+        self.assertIsNotNone(retrieved_user)
+        self.assertEqual(retrieved_user.name, "Alice")
+        self.assertIsNotNone(retrieved_user.id)
 
-    def test\_update\_user(self):  
-        \# Add a user  
-        user\_to\_update \= User(name="Bob")  
-        self.session.add(user\_to\_update)  
-        self.session.commit()  
-        user\_id \= user\_to\_update.id
+    def test_update_user(self):
+        # Add a user
+        user_to_update = User(name="Bob")
+        self.session.add(user_to_update)
+        self.session.commit()
+        user_id = user_to_update.id
 
-        \# Update the user  
-        user\_to\_update.name \= "Robert"  
+        # Update the user
+        user_to_update.name = "Robert"
         self.session.commit()
 
-        \# Retrieve and verify  
-        updated\_user \= self.session.query(User).filter\_by(id=user\_id).first()  
-        self.assertEqual(updated\_user.name, "Robert")
+        # Retrieve and verify
+        updated_user = self.session.query(User).filter_by(id=user_id).first()
+        self.assertEqual(updated_user.name, "Robert")
 
-    def test\_delete\_user(self):  
-        \# Add a user  
-        user\_to\_delete \= User(name="Charlie")  
-        self.session.add(user\_to\_delete)  
-        self.session.commit()  
-        user\_id \= user\_to\_delete.id
+    def test_delete_user(self):
+        # Add a user
+        user_to_delete = User(name="Charlie")
+        self.session.add(user_to_delete)
+        self.session.commit()
+        user_id = user_to_delete.id
 
-        \# Delete the user  
-        self.session.delete(user\_to\_delete)  
+        # Delete the user
+        self.session.delete(user_to_delete)
         self.session.commit()
 
-        \# Verify deletion  
-        deleted\_user \= self.session.query(User).filter\_by(id=user\_id).first()  
-        self.assertIsNone(deleted\_user)
+        # Verify deletion
+        deleted_user = self.session.query(User).filter_by(id=user_id).first()
+        self.assertIsNone(deleted_user)
+
+```
 
 This structure, demonstrated in the library's usage examples 1, ensures a clean
 slate for each test method.
@@ -518,12 +530,13 @@ initdb behavior or postgres server settings. For example (the exact parameter
 name should be verified from the library's documentation for the specific
 version):
 
-Python
-
-\# Conceptual example, actual parameter name may vary (e.g.,
-'postgres\_options', or direct kwargs) \# postgresql\_instance \=
-testing.postgresql.Postgresql(settings={'fsync': 'off', 'shared\_buffers':
-'128MB'})
+```python
+# Conceptual example, actual parameter name may vary (e.g., 'postgres_options',
+# or direct kwargs)
+# postgresql_instance = testing.postgresql.Postgresql(
+#     settings={"fsync": "off", "shared_buffers": "128MB"}
+# )
+```
 
 This feature allows for fine-tuning the temporary server's configuration, which
 might be necessary for:

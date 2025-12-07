@@ -139,18 +139,22 @@ that the test function is a coroutine and should be executed within an event
 loop, allowing the use of the await keyword for calling other coroutines. A
 fundamental example of an asynchronous test function is:
 
-Python
+```python
+import asyncio
+import pytest
 
-import pytest import asyncio
 
-\# Assume my\_async\_function is an async function to be tested async def
-my\_async\_function():
-    await asyncio.sleep(0.01)  
-    return "expected\_value"
+# Assume my_async_function is an async function to be tested
+async def my_async_function():
+    await asyncio.sleep(0.01)
+    return "expected_value"
 
-@pytest.mark.asyncio async def test\_my\_async\_function():
-    result \= await my\_async\_function()  
-    assert result \== "expected\_value"
+
+@pytest.mark.asyncio
+async def test_my_async_function():
+    result = await my_async_function()
+    assert result == "expected_value"
+```
 
 This structure, demonstrated in various forms, forms the basis for all
 asynchronous tests.
@@ -176,18 +180,21 @@ unless end-to-end testing with a specific server like Uvicorn is explicitly
 required. The setup for using httpx.AsyncClient with ASGITransport typically
 looks like this:
 
-Python
+```python
+import pytest
+from httpx import ASGITransport, AsyncClient
 
-import pytest from httpx import ASGITransport, AsyncClient \# from
-my\_falcon\_app import app  \# Your Falcon ASGI application instance
+# from my_falcon_app import app  # Your Falcon ASGI application instance
 
-@pytest.mark.asyncio async def test\_root\_endpoint(app): \# Assuming 'app' is
-provided by a fixture
-    async with AsyncClient(  
-        transport=ASGITransport(app=app), base\_url="<http://test>"  
-    ) as ac:  
-        response \= await ac.get("/")  
-        \# Assertions follow
+
+@pytest.mark.asyncio
+async def test_root_endpoint(app):  # Assuming 'app' is provided by a fixture
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="<http://test>"
+    ) as ac:
+        response = await ac.get("/")
+        # Assertions follow
+```
 
 The base\_url="<http://test>" is a mandatory parameter for HTTPX, serving as a
 placeholder even when ASGITransport is used, as HTTPX uses it for internal
@@ -221,61 +228,68 @@ Examples of such assertions are found in various contexts.
 To illustrate these concepts, consider a simple Falcon ASGI application and its
 corresponding tests. **Falcon Application (src/app.py):**
 
-Python
+```python
+# src/app.py
+import falcon
+import falcon.asgi
 
-\# src/app.py import falcon import falcon.asgi
 
 class ThingsResource:
-    async def on\_get(self, req, resp):  
-        """Handles GET requests"""  
-        resp.media \= {'message': 'Hello, async world\!'}  
-        resp.status \= falcon.HTTP\_200
+    async def on_get(self, req, resp):
+        """Handles GET requests"""
+        resp.media = {"message": "Hello, async world!"}
+        resp.status = falcon.HTTP_200
 
-    async def on\_post(self, req, resp):  
-        """Handles POST requests"""  
-        \# For POST requests, the request body is typically read asynchronously  
-        data \= await req.get\_media() \#.get\_media() is an awaitable for ASGI apps  
-        resp.media \= {'received': data}  
-        resp.status \= falcon.HTTP\_201
+    async def on_post(self, req, resp):
+        """Handles POST requests"""
+        # For POST requests, the request body is typically read asynchronously
+        data = await req.get_media()  # .get_media() is an awaitable for ASGI apps
+        resp.media = {"received": data}
+        resp.status = falcon.HTTP_201
 
-app \= falcon.asgi.App() app.add\_route('/things', ThingsResource())
+
+app = falcon.asgi.App()
+app.add_route("/things", ThingsResource())
+```
 
 This application defines a resource with asynchronous GET and POST handlers.
 The on\_post handler uses await req.get\_media() to asynchronously parse the
 request body, a common pattern in Falcon ASGI applications. **Test File
 (tests/test\_app.py):**
 
-    # tests/test_app.py
-    import pytest
-    from httpx import ASGITransport, AsyncClient
-    from src.app import app  # Assuming app.py is in src
+```python
+# tests/test_app.py
+import pytest
+from httpx import ASGITransport, AsyncClient
+from src.app import app  # Assuming app.py is in src
 
 
-    @pytest.fixture(scope="module")
-    def client_app():
-        # This fixture provides the app instance to tests
-        return app
+@pytest.fixture(scope="module")
+def client_app():
+    # This fixture provides the app instance to tests
+    return app
 
 
-    @pytest.mark.asyncio
-    async def test_get_things(client_app):
-        async with AsyncClient(
-            transport=ASGITransport(app=client_app), base_url="<http://test>"
-        ) as ac:
-            response = await ac.get("/things")
-        assert response.status_code == falcon.HTTP_200
-        assert response.json() == {"message": "Hello, async world!"}
+@pytest.mark.asyncio
+async def test_get_things(client_app):
+    async with AsyncClient(
+        transport=ASGITransport(app=client_app), base_url="<http://test>"
+    ) as ac:
+        response = await ac.get("/things")
+    assert response.status_code == falcon.HTTP_200
+    assert response.json() == {"message": "Hello, async world!"}
 
 
-    @pytest.mark.asyncio
-    async def test_post_things(client_app):
-        payload = {"name": "My Thing", "value": 42}
-        async with AsyncClient(
-            transport=ASGITransport(app=client_app), base_url="<http://test>"
-        ) as ac:
-            response = await ac.post("/things", json=payload)
-        assert response.status_code == falcon.HTTP_201
-        assert response.json() == {"received": payload}
+@pytest.mark.asyncio
+async def test_post_things(client_app):
+    payload = {"name": "My Thing", "value": 42}
+    async with AsyncClient(
+        transport=ASGITransport(app=client_app), base_url="<http://test>"
+    ) as ac:
+        response = await ac.post("/things", json=payload)
+    assert response.status_code == falcon.HTTP_201
+    assert response.json() == {"received": payload}
+```
 
 These tests demonstrate how to use httpx.AsyncClient with ASGITransport to send
 GET and POST requests to the Falcon ASGI application and assert the responses.
@@ -388,11 +402,12 @@ An ASGIConductor instance can also be obtained directly from an instance of
 falcon.testing.TestClient by using the TestClient instance as an async context
 manager.
 
-Python
-
-\# client \= falcon.testing.TestClient(my\_asgi\_app) \# async with client as
-conductor: \#     response \= await conductor.get('/some\_endpoint') \#
-assert response.status\_code \== 200
+```python
+# client = falcon.testing.TestClient(my_asgi_app)
+# async with client as conductor:
+#     response = await conductor.get("/some_endpoint")
+#     assert response.status_code == 200
+```
 
 This provides flexibility, allowing developers to use the familiar TestClient
 setup and then "upgrade" to ASGIConductor when its advanced lifecycle
@@ -493,17 +508,20 @@ operate correctly.
 
 Python
 
-import pytest import asyncio
+```python
+import asyncio import pytest
 
-@pytest.fixture(scope="session")  \# Or "module", "class" def
-event\_loop(request):
-    """Override the default function-scoped event loop.  
-    Creates an instance of the event loop for the specified scope.  
-    """  
-    loop \= asyncio.new\_event\_loop()  
-    asyncio.set\_event\_loop(loop)  
-    yield loop  
+
+@pytest.fixture(scope="session")  # Or "module", "class" def
+event_loop(request):
+    """Override the default function-scoped event loop.
+    Creates an instance of the event loop for the specified scope.
+    """
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    yield loop
     loop.close()
+```
 
 This customization is an advanced topic but essential for optimizing test
 suites that utilize expensive, shared asynchronous resources. Proper event loop
@@ -515,14 +533,18 @@ utilization.
 A common use case for async fixtures is managing asynchronous database
 connections.
 
-Python
+```python
+# Conceptual example using a hypothetical asyncpg-like library
+import pytest import pytest_asyncio
 
-\# Conceptual example using a hypothetical asyncpg-like library import pytest
-import pytest\_asyncio \# import asyncpg  \# Example: pip install asyncpg
+# import asyncpg  # Example: pip install asyncpg
 
-\# Assume event\_loop fixture is session-scoped if db\_pool is session-scoped.
-\# @pytest\_asyncio.fixture(scope="session") \# async def db\_pool(): \#     \#
-Replace with actual connection details for your async database driver \#
+# Assume event_loop fixture is session-scoped if db_pool is session-scoped.
+# @pytest_asyncio.fixture(scope="session")
+# async def db_pool():
+#     # Replace with actual connection details for your async database driver
+```
+
 pool \= await asyncpg.create\_pool( \#         user='your\_user',
 password='your\_password', \#         database='test\_db', host='localhost'
 \#     ) \#     yield pool \#     await pool.close()
@@ -580,12 +602,12 @@ the same. The key difference is that the replacement object must be an
 AsyncMock.4 For example, to mock an asynchronous method get\_cat\_fact on a
 CatFact class:
 
-Python
+```python
+from unittest.mock import AsyncMock  # Or from asyncmock import AsyncMock
 
-from unittest.mock import AsyncMock \# Or from asyncmock import AsyncMock
-
-\# In your test: \# mocker.patch.object(CatFact, "get\_cat\_fact",
-AsyncMock(return\_value=mock\_response))
+# In your test:
+# mocker.patch.object(CatFact, "get_cat_fact", AsyncMock(return_value=mock_response))
+```
 
 This replaces the actual get\_cat\_fact method with an AsyncMock that, when
 awaited, will return mock\_response.
@@ -597,28 +619,37 @@ return\_value and side\_effect attributes:
 
 - **return\_value**: This attribute defines the value that the coroutine
   returned by the AsyncMock will resolve to when awaited.
-  Python from unittest.mock import AsyncMock mock\_async\_func \=
-  AsyncMock(return\_value="mocked\_result\_from\_async\_call") \# In the code
-  under test: \# actual\_result \= await patched\_function() \# actual\_result
-  would be "mocked\_result\_from\_async\_call"
+
+```python
+from unittest.mock import AsyncMock
+
+mock_async_func = AsyncMock(return_value="mocked_result_from_async_call")
+# In the code under test:
+# actual_result = await patched_function()
+# actual_result would be "mocked_result_from_async_call"
+```
 
 - **side\_effect**: This attribute offers more complex control. It can be:  
   - An **exception class or instance**: The mock will raise this exception when
     awaited.  
-    Python  
-    my\_mock \= AsyncMock(side\_effect=ValueError("Async operation failed"))  
-    \# In the code under test, awaiting this mock would raise ValueError.
 
-  - An **iterable**: The mock will return successive values from the iterable
+```python
+from unittest.mock import AsyncMock
+
+my_mock = AsyncMock(side_effect=ValueError("Async operation failed"))
+# In the code under test, awaiting this mock would raise ValueError.
+```
+
+- An **iterable**: The mock will return successive values from the iterable
     upon each await.  
-  - A **synchronous function**: This function will be called with the same
+- A **synchronous function**: This function will be called with the same
     arguments as the mock. Its return value becomes the resolved value of the
     awaitable, unless it returns unittest.mock.DEFAULT, in which case the
     mock's return\_value is used.  
-  - An **asynchronous function (async def)**: This async function will be
+- An **asynchronous function (async def)**: This async function will be
     called and awaited. Its result becomes the resolved value of the mock's
     awaitable. This is powerful for simulating more complex async behaviors.  
-  - Another **AsyncMock instance**: If side\_effect is set to another AsyncMock
+- Another **AsyncMock instance**: If side\_effect is set to another AsyncMock
     instance, calling the patched function effectively calls this other
     AsyncMock instance. The return\_value should then be configured on this
     side\_effect instance.
@@ -650,78 +681,79 @@ with its asynchronous dependencies in the expected manner.
 Consider a Falcon resource that depends on an external asynchronous service:
 **Service (src/services.py):**
 
-Python
+```python
+# src/services.py
+import asyncio
 
-\# src/services.py import asyncio
 
 class ExternalService:
-    async def fetch\_data(self, item\_id: str):  
-        \# Simulates a real network call  
-        await asyncio.sleep(0.1)  
-        return f"Data for {item\_id} from external service"
+    async def fetch_data(self, item_id: str):
+        # Simulates a real network call
+        await asyncio.sleep(0.1)
+        return f"Data for {item_id} from external service"
+```python
+# src/app_with_service.py
+import falcon
+import falcon.asgi
 
-**Falcon Application with Service Dependency (src/app\_with\_service.py):**
+from .services import ExternalService
 
-Python
+# Assume service is instantiated and used by resources
+# This could be a global instance or injected. For simplicity, let's assume global.
+service_instance = ExternalService()
 
-\# src/app\_with\_service.py import falcon import falcon.asgi from.services
-import ExternalService
-
-\# Assume service is instantiated and used by resources \# This could be a
-global instance or injected. For simplicity, let's assume global.
-service\_instance \= ExternalService()
 
 class ServiceResource:
-    async def on\_get(self, req, resp, item\_id):  
-        \# Calls the asynchronous method on the service instance  
-        data \= await service\_instance.fetch\_data(item\_id)  
-        resp.media \= {"item\_data": data}  
-        resp.status \= falcon.HTTP\_200
+    async def on_get(self, req, resp, item_id):
+        # Calls the asynchronous method on the service instance
+        data = await service_instance.fetch_data(item_id)
+        resp.media = {"item_data": data}
+        resp.status = falcon.HTTP_200
 
-app\_svc \= falcon.asgi.App() app\_svc.add\_route('/items/{item\_id}',
-ServiceResource())
+
+app_svc = falcon.asgi.App()
+app_svc.add_route("/items/{item_id}", ServiceResource())
+```
 
 **Test File (tests/test\_app\_with\_service.py):**
 
-Python
+```python
+import pytest
+from httpx import ASGITransport, AsyncClient
+from unittest.mock import AsyncMock, patch
 
-\# tests/test\_app\_with\_service.py import pytest from httpx import
-ASGITransport, AsyncClient from unittest.mock import AsyncMock, patch \# Or
-from asyncmock import AsyncMock, patch from src.app\_with\_service import
-app\_svc \# Your Falcon ASGI app
+# Or: from asyncmock import AsyncMock, patch
+from src.app_with_service import app_svc  # Your Falcon ASGI app
 
-@pytest.fixture def client\_svc(event\_loop): \# event\_loop fixture from
-pytest-asyncio
-    return AsyncClient(transport=ASGITransport(app=app\_svc), base\_url="<http://test>")
 
-@pytest.mark.asyncio async def
-test\_get\_item\_with\_mocked\_service(client\_svc, mocker):
-    mocked\_service\_data \= "Mocked data for item\_789"
+@pytest.fixture
+def client_svc(event_loop):  # event_loop fixture from pytest-asyncio
+    return AsyncClient(
+        transport=ASGITransport(app=app_svc), base_url="<http://test>"
+    )
 
-    \# Patch the 'fetch\_data' method of the 'service\_instance'  
-    \# The target for patching is 'src.app\_with\_service.service\_instance.fetch\_data'  
-    \# because that's where 'fetch\_data' is looked up when ServiceResource calls it.  
-    patched\_fetch\_method \= mocker.patch(  
-        'src.app\_with\_service.service\_instance.fetch\_data',  
-        new\_callable=AsyncMock \# Ensures the mock is an AsyncMock  
-    )  
-    patched\_fetch\_method.return\_value \= mocked\_service\_data
 
-    response \= await client\_svc.get("/items/item\_789")
+@pytest.mark.asyncio
+async def test_get_item_with_mocked_service(client_svc, mocker):
+    mocked_service_data = "Mocked data for item_789"
 
-    assert response.status\_code \== falcon.HTTP\_200  
-    assert response.json() \== {"item\_data": mocked\_service\_data}
+    # Patch the 'fetch_data' method of the 'service_instance'
+    # The target for patching is 'src.app_with_service.service_instance.fetch_data'
+    # because that's where 'fetch_data' is looked up when ServiceResource calls it.
+    patched_fetch_method = mocker.patch(
+        "src.app_with_service.service_instance.fetch_data",
+        new_callable=AsyncMock,  # Ensures the mock is an AsyncMock
+    )
+    patched_fetch_method.return_value = mocked_service_data
 
-    \# Verify that the mocked fetch\_data method was called correctly  
-    patched\_fetch\_method.assert\_called\_once\_with("item\_789")
+    response = await client_svc.get("/items/item_789")
 
-This example demonstrates patching an async method of a dependency, setting its
-return value, making a request to the Falcon endpoint that uses this
-dependency, and then asserting both the response and the mock interaction. The
-principle of "patch where it's used" remains paramount; the asynchronous nature
-of the code does not alter this fundamental rule of mocking, but the flow of
-object creation and usage might require careful consideration to identify the
-correct patch target.
+    assert response.status_code == falcon.HTTP_200
+    assert response.json() == {"item_data": mocked_service_data}
+
+    # Verify that the mocked fetch_data method was called correctly
+    patched_fetch_method.assert_called_once_with("item_789")
+```
 
 ### **Table: unittest.mock.Mock vs. unittest.mock.AsyncMock**
 
@@ -973,98 +1005,113 @@ from req.scope\['state'\] to req.context for easier access by responders.
 
 **Middleware with Lifespan Methods (src/middleware.py):**
 
-Python
+```python
+# src/middleware.py
+import falcon
 
-\# src/middleware.py import falcon
 
 class DatabaseConnectionMiddleware:
-    def \_\_init\_\_(self):  
-        self.startup\_complete \= False  
-        self.shutdown\_complete \= False  
-        \# In a real scenario, this might be an actual connection pool object  
-        self.db\_connection\_info \= None
+    def __init__(self):
+        self.startup_complete = False
+        self.shutdown_complete = False
+        # In a real scenario, this might be an actual connection pool object
+        self.db_connection_info = None
 
-    async def process\_startup(self, scope, event):  
-        \# Simulate initializing a database connection pool  
-        self.db\_connection\_info \= "fake\_db\_pool\_initialized"  
-        \# Store in ASGI scope state for access by other parts of the app/middleware  
-        if 'state' not in scope:  
-            scope\['state'\] \= {}  
-        scope\['state'\]\['db\_pool'\] \= self.db\_connection\_info  
-        self.startup\_complete \= True  
-        print(f"Middleware: process\_startup executed, db\_pool: {scope\['state'\]\['db\_pool'\]}")
+    async def process_startup(self, scope, event):
+        # Simulate initializing a database connection pool
+        self.db_connection_info = "fake_db_pool_initialized"
+        # Store in ASGI scope state for access by other parts of the app/middleware
+        if "state" not in scope:
+            scope["state"] = {}
+        scope["state"]["db_pool"] = self.db_connection_info
+        self.startup_complete = True
+        print(
+            f"Middleware: process_startup executed, db_pool: {scope['state']['db_pool']}"
+        )
 
-    async def process\_shutdown(self, scope, event):  
-        \# Simulate closing the database connection pool  
-        if 'state' in scope and 'db\_pool' in scope\['state'\]:  
-            print(f"Middleware: process\_shutdown cleaning up db\_pool: {scope\['state'\]\['db\_pool'\]}")  
-            del scope\['state'\]\['db\_pool'\]  
-        self.db\_connection\_info \= None  
-        self.shutdown\_complete \= True  
-        print("Middleware: process\_shutdown executed")
+    async def process_shutdown(self, scope, event):
+        # Simulate closing the database connection pool
+        if "state" in scope and "db_pool" in scope["state"]:
+            print(
+                f\"Middleware: process_shutdown cleaning up db_pool: {scope['state']['db_pool']}\"
+            )
+            del scope["state"]["db_pool"]
+        self.db_connection_info = None
+        self.shutdown_complete = True
+        print("Middleware: process_shutdown executed")
 
-    async def process\_request(self, req, resp):  
-        \# Make the db\_pool available on req.context if it was set in scope\['state'\]  
-        if 'db\_pool' in req.scope.get('state', {}):  
-            req.context.db\_pool \= req.scope\['state'\]\['db\_pool'\]
+    async def process_request(self, req, resp):
+        # Make the db_pool available on req.context if it was set in scope['state']
+        if "db_pool" in req.scope.get("state", {}):
+            req.context.db_pool = req.scope["state"]["db_pool"]
+```
 
 **Falcon App with Middleware (src/app\_with\_middleware.py):**
 
-Python
+```python
+# src/app_with_middleware.py
+import falcon
+import falcon.asgi
 
-\# src/app\_with\_middleware.py import falcon import falcon.asgi
-from.middleware import DatabaseConnectionMiddleware
+from .middleware import DatabaseConnectionMiddleware
 
-    # Instantiate the middleware
-    db_middleware_instance = DatabaseConnectionMiddleware()
+# Instantiate the middleware
+db_middleware_instance = DatabaseConnectionMiddleware()
 
-    class DataResource:
-        async def on_get(self, req, resp):
-            db_pool_status = "not_found"
-            if hasattr(req.context, "db_pool"):
-                db_pool_status = req.context.db_pool
-            resp.media = {
-                "message": "Data resource accessed",
-                "db_status": db_pool_status,
-            }
-            resp.status = falcon.HTTP_200
 
-    app_mw = falcon.asgi.App(middleware=[db_middleware_instance])
-    app_mw.add_route("/data", DataResource())
+class DataResource:
+    async def on_get(self, req, resp):
+        db_pool_status = "not_found"
+        if hasattr(req.context, "db_pool"):
+            db_pool_status = req.context.db_pool
+        resp.media = {
+            "message": "Data resource accessed",
+            "db_status": db_pool_status,
+        }
+        resp.status = falcon.HTTP_200
+
+
+app_mw = falcon.asgi.App(middleware=[db_middleware_instance])
+app_mw.add_route("/data", DataResource())
+```
 
 **Test using ASGIConductor (tests/test_middleware.py):**
 
-    # tests/test_middleware.py
-    import pytest
-    from falcon import testing
+```python
+# tests/test_middleware.py
+import pytest
+from falcon import testing
 
-    # Import your app and the middleware instance to check its state from the module
-    from src.app_with_middleware import app_mw, db_middleware_instance
+# Import your app and the middleware instance to check its state from the module
+from src.app_with_middleware import app_mw, db_middleware_instance
 
-    @pytest.mark.asyncio
-    async def test_database_middleware_lifespan(event_loop):  # event_loop from pytest-asyncio
-        # Ensure initial state
-        assert not db_middleware_instance.startup_complete
-        assert not db_middleware_instance.shutdown_complete
-        assert db_middleware_instance.db_connection_info is None
 
-        async with testing.ASGIConductor(app_mw) as conductor:
-            # After entering context, process_startup should have run
-            assert db_middleware_instance.startup_complete
-            assert (
-                db_middleware_instance.db_connection_info == "fake_db_pool_initialized"
-            )
-            assert not db_middleware_instance.shutdown_complete  # Shutdown not yet run
+@pytest.mark.asyncio
+async def test_database_middleware_lifespan(event_loop):  # event_loop from pytest-asyncio
+    # Ensure initial state
+    assert not db_middleware_instance.startup_complete
+    assert not db_middleware_instance.shutdown_complete
+    assert db_middleware_instance.db_connection_info is None
 
-            # Make a request to verify state is accessible via context
-            response = await conductor.get("/data")
-            assert response.status_code == falcon.HTTP_200
-            assert response.json()["db_status"] == "fake_db_pool_initialized"
+    async with testing.ASGIConductor(app_mw) as conductor:
+        # After entering context, process_startup should have run
+        assert db_middleware_instance.startup_complete
+        assert (
+            db_middleware_instance.db_connection_info
+            == "fake_db_pool_initialized"
+        )
+        assert not db_middleware_instance.shutdown_complete  # Shutdown not yet run
 
-        # After exiting context, process_shutdown should have run
-        assert db_middleware_instance.startup_complete  # Still true
-        assert db_middleware_instance.shutdown_complete
-        assert db_middleware_instance.db_connection_info is None  # Cleaned up
+        # Make a request to verify state is accessible via context
+        response = await conductor.get("/data")
+        assert response.status_code == falcon.HTTP_200
+        assert response.json()["db_status"] == "fake_db_pool_initialized"
+
+    # After exiting context, process_shutdown should have run
+    assert db_middleware_instance.startup_complete  # Still true
+    assert db_middleware_instance.shutdown_complete
+    assert db_middleware_instance.db_connection_info is None  # Cleaned up
+```
 
 This example demonstrates how ASGIConductor facilitates testing the full
 lifecycle of ASGI middleware, including the propagation of state from
@@ -1106,25 +1153,29 @@ Tests should verify that:
 
 Example: If a resource expects a 'name' field in a POST request:
 
-Python
+```python
+# In a Falcon resource:
+# async def on_post(self, req, resp):
+#     media = await req.get_media()
+#     if 'name' not in media or not media['name']:
+#         raise falcon.HTTPBadRequest(
+#             title="Missing Field", description="The 'name' field is required."
+#         )
+#     # … further processing…
+#     resp.status = falcon.HTTP_201
+#     resp.media = {"id": "new_id", "name": media['name']}
 
-\# In a Falcon resource: \# async def on\_post(self, req, resp): \#     media
-\= await req.get\_media() \#     if 'name' not in media or not media\['name'\]:
-\#         raise falcon.HTTPBadRequest(title="Missing Field", description="The
-'name' field is required.") \#     \#… further processing… \#     resp.status
-\= falcon.HTTP\_201 \#     resp.media \= {"id": "new\_id", "name":
-media\['name'\]}
-
-\# In the test file: @pytest.mark.asyncio async def
-test\_post\_item\_missing\_name(async\_test\_client): \# async\_test\_client is
-an httpx.AsyncClient fixture
-    response \= await async\_test\_client.post(
+# In the test file:
+@pytest.mark.asyncio
+async def test_post_item_missing_name(async_test_client):  # httpx.AsyncClient fixture
+    response = await async_test_client.post(
         "/items", json={"value": 42}
-    ) \# Missing 'name'  
-    assert response.status\_code \== falcon.HTTP\_BAD\_REQUEST \# Or 400  
-    error\_payload \= response.json()  
-    assert error\_payload\["title"\] \== "Missing Field"  
-    assert "The 'name' field is required" in error\_payload\["description"\]
+    )  # Missing 'name'
+    assert response.status_code == falcon.HTTP_BAD_REQUEST  # Or 400
+    error_payload = response.json()
+    assert error_payload["title"] == "Missing Field"
+    assert "The 'name' field is required" in error_payload["description"]
+```
 
 ### **Using pytest.raises with Asynchronous Code**
 
@@ -1132,17 +1183,17 @@ For testing scenarios where specific Python exceptions (not necessarily
 Falcon's HTTP exceptions) are expected to be raised from asynchronous code,
 pytest.raises is the appropriate tool. It functions as a context manager:
 
-Python
-    import falcon
-    import pytest
+```python
+import falcon
+import pytest
 
-    # async def some_utility_that_might_fail_async():
-    #     raise ValueError("An internal problem occurred")
+# async def some_utility_that_might_fail_async():
+#     raise ValueError("An internal problem occurred")
 
-    # class MyResource:
-    #     async def on_get(self, req, resp):
-    #         try:
-    #             await some_utility_that_might_fail_async()
+# class MyResource:
+#     async def on_get(self, req, resp):
+#         try:
+#             await some_utility_that_might_fail_async()
     #             resp.media = {"status": "ok"}
     #         except ValueError as e:
     #             # Example: Catch specific error, log it, and return a generic server error
@@ -1151,18 +1202,20 @@ Python
     #                 description=f"Internal processing error: {e}",
     #             )
 
-    @pytest.mark.asyncio
-    async def test_operation_raises_specific_exception(mocker, async_test_client):
-        # Mock the utility to ensure it raises the expected underlying error
-        mocker.patch(
-            "path.to.some_utility_that_might_fail_async",
-            side_effect=ValueError("Simulated problem"),
-        )
+@pytest.mark.asyncio
+async def test_operation_raises_specific_exception(mocker, async_test_client):
+    # Mock the utility to ensure it raises the expected underlying error
+    mocker.patch(
+        "path.to.some_utility_that_might_fail_async",
+        side_effect=ValueError("Simulated problem"),
+    )
 
-        # If testing that the resource correctly translates this to a Falcon error:
-        response = await async_test_client.get("/some_endpoint_that_uses_utility")
-        assert response.status_code == falcon.HTTP_INTERNAL_SERVER_ERROR
-        assert "Simulated problem" in response.json().get("description", "")
+    # If testing that the resource correctly translates this to a Falcon error:
+    response = await async_test_client.get("/some_endpoint_that_uses_utility")
+    assert response.status_code == falcon.HTTP_INTERNAL_SERVER_ERROR
+    assert "Simulated problem" in response.json().get("description", "")
+```
+
     \# If testing a function that should directly raise an exception (not caught by Falcon yet):  
     \# async def my\_raw\_async\_function():  
     \#    raise TypeError("Specific type error")  
