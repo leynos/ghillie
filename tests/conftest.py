@@ -103,7 +103,7 @@ async def _try_setup_pglite(
 
 async def _setup_sqlite(tmp_path: Path) -> AsyncEngine:
     """Create a SQLite engine and initialise all storage layers."""
-    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'bronze.db'}")
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'ghillie_test.db'}")
     try:
         await _init_all_storage(engine)
     except Exception:
