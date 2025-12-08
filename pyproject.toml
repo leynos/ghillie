@@ -97,6 +97,11 @@ datetime = "dt"
 "msgspec.json" = "msjson"
 typing = "typ"
 
+[tool.ruff.lint.flake8-type-checking]
+# SQLAlchemy ORM models require type annotations at runtime for relationship()
+# and mapped_column() introspection.
+runtime-evaluated-base-classes = ["ghillie.bronze.storage.Base"]
+
 [tool.ruff.lint.mccabe]
 max-complexity = 9
 

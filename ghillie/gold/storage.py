@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime as dt  # noqa: TC003
+import datetime as dt
 import enum
 import typing as typ
 import uuid
@@ -25,7 +25,9 @@ from ghillie.common.time import utcnow
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
 
-    from ghillie.silver.storage import EventFact, Repository
+    # Imported for type annotations only; relationship() uses string targets to
+    # avoid circular imports between silver and gold modules.
+    from ghillie.silver.storage import EventFact, Repository  # noqa: TC004
 
 
 class ReportScope(enum.StrEnum):
