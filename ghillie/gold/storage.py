@@ -109,6 +109,7 @@ class Report(Base):
     )
     model: Mapped[str | None] = mapped_column(String(128), default=None)
     human_text: Mapped[str | None] = mapped_column(Text(), default=None)
+    # JSON payload has dynamic structure; Any is required for flexibility.
     machine_summary: Mapped[dict[str, typ.Any]] = mapped_column(
         JSON, default=dict, nullable=False
     )

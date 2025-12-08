@@ -92,9 +92,13 @@ async def session_factory(
 
     if engine is None:
         engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'bronze.db'}")
-        await init_bronze_storage(engine)
-        await init_silver_storage(engine)
-        await init_gold_storage(engine)
+        try:
+            await init_bronze_storage(engine)
+            await init_silver_storage(engine)
+            await init_gold_storage(engine)
+        except Exception:
+            await engine.dispose()
+            raise
 
     factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
