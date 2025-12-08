@@ -112,7 +112,7 @@ class Report(Base):
     )
 
     repository: Mapped[Repository | None] = relationship(
-        back_populates="reports", foreign_keys=[repository_id]
+        "Repository", back_populates="reports", foreign_keys=[repository_id]
     )
     project: Mapped[ReportProject | None] = relationship(
         back_populates="reports", foreign_keys=[project_id]
@@ -142,7 +142,7 @@ class ReportCoverage(Base):
     )
 
     report: Mapped[Report] = relationship(back_populates="coverage_records")
-    event_fact: Mapped[EventFact] = relationship()
+    event_fact: Mapped[EventFact] = relationship("EventFact")
 
 
 async def init_gold_storage(engine: AsyncEngine) -> None:

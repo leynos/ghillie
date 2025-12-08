@@ -55,7 +55,7 @@ class Repository(Base):
     documentation_changes: Mapped[list[DocumentationChange]] = relationship(
         back_populates="repository"
     )
-    reports: Mapped[list[Report]] = relationship(back_populates="repository")
+    reports: Mapped[list[Report]] = relationship("Report", back_populates="repository")
 
 
 class Commit(Base):

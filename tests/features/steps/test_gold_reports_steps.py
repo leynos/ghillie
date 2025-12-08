@@ -63,7 +63,20 @@ def given_empty_store(session_factory: async_sessionmaker[AsyncSession]) -> Gold
 def _commit_envelope(
     repo_slug: str, commit_sha: str, occurred_at: dt.datetime
 ) -> RawEventEnvelope:
-    """Construct a commit event envelope used in repository-scope tests."""
+    """Construct a commit event envelope used in repository-scope tests.
+
+    Args:
+        repo_slug: Repository identifier in 'owner/name' format.
+        commit_sha: Commit SHA to embed in the envelope.
+        occurred_at: Timezone-aware timestamp for the event.
+
+    Raises:
+        ValueError: If repo_slug is not in 'owner/name' format.
+
+    """
+    if repo_slug.count("/") != 1:
+        msg = f"Expected 'owner/name' format, got: {repo_slug}"
+        raise ValueError(msg)
     owner, name = repo_slug.split("/")
     return RawEventEnvelope(
         source_system="github",
