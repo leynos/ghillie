@@ -148,6 +148,6 @@ class ReportCoverage(Base):
 
 
 async def init_gold_storage(engine: AsyncEngine) -> None:
-    """Create Gold tables registered with the shared Base if absent."""
+    """Create all tables registered with Base if they are absent."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

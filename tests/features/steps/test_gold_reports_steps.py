@@ -240,6 +240,6 @@ def then_project_report_persists_scope_and_summary(gold_context: GoldContext) ->
                     select(Report).where(Report.project_id == project.id)
                 )
             ).all()
-            assert reports[0] is report
+            assert reports[0].id == report.id
 
     asyncio.run(_assert())
