@@ -40,6 +40,10 @@ classDiagram
         +bool is_active
         +datetime created_at
         +datetime updated_at
+        +str catalogue_repository_id
+        +bool ingestion_enabled
+        +list~str~ documentation_paths
+        +datetime last_synced_at
         +list~Commit~ commits
         +list~PullRequest~ pull_requests
         +list~Issue~ issues
@@ -1199,7 +1203,50 @@ Processed commits are recorded in `catalogue_imports` for audit purposes, while
 allowing replays when operators want to reassert catalogue truth. A Dramatiq
 actor (`import_catalogue_job`) executes the importer asynchronously, and a
 `GitCatalogueWatcher` polls `git rev-parse` to enqueue new imports whenever the
-catalogue repository’s HEAD moves.
+catalogue repository's HEAD moves.
+
+### 9.2 Repository discovery and registration (Phase 1.3.a)
+
+The `RepositoryRegistryService` bridges the catalogue domain with the Silver
+layer by synchronizing catalogue repositories into the Silver `repositories`
+table. This enables controlled GitHub ingestion with per-repository toggle
+controls.
+
+**Silver Repository extensions:**
+
+- `catalogue_repository_id`: links to the source catalogue `RepositoryRecord.id`
+- `ingestion_enabled`: controls whether the ingestion worker processes this
+  repository (default `True` for catalogue repos, `False` for ad-hoc)
+- `documentation_paths`: copied from catalogue for doc change detection
+- `last_synced_at`: audit timestamp for sync freshness
+
+**Sync behavior:**
+
+1. Load catalogue `RepositoryRecord` entries for an estate via component
+   definitions.
+2. Match Silver repositories by slug (`owner/name`).
+3. Upsert: create new Silver rows or update existing ones with catalogue
+   metadata.
+4. Deactivate: repositories removed from catalogue have `ingestion_enabled` set
+   to `False` (soft disable, no deletion).
+5. Ad-hoc repositories created by the Silver transformer default to
+   `ingestion_enabled=False` to prevent uncontrolled event processing.
+
+**Usage:**
+
+```python
+from ghillie.registry import RepositoryRegistryService
+
+service = RepositoryRegistryService(catalogue_session_factory, silver_session_factory)
+result = await service.sync_from_catalogue("wildside")
+
+# Toggle ingestion
+await service.disable_ingestion("leynos", "wildside-engine")
+await service.enable_ingestion("leynos", "wildside-engine")
+
+# List active repositories for ingestion worker
+repos = await service.list_active_repositories()
+```
 
 ______________________________________________________________________
 

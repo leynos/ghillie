@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from ghillie.bronze import init_bronze_storage
+from ghillie.catalogue import init_catalogue_storage
 from ghillie.gold import init_gold_storage
 from ghillie.silver import init_silver_storage
 
@@ -68,10 +69,11 @@ async def _pglite_engine(tmp_path: Path) -> typ.AsyncIterator[AsyncEngine]:
 
 
 async def _init_all_storage(engine: AsyncEngine) -> None:
-    """Initialise bronze, silver, and gold storage layers."""
+    """Initialise bronze, silver, gold, and catalogue storage layers."""
     await init_bronze_storage(engine)
     await init_silver_storage(engine)
     await init_gold_storage(engine)
+    await init_catalogue_storage(engine)
 
 
 async def _try_setup_pglite(

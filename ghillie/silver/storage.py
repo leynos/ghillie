@@ -36,6 +36,7 @@ class Repository(Base):
         UniqueConstraint(
             "github_owner", "github_name", name="uq_repositories_owner_name"
         ),
+        Index("ix_repositories_catalogue_id", "catalogue_repository_id"),
     )
 
     id: Mapped[str] = mapped_column(
@@ -51,6 +52,16 @@ class Repository(Base):
         UTCDateTime(), default=utcnow, onupdate=utcnow
     )
 
+    # Task 1.3.a: Repository discovery and registration fields
+    catalogue_repository_id: Mapped[str | None] = mapped_column(
+        String(36), default=None
+    )
+    ingestion_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    documentation_paths: Mapped[list[str]] = mapped_column(JSON, default=list)
+    last_synced_at: Mapped[dt.datetime | None] = mapped_column(
+        UTCDateTime(), default=None
+    )
+
     commits: Mapped[list[Commit]] = relationship(back_populates="repository")
     pull_requests: Mapped[list[PullRequest]] = relationship(back_populates="repository")
     issues: Mapped[list[Issue]] = relationship(back_populates="repository")
@@ -58,6 +69,11 @@ class Repository(Base):
         back_populates="repository"
     )
     reports: Mapped[list[Report]] = relationship("Report", back_populates="repository")
+
+    @property
+    def slug(self) -> str:
+        """Return owner/name to match catalogue notation."""
+        return f"{self.github_owner}/{self.github_name}"
 
 
 class Commit(Base):
