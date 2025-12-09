@@ -19,6 +19,8 @@ dev = [
     "pytest-bdd",
     "pytest-asyncio",
     "pytest-xdist",
+    "py-pglite[asyncpg]>=0.1.0",
+    "asyncpg>=0.20.0,<1.0",
     "ruff",
     "pyright",
     "ty>=0.0.1a21",
@@ -94,6 +96,11 @@ datetime = "dt"
 "unittest.mock" = "mock"
 "msgspec.json" = "msjson"
 typing = "typ"
+
+[tool.ruff.lint.flake8-type-checking]
+# SQLAlchemy ORM models require type annotations at runtime for relationship()
+# and mapped_column() introspection.
+runtime-evaluated-base-classes = ["ghillie.bronze.storage.Base"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 9

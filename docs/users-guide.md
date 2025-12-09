@@ -88,6 +88,7 @@ import asyncio
 from pathlib import Path
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy import select
 
 from ghillie.catalogue import CatalogueImporter, init_catalogue_storage
 
@@ -252,3 +253,107 @@ asyncio.run(main())
 
 Running the example leaves `repositories`, `commits`, and `event_facts`
 populated for the pilot repository without duplicating rows on replay.
+
+## Gold report metadata (Phase 1.2)
+
+The Gold layer now persists report metadata alongside the Silver entities but
+separate from raw GitHub payloads. Reports capture:
+
+- `scope`: `repository`, `project`, or `estate`.
+- `window_start` / `window_end`: the reporting window, enforced so end is after
+  start.
+- `model`, `human_text`, and `machine_summary`: which generator produced the
+  report and the stored Markdown plus a JSON machine summary.
+
+Repository reports link to `repositories.id`; project reports link to
+`report_projects.id` (a lightweight dimension keyed by `key` so reporting is
+decoupled from the catalogue database). `report_coverage` tracks which
+`event_facts` have been consumed, allowing replays without double counting
+events.
+
+### Creating a report with coverage
+
+```python
+import asyncio
+import datetime as dt
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from ghillie.bronze import RawEventEnvelope, RawEventWriter, init_bronze_storage
+from ghillie.gold import (
+    Report,
+    ReportCoverage,
+    ReportProject,
+    ReportScope,
+    init_gold_storage,
+)
+from ghillie.silver import EventFact, RawEventTransformer, init_silver_storage
+
+
+async def main() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///gold.db")
+    await init_bronze_storage(engine)
+    await init_silver_storage(engine)
+    await init_gold_storage(engine)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    writer = RawEventWriter(session_factory)
+    await writer.ingest(
+        RawEventEnvelope(
+            source_system="github",
+            source_event_id="commit-1",
+            event_type="github.commit",
+            repo_external_id="octo/reef",
+            occurred_at=dt.datetime.now(dt.timezone.utc),
+            payload={
+                "sha": "abc123",
+                "message": "docs: refresh roadmap",
+                "repo_owner": "octo",
+                "repo_name": "reef",
+                "default_branch": "main",
+                "committed_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+            },
+        )
+    )
+
+    transformer = RawEventTransformer(session_factory)
+    await transformer.process_pending()
+
+    async with session_factory() as session:
+        event_fact = await session.scalar(select(EventFact))
+        project = ReportProject(key="wildside", name="Wildside")
+
+        report = Report(
+            scope=ReportScope.PROJECT,
+            project_id=project.id,
+            window_start=dt.datetime(2024, 7, 1, tzinfo=dt.timezone.utc),
+            window_end=dt.datetime(2024, 7, 8, tzinfo=dt.timezone.utc),
+            model="gpt-5.1-thinking",
+            human_text="# Weekly status\n\n- refreshed roadmap",
+            machine_summary={"status": "on_track"},
+        )
+        if event_fact:
+            report.coverage_records.append(
+                ReportCoverage(event_fact_id=event_fact.id)
+            )
+
+        session.add_all([project, report])
+        await session.commit()
+
+
+asyncio.run(main())
+```
+
+The example records both the report metadata and the event coverage. Because
+coverage references `event_facts`, reprocessing the same raw events does not
+create duplicate coverage rows.
+
+### Running tests against Postgres with py-pglite
+
+The test fixtures now attempt to start a py-pglite Postgres instance by default
+so behavioural and unit tests exercise real Postgres semantics. If py-pglite
+cannot start (for example, Node.js is missing), the fixtures automatically fall
+back to SQLite to keep the suite runnable. To force SQLite explicitly, set
+`GHILLIE_TEST_DB=sqlite` before invoking `make test`. See
+`docs/testing-sqlalchemy-with-pytest-and-py-pglite.md` for full guidance.

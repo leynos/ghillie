@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime as dt  # noqa: TC003
+import datetime as dt
 import typing as typ
 import uuid
 
@@ -22,6 +22,10 @@ from ghillie.common.time import utcnow
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
+
+    # Imported for type annotations only; relationship() uses string targets to
+    # avoid circular imports between silver and gold modules.
+    from ghillie.gold.storage import Report  # noqa: TC004
 
 
 class Repository(Base):
@@ -53,6 +57,7 @@ class Repository(Base):
     documentation_changes: Mapped[list[DocumentationChange]] = relationship(
         back_populates="repository"
     )
+    reports: Mapped[list[Report]] = relationship("Report", back_populates="repository")
 
 
 class Commit(Base):
