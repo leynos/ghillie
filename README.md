@@ -28,12 +28,14 @@ Ghillie follows the **Medallion architecture** pattern, progressively refining
 data through three layers:
 
 - **Bronze** – Raw, append-only event storage. GitHub payloads land here
-  unmodified, preserving auditability and enabling replay.
+  unmodified, preserving auditability and enabling replay. Use this layer to
+  debug ingestion or replay historical data.
 - **Silver** – Refined entity tables. Deterministic transformers convert raw
   events into structured records: repositories, commits, pull requests, issues,
-  and documentation changes.
+  and documentation changes. Query this layer for structured activity data.
 - **Gold** – Aggregated intelligence. Report metadata, coverage tracking, and
-  the machine summaries that power status narratives.
+  the machine summaries that power status narratives. Consume this layer for
+  dashboards, notifications, and status pages.
 
 This separation lets us reprocess historical data, debug transformation logic,
 and evolve the schema without losing the original signals.
