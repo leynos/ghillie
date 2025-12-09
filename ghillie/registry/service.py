@@ -163,29 +163,63 @@ class RepositoryRegistryService:
                 )
                 if changed:
                     result.repositories_updated += 1
-            else:
-                # Create new Silver repository
-                silver_repo = Repository(
-                    github_owner=cat_repo.owner,
-                    github_name=cat_repo.name,
-                    default_branch=cat_repo.default_branch,
-                    estate_id=estate_id,
-                    catalogue_repository_id=cat_repo.id,
-                    ingestion_enabled=cat_repo.is_active,
-                    documentation_paths=list(cat_repo.documentation_paths),
-                    last_synced_at=now,
-                )
-                session.add(silver_repo)
-                result.repositories_created += 1
+                continue
+
+            # Create new Silver repository
+            silver_repo = self._create_silver_repository(cat_repo, estate_id, now)
+            session.add(silver_repo)
+            result.repositories_created += 1
 
         # Deactivate repositories no longer in catalogue
+        self._deactivate_removed_repositories(silver_repos, seen_slugs, now, result)
+
+    def _create_silver_repository(
+        self,
+        cat_repo: RepositoryRecord,
+        estate_id: str | None,
+        now: dt.datetime,
+    ) -> Repository:
+        """Create a new Silver repository from a catalogue record."""
+        return Repository(
+            github_owner=cat_repo.owner,
+            github_name=cat_repo.name,
+            default_branch=cat_repo.default_branch,
+            estate_id=estate_id,
+            catalogue_repository_id=cat_repo.id,
+            ingestion_enabled=cat_repo.is_active,
+            documentation_paths=list(cat_repo.documentation_paths),
+            last_synced_at=now,
+        )
+
+    def _should_deactivate_repository(
+        self,
+        slug: str,
+        silver_repo: Repository,
+        seen_slugs: set[str],
+    ) -> bool:
+        """Determine whether a Silver repository should be deactivated.
+
+        A repository should be deactivated if:
+        - It's not in the current catalogue sync (not in seen_slugs)
+        - It was previously synced from the catalogue (has catalogue_repository_id)
+        - Ingestion is currently enabled
+        """
+        return (
+            slug not in seen_slugs
+            and silver_repo.catalogue_repository_id is not None
+            and silver_repo.ingestion_enabled
+        )
+
+    def _deactivate_removed_repositories(
+        self,
+        silver_repos: dict[str, Repository],
+        seen_slugs: set[str],
+        now: dt.datetime,
+        result: SyncResult,
+    ) -> None:
+        """Deactivate repositories that are no longer in the catalogue."""
         for slug, silver_repo in silver_repos.items():
-            # Only deactivate if it was synced from catalogue (has catalogue_id)
-            if (
-                slug not in seen_slugs
-                and silver_repo.catalogue_repository_id is not None
-                and silver_repo.ingestion_enabled
-            ):
+            if self._should_deactivate_repository(slug, silver_repo, seen_slugs):
                 silver_repo.ingestion_enabled = False
                 silver_repo.last_synced_at = now
                 result.repositories_deactivated += 1

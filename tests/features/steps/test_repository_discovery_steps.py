@@ -22,6 +22,25 @@ from ghillie.silver import init_silver_storage
 from ghillie.silver.storage import Repository
 
 
+def run_async[T](coro: typ.Coroutine[typ.Any, typ.Any, T]) -> T:
+    """Run async coroutines in sync BDD step functions."""
+    return asyncio.run(coro)
+
+
+async def get_repository_by_slug(
+    session_factory: async_sessionmaker[AsyncSession], slug: str
+) -> Repository | None:
+    """Fetch a repository from Silver by owner/name slug."""
+    owner, name = slug.split("/")
+    async with session_factory() as session:
+        return await session.scalar(
+            select(Repository).where(
+                Repository.github_owner == owner,
+                Repository.github_name == name,
+            )
+        )
+
+
 class DiscoveryContext(typ.TypedDict, total=False):
     """Shared state used by BDD steps."""
 
@@ -74,7 +93,7 @@ def discovery_context(tmp_path: Path) -> typ.Iterator[DiscoveryContext]:
         await init_silver_storage(engine)
         await init_catalogue_storage(engine)
 
-    asyncio.run(_init())
+    run_async(_init())
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
     importer = CatalogueImporter(
@@ -88,7 +107,7 @@ def discovery_context(tmp_path: Path) -> typ.Iterator[DiscoveryContext]:
         "service": service,
     }
 
-    asyncio.run(engine.dispose())
+    run_async(engine.dispose())
 
 
 @given("a fresh database")
@@ -107,7 +126,7 @@ def import_catalogue(discovery_context: DiscoveryContext, path: str) -> None:
         importer = discovery_context["importer"]
         await importer.import_path(catalogue_path, commit_sha="bdd-test")
 
-    asyncio.run(_import())
+    run_async(_import())
 
 
 @given("the repository registry syncs from catalogue")
@@ -119,7 +138,7 @@ def sync_registry(discovery_context: DiscoveryContext) -> None:
         service = discovery_context["service"]
         return await service.sync_from_catalogue("bdd")
 
-    discovery_context["sync_result"] = asyncio.run(_sync())
+    discovery_context["sync_result"] = run_async(_sync())
 
 
 @when(parsers.parse('repository "{slug}" is removed from catalogue'))
@@ -138,7 +157,7 @@ def remove_from_catalogue(discovery_context: DiscoveryContext, slug: str) -> Non
             if repo:
                 await session.delete(repo)
 
-    asyncio.run(_remove())
+    run_async(_remove())
 
 
 @given(parsers.parse('ingestion is disabled for "{slug}"'))
@@ -151,7 +170,7 @@ def disable_ingestion(discovery_context: DiscoveryContext, slug: str) -> None:
         service = discovery_context["service"]
         await service.disable_ingestion(owner, name)
 
-    asyncio.run(_disable())
+    run_async(_disable())
 
 
 @when(parsers.parse('ingestion is enabled for "{slug}"'))
@@ -163,7 +182,7 @@ def enable_ingestion(discovery_context: DiscoveryContext, slug: str) -> None:
         service = discovery_context["service"]
         await service.enable_ingestion(owner, name)
 
-    asyncio.run(_enable())
+    run_async(_enable())
 
 
 @when("listing active repositories for ingestion")
@@ -174,108 +193,49 @@ def list_active_repos(discovery_context: DiscoveryContext) -> None:
         service = discovery_context["service"]
         return await service.list_active_repositories()
 
-    discovery_context["active_repos"] = asyncio.run(_list())
+    discovery_context["active_repos"] = run_async(_list())
 
 
 @then(parsers.parse('the Silver layer contains repository "{slug}"'))
 def silver_contains_repo(discovery_context: DiscoveryContext, slug: str) -> None:
     """Verify the repository exists in Silver."""
-    owner, name = slug.split("/")
-
-    async def _check() -> None:
-        async with discovery_context["session_factory"]() as session:
-            repo = await session.scalar(
-                select(Repository).where(
-                    Repository.github_owner == owner,
-                    Repository.github_name == name,
-                )
-            )
-            assert repo is not None, f"Repository {slug} not found in Silver"
-
-    asyncio.run(_check())
+    repo = run_async(get_repository_by_slug(discovery_context["session_factory"], slug))
+    assert repo is not None, f"Repository {slug} not found in Silver"
 
 
 @then(parsers.parse('repository "{slug}" has ingestion enabled'))
 def repo_ingestion_enabled(discovery_context: DiscoveryContext, slug: str) -> None:
     """Verify the repository has ingestion enabled."""
-    owner, name = slug.split("/")
-
-    async def _check() -> None:
-        async with discovery_context["session_factory"]() as session:
-            repo = await session.scalar(
-                select(Repository).where(
-                    Repository.github_owner == owner,
-                    Repository.github_name == name,
-                )
-            )
-            assert repo is not None, f"Repository {slug} not found"
-            assert repo.ingestion_enabled is True, (
-                f"Expected ingestion_enabled=True for {slug}"
-            )
-
-    asyncio.run(_check())
+    repo = run_async(get_repository_by_slug(discovery_context["session_factory"], slug))
+    assert repo is not None, f"Repository {slug} not found"
+    assert repo.ingestion_enabled is True, f"Expected ingestion_enabled=True for {slug}"
 
 
 @then(parsers.parse('repository "{slug}" has ingestion disabled'))
 def repo_ingestion_disabled(discovery_context: DiscoveryContext, slug: str) -> None:
     """Verify the repository has ingestion disabled."""
-    owner, name = slug.split("/")
-
-    async def _check() -> None:
-        async with discovery_context["session_factory"]() as session:
-            repo = await session.scalar(
-                select(Repository).where(
-                    Repository.github_owner == owner,
-                    Repository.github_name == name,
-                )
-            )
-            assert repo is not None, f"Repository {slug} not found"
-            assert repo.ingestion_enabled is False, (
-                f"Expected ingestion_enabled=False for {slug}"
-            )
-
-    asyncio.run(_check())
+    repo = run_async(get_repository_by_slug(discovery_context["session_factory"], slug))
+    assert repo is not None, f"Repository {slug} not found"
+    assert repo.ingestion_enabled is False, (
+        f"Expected ingestion_enabled=False for {slug}"
+    )
 
 
 @then(parsers.parse('repository "{slug}" still exists in Silver'))
 def repo_still_exists(discovery_context: DiscoveryContext, slug: str) -> None:
     """Verify the repository still exists in Silver (was not deleted)."""
-    owner, name = slug.split("/")
-
-    async def _check() -> None:
-        async with discovery_context["session_factory"]() as session:
-            repo = await session.scalar(
-                select(Repository).where(
-                    Repository.github_owner == owner,
-                    Repository.github_name == name,
-                )
-            )
-            assert repo is not None, f"Repository {slug} should still exist in Silver"
-
-    asyncio.run(_check())
+    repo = run_async(get_repository_by_slug(discovery_context["session_factory"], slug))
+    assert repo is not None, f"Repository {slug} should still exist in Silver"
 
 
 @then(parsers.parse('repository "{slug}" has documentation paths from catalogue'))
 def repo_has_doc_paths(discovery_context: DiscoveryContext, slug: str) -> None:
     """Verify the repository has documentation paths from catalogue."""
-    owner, name = slug.split("/")
-
-    async def _check() -> None:
-        async with discovery_context["session_factory"]() as session:
-            repo = await session.scalar(
-                select(Repository).where(
-                    Repository.github_owner == owner,
-                    Repository.github_name == name,
-                )
-            )
-            assert repo is not None, f"Repository {slug} not found"
-            assert len(repo.documentation_paths) > 0, (
-                f"Expected documentation_paths for {slug}"
-            )
-            # leynos/wildside should have docs/roadmap.md and docs/adr/
-            assert "docs/roadmap.md" in repo.documentation_paths
-
-    asyncio.run(_check())
+    repo = run_async(get_repository_by_slug(discovery_context["session_factory"], slug))
+    assert repo is not None, f"Repository {slug} not found"
+    assert len(repo.documentation_paths) > 0, f"Expected documentation_paths for {slug}"
+    # leynos/wildside should have docs/roadmap.md and docs/adr/
+    assert "docs/roadmap.md" in repo.documentation_paths
 
 
 @then(parsers.parse('the result includes "{slug}"'))
