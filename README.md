@@ -98,4 +98,4 @@ The [users' guide](docs/users-guide.md) walks you through:
 
 [ISC](LICENSE)
 
-[concordat]: https://github.com/example/concordat
+[concordat]: https://github.com/leynos/concordat
