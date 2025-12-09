@@ -94,4 +94,8 @@ The [users' guide](docs/users-guide.md) walks you through:
 - **Concordat** – The governance control plane that Ghillie complements. Ghillie
   ingests Concordat events and surfaces compliance state in reports (Phase 4).
 
+## Licence
+
+[ISC](LICENSE)
+
 [concordat]: https://github.com/example/concordat
