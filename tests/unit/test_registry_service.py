@@ -20,7 +20,70 @@ from ghillie.registry import (
 from ghillie.silver.storage import Repository
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+    # Type aliases for fixture return types
+    CreateRepoFn = cabc.Callable[..., cabc.Coroutine[typ.Any, typ.Any, None]]
+    FetchRepoFn = cabc.Callable[
+        [async_sessionmaker[AsyncSession], str, str],
+        cabc.Coroutine[typ.Any, typ.Any, Repository | None],
+    ]
+
+
+@pytest.fixture
+def create_repo() -> CreateRepoFn:
+    """Return a factory for creating test repositories."""
+
+    async def _create(  # noqa: PLR0913
+        session_factory: async_sessionmaker[AsyncSession],
+        owner: str,
+        name: str,
+        *,
+        ingestion_enabled: bool = True,
+        default_branch: str = "main",
+        **kwargs: typ.Any,  # noqa: ANN401
+    ) -> None:
+        async with session_factory() as session, session.begin():
+            repo = Repository(
+                github_owner=owner,
+                github_name=name,
+                default_branch=default_branch,
+                ingestion_enabled=ingestion_enabled,
+                **kwargs,
+            )
+            session.add(repo)
+
+    return _create
+
+
+@pytest.fixture
+def fetch_repo() -> FetchRepoFn:
+    """Return a factory for fetching repositories by owner/name."""
+
+    async def _fetch(
+        session_factory: async_sessionmaker[AsyncSession],
+        owner: str,
+        name: str,
+    ) -> Repository | None:
+        async with session_factory() as session:
+            return await session.scalar(
+                select(Repository).where(
+                    Repository.github_owner == owner,
+                    Repository.github_name == name,
+                )
+            )
+
+    return _fetch
+
+
+@pytest.fixture
+def registry_service(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> RepositoryRegistryService:
+    """Return a RepositoryRegistryService instance for testing."""
+    return RepositoryRegistryService(session_factory, session_factory)
 
 
 @pytest.mark.asyncio
@@ -146,87 +209,57 @@ async def test_sync_deactivates_removed_catalogue_repository(
 @pytest.mark.asyncio
 async def test_enable_ingestion_updates_flag(
     session_factory: async_sessionmaker[AsyncSession],
+    create_repo: CreateRepoFn,
+    fetch_repo: FetchRepoFn,
+    registry_service: RepositoryRegistryService,
 ) -> None:
     """enable_ingestion() sets the flag to True."""
     # Setup
-    async with session_factory() as session, session.begin():
-        repo = Repository(
-            github_owner="test-org",
-            github_name="test-repo",
-            default_branch="main",
-            ingestion_enabled=False,
-        )
-        session.add(repo)
+    await create_repo(session_factory, "test-org", "test-repo", ingestion_enabled=False)
 
     # Execute
-    service = RepositoryRegistryService(session_factory, session_factory)
-    changed = await service.enable_ingestion("test-org", "test-repo")
+    changed = await registry_service.enable_ingestion("test-org", "test-repo")
 
     # Verify
     assert changed is True
-
-    async with session_factory() as session:
-        repo = await session.scalar(
-            select(Repository).where(
-                Repository.github_owner == "test-org",
-                Repository.github_name == "test-repo",
-            )
-        )
-        assert repo is not None
-        assert repo.ingestion_enabled is True
+    repo = await fetch_repo(session_factory, "test-org", "test-repo")
+    assert repo is not None
+    assert repo.ingestion_enabled is True
 
 
 @pytest.mark.asyncio
 async def test_disable_ingestion_updates_flag(
     session_factory: async_sessionmaker[AsyncSession],
+    create_repo: CreateRepoFn,
+    fetch_repo: FetchRepoFn,
+    registry_service: RepositoryRegistryService,
 ) -> None:
     """disable_ingestion() sets the flag to False."""
     # Setup
-    async with session_factory() as session, session.begin():
-        repo = Repository(
-            github_owner="test-org",
-            github_name="test-repo",
-            default_branch="main",
-            ingestion_enabled=True,
-        )
-        session.add(repo)
+    await create_repo(session_factory, "test-org", "test-repo", ingestion_enabled=True)
 
     # Execute
-    service = RepositoryRegistryService(session_factory, session_factory)
-    changed = await service.disable_ingestion("test-org", "test-repo")
+    changed = await registry_service.disable_ingestion("test-org", "test-repo")
 
     # Verify
     assert changed is True
-
-    async with session_factory() as session:
-        repo = await session.scalar(
-            select(Repository).where(
-                Repository.github_owner == "test-org",
-                Repository.github_name == "test-repo",
-            )
-        )
-        assert repo is not None
-        assert repo.ingestion_enabled is False
+    repo = await fetch_repo(session_factory, "test-org", "test-repo")
+    assert repo is not None
+    assert repo.ingestion_enabled is False
 
 
 @pytest.mark.asyncio
 async def test_enable_ingestion_returns_false_when_already_enabled(
     session_factory: async_sessionmaker[AsyncSession],
+    create_repo: CreateRepoFn,
+    registry_service: RepositoryRegistryService,
 ) -> None:
     """enable_ingestion() returns False when already enabled."""
     # Setup
-    async with session_factory() as session, session.begin():
-        repo = Repository(
-            github_owner="test-org",
-            github_name="test-repo",
-            default_branch="main",
-            ingestion_enabled=True,
-        )
-        session.add(repo)
+    await create_repo(session_factory, "test-org", "test-repo", ingestion_enabled=True)
 
     # Execute
-    service = RepositoryRegistryService(session_factory, session_factory)
-    changed = await service.enable_ingestion("test-org", "test-repo")
+    changed = await registry_service.enable_ingestion("test-org", "test-repo")
 
     # Verify
     assert changed is False
@@ -248,30 +281,16 @@ async def test_enable_ingestion_raises_for_missing_repo(
 @pytest.mark.asyncio
 async def test_list_active_repositories_respects_ingestion_flag(
     session_factory: async_sessionmaker[AsyncSession],
+    create_repo: CreateRepoFn,
+    registry_service: RepositoryRegistryService,
 ) -> None:
     """Only repositories with ingestion_enabled=True are returned."""
     # Setup
-    async with session_factory() as session, session.begin():
-        session.add(
-            Repository(
-                github_owner="org",
-                github_name="enabled-repo",
-                default_branch="main",
-                ingestion_enabled=True,
-            )
-        )
-        session.add(
-            Repository(
-                github_owner="org",
-                github_name="disabled-repo",
-                default_branch="main",
-                ingestion_enabled=False,
-            )
-        )
+    await create_repo(session_factory, "org", "enabled-repo", ingestion_enabled=True)
+    await create_repo(session_factory, "org", "disabled-repo", ingestion_enabled=False)
 
     # Execute
-    service = RepositoryRegistryService(session_factory, session_factory)
-    repos = await service.list_active_repositories()
+    repos = await registry_service.list_active_repositories()
 
     # Verify
     slugs = {repo.slug for repo in repos}
@@ -282,30 +301,16 @@ async def test_list_active_repositories_respects_ingestion_flag(
 @pytest.mark.asyncio
 async def test_list_all_repositories_includes_disabled(
     session_factory: async_sessionmaker[AsyncSession],
+    create_repo: CreateRepoFn,
+    registry_service: RepositoryRegistryService,
 ) -> None:
     """list_all_repositories() includes disabled repositories."""
     # Setup
-    async with session_factory() as session, session.begin():
-        session.add(
-            Repository(
-                github_owner="org",
-                github_name="enabled-repo",
-                default_branch="main",
-                ingestion_enabled=True,
-            )
-        )
-        session.add(
-            Repository(
-                github_owner="org",
-                github_name="disabled-repo",
-                default_branch="main",
-                ingestion_enabled=False,
-            )
-        )
+    await create_repo(session_factory, "org", "enabled-repo", ingestion_enabled=True)
+    await create_repo(session_factory, "org", "disabled-repo", ingestion_enabled=False)
 
     # Execute
-    service = RepositoryRegistryService(session_factory, session_factory)
-    repos = await service.list_all_repositories()
+    repos = await registry_service.list_all_repositories()
 
     # Verify
     slugs = {repo.slug for repo in repos}
@@ -316,23 +321,21 @@ async def test_list_all_repositories_includes_disabled(
 @pytest.mark.asyncio
 async def test_get_repository_by_slug_returns_info(
     session_factory: async_sessionmaker[AsyncSession],
+    create_repo: CreateRepoFn,
+    registry_service: RepositoryRegistryService,
 ) -> None:
     """get_repository_by_slug() returns RepositoryInfo for existing repo."""
     # Setup
-    async with session_factory() as session, session.begin():
-        session.add(
-            Repository(
-                github_owner="test-org",
-                github_name="test-repo",
-                default_branch="main",
-                ingestion_enabled=True,
-                documentation_paths=["docs/roadmap.md"],
-            )
-        )
+    await create_repo(
+        session_factory,
+        "test-org",
+        "test-repo",
+        ingestion_enabled=True,
+        documentation_paths=["docs/roadmap.md"],
+    )
 
     # Execute
-    service = RepositoryRegistryService(session_factory, session_factory)
-    repo = await service.get_repository_by_slug("test-org/test-repo")
+    repo = await registry_service.get_repository_by_slug("test-org/test-repo")
 
     # Verify
     assert repo is not None
