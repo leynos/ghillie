@@ -262,6 +262,39 @@ class RepositoryRegistryService:
 
         return changed
 
+    async def _list_repositories(
+        self,
+        estate_id: str | None = None,
+        *,
+        ingestion_enabled: bool | None = None,
+    ) -> list[RepositoryInfo]:
+        """List repositories with optional filters.
+
+        Parameters
+        ----------
+        estate_id:
+            Optional filter to limit results to a specific estate.
+        ingestion_enabled:
+            Optional filter for ingestion status. If None, return all repositories.
+
+        Returns
+        -------
+        list[RepositoryInfo]
+            Repository metadata matching the filters.
+
+        """
+        async with self._silver_sf() as session:
+            query = select(Repository)
+
+            if ingestion_enabled is not None:
+                query = query.where(Repository.ingestion_enabled.is_(ingestion_enabled))
+
+            if estate_id is not None:
+                query = query.where(Repository.estate_id == estate_id)
+
+            repos = await session.scalars(query)
+            return [self._to_repository_info(repo) for repo in repos]
+
     async def list_active_repositories(
         self, estate_id: str | None = None
     ) -> list[RepositoryInfo]:
@@ -278,13 +311,7 @@ class RepositoryRegistryService:
             Repository metadata needed by the ingestion worker.
 
         """
-        async with self._silver_sf() as session:
-            query = select(Repository).where(Repository.ingestion_enabled.is_(True))
-            if estate_id is not None:
-                query = query.where(Repository.estate_id == estate_id)
-
-            repos = await session.scalars(query)
-            return [self._to_repository_info(repo) for repo in repos]
+        return await self._list_repositories(estate_id, ingestion_enabled=True)
 
     async def list_all_repositories(
         self, estate_id: str | None = None
@@ -302,13 +329,7 @@ class RepositoryRegistryService:
             Repository metadata for all repositories.
 
         """
-        async with self._silver_sf() as session:
-            query = select(Repository)
-            if estate_id is not None:
-                query = query.where(Repository.estate_id == estate_id)
-
-            repos = await session.scalars(query)
-            return [self._to_repository_info(repo) for repo in repos]
+        return await self._list_repositories(estate_id, ingestion_enabled=None)
 
     async def enable_ingestion(self, owner: str, name: str) -> bool:
         """Enable ingestion for a repository.
