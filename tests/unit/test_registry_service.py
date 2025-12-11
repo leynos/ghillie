@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import dataclasses
 import typing as typ
 from pathlib import Path
 
 import pytest
+import pytest_asyncio
 from sqlalchemy import select
 
 from ghillie.catalogue import (
@@ -31,6 +33,16 @@ if typ.TYPE_CHECKING:
         [async_sessionmaker[AsyncSession], str, str],
         cabc.Coroutine[typ.Any, typ.Any, Repository | None],
     ]
+
+
+@dataclasses.dataclass(frozen=True)
+class IngestionToggleParams:
+    """Parameters for ingestion toggle test cases."""
+
+    initial_state: bool
+    method_name: str
+    expected_state: bool
+    expect_change: bool
 
 
 @pytest.fixture
@@ -85,6 +97,24 @@ def registry_service(
 ) -> RepositoryRegistryService:
     """Return a RepositoryRegistryService instance for testing."""
     return RepositoryRegistryService(session_factory, session_factory)
+
+
+@pytest_asyncio.fixture
+async def create_estates(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> tuple[str, str]:
+    """Create two test estates and return their IDs."""
+    async with session_factory() as session, session.begin():
+        estate_a = Estate(key="estate-a", name="Estate A")
+        estate_b = Estate(key="estate-b", name="Estate B")
+        session.add_all([estate_a, estate_b])
+
+    async with session_factory() as session:
+        estate_a = await session.scalar(select(Estate).where(Estate.key == "estate-a"))
+        estate_b = await session.scalar(select(Estate).where(Estate.key == "estate-b"))
+        assert estate_a is not None
+        assert estate_b is not None
+        return estate_a.id, estate_b.id
 
 
 @pytest.mark.asyncio
@@ -283,10 +313,26 @@ async def test_enable_ingestion_raises_for_missing_repo(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("initial_state", "method_name", "expected_state", "expect_change"),
+    "params",
     [
-        pytest.param(False, "enable_ingestion", True, True, id="enable"),
-        pytest.param(True, "disable_ingestion", False, True, id="disable"),
+        pytest.param(
+            IngestionToggleParams(
+                initial_state=False,
+                method_name="enable_ingestion",
+                expected_state=True,
+                expect_change=True,
+            ),
+            id="enable",
+        ),
+        pytest.param(
+            IngestionToggleParams(
+                initial_state=True,
+                method_name="disable_ingestion",
+                expected_state=False,
+                expect_change=True,
+            ),
+            id="disable",
+        ),
     ],
 )
 async def test_ingestion_toggle_updates_flag(  # noqa: PLR0913
@@ -294,26 +340,23 @@ async def test_ingestion_toggle_updates_flag(  # noqa: PLR0913
     create_repo: CreateRepoFn,
     fetch_repo: FetchRepoFn,
     registry_service: RepositoryRegistryService,
-    initial_state: bool,  # noqa: FBT001
-    method_name: str,
-    expected_state: bool,  # noqa: FBT001
-    expect_change: bool,  # noqa: FBT001
+    params: IngestionToggleParams,
 ) -> None:
     """Test enable/disable ingestion methods update the flag correctly."""
     # Setup
     await create_repo(
-        session_factory, "test-org", "test-repo", ingestion_enabled=initial_state
+        session_factory, "test-org", "test-repo", ingestion_enabled=params.initial_state
     )
 
     # Execute
-    method = getattr(registry_service, method_name)
+    method = getattr(registry_service, params.method_name)
     changed = await method("test-org", "test-repo")
 
     # Verify
-    assert changed is expect_change
+    assert changed is params.expect_change
     repo = await fetch_repo(session_factory, "test-org", "test-repo")
     assert repo is not None
-    assert repo.ingestion_enabled is expected_state
+    assert repo.ingestion_enabled is params.expected_state
 
 
 @pytest.mark.asyncio
@@ -351,84 +394,49 @@ async def test_list_repositories_filtering(  # noqa: PLR0913
 
 
 @pytest.mark.asyncio
-async def test_list_active_repositories_filters_by_estate_id(
+@pytest.mark.parametrize(
+    ("method_name", "create_disabled_repo"),
+    [
+        pytest.param("list_active_repositories", False, id="active_only"),
+        pytest.param("list_all_repositories", True, id="all"),
+    ],
+)
+async def test_list_repositories_filters_by_estate_id(  # noqa: PLR0913
     session_factory: async_sessionmaker[AsyncSession],
     create_repo: CreateRepoFn,
+    create_estates: tuple[str, str],
     registry_service: RepositoryRegistryService,
+    method_name: str,
+    create_disabled_repo: bool,  # noqa: FBT001
 ) -> None:
-    """list_active_repositories(estate_id=...) only returns repos from that estate."""
-    # Setup - create estates
-    async with session_factory() as session, session.begin():
-        estate_a = Estate(key="estate-a", name="Estate A")
-        estate_b = Estate(key="estate-b", name="Estate B")
-        session.add_all([estate_a, estate_b])
+    """Test list methods filter by estate_id correctly."""
+    estate_a_id, estate_b_id = create_estates
 
-    # Get estate IDs
-    async with session_factory() as session:
-        estate_a = await session.scalar(select(Estate).where(Estate.key == "estate-a"))
-        estate_b = await session.scalar(select(Estate).where(Estate.key == "estate-b"))
-        assert estate_a is not None
-        assert estate_b is not None
-        estate_a_id = estate_a.id
-        estate_b_id = estate_b.id
-
-    # Create repositories in both estates (all enabled)
+    # Create repositories in both estates
     await create_repo(session_factory, "org", "estate-a-repo-1", estate_id=estate_a_id)
-    await create_repo(session_factory, "org", "estate-a-repo-2", estate_id=estate_a_id)
+    if create_disabled_repo:
+        await create_repo(
+            session_factory,
+            "org",
+            "estate-a-repo-2",
+            estate_id=estate_a_id,
+            ingestion_enabled=False,
+        )
+    else:
+        await create_repo(
+            session_factory, "org", "estate-a-repo-2", estate_id=estate_a_id
+        )
     await create_repo(session_factory, "org", "estate-b-repo-1", estate_id=estate_b_id)
 
-    # Execute - list only estate A repos
-    repos = await registry_service.list_active_repositories(estate_id=estate_a_id)
+    # Execute
+    method = getattr(registry_service, method_name)
+    repos = await method(estate_id=estate_a_id)
 
     # Verify - only repos from estate A are returned
     slugs = {repo.slug for repo in repos}
     assert "org/estate-a-repo-1" in slugs
     assert "org/estate-a-repo-2" in slugs
     assert "org/estate-b-repo-1" not in slugs
-    assert all(repo.estate_id == estate_a_id for repo in repos)
-
-
-@pytest.mark.asyncio
-async def test_list_all_repositories_filters_by_estate_id(
-    session_factory: async_sessionmaker[AsyncSession],
-    create_repo: CreateRepoFn,
-    registry_service: RepositoryRegistryService,
-) -> None:
-    """list_all_repositories(estate_id=...) only returns repos from that estate."""
-    # Setup - create estates
-    async with session_factory() as session, session.begin():
-        estate_a = Estate(key="estate-a", name="Estate A")
-        estate_b = Estate(key="estate-b", name="Estate B")
-        session.add_all([estate_a, estate_b])
-
-    # Get estate IDs
-    async with session_factory() as session:
-        estate_a = await session.scalar(select(Estate).where(Estate.key == "estate-a"))
-        estate_b = await session.scalar(select(Estate).where(Estate.key == "estate-b"))
-        assert estate_a is not None
-        assert estate_b is not None
-        estate_a_id = estate_a.id
-        estate_b_id = estate_b.id
-
-    # Create repositories in both estates (mixed enabled/disabled)
-    await create_repo(session_factory, "org", "estate-a-enabled", estate_id=estate_a_id)
-    await create_repo(
-        session_factory,
-        "org",
-        "estate-a-disabled",
-        estate_id=estate_a_id,
-        ingestion_enabled=False,
-    )
-    await create_repo(session_factory, "org", "estate-b-repo", estate_id=estate_b_id)
-
-    # Execute - list all repos from estate A
-    repos = await registry_service.list_all_repositories(estate_id=estate_a_id)
-
-    # Verify - both enabled and disabled repos from estate A, but not estate B
-    slugs = {repo.slug for repo in repos}
-    assert "org/estate-a-enabled" in slugs
-    assert "org/estate-a-disabled" in slugs
-    assert "org/estate-b-repo" not in slugs
     assert all(repo.estate_id == estate_a_id for repo in repos)
 
 
