@@ -1220,7 +1220,7 @@ controls.
 - `documentation_paths`: copied from catalogue for doc change detection
 - `last_synced_at`: audit timestamp for sync freshness
 
-**Sync behavior:**
+**Sync behaviour:**
 
 1. Load catalogue `RepositoryRecord` entries for an estate via component
    definitions.

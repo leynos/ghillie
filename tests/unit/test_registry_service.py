@@ -521,3 +521,29 @@ async def test_sync_copies_documentation_paths_from_catalogue(
         assert repo is not None
         assert "docs/roadmap.md" in repo.documentation_paths
         assert "docs/adr/" in repo.documentation_paths
+
+
+@pytest.mark.asyncio
+async def test_get_repository_by_slug_returns_none_for_invalid_format(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """get_repository_by_slug() returns None for slug without '/'."""
+    # Execute
+    service = RepositoryRegistryService(session_factory, session_factory)
+    repo = await service.get_repository_by_slug("invalid-slug")
+
+    # Verify
+    assert repo is None
+
+
+@pytest.mark.asyncio
+async def test_disable_ingestion_raises_for_missing_repo(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """disable_ingestion() raises RepositoryNotFoundError for missing repo."""
+    # Execute & Verify
+    service = RepositoryRegistryService(session_factory, session_factory)
+    with pytest.raises(RepositoryNotFoundError) as exc_info:
+        await service.disable_ingestion("nonexistent", "repo")
+
+    assert "nonexistent/repo" in str(exc_info.value)

@@ -364,6 +364,7 @@ have ingestion disabled by default.
 
 ```python
 import asyncio
+from pathlib import Path
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -380,7 +381,7 @@ async def main() -> None:
 
     # Import catalogue
     importer = CatalogueImporter(session_factory, estate_key="wildside")
-    await importer.import_path("examples/wildside-catalogue.yaml", commit_sha="v1")
+    await importer.import_path(Path("examples/wildside-catalogue.yaml"), commit_sha="v1")
 
     # Sync to Silver
     service = RepositoryRegistryService(session_factory, session_factory)
