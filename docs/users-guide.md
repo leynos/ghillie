@@ -353,10 +353,10 @@ create duplicate coverage rows.
 
 The repository registry bridges catalogue-defined repositories with the Silver
 layer ingestion pipeline. It enables controlled GitHub event ingestion by
-synchronising repositories from the catalogue and providing toggle controls for
+synchronizing repositories from the catalogue and providing toggle controls for
 enabling or disabling ingestion per repository.
 
-### Synchronising catalogue repositories to Silver
+### Synchronizing catalogue repositories to Silver
 
 The `RepositoryRegistryService` projects catalogue `RepositoryRecord` entries
 into the Silver `Repository` table. Repositories not present in the catalogue

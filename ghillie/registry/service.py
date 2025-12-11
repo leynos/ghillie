@@ -81,13 +81,12 @@ class RepositoryRegistryService:
         """
         result = SyncResult(estate_key=estate_key)
 
-        # Load catalogue repositories for the estate
-        catalogue_repos = await self._load_catalogue_repositories(estate_key)
-        if catalogue_repos is None:
+        # Load catalogue repositories and estate_id for the estate
+        load_result = await self._load_catalogue_repositories(estate_key)
+        if load_result is None:
             raise RegistrySyncError(estate_key, "Estate not found")
 
-        # Extract estate_id for linking
-        estate_id = await self._get_estate_id(estate_key)
+        catalogue_repos, estate_id = load_result
 
         # Sync to Silver
         async with self._silver_sf() as session, session.begin():
@@ -97,10 +96,10 @@ class RepositoryRegistryService:
 
     async def _load_catalogue_repositories(
         self, estate_key: str
-    ) -> dict[str, RepositoryRecord] | None:
+    ) -> tuple[dict[str, RepositoryRecord], str] | None:
         """Load all repositories from the catalogue for an estate.
 
-        Returns a dict mapping slug (owner/name) to RepositoryRecord,
+        Returns a tuple of (repos dict mapping slug to RepositoryRecord, estate_id),
         or None if the estate does not exist.
         """
         async with self._catalogue_sf() as session:
@@ -127,15 +126,7 @@ class RepositoryRegistryService:
                     if component.repository is not None:
                         repos[component.repository.slug] = component.repository
 
-            return repos
-
-    async def _get_estate_id(self, estate_key: str) -> str | None:
-        """Get the estate ID from the catalogue database."""
-        async with self._catalogue_sf() as session:
-            estate = await session.scalar(
-                select(Estate).where(Estate.key == estate_key)
-            )
-            return estate.id if estate else None
+            return repos, estate.id
 
     async def _sync_repositories(
         self,

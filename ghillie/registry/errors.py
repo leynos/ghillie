@@ -13,7 +13,8 @@ class RepositoryNotFoundError(RegistryError):
     def __init__(self, slug: str) -> None:
         """Initialise with the missing repository slug."""
         self.slug = slug
-        super().__init__(f"Repository not found: {slug}")
+        msg = f"Repository not found: {slug}"
+        super().__init__(msg)
 
 
 class RegistrySyncError(RegistryError):
@@ -23,4 +24,5 @@ class RegistrySyncError(RegistryError):
         """Initialise with the estate key and failure reason."""
         self.estate_key = estate_key
         self.reason = reason
-        super().__init__(f"Sync failed for estate {estate_key}: {reason}")
+        msg = f"Sync failed for estate {estate_key}: {reason}"
+        super().__init__(msg)
