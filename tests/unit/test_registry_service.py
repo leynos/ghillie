@@ -45,6 +45,14 @@ class IngestionToggleParams:
     expect_change: bool
 
 
+@dataclasses.dataclass(frozen=True)
+class EstateFilteringParams:
+    """Parameters for estate filtering test cases."""
+
+    method_name: str
+    create_disabled_repo: bool
+
+
 @pytest.fixture
 def create_repo() -> CreateRepoFn:
     """Return a factory for creating test repositories."""
@@ -395,10 +403,22 @@ async def test_list_repositories_filtering(  # noqa: PLR0913
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("method_name", "create_disabled_repo"),
+    "params",
     [
-        pytest.param("list_active_repositories", False, id="active_only"),
-        pytest.param("list_all_repositories", True, id="all"),
+        pytest.param(
+            EstateFilteringParams(
+                method_name="list_active_repositories",
+                create_disabled_repo=False,
+            ),
+            id="active_only",
+        ),
+        pytest.param(
+            EstateFilteringParams(
+                method_name="list_all_repositories",
+                create_disabled_repo=True,
+            ),
+            id="all",
+        ),
     ],
 )
 async def test_list_repositories_filters_by_estate_id(  # noqa: PLR0913
@@ -406,15 +426,14 @@ async def test_list_repositories_filters_by_estate_id(  # noqa: PLR0913
     create_repo: CreateRepoFn,
     create_estates: tuple[str, str],
     registry_service: RepositoryRegistryService,
-    method_name: str,
-    create_disabled_repo: bool,  # noqa: FBT001
+    params: EstateFilteringParams,
 ) -> None:
     """Test list methods filter by estate_id correctly."""
     estate_a_id, estate_b_id = create_estates
 
     # Create repositories in both estates
     await create_repo(session_factory, "org", "estate-a-repo-1", estate_id=estate_a_id)
-    if create_disabled_repo:
+    if params.create_disabled_repo:
         await create_repo(
             session_factory,
             "org",
@@ -429,7 +448,7 @@ async def test_list_repositories_filters_by_estate_id(  # noqa: PLR0913
     await create_repo(session_factory, "org", "estate-b-repo-1", estate_id=estate_b_id)
 
     # Execute
-    method = getattr(registry_service, method_name)
+    method = getattr(registry_service, params.method_name)
     repos = await method(estate_id=estate_a_id)
 
     # Verify - only repos from estate A are returned
