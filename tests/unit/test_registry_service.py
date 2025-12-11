@@ -12,6 +12,7 @@ from ghillie.catalogue import (
     CatalogueImporter,
     RepositoryRecord,
 )
+from ghillie.catalogue.storage import Estate
 from ghillie.registry import (
     RegistrySyncError,
     RepositoryNotFoundError,
@@ -204,6 +205,50 @@ async def test_sync_deactivates_removed_catalogue_repository(
         )
         assert repo is not None, "Repository should still exist in Silver"
         assert repo.ingestion_enabled is False, "Ingestion should be disabled"
+
+
+@pytest.mark.asyncio
+async def test_sync_does_not_deactivate_other_estate_repositories(
+    session_factory: async_sessionmaker[AsyncSession],
+    create_repo: CreateRepoFn,
+    fetch_repo: FetchRepoFn,
+) -> None:
+    """Syncing estate A should not deactivate repositories from estate B."""
+    # Setup - create estates
+    async with session_factory() as session, session.begin():
+        estate_a = Estate(key="estate-a", name="Estate A")
+        estate_b = Estate(key="estate-b", name="Estate B")
+        session.add_all([estate_a, estate_b])
+
+    # Get estate IDs
+    async with session_factory() as session:
+        estate_a = await session.scalar(select(Estate).where(Estate.key == "estate-a"))
+        estate_b = await session.scalar(select(Estate).where(Estate.key == "estate-b"))
+        assert estate_a is not None
+        assert estate_b is not None
+        estate_b_id = estate_b.id
+
+    # Setup - create a repository belonging to estate B
+    await create_repo(
+        session_factory,
+        "other-org",
+        "other-repo",
+        ingestion_enabled=True,
+        estate_id=estate_b_id,
+        catalogue_repository_id="cat-repo-b",
+    )
+
+    # Execute - sync estate A (which has no catalogue repos)
+    service = RepositoryRegistryService(session_factory, session_factory)
+    result = await service.sync_from_catalogue("estate-a")
+
+    # Verify - estate B's repository should NOT be deactivated
+    assert result.repositories_deactivated == 0
+
+    repo = await fetch_repo(session_factory, "other-org", "other-repo")
+    assert repo is not None
+    assert repo.ingestion_enabled is True, "Estate B repo should remain enabled"
+    assert repo.estate_id == estate_b_id
 
 
 @pytest.mark.asyncio

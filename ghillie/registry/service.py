@@ -145,8 +145,15 @@ class RepositoryRegistryService:
         result: SyncResult,
     ) -> None:
         """Project catalogue repositories into Silver, updating or creating."""
-        # Load existing Silver repositories
-        existing = await session.scalars(select(Repository))
+        # Load existing Silver repositories scoped to this estate for deactivation.
+        # We only deactivate repositories that belong to the current estate (or have
+        # no estate_id), not repositories from other estates.
+        query = select(Repository)
+        if estate_id is not None:
+            query = query.where(
+                (Repository.estate_id == estate_id) | (Repository.estate_id.is_(None))
+            )
+        existing = await session.scalars(query)
         silver_repos: dict[str, Repository] = {repo.slug: repo for repo in existing}
 
         now = utcnow()
@@ -170,7 +177,8 @@ class RepositoryRegistryService:
             session.add(silver_repo)
             result.repositories_created += 1
 
-        # Deactivate repositories no longer in catalogue
+        # Deactivate repositories no longer in catalogue (only those in silver_repos,
+        # which is already scoped to the current estate)
         self._deactivate_removed_repositories(silver_repos, seen_slugs, now, result)
 
     def _create_silver_repository(
