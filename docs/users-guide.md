@@ -411,12 +411,12 @@ for repo in active_repos:
     print(f"{repo.slug}: branch={repo.default_branch}")
 ```
 
-### Ad-hoc repositories
+### Ad hoc repositories
 
 When the Silver transformer encounters events for repositories not in the
 catalogue, it creates repository rows with `ingestion_enabled=False` and
 `catalogue_repository_id=None`. This prevents uncontrolled event processing
-while preserving historical data. To enable ingestion for ad-hoc repositories,
+while preserving historical data. To enable ingestion for ad hoc repositories,
 either add them to the catalogue and re-sync, or explicitly call
 `enable_ingestion()`.
 
