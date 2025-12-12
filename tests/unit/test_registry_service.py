@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from ghillie.catalogue import (
     CatalogueImporter,
@@ -217,15 +217,12 @@ async def test_sync_deactivates_removed_catalogue_repository(
 
     # Setup - delete the repo from catalogue
     async with session_factory() as session, session.begin():
-        cat_repo = await session.scalar(
-            select(RepositoryRecord).where(
+        await session.execute(
+            delete(RepositoryRecord).where(
                 RepositoryRecord.owner == "leynos",
                 RepositoryRecord.name == "wildside-engine",
             )
         )
-
-        if cat_repo:
-            await session.delete(cat_repo)
 
     # Execute - run sync again - should deactivate the removed repo
     result = await service.sync_from_catalogue("test")

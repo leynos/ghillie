@@ -331,6 +331,12 @@ class RepositoryRegistryService:
         list[RepositoryInfo]
             Repository metadata needed by the ingestion worker.
 
+        Notes
+        -----
+        For large deployments, prefer bounded queries by providing `limit`
+        (and `offset` for pagination) rather than loading all repositories at
+        once.
+
         """
         return await self._list_repositories(
             estate_id,
@@ -361,6 +367,12 @@ class RepositoryRegistryService:
         -------
         list[RepositoryInfo]
             Repository metadata for all repositories.
+
+        Notes
+        -----
+        For large deployments, prefer bounded queries by providing `limit`
+        (and `offset` for pagination) rather than loading all repositories at
+        once.
 
         """
         return await self._list_repositories(
