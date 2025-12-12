@@ -57,7 +57,7 @@ class Repository(Base):
     catalogue_repository_id: Mapped[str | None] = mapped_column(
         String(36), default=None
     )
-    ingestion_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    ingestion_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     documentation_paths: Mapped[list[str]] = mapped_column(JSON, default=list)
     last_synced_at: Mapped[dt.datetime | None] = mapped_column(
         UTCDateTime(), default=None

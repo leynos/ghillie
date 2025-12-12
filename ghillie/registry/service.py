@@ -27,7 +27,7 @@ from ghillie.silver.storage import Repository
 if typ.TYPE_CHECKING:
     import datetime as dt
 
-SessionFactory = async_sessionmaker[AsyncSession]
+type SessionFactory = async_sessionmaker[AsyncSession]
 
 
 class RepositoryRegistryService:
@@ -412,10 +412,10 @@ class RepositoryRegistryService:
             Repository metadata if found, None otherwise.
 
         """
-        if "/" not in slug:
+        if slug.count("/") != 1:
             return None
 
-        owner, name = slug.split("/", 1)
+        owner, name = slug.split("/")
         async with self._silver_sf() as session:
             repo = await session.scalar(
                 select(Repository).where(

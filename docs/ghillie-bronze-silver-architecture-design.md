@@ -1229,7 +1229,7 @@ controls.
    metadata.
 4. Deactivate: repositories removed from catalogue have `ingestion_enabled` set
    to `False` (soft disable, no deletion).
-5. Ad-hoc repositories created by the Silver transformer default to
+5. Ad hoc repositories created by the Silver transformer default to
    `ingestion_enabled=False` to prevent uncontrolled event processing.
 
 **Usage:**

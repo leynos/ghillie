@@ -171,7 +171,7 @@ async def _ensure_repository(
             github_owner=owner,
             github_name=name,
             default_branch=default_branch or "main",
-            # Ad-hoc repos have ingestion disabled until synced from catalogue
+            # Ad hoc repos have ingestion disabled until synced from catalogue
             catalogue_repository_id=None,
             ingestion_enabled=False,
         )
