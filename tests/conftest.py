@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 import os
@@ -90,8 +91,9 @@ async def _try_setup_pglite(
     engine_cm = None
     try:
         engine_cm = _pglite_engine(tmp_path)
-        engine = await engine_cm.__aenter__()
-        await _init_all_storage(engine)
+        async with asyncio.timeout(20):
+            engine = await engine_cm.__aenter__()
+            await _init_all_storage(engine)
     except Exception as exc:  # noqa: BLE001
         # pragma: no cover - fall back when py-pglite fails at any stage
         logger.warning("py-pglite unavailable, falling back to SQLite: %s", exc)
