@@ -200,6 +200,47 @@ async def test_sync_updates_existing_silver_repository(
 
 
 @pytest.mark.asyncio
+async def test_sync_disables_ingestion_for_inactive_catalogue_repository(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """When a catalogue repository is inactive, Silver ingestion is disabled."""
+    # Setup - import catalogue and run initial sync
+    importer = CatalogueImporter(
+        session_factory, estate_key="test", estate_name="Test Estate"
+    )
+    catalogue_path = Path("examples/wildside-catalogue.yaml")
+    await importer.import_path(catalogue_path, commit_sha="test-sync-inactive-1")
+
+    service = RepositoryRegistryService(session_factory, session_factory)
+    await service.sync_from_catalogue("test")
+
+    # Setup - mark catalogue repo inactive
+    async with session_factory() as session, session.begin():
+        cat_repo = await session.scalar(
+            select(RepositoryRecord).where(
+                RepositoryRecord.owner == "leynos",
+                RepositoryRecord.name == "wildside",
+            )
+        )
+        assert cat_repo is not None
+        cat_repo.is_active = False
+
+    # Execute - sync again, should disable ingestion in Silver
+    await service.sync_from_catalogue("test")
+
+    # Verify
+    async with session_factory() as session:
+        repo = await session.scalar(
+            select(Repository).where(
+                Repository.github_owner == "leynos",
+                Repository.github_name == "wildside",
+            )
+        )
+        assert repo is not None
+        assert repo.ingestion_enabled is False
+
+
+@pytest.mark.asyncio
 async def test_sync_deactivates_removed_catalogue_repository(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:

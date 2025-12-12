@@ -250,6 +250,11 @@ class RepositoryRegistryService:
             silver_repo.ingestion_enabled = True
             changed = True
 
+        # Disable ingestion if repo is inactive in the catalogue
+        if silver_repo.ingestion_enabled and not cat_repo.is_active:
+            silver_repo.ingestion_enabled = False
+            changed = True
+
         # Update documentation paths
         new_paths = list(cat_repo.documentation_paths)
         if silver_repo.documentation_paths != new_paths:
