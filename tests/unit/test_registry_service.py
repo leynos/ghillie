@@ -116,12 +116,7 @@ async def create_estates(
         estate_a = Estate(key="estate-a", name="Estate A")
         estate_b = Estate(key="estate-b", name="Estate B")
         session.add_all([estate_a, estate_b])
-
-    async with session_factory() as session:
-        estate_a = await session.scalar(select(Estate).where(Estate.key == "estate-a"))
-        estate_b = await session.scalar(select(Estate).where(Estate.key == "estate-b"))
-        assert estate_a is not None
-        assert estate_b is not None
+        await session.flush()
         return estate_a.id, estate_b.id
 
 
@@ -286,22 +281,11 @@ async def test_sync_deactivates_removed_catalogue_repository(
 async def test_sync_does_not_deactivate_other_estate_repositories(
     session_factory: async_sessionmaker[AsyncSession],
     create_repo: CreateRepoFn,
+    create_estates: tuple[str, str],
     fetch_repo: FetchRepoFn,
 ) -> None:
     """Syncing estate A should not deactivate repositories from estate B."""
-    # Setup - create estates
-    async with session_factory() as session, session.begin():
-        estate_a = Estate(key="estate-a", name="Estate A")
-        estate_b = Estate(key="estate-b", name="Estate B")
-        session.add_all([estate_a, estate_b])
-
-    # Get estate IDs
-    async with session_factory() as session:
-        estate_a = await session.scalar(select(Estate).where(Estate.key == "estate-a"))
-        estate_b = await session.scalar(select(Estate).where(Estate.key == "estate-b"))
-        assert estate_a is not None
-        assert estate_b is not None
-        estate_b_id = estate_b.id
+    _estate_a_id, estate_b_id = create_estates
 
     # Setup - create a repository belonging to estate B
     await create_repo(

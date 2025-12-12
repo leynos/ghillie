@@ -245,14 +245,9 @@ class RepositoryRegistryService:
             silver_repo.catalogue_repository_id = cat_repo.id
             changed = True
 
-        # Re-enable ingestion if repo is back in catalogue and was disabled
-        if not silver_repo.ingestion_enabled and cat_repo.is_active:
-            silver_repo.ingestion_enabled = True
-            changed = True
-
-        # Disable ingestion if repo is inactive in the catalogue
-        if silver_repo.ingestion_enabled and not cat_repo.is_active:
-            silver_repo.ingestion_enabled = False
+        # Sync ingestion_enabled with catalogue is_active state
+        if silver_repo.ingestion_enabled != cat_repo.is_active:
+            silver_repo.ingestion_enabled = cat_repo.is_active
             changed = True
 
         # Update documentation paths
@@ -297,7 +292,7 @@ class RepositoryRegistryService:
             query = select(Repository)
 
             if ingestion_enabled is not None:
-                query = query.where(Repository.ingestion_enabled.is_(ingestion_enabled))
+                query = query.where(Repository.ingestion_enabled == ingestion_enabled)
 
             if estate_id is not None:
                 query = query.where(Repository.estate_id == estate_id)
