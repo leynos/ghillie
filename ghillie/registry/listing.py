@@ -46,7 +46,31 @@ class NegativePaginationError(ValueError):
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class RepositoryListOptions:
-    """Repository listing options."""
+    """Repository listing options.
+
+    Attributes
+    ----------
+    estate_id
+        Type: ``str | None``. Default: ``None``.
+
+        Optional filter to limit results to a specific estate.
+    ingestion_enabled
+        Type: ``bool | None``. Default: ``None``.
+
+        Optional filter for ingestion status. When ``True``, only repositories
+        enabled for ingestion are returned. When ``False``, only disabled
+        repositories are returned. When ``None``, no ingestion filter is
+        applied.
+    limit
+        Type: ``int | None``. Default: ``None``.
+
+        Optional maximum number of ordered repositories to return.
+    offset
+        Type: ``int | None``. Default: ``None``.
+
+        Optional number of ordered rows to skip before returning results.
+
+    """
 
     estate_id: str | None = None
     ingestion_enabled: bool | None = None
