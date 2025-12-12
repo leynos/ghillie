@@ -216,7 +216,7 @@ async def test_sync_deactivates_removed_catalogue_repository(
     await service.sync_from_catalogue("test")
 
     # Setup - delete the repo from catalogue
-    async with session_factory() as session:
+    async with session_factory() as session, session.begin():
         cat_repo = await session.scalar(
             select(RepositoryRecord).where(
                 RepositoryRecord.owner == "leynos",
@@ -226,7 +226,6 @@ async def test_sync_deactivates_removed_catalogue_repository(
 
         if cat_repo:
             await session.delete(cat_repo)
-            await session.commit()
 
     # Execute - run sync again - should deactivate the removed repo
     result = await service.sync_from_catalogue("test")
@@ -320,6 +319,23 @@ async def test_enable_ingestion_raises_for_missing_repo(
 
 
 @pytest.mark.asyncio
+async def test_disable_ingestion_returns_false_when_already_disabled(
+    session_factory: async_sessionmaker[AsyncSession],
+    create_repo: CreateRepoFn,
+    registry_service: RepositoryRegistryService,
+) -> None:
+    """disable_ingestion() returns False when already disabled."""
+    # Setup
+    await create_repo(session_factory, "test-org", "test-repo", ingestion_enabled=False)
+
+    # Execute
+    changed = await registry_service.disable_ingestion("test-org", "test-repo")
+
+    # Verify
+    assert changed is False
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "params",
     [
@@ -343,10 +359,9 @@ async def test_enable_ingestion_raises_for_missing_repo(
         ),
     ],
 )
-async def test_ingestion_toggle_updates_flag(  # noqa: PLR0913
+async def test_ingestion_toggle_updates_flag(
     session_factory: async_sessionmaker[AsyncSession],
     create_repo: CreateRepoFn,
-    fetch_repo: FetchRepoFn,
     registry_service: RepositoryRegistryService,
     params: IngestionToggleParams,
 ) -> None:
@@ -362,7 +377,13 @@ async def test_ingestion_toggle_updates_flag(  # noqa: PLR0913
 
     # Verify
     assert changed is params.expect_change
-    repo = await fetch_repo(session_factory, "test-org", "test-repo")
+    async with session_factory() as session:
+        repo = await session.scalar(
+            select(Repository).where(
+                Repository.github_owner == "test-org",
+                Repository.github_name == "test-repo",
+            )
+        )
     assert repo is not None
     assert repo.ingestion_enabled is params.expected_state
 
