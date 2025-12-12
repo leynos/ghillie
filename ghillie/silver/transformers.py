@@ -156,7 +156,7 @@ async def _ensure_repository(
 ) -> Repository:
     """Fetch or create a repository row.
 
-    Repositories created ad-hoc (not synced from catalogue) have ingestion
+    Repositories created ad hoc (not synced from catalogue) have ingestion
     disabled by default to prevent uncontrolled event processing. Use the
     RepositoryRegistryService to sync catalogue repositories and enable
     ingestion.

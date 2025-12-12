@@ -291,6 +291,8 @@ class RepositoryRegistryService:
             if estate_id is not None:
                 query = query.where(Repository.estate_id == estate_id)
 
+            query = query.order_by(Repository.github_owner, Repository.github_name)
+
             repos = await session.scalars(query)
             return [self._to_repository_info(repo) for repo in repos]
 

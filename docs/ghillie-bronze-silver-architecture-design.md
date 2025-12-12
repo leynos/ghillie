@@ -1216,7 +1216,7 @@ controls.
 
 - `catalogue_repository_id`: links to the source catalogue `RepositoryRecord.id`
 - `ingestion_enabled`: controls whether the ingestion worker processes this
-  repository (default `True` for catalogue repos, `False` for ad-hoc)
+  repository (default `True` for catalogue repos, `False` for ad hoc)
 - `documentation_paths`: copied from catalogue for doc change detection
 - `last_synced_at`: audit timestamp for sync freshness
 
