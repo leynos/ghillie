@@ -481,6 +481,31 @@ async def test_list_repositories_filters_by_estate_id(  # noqa: PLR0913
 
 
 @pytest.mark.asyncio
+async def test_list_all_repositories_supports_pagination(
+    session_factory: async_sessionmaker[AsyncSession],
+    create_repo: CreateRepoFn,
+    registry_service: RepositoryRegistryService,
+) -> None:
+    """Pagination returns stable pages in owner/name order."""
+    await create_repo(session_factory, "b-org", "repo-1")
+    await create_repo(session_factory, "a-org", "repo-2")
+    await create_repo(session_factory, "a-org", "repo-1")
+    await create_repo(session_factory, "c-org", "repo-0")
+
+    first_page = await registry_service.list_all_repositories(limit=2)
+    assert [repo.slug for repo in first_page] == [
+        "a-org/repo-1",
+        "a-org/repo-2",
+    ]
+
+    second_page = await registry_service.list_all_repositories(limit=2, offset=2)
+    assert [repo.slug for repo in second_page] == [
+        "b-org/repo-1",
+        "c-org/repo-0",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_get_repository_by_slug_returns_info(
     session_factory: async_sessionmaker[AsyncSession],
     create_repo: CreateRepoFn,

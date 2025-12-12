@@ -266,6 +266,8 @@ class RepositoryRegistryService:
         estate_id: str | None = None,
         *,
         ingestion_enabled: bool | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
     ) -> list[RepositoryInfo]:
         """List repositories with optional filters.
 
@@ -275,6 +277,10 @@ class RepositoryRegistryService:
             Optional filter to limit results to a specific estate.
         ingestion_enabled:
             Optional filter for ingestion status. If None, return all repositories.
+        limit:
+            Optional maximum number of repositories to return.
+        offset:
+            Optional number of ordered rows to skip before returning results.
 
         Returns
         -------
@@ -293,11 +299,21 @@ class RepositoryRegistryService:
 
             query = query.order_by(Repository.github_owner, Repository.github_name)
 
+            if offset is not None:
+                query = query.offset(offset)
+
+            if limit is not None:
+                query = query.limit(limit)
+
             repos = await session.scalars(query)
             return [self._to_repository_info(repo) for repo in repos]
 
     async def list_active_repositories(
-        self, estate_id: str | None = None
+        self,
+        estate_id: str | None = None,
+        *,
+        limit: int | None = None,
+        offset: int | None = None,
     ) -> list[RepositoryInfo]:
         """Return all repositories enabled for ingestion.
 
@@ -305,6 +321,10 @@ class RepositoryRegistryService:
         ----------
         estate_id:
             Optional filter to limit results to a specific estate.
+        limit:
+            Optional maximum number of repositories to return.
+        offset:
+            Optional number of ordered rows to skip before returning results.
 
         Returns
         -------
@@ -312,10 +332,19 @@ class RepositoryRegistryService:
             Repository metadata needed by the ingestion worker.
 
         """
-        return await self._list_repositories(estate_id, ingestion_enabled=True)
+        return await self._list_repositories(
+            estate_id,
+            ingestion_enabled=True,
+            limit=limit,
+            offset=offset,
+        )
 
     async def list_all_repositories(
-        self, estate_id: str | None = None
+        self,
+        estate_id: str | None = None,
+        *,
+        limit: int | None = None,
+        offset: int | None = None,
     ) -> list[RepositoryInfo]:
         """Return all repositories regardless of ingestion status.
 
@@ -323,6 +352,10 @@ class RepositoryRegistryService:
         ----------
         estate_id:
             Optional filter to limit results to a specific estate.
+        limit:
+            Optional maximum number of repositories to return.
+        offset:
+            Optional number of ordered rows to skip before returning results.
 
         Returns
         -------
@@ -330,7 +363,12 @@ class RepositoryRegistryService:
             Repository metadata for all repositories.
 
         """
-        return await self._list_repositories(estate_id, ingestion_enabled=None)
+        return await self._list_repositories(
+            estate_id,
+            ingestion_enabled=None,
+            limit=limit,
+            offset=offset,
+        )
 
     async def enable_ingestion(self, owner: str, name: str) -> bool:
         """Enable ingestion for a repository.

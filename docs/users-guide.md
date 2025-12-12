@@ -410,6 +410,9 @@ await service.enable_ingestion("leynos", "wildside-engine")
 active_repos = await service.list_active_repositories()
 for repo in active_repos:
     print(f"{repo.slug}: branch={repo.default_branch}")
+
+# Paginate active repositories (ordered by owner/name)
+page = await service.list_active_repositories(limit=100, offset=0)
 ```
 
 ### Ad hoc repositories
