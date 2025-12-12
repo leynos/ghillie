@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import dataclasses
 
+from ghillie.common.slug import repo_slug
+
 
 @dataclasses.dataclass(slots=True, frozen=True)
 class RepositoryInfo:
@@ -24,7 +26,7 @@ class RepositoryInfo:
     @property
     def slug(self) -> str:
         """Return owner/name to match catalogue notation."""
-        return f"{self.owner}/{self.name}"
+        return repo_slug(self.owner, self.name)
 
 
 @dataclasses.dataclass(slots=True)

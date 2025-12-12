@@ -23,6 +23,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from ghillie.common.slug import repo_slug
 from ghillie.common.time import utcnow
 
 if typ.TYPE_CHECKING:
@@ -122,7 +123,7 @@ class RepositoryRecord(Base):
     @property
     def slug(self) -> str:
         """Return owner/name to match catalogue notation."""
-        return f"{self.owner}/{self.name}"
+        return repo_slug(self.owner, self.name)
 
 
 class ComponentRecord(Base):

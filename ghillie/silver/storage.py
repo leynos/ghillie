@@ -18,6 +18,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ghillie.bronze.storage import Base, RawEvent, UTCDateTime
+from ghillie.common.slug import repo_slug
 from ghillie.common.time import utcnow
 
 if typ.TYPE_CHECKING:
@@ -73,7 +74,7 @@ class Repository(Base):
     @property
     def slug(self) -> str:
         """Return owner/name to match catalogue notation."""
-        return f"{self.github_owner}/{self.github_name}"
+        return repo_slug(self.github_owner, self.github_name)
 
 
 class Commit(Base):
