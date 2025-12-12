@@ -5,6 +5,7 @@ from __future__ import annotations
 import typing as typ
 
 import pytest
+import pytest_asyncio
 from sqlalchemy import delete, select
 
 from ghillie.catalogue import CatalogueImporter, RepositoryRecord
@@ -17,38 +18,65 @@ if typ.TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-    from ghillie.registry import RepositoryRegistryService
+    from ghillie.registry import RepositoryRegistryService, SyncResult
     from tests.unit.conftest import CreateRepoFn, FetchRepoFn
+
+
+async def fetch_silver_repo(
+    session_factory: async_sessionmaker[AsyncSession],
+    owner: str,
+    name: str,
+) -> Repository | None:
+    """Fetch a repository from Silver by owner/name."""
+    async with session_factory() as session:
+        return await session.scalar(
+            select(Repository).where(
+                Repository.github_owner == owner,
+                Repository.github_name == name,
+            )
+        )
+
+
+@pytest_asyncio.fixture
+async def import_and_sync(
+    session_factory: async_sessionmaker[AsyncSession],
+    registry_service: RepositoryRegistryService,
+) -> typ.Callable[[Path, str], typ.Awaitable[SyncResult]]:
+    """Return a factory for importing catalogue and running sync."""
+
+    async def _import_and_sync(
+        catalogue_path: Path,
+        commit_sha: str,
+        estate_key: str = "test",
+        estate_name: str = "Test Estate",
+    ) -> SyncResult:
+        importer = CatalogueImporter(
+            session_factory, estate_key=estate_key, estate_name=estate_name
+        )
+        await importer.import_path(catalogue_path, commit_sha=commit_sha)
+        return await registry_service.sync_from_catalogue(estate_key)
+
+    return _import_and_sync
 
 
 @pytest.mark.asyncio
 async def test_sync_creates_silver_repository_from_catalogue(
     session_factory: async_sessionmaker[AsyncSession],
     registry_service: RepositoryRegistryService,
+    import_and_sync: typ.Callable[[Path, str], typ.Awaitable[SyncResult]],
     wildside_catalogue_path: Path,
 ) -> None:
     """Catalogue repositories appear in Silver after sync."""
-    importer = CatalogueImporter(
-        session_factory, estate_key="test", estate_name="Test Estate"
-    )
-    await importer.import_path(wildside_catalogue_path, commit_sha="test-sync-1")
-
-    result = await registry_service.sync_from_catalogue("test")
+    result = await import_and_sync(wildside_catalogue_path, "test-sync-1")
 
     assert result.repositories_created >= 1
     assert result.estate_key == "test"
 
-    async with session_factory() as session:
-        repo = await session.scalar(
-            select(Repository).where(
-                Repository.github_owner == "leynos",
-                Repository.github_name == "wildside",
-            )
-        )
-        assert repo is not None
-        assert repo.ingestion_enabled is True
-        assert repo.catalogue_repository_id is not None
-        assert repo.last_synced_at is not None
+    repo = await fetch_silver_repo(session_factory, "leynos", "wildside")
+    assert repo is not None
+    assert repo.ingestion_enabled is True
+    assert repo.catalogue_repository_id is not None
+    assert repo.last_synced_at is not None
 
 
 @pytest.mark.asyncio
@@ -89,17 +117,11 @@ async def test_sync_updates_existing_silver_repository(
 async def test_sync_disables_ingestion_for_inactive_catalogue_repository(
     session_factory: async_sessionmaker[AsyncSession],
     registry_service: RepositoryRegistryService,
+    import_and_sync: typ.Callable[[Path, str], typ.Awaitable[SyncResult]],
     wildside_catalogue_path: Path,
 ) -> None:
     """When a catalogue repository is inactive, Silver ingestion is disabled."""
-    importer = CatalogueImporter(
-        session_factory, estate_key="test", estate_name="Test Estate"
-    )
-    await importer.import_path(
-        wildside_catalogue_path, commit_sha="test-sync-inactive-1"
-    )
-
-    await registry_service.sync_from_catalogue("test")
+    await import_and_sync(wildside_catalogue_path, "test-sync-inactive-1")
 
     async with session_factory() as session, session.begin():
         cat_repo = await session.scalar(
@@ -113,30 +135,20 @@ async def test_sync_disables_ingestion_for_inactive_catalogue_repository(
 
     await registry_service.sync_from_catalogue("test")
 
-    async with session_factory() as session:
-        repo = await session.scalar(
-            select(Repository).where(
-                Repository.github_owner == "leynos",
-                Repository.github_name == "wildside",
-            )
-        )
-        assert repo is not None
-        assert repo.ingestion_enabled is False
+    repo = await fetch_silver_repo(session_factory, "leynos", "wildside")
+    assert repo is not None
+    assert repo.ingestion_enabled is False
 
 
 @pytest.mark.asyncio
 async def test_sync_deactivates_removed_catalogue_repository(
     session_factory: async_sessionmaker[AsyncSession],
     registry_service: RepositoryRegistryService,
+    import_and_sync: typ.Callable[[Path, str], typ.Awaitable[SyncResult]],
     wildside_catalogue_path: Path,
 ) -> None:
     """Repositories removed from catalogue get ingestion disabled."""
-    importer = CatalogueImporter(
-        session_factory, estate_key="test", estate_name="Test Estate"
-    )
-    await importer.import_path(wildside_catalogue_path, commit_sha="test-sync-3")
-
-    await registry_service.sync_from_catalogue("test")
+    await import_and_sync(wildside_catalogue_path, "test-sync-3")
 
     async with session_factory() as session, session.begin():
         await session.execute(
@@ -149,15 +161,9 @@ async def test_sync_deactivates_removed_catalogue_repository(
     result = await registry_service.sync_from_catalogue("test")
     assert result.repositories_deactivated >= 1
 
-    async with session_factory() as session:
-        repo = await session.scalar(
-            select(Repository).where(
-                Repository.github_owner == "leynos",
-                Repository.github_name == "wildside-engine",
-            )
-        )
-        assert repo is not None, "Repository should still exist in Silver"
-        assert repo.ingestion_enabled is False, "Ingestion should be disabled"
+    repo = await fetch_silver_repo(session_factory, "leynos", "wildside-engine")
+    assert repo is not None, "Repository should still exist in Silver"
+    assert repo.ingestion_enabled is False, "Ingestion should be disabled"
 
 
 @pytest.mark.asyncio
@@ -194,34 +200,23 @@ async def test_sync_raises_for_nonexistent_estate(
     registry_service: RepositoryRegistryService,
 ) -> None:
     """sync_from_catalogue() raises RegistrySyncError for missing estate."""
-    with pytest.raises(RegistrySyncError) as exc_info:
+    with pytest.raises(
+        RegistrySyncError,
+        match=r"^Sync failed for estate nonexistent-estate: Estate not found$",
+    ):
         await registry_service.sync_from_catalogue("nonexistent-estate")
-
-    assert "nonexistent-estate" in str(exc_info.value)
-    assert "Estate not found" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
 async def test_sync_copies_documentation_paths_from_catalogue(
-    session_factory: async_sessionmaker[AsyncSession],
     registry_service: RepositoryRegistryService,
+    import_and_sync: typ.Callable[[Path, str], typ.Awaitable[SyncResult]],
     wildside_catalogue_path: Path,
 ) -> None:
     """Documentation paths are copied from catalogue to Silver."""
-    importer = CatalogueImporter(
-        session_factory, estate_key="test", estate_name="Test Estate"
-    )
-    await importer.import_path(wildside_catalogue_path, commit_sha="test-docs")
+    await import_and_sync(wildside_catalogue_path, "test-docs")
 
-    await registry_service.sync_from_catalogue("test")
-
-    async with session_factory() as session:
-        repo = await session.scalar(
-            select(Repository).where(
-                Repository.github_owner == "leynos",
-                Repository.github_name == "wildside",
-            )
-        )
-        assert repo is not None
-        assert "docs/roadmap.md" in repo.documentation_paths
-        assert "docs/adr/" in repo.documentation_paths
+    repo = await registry_service.get_repository_by_slug("leynos/wildside")
+    assert repo is not None
+    assert "docs/roadmap.md" in repo.documentation_paths
+    assert "docs/adr/" in repo.documentation_paths

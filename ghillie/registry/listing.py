@@ -1,4 +1,21 @@
-"""Repository listing/query helpers."""
+"""Repository listing and query helpers.
+
+This module provides utilities for listing repositories from the Silver store
+with optional filtering by estate and ingestion status, and pagination
+support.
+
+Example:
+-------
+List all active repositories for a specific estate::
+
+    options = RepositoryListOptions(
+        estate_id="my-estate",
+        ingestion_enabled=True,
+        limit=10,
+    )
+    repos = await list_repositories(session_factory, options)
+
+"""
 
 from __future__ import annotations
 
@@ -23,7 +40,8 @@ class NegativePaginationError(ValueError):
 
     def __init__(self, name: str) -> None:
         """Build a consistent error message for the invalid parameter."""
-        super().__init__(f"{name} must be non-negative")
+        msg = f"{name} must be non-negative"
+        super().__init__(msg)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

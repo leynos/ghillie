@@ -1,7 +1,29 @@
-"""Catalogue-to-Silver synchronization."""
+"""Catalogue-to-Silver synchronization.
+
+This module contains the low-level implementation used by
+`RepositoryRegistryService.sync_from_catalogue()` to project repository
+definitions from the catalogue database into the Silver `Repository` table.
+
+It creates missing repositories, updates existing ones to match catalogue
+state, and disables ingestion for repositories that were removed from the
+catalogue (while keeping rows for historical reporting).
+
+Example:
+-------
+Sync an estate and inspect the result::
+
+    result = await sync_from_catalogue(
+        catalogue_session_factory,
+        silver_session_factory,
+        estate_key="my-estate",
+    )
+    print(result.repositories_created)
+
+"""
 
 from __future__ import annotations
 
+import dataclasses
 import typing as typ
 
 from sqlalchemy import select
@@ -42,25 +64,62 @@ async def sync_from_catalogue(
     """
     result = SyncResult(estate_key=estate_key)
 
+    catalogue_repos, estate_id = await _load_catalogue_repositories_or_raise(
+        catalogue_session_factory,
+        estate_key,
+    )
+    await _sync_catalogue_repositories_or_raise(
+        silver_session_factory,
+        catalogue_repos,
+        estate_id,
+        result,
+    )
+
+    return result
+
+
+async def _load_catalogue_repositories_or_raise(
+    session_factory: SessionFactory,
+    estate_key: str,
+) -> tuple[dict[str, RepositoryRecord], str]:
+    """Load catalogue repositories for an estate, raising RegistrySyncError."""
     try:
-        load_result = await _load_catalogue_repositories(
-            catalogue_session_factory, estate_key
-        )
+        load_result = await _load_catalogue_repositories(session_factory, estate_key)
     except SQLAlchemyError as exc:
         raise RegistrySyncError(estate_key, "Database error during sync") from exc
 
     if load_result is None:
         raise RegistrySyncError(estate_key, "Estate not found")
 
-    catalogue_repos, estate_id = load_result
+    return load_result
 
+
+async def _sync_catalogue_repositories_or_raise(
+    session_factory: SessionFactory,
+    catalogue_repos: dict[str, RepositoryRecord],
+    estate_id: str | None,
+    result: SyncResult,
+) -> None:
+    """Sync catalogue repositories into Silver, raising RegistrySyncError."""
     try:
-        async with silver_session_factory() as session, session.begin():
+        async with session_factory() as session, session.begin():
             await _sync_repositories(session, catalogue_repos, estate_id, result)
     except SQLAlchemyError as exc:
-        raise RegistrySyncError(estate_key, "Database error during sync") from exc
+        raise RegistrySyncError(
+            result.estate_key, "Database error during sync"
+        ) from exc
 
-    return result
+
+def _catalogue_repository_map(
+    projects: typ.Iterable[ProjectRecord],
+) -> dict[str, RepositoryRecord]:
+    """Build a slug-indexed repository map from catalogue projects."""
+    repos: dict[str, RepositoryRecord] = {}
+    for project in projects:
+        for component in project.components:
+            if component.repository is not None:
+                repos[component.repository.slug] = component.repository
+    return repos
 
 
 async def _load_catalogue_repositories(
@@ -82,13 +141,56 @@ async def _load_catalogue_repositories(
             )
         )
 
-        repos: dict[str, RepositoryRecord] = {}
-        for project in projects:
-            for component in project.components:
-                if component.repository is not None:
-                    repos[component.repository.slug] = component.repository
+        return _catalogue_repository_map(projects), estate.id
 
-        return repos, estate.id
+
+async def _load_silver_repositories(
+    session: AsyncSession,
+    estate_id: str | None,
+) -> dict[str, Repository]:
+    """Load Silver repositories that could belong to an estate sync run."""
+    query = select(Repository)
+    if estate_id is not None:
+        query = query.where(
+            (Repository.estate_id == estate_id) | (Repository.estate_id.is_(None))
+        )
+    existing = await session.scalars(query)
+    return {repo.slug: repo for repo in existing}
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class _SilverSyncContext:
+    """Context for a Silver sync transaction."""
+
+    session: AsyncSession
+    silver_repos: dict[str, Repository]
+    estate_id: str | None
+    now: dt.datetime
+    result: SyncResult
+
+
+def _sync_one_repository(
+    context: _SilverSyncContext,
+    slug: str,
+    cat_repo: RepositoryRecord,
+) -> None:
+    """Sync a single catalogue repository into Silver."""
+    silver_repo = context.silver_repos.get(slug)
+    if silver_repo is None:
+        context.session.add(
+            _create_silver_repository(cat_repo, context.estate_id, context.now)
+        )
+        context.result.repositories_created += 1
+        return
+
+    changed = _update_silver_repository(
+        silver_repo,
+        cat_repo,
+        context.estate_id,
+        context.now,
+    )
+    if changed:
+        context.result.repositories_updated += 1
 
 
 async def _sync_repositories(
@@ -98,30 +200,20 @@ async def _sync_repositories(
     result: SyncResult,
 ) -> None:
     """Project catalogue repositories into Silver, updating or creating."""
-    query = select(Repository)
-    if estate_id is not None:
-        query = query.where(
-            (Repository.estate_id == estate_id) | (Repository.estate_id.is_(None))
-        )
-    existing = await session.scalars(query)
-    silver_repos: dict[str, Repository] = {repo.slug: repo for repo in existing}
+    silver_repos = await _load_silver_repositories(session, estate_id)
 
     now = utcnow()
-    seen_slugs: set[str] = set()
+    seen_slugs = set(catalogue_repos)
+    context = _SilverSyncContext(
+        session=session,
+        silver_repos=silver_repos,
+        estate_id=estate_id,
+        now=now,
+        result=result,
+    )
 
     for slug, cat_repo in catalogue_repos.items():
-        seen_slugs.add(slug)
-
-        if slug in silver_repos:
-            silver_repo = silver_repos[slug]
-            changed = _update_silver_repository(silver_repo, cat_repo, estate_id, now)
-            if changed:
-                result.repositories_updated += 1
-            continue
-
-        silver_repo = _create_silver_repository(cat_repo, estate_id, now)
-        session.add(silver_repo)
-        result.repositories_created += 1
+        _sync_one_repository(context, slug, cat_repo)
 
     _deactivate_removed_repositories(silver_repos, seen_slugs, now, result)
 
@@ -178,24 +270,23 @@ def _update_silver_repository(
     now: dt.datetime,
 ) -> bool:
     """Update Silver repository fields from catalogue; return True if changed."""
+    # Define field mappings: (silver_field, catalogue_value)
+    field_updates = [
+        ("default_branch", cat_repo.default_branch),
+        ("estate_id", estate_id),
+        ("catalogue_repository_id", cat_repo.id),
+        ("ingestion_enabled", cat_repo.is_active),
+    ]
+
     changed = False
 
-    if silver_repo.default_branch != cat_repo.default_branch:
-        silver_repo.default_branch = cat_repo.default_branch
-        changed = True
+    # Apply scalar field updates
+    for field_name, new_value in field_updates:
+        if getattr(silver_repo, field_name) != new_value:
+            setattr(silver_repo, field_name, new_value)
+            changed = True
 
-    if silver_repo.estate_id != estate_id:
-        silver_repo.estate_id = estate_id
-        changed = True
-
-    if silver_repo.catalogue_repository_id != cat_repo.id:
-        silver_repo.catalogue_repository_id = cat_repo.id
-        changed = True
-
-    if silver_repo.ingestion_enabled != cat_repo.is_active:
-        silver_repo.ingestion_enabled = cat_repo.is_active
-        changed = True
-
+    # Handle documentation_paths separately (list comparison)
     new_paths = list(cat_repo.documentation_paths)
     if silver_repo.documentation_paths != new_paths:
         silver_repo.documentation_paths = new_paths

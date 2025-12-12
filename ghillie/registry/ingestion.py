@@ -25,7 +25,30 @@ async def set_ingestion_enabled(
     *,
     enabled: bool,
 ) -> bool:
-    """Set the ingestion_enabled flag for a repository."""
+    """Set the ingestion_enabled flag for a repository.
+
+    Parameters
+    ----------
+    session_factory
+        Factory for creating async database sessions.
+    owner
+        GitHub repository owner.
+    name
+        GitHub repository name.
+    enabled
+        Desired ingestion-enabled state.
+
+    Returns
+    -------
+    bool
+        True if the flag changed, False if no update was needed.
+
+    Raises
+    ------
+    RepositoryNotFoundError
+        If the repository does not exist.
+
+    """
     async with session_factory() as session, session.begin():
         repo = await session.scalar(
             select(Repository).where(
@@ -47,11 +70,28 @@ async def set_ingestion_enabled(
 async def get_repository_by_slug(
     session_factory: SessionFactory, slug: str
 ) -> RepositoryInfo | None:
-    """Look up a repository by owner/name slug."""
+    """Look up a repository by owner/name slug.
+
+    Parameters
+    ----------
+    session_factory
+        Factory for creating async database sessions.
+    slug
+        Repository slug in "owner/name" format.
+
+    Returns
+    -------
+    RepositoryInfo | None
+        Repository metadata if found, otherwise None.
+
+    """
     if slug.count("/") != 1:
         return None
 
     owner, name = slug.split("/")
+    if not owner or not name:
+        return None
+
     async with session_factory() as session:
         repo = await session.scalar(
             select(Repository).where(

@@ -24,7 +24,8 @@ def _find_repo_root(start: Path) -> Path:
     for parent in (start, *start.parents):
         if (parent / "pyproject.toml").exists():
             return parent
-    raise RuntimeError
+    msg = f"Failed to locate repository root (missing pyproject.toml) from: {start}"
+    raise FileNotFoundError(msg)
 
 
 @pytest.fixture(scope="session")

@@ -56,9 +56,11 @@ async def test_enable_ingestion_raises_for_missing_repo(
     registry_service: RepositoryRegistryService,
 ) -> None:
     """enable_ingestion() raises RepositoryNotFoundError for missing repo."""
-    with pytest.raises(RepositoryNotFoundError) as exc_info:
+    with pytest.raises(
+        RepositoryNotFoundError,
+        match=r"^Repository not found: nonexistent/repo$",
+    ):
         await registry_service.enable_ingestion("nonexistent", "repo")
-    assert "nonexistent/repo" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -66,9 +68,11 @@ async def test_disable_ingestion_raises_for_missing_repo(
     registry_service: RepositoryRegistryService,
 ) -> None:
     """disable_ingestion() raises RepositoryNotFoundError for missing repo."""
-    with pytest.raises(RepositoryNotFoundError) as exc_info:
+    with pytest.raises(
+        RepositoryNotFoundError,
+        match=r"^Repository not found: nonexistent/repo$",
+    ):
         await registry_service.disable_ingestion("nonexistent", "repo")
-    assert "nonexistent/repo" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -108,8 +112,10 @@ async def test_ingestion_toggle_updates_flag(
         spec=RepositoryCreateSpec(ingestion_enabled=params.initial_state),
     )
 
-    method = getattr(registry_service, params.method_name)
-    changed = await method("test-org", "test-repo")
+    if params.method_name == "enable_ingestion":
+        changed = await registry_service.enable_ingestion("test-org", "test-repo")
+    else:
+        changed = await registry_service.disable_ingestion("test-org", "test-repo")
     assert changed is params.expect_change
 
     repo = await fetch_repo("test-org", "test-repo")

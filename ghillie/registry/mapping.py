@@ -11,7 +11,19 @@ if typ.TYPE_CHECKING:
 
 
 def to_repository_info(repo: Repository) -> RepositoryInfo:
-    """Convert a Silver Repository to a RepositoryInfo DTO."""
+    """Convert a Silver repository row to a RepositoryInfo DTO.
+
+    Parameters
+    ----------
+    repo
+        Repository row from the Silver database.
+
+    Returns
+    -------
+    RepositoryInfo
+        Repository information suitable for registry callers.
+
+    """
     return RepositoryInfo(
         id=repo.id,
         owner=repo.github_owner,

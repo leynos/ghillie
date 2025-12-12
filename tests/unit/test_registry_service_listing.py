@@ -143,7 +143,7 @@ async def test_list_repositories_rejects_negative_limit(
     registry_service: RepositoryRegistryService,
 ) -> None:
     """Negative limits are rejected early."""
-    with pytest.raises(NegativePaginationError):
+    with pytest.raises(NegativePaginationError, match="must be non-negative"):
         await registry_service.list_all_repositories(limit=-1)
 
 
@@ -152,5 +152,5 @@ async def test_list_repositories_rejects_negative_offset(
     registry_service: RepositoryRegistryService,
 ) -> None:
     """Negative offsets are rejected early."""
-    with pytest.raises(NegativePaginationError):
+    with pytest.raises(NegativePaginationError, match="must be non-negative"):
         await registry_service.list_all_repositories(offset=-1)
