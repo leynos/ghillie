@@ -23,6 +23,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from ghillie.common.slug import repo_slug
 from ghillie.common.time import utcnow
 
 if typ.TYPE_CHECKING:
@@ -95,8 +96,10 @@ class ProjectRecord(Base):
 class RepositoryRecord(Base):
     """Repository mapped from a catalogue component."""
 
-    __tablename__ = "repositories"
-    __table_args__ = (UniqueConstraint("owner", "name", name="uq_repository_slug"),)
+    __tablename__ = "catalogue_repositories"
+    __table_args__ = (
+        UniqueConstraint("owner", "name", name="uq_catalogue_repository_slug"),
+    )
 
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
@@ -120,7 +123,7 @@ class RepositoryRecord(Base):
     @property
     def slug(self) -> str:
         """Return owner/name to match catalogue notation."""
-        return f"{self.owner}/{self.name}"
+        return repo_slug(self.owner, self.name)
 
 
 class ComponentRecord(Base):
@@ -140,7 +143,7 @@ class ComponentRecord(Base):
         ForeignKey("projects.id", ondelete="CASCADE")
     )
     repository_id: Mapped[str | None] = mapped_column(
-        ForeignKey("repositories.id", ondelete="SET NULL"), default=None
+        ForeignKey("catalogue_repositories.id", ondelete="SET NULL"), default=None
     )
     key: Mapped[str] = mapped_column(String(128), index=True)
     name: Mapped[str] = mapped_column(String(255))

@@ -102,7 +102,7 @@ entities and reporting outputs, enabling replay and reprocessing.
 **Goal:** Ingest GitHub activity for the managed estate into the Bronze and
 Silver layers with controlled noise and back-pressure.
 
-- [ ] **Task 1.3.a – Implement repository discovery and registration**  
+- [x] **Task 1.3.a – Implement repository discovery and registration**
   Derive the managed repository set from the estate catalogue and any allowlist
   labels or naming conventions. Store GitHub owner, name, and default branch,
   along with any metadata required by later stages.

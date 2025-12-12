@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 import os
@@ -17,6 +18,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from ghillie.bronze import init_bronze_storage
+from ghillie.catalogue import init_catalogue_storage
 from ghillie.gold import init_gold_storage
 from ghillie.silver import init_silver_storage
 
@@ -68,10 +70,11 @@ async def _pglite_engine(tmp_path: Path) -> typ.AsyncIterator[AsyncEngine]:
 
 
 async def _init_all_storage(engine: AsyncEngine) -> None:
-    """Initialise bronze, silver, and gold storage layers."""
+    """Initialise bronze, silver, gold, and catalogue storage layers."""
     await init_bronze_storage(engine)
     await init_silver_storage(engine)
     await init_gold_storage(engine)
+    await init_catalogue_storage(engine)
 
 
 async def _try_setup_pglite(
@@ -88,8 +91,9 @@ async def _try_setup_pglite(
     engine_cm = None
     try:
         engine_cm = _pglite_engine(tmp_path)
-        engine = await engine_cm.__aenter__()
-        await _init_all_storage(engine)
+        async with asyncio.timeout(20):
+            engine = await engine_cm.__aenter__()
+            await _init_all_storage(engine)
     except Exception as exc:  # noqa: BLE001
         # pragma: no cover - fall back when py-pglite fails at any stage
         logger.warning("py-pglite unavailable, falling back to SQLite: %s", exc)

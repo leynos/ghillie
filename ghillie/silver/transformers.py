@@ -154,7 +154,13 @@ def _copy_metadata(metadata: dict[str, typ.Any] | None) -> dict[str, typ.Any]:
 async def _ensure_repository(
     session: AsyncSession, owner: str, name: str, default_branch: str | None
 ) -> Repository:
-    """Fetch or create a repository row."""
+    """Fetch or create a repository row.
+
+    Repositories created ad hoc (not synced from catalogue) have ingestion
+    disabled by default to prevent uncontrolled event processing. Use the
+    RepositoryRegistryService to sync catalogue repositories and enable
+    ingestion.
+    """
     repo = await session.scalar(
         select(Repository).where(
             Repository.github_owner == owner, Repository.github_name == name
@@ -165,6 +171,9 @@ async def _ensure_repository(
             github_owner=owner,
             github_name=name,
             default_branch=default_branch or "main",
+            # Ad hoc repos have ingestion disabled until synced from catalogue
+            catalogue_repository_id=None,
+            ingestion_enabled=False,
         )
         session.add(repo)
         await session.flush()

@@ -426,7 +426,7 @@ Factory Boy commit automatically after creation).
   scenarios([5](https://medium.com/@aasispaudelthp2/factoryboy-tutorial-with-sqlalchemy-and-pytest-1cda908d783a)).
 
 - **Faker for direct use:** Even outside of Factory Boy, **Faker** can generate
-  data for ad-hoc inserts or assertions. For example, `fake.email()` returns a
+  data for ad hoc inserts or assertions. For example, `fake.email()` returns a
   random email address, ensuring a test covers varied inputs. Faker can
   generate consistent data if seeded (e.g., `Faker.seed(1234)`) for
   reproducibility.

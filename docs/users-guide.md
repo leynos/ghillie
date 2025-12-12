@@ -349,6 +349,87 @@ The example records both the report metadata and the event coverage. Because
 coverage references `event_facts`, reprocessing the same raw events does not
 create duplicate coverage rows.
 
+## Repository discovery and registration (Phase 1.3)
+
+The repository registry bridges catalogue-defined repositories with the Silver
+layer ingestion pipeline. It enables controlled GitHub event ingestion by
+synchronizing repositories from the catalogue and providing toggle controls for
+enabling or disabling ingestion per repository.
+
+### Synchronizing catalogue repositories to Silver
+
+The `RepositoryRegistryService` projects catalogue `RepositoryRecord` entries
+into the Silver `Repository` table. Repositories not present in the catalogue
+have ingestion disabled by default.
+
+```python
+import asyncio
+from pathlib import Path
+
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from ghillie.catalogue import CatalogueImporter, init_catalogue_storage
+from ghillie.registry import RepositoryRegistryService
+from ghillie.silver import init_silver_storage
+
+
+async def main() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///ghillie.db")
+    await init_catalogue_storage(engine)
+    await init_silver_storage(engine)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    # Import catalogue
+    importer = CatalogueImporter(session_factory, estate_key="wildside")
+    await importer.import_path(Path("examples/wildside-catalogue.yaml"), commit_sha="v1")
+
+    # Sync to Silver
+    service = RepositoryRegistryService(session_factory, session_factory)
+    result = await service.sync_from_catalogue("wildside")
+    print(f"Created: {result.repositories_created}")
+    print(f"Updated: {result.repositories_updated}")
+
+
+asyncio.run(main())
+```
+
+### Enabling and disabling ingestion
+
+Each Silver repository has an `ingestion_enabled` flag that controls whether
+the ingestion worker should process events for that repository. The registry
+service provides methods to toggle this flag.
+
+```python
+# Disable ingestion for a repository
+await service.disable_ingestion("leynos", "wildside-engine")
+
+# Re-enable ingestion
+await service.enable_ingestion("leynos", "wildside-engine")
+
+# List only active repositories
+active_repos = await service.list_active_repositories()
+for repo in active_repos:
+    print(f"{repo.slug}: branch={repo.default_branch}")
+
+# Paginate active repositories (ordered by owner/name)
+page = await service.list_active_repositories(limit=100, offset=0)
+```
+
+### Ad hoc repositories
+
+When the Silver transformer encounters events for repositories not in the
+catalogue, it creates repository rows with `ingestion_enabled=False` and
+`catalogue_repository_id=None`. This prevents uncontrolled event processing
+while preserving historical data. To enable ingestion for ad hoc repositories,
+either add them to the catalogue and re-sync, or explicitly call
+`enable_ingestion()`.
+
+### Documentation paths
+
+The registry copies `documentation_paths` from catalogue repositories into
+Silver. These paths guide the ingestion worker when detecting documentation
+changes such as roadmaps and ADRs.
+
 ### Running tests against Postgres with py-pglite
 
 The test fixtures now attempt to start a py-pglite Postgres instance by default
