@@ -111,7 +111,7 @@ Silver layers with controlled noise and back-pressure.
   repositories for at least one organisation and can enable or disable
   ingestion per repository.
 
-- [ ] **Task 1.3.b – Implement incremental GitHub ingestion**  
+- [x] **Task 1.3.b – Implement incremental GitHub ingestion**  
   Implement a worker that, per repository, fetches new commits to the default
   branch, pull requests, issues, and selected documentation changes since the
   last ingestion time, using the GitHub GraphQL API where practical.

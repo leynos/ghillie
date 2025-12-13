@@ -11,6 +11,7 @@ dependencies = [
     "sqlalchemy>=2.0.34",
     "aiosqlite>=0.20.0",
     "dramatiq>=1.16.0",
+    "httpx>=0.27.0",
 ]
 
 [dependency-groups]
