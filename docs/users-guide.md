@@ -430,6 +430,60 @@ The registry copies `documentation_paths` from catalogue repositories into
 Silver. These paths guide the ingestion worker when detecting documentation
 changes such as roadmaps and ADRs.
 
+## Incremental GitHub ingestion (Phase 1.3.b)
+
+Ghillie polls GitHub per managed repository and appends activity into the
+Bronze `raw_events` table. Each repository has per-kind watermarks stored in
+`github_ingestion_offsets`, allowing the worker to fetch only new commits, pull
+requests, issues, and documentation changes since the last successful ingestion
+run.
+
+The reference implementation uses the GitHub GraphQL API for commits, pull
+requests, and issues, and reuses commit history filtering for documentation
+paths (for example, roadmaps and ADR directories).
+
+### Running the ingestion worker
+
+The GraphQL client expects a GitHub token in `GHILLIE_GITHUB_TOKEN`. For pilot
+deployments, use a fine-scoped token or GitHub App installation token with
+read-only access to the managed repositories.
+
+```python
+import asyncio
+
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from ghillie.github import (
+    GitHubGraphQLClient,
+    GitHubGraphQLConfig,
+    GitHubIngestionWorker,
+)
+from ghillie.registry import RepositoryRegistryService
+
+
+async def main() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///ghillie.db")
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    registry = RepositoryRegistryService(session_factory, session_factory)
+    repos = await registry.list_active_repositories()
+
+    client = GitHubGraphQLClient(GitHubGraphQLConfig.from_env())
+    worker = GitHubIngestionWorker(session_factory, client)
+
+    for repo in repos:
+        await worker.ingest_repository(repo)
+
+    await client.aclose()
+
+
+asyncio.run(main())
+```
+
+After ingestion, run `RawEventTransformer.process_pending()` to hydrate the
+Silver entity tables (`commits`, `pull_requests`, `issues`,
+`documentation_changes`) from the newly-ingested raw events.
+
 ### Running tests against Postgres with py-pglite
 
 The test fixtures now attempt to start a py-pglite Postgres instance by default

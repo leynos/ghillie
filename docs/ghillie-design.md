@@ -379,6 +379,14 @@ days of activity).29 This tight coupling of enrolment and observation ensures
 that “Shadow IT” is excluded from reporting, while every sanctioned asset is
 automatically tracked from the moment of its inception.
 
+Implementation note: the Phase 1 ingestion worker is implemented as
+`ghillie.github.GitHubIngestionWorker`, backed by `GitHubGraphQLClient`. The
+worker stores per-repository, per-entity watermarks in
+`github_ingestion_offsets` (`last_commit_ingested_at`, `last_pr_ingested_at`,
+`last_issue_ingested_at`, `last_doc_ingested_at`) and polls GitHub for activity
+occurring after the last successful ingestion time, using a small overlap
+window to tolerate clock skew and eventual consistency.
+
 ### 5.2 Violations as First-Class Reporting Citizens
 
 Compliance violations are not merely metadata; they are critical indicators of
