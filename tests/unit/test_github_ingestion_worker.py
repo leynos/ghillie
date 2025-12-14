@@ -99,6 +99,83 @@ def _event(
     )
 
 
+def _create_test_commit_event(
+    repo: RepositoryInfo, occurred_at: dt.datetime
+) -> GitHubIngestedEvent:
+    return _event(
+        event_type="github.commit",
+        source_event_id="abc123",
+        occurred_at=occurred_at,
+        payload={
+            "sha": "abc123",
+            "repo_owner": repo.owner,
+            "repo_name": repo.name,
+            "default_branch": repo.default_branch,
+            "committed_at": occurred_at.isoformat(),
+        },
+    )
+
+
+def _create_test_pr_event(
+    repo: RepositoryInfo, occurred_at: dt.datetime
+) -> GitHubIngestedEvent:
+    return _event(
+        event_type="github.pull_request",
+        source_event_id="17",
+        occurred_at=occurred_at,
+        payload={
+            "id": 17,
+            "number": 17,
+            "title": "Add release checklist",
+            "state": "open",
+            "base_branch": "main",
+            "head_branch": "feature/release-checklist",
+            "repo_owner": repo.owner,
+            "repo_name": repo.name,
+            "created_at": occurred_at.isoformat(),
+        },
+    )
+
+
+def _create_test_issue_event(
+    repo: RepositoryInfo, occurred_at: dt.datetime
+) -> GitHubIngestedEvent:
+    return _event(
+        event_type="github.issue",
+        source_event_id="101",
+        occurred_at=occurred_at,
+        payload={
+            "id": 101,
+            "number": 101,
+            "title": "Fix flaky integration test",
+            "state": "open",
+            "repo_owner": repo.owner,
+            "repo_name": repo.name,
+            "created_at": occurred_at.isoformat(),
+        },
+    )
+
+
+def _create_test_doc_change_event(
+    repo: RepositoryInfo, occurred_at: dt.datetime
+) -> GitHubIngestedEvent:
+    return _event(
+        event_type="github.doc_change",
+        source_event_id="abc123:docs/roadmap.md",
+        occurred_at=occurred_at,
+        payload={
+            "commit_sha": "abc123",
+            "path": "docs/roadmap.md",
+            "change_type": "modified",
+            "repo_owner": repo.owner,
+            "repo_name": repo.name,
+            "occurred_at": occurred_at.isoformat(),
+            "is_roadmap": True,
+            "is_adr": False,
+        },
+    )
+
+
 @pytest.mark.asyncio
 async def test_ingestion_writes_raw_events_and_updates_watermarks(
     session_factory: async_sessionmaker[AsyncSession],
@@ -112,71 +189,10 @@ async def test_ingestion_writes_raw_events_and_updates_watermarks(
     doc_time = now - dt.timedelta(hours=1)
 
     client = FakeGitHubClient(
-        commits=[
-            _event(
-                event_type="github.commit",
-                source_event_id="abc123",
-                occurred_at=commit_time,
-                payload={
-                    "sha": "abc123",
-                    "repo_owner": repo.owner,
-                    "repo_name": repo.name,
-                    "default_branch": repo.default_branch,
-                    "committed_at": commit_time.isoformat(),
-                },
-            )
-        ],
-        pull_requests=[
-            _event(
-                event_type="github.pull_request",
-                source_event_id="17",
-                occurred_at=pr_time,
-                payload={
-                    "id": 17,
-                    "number": 17,
-                    "title": "Add release checklist",
-                    "state": "open",
-                    "base_branch": "main",
-                    "head_branch": "feature/release-checklist",
-                    "repo_owner": repo.owner,
-                    "repo_name": repo.name,
-                    "created_at": pr_time.isoformat(),
-                },
-            )
-        ],
-        issues=[
-            _event(
-                event_type="github.issue",
-                source_event_id="101",
-                occurred_at=issue_time,
-                payload={
-                    "id": 101,
-                    "number": 101,
-                    "title": "Fix flaky integration test",
-                    "state": "open",
-                    "repo_owner": repo.owner,
-                    "repo_name": repo.name,
-                    "created_at": issue_time.isoformat(),
-                },
-            )
-        ],
-        doc_changes=[
-            _event(
-                event_type="github.doc_change",
-                source_event_id="abc123:docs/roadmap.md",
-                occurred_at=doc_time,
-                payload={
-                    "commit_sha": "abc123",
-                    "path": "docs/roadmap.md",
-                    "change_type": "modified",
-                    "repo_owner": repo.owner,
-                    "repo_name": repo.name,
-                    "occurred_at": doc_time.isoformat(),
-                    "is_roadmap": True,
-                    "is_adr": False,
-                },
-            )
-        ],
+        commits=[_create_test_commit_event(repo, commit_time)],
+        pull_requests=[_create_test_pr_event(repo, pr_time)],
+        issues=[_create_test_issue_event(repo, issue_time)],
+        doc_changes=[_create_test_doc_change_event(repo, doc_time)],
     )
     worker = GitHubIngestionWorker(
         session_factory,

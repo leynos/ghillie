@@ -86,6 +86,88 @@ class IngestionContext(typ.TypedDict, total=False):
     raw_event_count_before: int
 
 
+def _create_commit_event(
+    owner: str, name: str, occurred_at: dt.datetime
+) -> GitHubIngestedEvent:
+    return GitHubIngestedEvent(
+        event_type="github.commit",
+        source_event_id="abc123",
+        occurred_at=occurred_at,
+        payload={
+            "sha": "abc123",
+            "message": "docs: refresh roadmap",
+            "repo_owner": owner,
+            "repo_name": name,
+            "default_branch": "main",
+            "committed_at": occurred_at.isoformat(),
+            "metadata": {"branch": "main"},
+        },
+    )
+
+
+def _create_pr_event(
+    owner: str, name: str, occurred_at: dt.datetime
+) -> GitHubIngestedEvent:
+    return GitHubIngestedEvent(
+        event_type="github.pull_request",
+        source_event_id="17",
+        occurred_at=occurred_at,
+        payload={
+            "id": 17,
+            "number": 17,
+            "title": "Add release checklist",
+            "state": "open",
+            "base_branch": "main",
+            "head_branch": "feature/release-checklist",
+            "repo_owner": owner,
+            "repo_name": name,
+            "created_at": occurred_at.isoformat(),
+            "metadata": {"updated_at": occurred_at.isoformat()},
+        },
+    )
+
+
+def _create_issue_event(
+    owner: str, name: str, occurred_at: dt.datetime
+) -> GitHubIngestedEvent:
+    return GitHubIngestedEvent(
+        event_type="github.issue",
+        source_event_id="101",
+        occurred_at=occurred_at,
+        payload={
+            "id": 101,
+            "number": 101,
+            "title": "Fix flaky integration test",
+            "state": "open",
+            "repo_owner": owner,
+            "repo_name": name,
+            "created_at": occurred_at.isoformat(),
+            "metadata": {"updated_at": occurred_at.isoformat()},
+        },
+    )
+
+
+def _create_doc_change_event(
+    owner: str, name: str, occurred_at: dt.datetime
+) -> GitHubIngestedEvent:
+    return GitHubIngestedEvent(
+        event_type="github.doc_change",
+        source_event_id="abc123:docs/roadmap.md",
+        occurred_at=occurred_at,
+        payload={
+            "commit_sha": "abc123",
+            "path": "docs/roadmap.md",
+            "change_type": "modified",
+            "repo_owner": owner,
+            "repo_name": name,
+            "occurred_at": occurred_at.isoformat(),
+            "is_roadmap": True,
+            "is_adr": False,
+            "metadata": {"message": "docs: refresh roadmap"},
+        },
+    )
+
+
 @scenario(
     "../github_incremental_ingestion.feature",
     "New GitHub activity is captured into raw events",
@@ -139,76 +221,12 @@ def github_api_returns_activity(ingestion_context: IngestionContext, slug: str) 
     """Configure a fake GitHub client that returns a fixed activity set."""
     owner, name = slug.split("/", 1)
     now = dt.datetime.now(dt.UTC)
-    committed_at = now - dt.timedelta(hours=4)
-    pr_updated_at = now - dt.timedelta(hours=3)
-    issue_updated_at = now - dt.timedelta(hours=2)
-    doc_occurred_at = now - dt.timedelta(hours=1)
-
     events = [
-        GitHubIngestedEvent(
-            event_type="github.commit",
-            source_event_id="abc123",
-            occurred_at=committed_at,
-            payload={
-                "sha": "abc123",
-                "message": "docs: refresh roadmap",
-                "repo_owner": owner,
-                "repo_name": name,
-                "default_branch": "main",
-                "committed_at": committed_at.isoformat(),
-                "metadata": {"branch": "main"},
-            },
-        ),
-        GitHubIngestedEvent(
-            event_type="github.pull_request",
-            source_event_id="17",
-            occurred_at=pr_updated_at,
-            payload={
-                "id": 17,
-                "number": 17,
-                "title": "Add release checklist",
-                "state": "open",
-                "base_branch": "main",
-                "head_branch": "feature/release-checklist",
-                "repo_owner": owner,
-                "repo_name": name,
-                "created_at": pr_updated_at.isoformat(),
-                "metadata": {"updated_at": pr_updated_at.isoformat()},
-            },
-        ),
-        GitHubIngestedEvent(
-            event_type="github.issue",
-            source_event_id="101",
-            occurred_at=issue_updated_at,
-            payload={
-                "id": 101,
-                "number": 101,
-                "title": "Fix flaky integration test",
-                "state": "open",
-                "repo_owner": owner,
-                "repo_name": name,
-                "created_at": issue_updated_at.isoformat(),
-                "metadata": {"updated_at": issue_updated_at.isoformat()},
-            },
-        ),
-        GitHubIngestedEvent(
-            event_type="github.doc_change",
-            source_event_id="abc123:docs/roadmap.md",
-            occurred_at=doc_occurred_at,
-            payload={
-                "commit_sha": "abc123",
-                "path": "docs/roadmap.md",
-                "change_type": "modified",
-                "repo_owner": owner,
-                "repo_name": name,
-                "occurred_at": doc_occurred_at.isoformat(),
-                "is_roadmap": True,
-                "is_adr": False,
-                "metadata": {"message": "docs: refresh roadmap"},
-            },
-        ),
+        _create_commit_event(owner, name, now - dt.timedelta(hours=4)),
+        _create_pr_event(owner, name, now - dt.timedelta(hours=3)),
+        _create_issue_event(owner, name, now - dt.timedelta(hours=2)),
+        _create_doc_change_event(owner, name, now - dt.timedelta(hours=1)),
     ]
-
     ingestion_context["github_client"] = FakeGitHubClient(events)
 
 

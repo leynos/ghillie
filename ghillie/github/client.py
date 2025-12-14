@@ -363,12 +363,20 @@ def _iter_doc_change_events(
             yield event
 
 
-def _pull_request_event_from_node(
-    repo: RepositoryInfo,
+def _generic_event_from_node[PayloadT: dict[str, typ.Any]](
+    event_type: str,
     node: dict[str, typ.Any],
     *,
     since: dt.datetime,
+    payload_builder: typ.Callable[[int, str], PayloadT],
 ) -> tuple[GitHubIngestedEvent | None, bool]:
+    """Create a GitHubIngestedEvent from a GraphQL node, or decide to stop.
+
+    This helper centralises the shared parsing of `updatedAt` and `databaseId`
+    fields for GitHub entities ordered by `UPDATED_AT`. It returns `(event,
+    should_stop)`, where `should_stop=True` indicates the caller should stop
+    paginating because results are older than or equal to the `since` watermark.
+    """
     updated_at_raw = node.get("updatedAt")
     database_id = node.get("databaseId")
     if not isinstance(updated_at_raw, str) or not isinstance(database_id, int):
@@ -378,8 +386,28 @@ def _pull_request_event_from_node(
     if updated_at <= since:
         return (None, True)
 
+    payload = payload_builder(database_id, updated_at_raw)
+    return (
+        GitHubIngestedEvent(
+            event_type=event_type,
+            source_event_id=str(database_id),
+            occurred_at=updated_at,
+            payload=payload,
+        ),
+        False,
+    )
+
+
+def _build_pr_payload(
+    repo: RepositoryInfo,
+    node: dict[str, typ.Any],
+    *,
+    database_id: int,
+    updated_at_raw: str,
+) -> dict[str, typ.Any]:
+    """Build a pull request payload dict from a GraphQL node."""
     merged_at = node.get("mergedAt")
-    payload: dict[str, typ.Any] = {
+    return {
         "id": database_id,
         "number": node.get("number"),
         "title": node.get("title"),
@@ -396,51 +424,17 @@ def _pull_request_event_from_node(
         "repo_name": repo.name,
         "metadata": {"updated_at": updated_at_raw},
     }
-    return (
-        GitHubIngestedEvent(
-            event_type="github.pull_request",
-            source_event_id=str(database_id),
-            occurred_at=updated_at,
-            payload=payload,
-        ),
-        False,
-    )
 
 
-def _pull_request_events_from_nodes(
-    repo: RepositoryInfo,
-    nodes: list[dict[str, typ.Any]],
-    *,
-    since: dt.datetime,
-) -> tuple[list[GitHubIngestedEvent], bool]:
-    events: list[GitHubIngestedEvent] = []
-    should_stop = False
-    for node in nodes:
-        event, stop = _pull_request_event_from_node(repo, node, since=since)
-        if event is not None:
-            events.append(event)
-        if stop:
-            should_stop = True
-            break
-    return events, should_stop
-
-
-def _issue_event_from_node(
+def _build_issue_payload(
     repo: RepositoryInfo,
     node: dict[str, typ.Any],
     *,
-    since: dt.datetime,
-) -> tuple[GitHubIngestedEvent | None, bool]:
-    updated_at_raw = node.get("updatedAt")
-    database_id = node.get("databaseId")
-    if not isinstance(updated_at_raw, str) or not isinstance(database_id, int):
-        return (None, False)
-
-    updated_at = _parse_github_datetime(updated_at_raw)
-    if updated_at <= since:
-        return (None, True)
-
-    payload: dict[str, typ.Any] = {
+    database_id: int,
+    updated_at_raw: str,
+) -> dict[str, typ.Any]:
+    """Build an issue payload dict from a GraphQL node."""
+    return {
         "id": database_id,
         "number": node.get("number"),
         "title": node.get("title"),
@@ -453,14 +447,93 @@ def _issue_event_from_node(
         "repo_name": repo.name,
         "metadata": {"updated_at": updated_at_raw},
     }
-    return (
-        GitHubIngestedEvent(
-            event_type="github.issue",
-            source_event_id=str(database_id),
-            occurred_at=updated_at,
-            payload=payload,
-        ),
-        False,
+
+
+class _NodeTransformer(typ.Protocol):
+    """Transform a node into an optional event and stop signal."""
+
+    def __call__(
+        self, repo: RepositoryInfo, node: dict[str, typ.Any], *, since: dt.datetime
+    ) -> tuple[GitHubIngestedEvent | None, bool]:
+        """Return (event, should_stop)."""
+        ...
+
+
+def _generic_events_from_nodes(
+    repo: RepositoryInfo,
+    nodes: list[dict[str, typ.Any]],
+    *,
+    since: dt.datetime,
+    node_transformer: _NodeTransformer,
+) -> tuple[list[GitHubIngestedEvent], bool]:
+    """Apply a node transformer across nodes, stopping when requested."""
+    events: list[GitHubIngestedEvent] = []
+    should_stop = False
+    for node in nodes:
+        event, stop = node_transformer(repo, node, since=since)
+        if event is not None:
+            events.append(event)
+        if stop:
+            should_stop = True
+            break
+    return events, should_stop
+
+
+def _pull_request_event_from_node(
+    repo: RepositoryInfo,
+    node: dict[str, typ.Any],
+    *,
+    since: dt.datetime,
+) -> tuple[GitHubIngestedEvent | None, bool]:
+    def _payload_builder(database_id: int, updated_at_raw: str) -> dict[str, typ.Any]:
+        return _build_pr_payload(
+            repo,
+            node,
+            database_id=database_id,
+            updated_at_raw=updated_at_raw,
+        )
+
+    return _generic_event_from_node(
+        "github.pull_request",
+        node,
+        since=since,
+        payload_builder=_payload_builder,
+    )
+
+
+def _pull_request_events_from_nodes(
+    repo: RepositoryInfo,
+    nodes: list[dict[str, typ.Any]],
+    *,
+    since: dt.datetime,
+) -> tuple[list[GitHubIngestedEvent], bool]:
+    return _generic_events_from_nodes(
+        repo,
+        nodes,
+        since=since,
+        node_transformer=_pull_request_event_from_node,
+    )
+
+
+def _issue_event_from_node(
+    repo: RepositoryInfo,
+    node: dict[str, typ.Any],
+    *,
+    since: dt.datetime,
+) -> tuple[GitHubIngestedEvent | None, bool]:
+    def _payload_builder(database_id: int, updated_at_raw: str) -> dict[str, typ.Any]:
+        return _build_issue_payload(
+            repo,
+            node,
+            database_id=database_id,
+            updated_at_raw=updated_at_raw,
+        )
+
+    return _generic_event_from_node(
+        "github.issue",
+        node,
+        since=since,
+        payload_builder=_payload_builder,
     )
 
 
@@ -470,16 +543,26 @@ def _issue_events_from_nodes(
     *,
     since: dt.datetime,
 ) -> tuple[list[GitHubIngestedEvent], bool]:
-    events: list[GitHubIngestedEvent] = []
-    should_stop = False
-    for node in nodes:
-        event, stop = _issue_event_from_node(repo, node, since=since)
-        if event is not None:
-            events.append(event)
-        if stop:
-            should_stop = True
-            break
-    return events, should_stop
+    return _generic_events_from_nodes(
+        repo,
+        nodes,
+        since=since,
+        node_transformer=_issue_event_from_node,
+    )
+
+
+class _EventsExtractor(typ.Protocol):
+    """Extract events (and stop signal) from a list of GraphQL nodes."""
+
+    def __call__(
+        self,
+        repo: RepositoryInfo,
+        nodes: list[dict[str, typ.Any]],
+        *,
+        since: dt.datetime,
+    ) -> tuple[list[GitHubIngestedEvent], bool]:
+        """Return (events, should_stop)."""
+        ...
 
 
 class GitHubGraphQLClient:
@@ -543,60 +626,74 @@ class GitHubGraphQLClient:
             if not isinstance(after, str):
                 return
 
-    async def iter_pull_requests(
-        self, repo: RepositoryInfo, *, since: dt.datetime
+    async def _iter_paginated_entities(  # noqa: PLR0913
+        self,
+        repo: RepositoryInfo,
+        *,
+        since: dt.datetime,
+        query: str,
+        connection_path: list[str],
+        entity_name: str,
+        events_extractor: _EventsExtractor,
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
-        """Yield pull request snapshot events updated since a timestamp."""
-        since_utc = _ensure_tzaware(since, field="since")
-        after: str | None = None
+        """Yield entity snapshot events from a paginated GraphQL connection.
 
+        This helper centralises the common pagination loop for connections
+        ordered by `UPDATED_AT`, such as pull requests and issues. The
+        `events_extractor` is responsible for converting nodes into
+        GitHubIngestedEvent instances and signalling when iteration should stop
+        because the nodes are older than the `since` watermark.
+        """
+        after: str | None = None
         while True:
             data = await self._graphql(
-                _PULL_REQUESTS_QUERY,
+                query,
                 {"owner": repo.owner, "name": repo.name, "after": after},
             )
-            pr_conn = _extract_connection(data, ["repository", "pullRequests"])
-            nodes = _connection_nodes(pr_conn, field="pull request")
-            events, should_stop = _pull_request_events_from_nodes(
-                repo, nodes, since=since_utc
-            )
+            connection = _extract_connection(data, connection_path)
+            nodes = _connection_nodes(connection, field=entity_name)
+            events, should_stop = events_extractor(repo, nodes, since=since)
             for event in events:
                 yield event
             if should_stop:
                 return
 
-            page_info = pr_conn.get("pageInfo")
+            page_info = connection.get("pageInfo")
             if not isinstance(page_info, dict) or not page_info.get("hasNextPage"):
                 return
             after = page_info.get("endCursor")
             if not isinstance(after, str):
                 return
+
+    async def iter_pull_requests(
+        self, repo: RepositoryInfo, *, since: dt.datetime
+    ) -> typ.AsyncIterator[GitHubIngestedEvent]:
+        """Yield pull request snapshot events updated since a timestamp."""
+        since_utc = _ensure_tzaware(since, field="since")
+        async for event in self._iter_paginated_entities(
+            repo,
+            since=since_utc,
+            query=_PULL_REQUESTS_QUERY,
+            connection_path=["repository", "pullRequests"],
+            entity_name="pull request",
+            events_extractor=_pull_request_events_from_nodes,
+        ):
+            yield event
 
     async def iter_issues(
         self, repo: RepositoryInfo, *, since: dt.datetime
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Yield issue snapshot events updated since a timestamp."""
         since_utc = _ensure_tzaware(since, field="since")
-        after: str | None = None
-
-        while True:
-            data = await self._graphql(
-                _ISSUES_QUERY, {"owner": repo.owner, "name": repo.name, "after": after}
-            )
-            issue_conn = _extract_connection(data, ["repository", "issues"])
-            nodes = _connection_nodes(issue_conn, field="issue")
-            events, should_stop = _issue_events_from_nodes(repo, nodes, since=since_utc)
-            for event in events:
-                yield event
-            if should_stop:
-                return
-
-            page_info = issue_conn.get("pageInfo")
-            if not isinstance(page_info, dict) or not page_info.get("hasNextPage"):
-                return
-            after = page_info.get("endCursor")
-            if not isinstance(after, str):
-                return
+        async for event in self._iter_paginated_entities(
+            repo,
+            since=since_utc,
+            query=_ISSUES_QUERY,
+            connection_path=["repository", "issues"],
+            entity_name="issue",
+            events_extractor=_issue_events_from_nodes,
+        ):
+            yield event
 
     async def iter_doc_changes(
         self,
@@ -675,16 +772,5 @@ def _extract_connection(
 
 
 def _extract_commit_history(data: dict[str, typ.Any]) -> dict[str, typ.Any]:
-    repository = data.get("repository")
-    if not isinstance(repository, dict):
-        raise GitHubResponseShapeError.missing("repository")
-    ref = repository.get("ref")
-    if not isinstance(ref, dict):
-        raise GitHubResponseShapeError.missing("repository.ref")
-    target = ref.get("target")
-    if not isinstance(target, dict):
-        raise GitHubResponseShapeError.missing("repository.ref.target")
-    history = target.get("history")
-    if not isinstance(history, dict):
-        raise GitHubResponseShapeError.missing("repository.ref.target.history")
-    return typ.cast("dict[str, typ.Any]", history)
+    """Extract commit history from GraphQL response data."""
+    return _extract_connection(data, ["repository", "ref", "target", "history"])
