@@ -31,6 +31,21 @@ def run_async[T](coro: typ.Coroutine[typ.Any, typ.Any, T]) -> T:
     return asyncio.run(coro)
 
 
+def _count_raw_events(ingestion_context: IngestionContext, slug: str) -> int:
+    """Count raw events for a given repository slug."""
+
+    async def _count() -> int:
+        async with ingestion_context["session_factory"]() as session:
+            ids = (
+                await session.scalars(
+                    select(RawEvent.id).where(RawEvent.repo_external_id == slug)
+                )
+            ).all()
+            return len(ids)
+
+    return run_async(_count())
+
+
 class FakeGitHubClient:
     """Deterministic GitHub client for behavioural tests."""
 
@@ -276,32 +291,14 @@ def raw_events_exist(ingestion_context: IngestionContext, slug: str) -> None:
 @when(parsers.parse('the GitHub ingestion worker runs again for "{slug}"'))
 def run_worker_again(ingestion_context: IngestionContext, slug: str) -> None:
     """Record raw event count, then re-run ingestion."""
-
-    async def _count_before() -> int:
-        async with ingestion_context["session_factory"]() as session:
-            ids = (
-                await session.scalars(
-                    select(RawEvent.id).where(RawEvent.repo_external_id == slug)
-                )
-            ).all()
-            return len(ids)
-
-    ingestion_context["raw_event_count_before"] = run_async(_count_before())
+    ingestion_context["raw_event_count_before"] = _count_raw_events(
+        ingestion_context, slug
+    )
     run_worker(ingestion_context, slug)
 
 
 @then(parsers.parse('no additional Bronze raw events are written for "{slug}"'))
 def no_additional_events(ingestion_context: IngestionContext, slug: str) -> None:
     """Assert the second ingestion run does not add duplicates."""
-
-    async def _count_after() -> int:
-        async with ingestion_context["session_factory"]() as session:
-            ids = (
-                await session.scalars(
-                    select(RawEvent.id).where(RawEvent.repo_external_id == slug)
-                )
-            ).all()
-            return len(ids)
-
-    after = run_async(_count_after())
+    after = _count_raw_events(ingestion_context, slug)
     assert after == ingestion_context["raw_event_count_before"]

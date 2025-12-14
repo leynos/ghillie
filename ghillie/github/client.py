@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
+import functools
 import os
 import typing as typ
 
@@ -386,7 +387,7 @@ def _generic_event_from_node[PayloadT: dict[str, typ.Any]](
     if updated_at <= since:
         return (None, True)
 
-    payload = payload_builder(database_id, updated_at_raw)
+    payload = payload_builder(database_id=database_id, updated_at_raw=updated_at_raw)
     return (
         GitHubIngestedEvent(
             event_type=event_type,
@@ -485,19 +486,11 @@ def _pull_request_event_from_node(
     *,
     since: dt.datetime,
 ) -> tuple[GitHubIngestedEvent | None, bool]:
-    def _payload_builder(database_id: int, updated_at_raw: str) -> dict[str, typ.Any]:
-        return _build_pr_payload(
-            repo,
-            node,
-            database_id=database_id,
-            updated_at_raw=updated_at_raw,
-        )
-
     return _generic_event_from_node(
         "github.pull_request",
         node,
         since=since,
-        payload_builder=_payload_builder,
+        payload_builder=functools.partial(_build_pr_payload, repo, node),
     )
 
 
@@ -521,19 +514,11 @@ def _issue_event_from_node(
     *,
     since: dt.datetime,
 ) -> tuple[GitHubIngestedEvent | None, bool]:
-    def _payload_builder(database_id: int, updated_at_raw: str) -> dict[str, typ.Any]:
-        return _build_issue_payload(
-            repo,
-            node,
-            database_id=database_id,
-            updated_at_raw=updated_at_raw,
-        )
-
     return _generic_event_from_node(
         "github.issue",
         node,
         since=since,
-        payload_builder=_payload_builder,
+        payload_builder=functools.partial(_build_issue_payload, repo, node),
     )
 
 
@@ -563,6 +548,30 @@ class _EventsExtractor(typ.Protocol):
     ) -> tuple[list[GitHubIngestedEvent], bool]:
         """Return (events, should_stop)."""
         ...
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class _PaginatedEntityConfig:
+    """Configuration for a paginated GraphQL entity type."""
+
+    query: str
+    connection_path: list[str]
+    entity_name: str
+    events_extractor: _EventsExtractor
+
+
+_PR_CONFIG = _PaginatedEntityConfig(
+    query=_PULL_REQUESTS_QUERY,
+    connection_path=["repository", "pullRequests"],
+    entity_name="pull request",
+    events_extractor=_pull_request_events_from_nodes,
+)
+_ISSUES_CONFIG = _PaginatedEntityConfig(
+    query=_ISSUES_QUERY,
+    connection_path=["repository", "issues"],
+    entity_name="issue",
+    events_extractor=_issue_events_from_nodes,
+)
 
 
 class GitHubGraphQLClient:
@@ -626,15 +635,12 @@ class GitHubGraphQLClient:
             if not isinstance(after, str):
                 return
 
-    async def _iter_paginated_entities(  # noqa: PLR0913
+    async def _iter_paginated_entities(
         self,
         repo: RepositoryInfo,
         *,
         since: dt.datetime,
-        query: str,
-        connection_path: list[str],
-        entity_name: str,
-        events_extractor: _EventsExtractor,
+        config: _PaginatedEntityConfig,
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Yield entity snapshot events from a paginated GraphQL connection.
 
@@ -647,12 +653,12 @@ class GitHubGraphQLClient:
         after: str | None = None
         while True:
             data = await self._graphql(
-                query,
+                config.query,
                 {"owner": repo.owner, "name": repo.name, "after": after},
             )
-            connection = _extract_connection(data, connection_path)
-            nodes = _connection_nodes(connection, field=entity_name)
-            events, should_stop = events_extractor(repo, nodes, since=since)
+            connection = _extract_connection(data, config.connection_path)
+            nodes = _connection_nodes(connection, field=config.entity_name)
+            events, should_stop = config.events_extractor(repo, nodes, since=since)
             for event in events:
                 yield event
             if should_stop:
@@ -673,10 +679,7 @@ class GitHubGraphQLClient:
         async for event in self._iter_paginated_entities(
             repo,
             since=since_utc,
-            query=_PULL_REQUESTS_QUERY,
-            connection_path=["repository", "pullRequests"],
-            entity_name="pull request",
-            events_extractor=_pull_request_events_from_nodes,
+            config=_PR_CONFIG,
         ):
             yield event
 
@@ -688,10 +691,7 @@ class GitHubGraphQLClient:
         async for event in self._iter_paginated_entities(
             repo,
             since=since_utc,
-            query=_ISSUES_QUERY,
-            connection_path=["repository", "issues"],
-            entity_name="issue",
-            events_extractor=_issue_events_from_nodes,
+            config=_ISSUES_CONFIG,
         ):
             yield event
 
