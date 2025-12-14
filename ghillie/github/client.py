@@ -7,6 +7,7 @@ import datetime as dt
 import functools
 import os
 import typing as typ
+from typing import TypeVar  # noqa: ICN003,F401
 
 import httpx
 
@@ -364,12 +365,20 @@ def _iter_doc_change_events(
             yield event
 
 
+class _PayloadBuilder[PayloadT: dict[str, typ.Any]](typ.Protocol):
+    """Build an event payload dict from validated node fields."""
+
+    def __call__(self, *, database_id: int, updated_at_raw: str) -> PayloadT:
+        """Return the event payload for the given node identifiers."""
+        ...
+
+
 def _generic_event_from_node[PayloadT: dict[str, typ.Any]](
     event_type: str,
     node: dict[str, typ.Any],
     *,
     since: dt.datetime,
-    payload_builder: typ.Callable[[int, str], PayloadT],
+    payload_builder: _PayloadBuilder[PayloadT],
 ) -> tuple[GitHubIngestedEvent | None, bool]:
     """Create a GitHubIngestedEvent from a GraphQL node, or decide to stop.
 
