@@ -120,24 +120,51 @@ def _create_commit_event(
     )
 
 
+def _create_numbered_item_event(  # noqa: PLR0913
+    owner: str,
+    name: str,
+    occurred_at: dt.datetime,
+    *,
+    event_type: str,
+    item_id: int,
+    title: str,
+    extra_fields: dict[str, object] | None = None,
+) -> GitHubIngestedEvent:
+    """Create a test event for numbered GitHub items (PRs or issues)."""
+    payload: dict[str, object] = {
+        "id": item_id,
+        "number": item_id,
+        "title": title,
+        "state": "open",
+        "repo_owner": owner,
+        "repo_name": name,
+        "created_at": occurred_at.isoformat(),
+        "metadata": {"updated_at": occurred_at.isoformat()},
+    }
+    if extra_fields is not None:
+        payload |= extra_fields
+
+    return GitHubIngestedEvent(
+        event_type=event_type,
+        source_event_id=str(item_id),
+        occurred_at=occurred_at,
+        payload=payload,
+    )
+
+
 def _create_pr_event(
     owner: str, name: str, occurred_at: dt.datetime
 ) -> GitHubIngestedEvent:
-    return GitHubIngestedEvent(
+    return _create_numbered_item_event(
+        owner,
+        name,
+        occurred_at,
         event_type="github.pull_request",
-        source_event_id="17",
-        occurred_at=occurred_at,
-        payload={
-            "id": 17,
-            "number": 17,
-            "title": "Add release checklist",
-            "state": "open",
+        item_id=17,
+        title="Add release checklist",
+        extra_fields={
             "base_branch": "main",
             "head_branch": "feature/release-checklist",
-            "repo_owner": owner,
-            "repo_name": name,
-            "created_at": occurred_at.isoformat(),
-            "metadata": {"updated_at": occurred_at.isoformat()},
         },
     )
 
@@ -145,20 +172,13 @@ def _create_pr_event(
 def _create_issue_event(
     owner: str, name: str, occurred_at: dt.datetime
 ) -> GitHubIngestedEvent:
-    return GitHubIngestedEvent(
+    return _create_numbered_item_event(
+        owner,
+        name,
+        occurred_at,
         event_type="github.issue",
-        source_event_id="101",
-        occurred_at=occurred_at,
-        payload={
-            "id": 101,
-            "number": 101,
-            "title": "Fix flaky integration test",
-            "state": "open",
-            "repo_owner": owner,
-            "repo_name": name,
-            "created_at": occurred_at.isoformat(),
-            "metadata": {"updated_at": occurred_at.isoformat()},
-        },
+        item_id=101,
+        title="Fix flaky integration test",
     )
 
 

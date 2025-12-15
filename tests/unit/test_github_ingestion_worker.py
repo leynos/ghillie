@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import typing as typ
 
@@ -117,30 +118,36 @@ def _create_test_commit_event(
     )
 
 
-def _create_test_numbered_item_event(  # noqa: PLR0913
+@dataclasses.dataclass(frozen=True, slots=True)
+class _TestNumberedItemSpec:
+    """Specification for creating a test numbered item event (PR or issue)."""
+
+    event_type: str
+    item_id: int
+    title: str
+    extra_fields: dict[str, object] | None = None
+
+
+def _create_test_numbered_item_event(
     repo: RepositoryInfo,
     occurred_at: dt.datetime,
-    *,
-    event_type: str,
-    item_id: int,
-    title: str,
-    extra_fields: dict[str, object] | None = None,
+    spec: _TestNumberedItemSpec,
 ) -> GitHubIngestedEvent:
     """Create a numbered-item event (PR or issue) with shared payload fields."""
     payload: dict[str, object] = {
-        "id": item_id,
-        "number": item_id,
-        "title": title,
+        "id": spec.item_id,
+        "number": spec.item_id,
+        "title": spec.title,
         "state": "open",
         "repo_owner": repo.owner,
         "repo_name": repo.name,
         "created_at": occurred_at.isoformat(),
     }
-    if extra_fields:
-        payload.update(extra_fields)
+    if spec.extra_fields is not None:
+        payload.update(spec.extra_fields)
     return _event(
-        event_type=event_type,
-        source_event_id=str(item_id),
+        event_type=spec.event_type,
+        source_event_id=str(spec.item_id),
         occurred_at=occurred_at,
         payload=payload,
     )
@@ -150,9 +157,7 @@ def _create_test_pr_event(
     repo: RepositoryInfo, occurred_at: dt.datetime
 ) -> GitHubIngestedEvent:
     """Create a test pull request event for the ingestion worker."""
-    return _create_test_numbered_item_event(
-        repo,
-        occurred_at,
+    spec = _TestNumberedItemSpec(
         event_type="github.pull_request",
         item_id=17,
         title="Add release checklist",
@@ -161,20 +166,20 @@ def _create_test_pr_event(
             "head_branch": "feature/release-checklist",
         },
     )
+    return _create_test_numbered_item_event(repo, occurred_at, spec)
 
 
 def _create_test_issue_event(
     repo: RepositoryInfo, occurred_at: dt.datetime
 ) -> GitHubIngestedEvent:
     """Create a test issue event for the ingestion worker."""
-    return _create_test_numbered_item_event(
-        repo,
-        occurred_at,
+    spec = _TestNumberedItemSpec(
         event_type="github.issue",
         item_id=101,
         title="Fix flaky integration test",
         extra_fields=None,
     )
+    return _create_test_numbered_item_event(repo, occurred_at, spec)
 
 
 def _create_test_doc_change_event(

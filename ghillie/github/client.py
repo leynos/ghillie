@@ -489,62 +489,6 @@ def _generic_events_from_nodes(
     return events, should_stop
 
 
-def _pull_request_event_from_node(
-    repo: RepositoryInfo,
-    node: dict[str, typ.Any],
-    *,
-    since: dt.datetime,
-) -> tuple[GitHubIngestedEvent | None, bool]:
-    return _generic_event_from_node(
-        "github.pull_request",
-        node,
-        since=since,
-        payload_builder=functools.partial(_build_pr_payload, repo, node),
-    )
-
-
-def _pull_request_events_from_nodes(
-    repo: RepositoryInfo,
-    nodes: list[dict[str, typ.Any]],
-    *,
-    since: dt.datetime,
-) -> tuple[list[GitHubIngestedEvent], bool]:
-    return _generic_events_from_nodes(
-        repo,
-        nodes,
-        since=since,
-        node_transformer=_pull_request_event_from_node,
-    )
-
-
-def _issue_event_from_node(
-    repo: RepositoryInfo,
-    node: dict[str, typ.Any],
-    *,
-    since: dt.datetime,
-) -> tuple[GitHubIngestedEvent | None, bool]:
-    return _generic_event_from_node(
-        "github.issue",
-        node,
-        since=since,
-        payload_builder=functools.partial(_build_issue_payload, repo, node),
-    )
-
-
-def _issue_events_from_nodes(
-    repo: RepositoryInfo,
-    nodes: list[dict[str, typ.Any]],
-    *,
-    since: dt.datetime,
-) -> tuple[list[GitHubIngestedEvent], bool]:
-    return _generic_events_from_nodes(
-        repo,
-        nodes,
-        since=since,
-        node_transformer=_issue_event_from_node,
-    )
-
-
 class _EventsExtractor(typ.Protocol):
     """Extract events (and stop signal) from a list of GraphQL nodes."""
 
@@ -573,13 +517,39 @@ _PR_CONFIG = _PaginatedEntityConfig(
     query=_PULL_REQUESTS_QUERY,
     connection_path=["repository", "pullRequests"],
     entity_name="pull request",
-    events_extractor=_pull_request_events_from_nodes,
+    events_extractor=lambda repo, nodes, *, since: _generic_events_from_nodes(
+        repo,
+        nodes,
+        since=since,
+        node_transformer=typ.cast(
+            "_NodeTransformer",
+            lambda r, n, *, since: _generic_event_from_node(
+                "github.pull_request",
+                n,
+                since=since,
+                payload_builder=functools.partial(_build_pr_payload, r, n),
+            ),
+        ),
+    ),
 )
 _ISSUES_CONFIG = _PaginatedEntityConfig(
     query=_ISSUES_QUERY,
     connection_path=["repository", "issues"],
     entity_name="issue",
-    events_extractor=_issue_events_from_nodes,
+    events_extractor=lambda repo, nodes, *, since: _generic_events_from_nodes(
+        repo,
+        nodes,
+        since=since,
+        node_transformer=typ.cast(
+            "_NodeTransformer",
+            lambda r, n, *, since: _generic_event_from_node(
+                "github.issue",
+                n,
+                since=since,
+                payload_builder=functools.partial(_build_issue_payload, r, n),
+            ),
+        ),
+    ),
 )
 
 
