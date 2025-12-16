@@ -2,41 +2,37 @@
 
 from __future__ import annotations
 
+import collections.abc as cabc
 import dataclasses
 import datetime as dt
-import functools
 import os
 import typing as typ
-from typing import TypeVar  # noqa: ICN003,F401
 
 import httpx
 
+from ghillie.registry.models import RepositoryInfo
+
 from .errors import GitHubAPIError, GitHubConfigError, GitHubResponseShapeError
 from .models import GitHubIngestedEvent
-
-if typ.TYPE_CHECKING:
-    import collections.abc as cabc
-
-    from ghillie.registry.models import RepositoryInfo
 
 
 class GitHubActivityClient(typ.Protocol):
     """Interface for fetching GitHub activity for ingestion."""
 
     def iter_commits(
-        self, repo: RepositoryInfo, *, since: dt.datetime
+        self, repo: RepositoryInfo, *, since: dt.datetime, after: str | None = None
     ) -> cabc.AsyncIterator[GitHubIngestedEvent]:
         """Yield commit events on the default branch since a timestamp."""
         ...
 
     def iter_pull_requests(
-        self, repo: RepositoryInfo, *, since: dt.datetime
+        self, repo: RepositoryInfo, *, since: dt.datetime, after: str | None = None
     ) -> cabc.AsyncIterator[GitHubIngestedEvent]:
         """Yield pull request snapshot events updated since a timestamp."""
         ...
 
     def iter_issues(
-        self, repo: RepositoryInfo, *, since: dt.datetime
+        self, repo: RepositoryInfo, *, since: dt.datetime, after: str | None = None
     ) -> cabc.AsyncIterator[GitHubIngestedEvent]:
         """Yield issue snapshot events updated since a timestamp."""
         ...
@@ -47,6 +43,7 @@ class GitHubActivityClient(typ.Protocol):
         *,
         since: dt.datetime,
         documentation_paths: typ.Sequence[str],
+        after: str | None = None,
     ) -> cabc.AsyncIterator[GitHubIngestedEvent]:
         """Yield documentation change events for configured paths since a timestamp."""
         ...
@@ -121,20 +118,23 @@ query($owner: String!, $name: String!, $after: String) {
         hasNextPage
         endCursor
       }
-      nodes {
-        databaseId
-        number
-        title
-        state
-        isDraft
-        createdAt
-        updatedAt
-        mergedAt
-        closedAt
-        baseRefName
-        headRefName
-        author { login }
-        labels(first: 50) { nodes { name } }
+      edges {
+        cursor
+        node {
+          databaseId
+          number
+          title
+          state
+          isDraft
+          createdAt
+          updatedAt
+          mergedAt
+          closedAt
+          baseRefName
+          headRefName
+          author { login }
+          labels(first: 50) { nodes { name } }
+        }
       }
     }
   }
@@ -153,16 +153,19 @@ query($owner: String!, $name: String!, $after: String) {
         hasNextPage
         endCursor
       }
-      nodes {
-        databaseId
-        number
-        title
-        state
-        createdAt
-        updatedAt
-        closedAt
-        author { login }
-        labels(first: 50) { nodes { name } }
+      edges {
+        cursor
+        node {
+          databaseId
+          number
+          title
+          state
+          createdAt
+          updatedAt
+          closedAt
+          author { login }
+          labels(first: 50) { nodes { name } }
+        }
       }
     }
   }
@@ -254,6 +257,8 @@ def _commit_event_from_node(
     repo: RepositoryInfo,
     node: dict[str, typ.Any],
     since: dt.datetime,
+    *,
+    cursor: str | None = None,
 ) -> GitHubIngestedEvent | None:
     oid = node.get("oid")
     committed_date = node.get("committedDate")
@@ -283,6 +288,7 @@ def _commit_event_from_node(
         source_event_id=oid,
         occurred_at=occurred_at,
         payload=payload,
+        cursor=cursor,
     )
 
 
@@ -292,10 +298,12 @@ def _iter_commit_events(
     since: dt.datetime,
 ) -> typ.Iterator[GitHubIngestedEvent]:
     for edge in edges:
+        cursor = edge.get("cursor")
         node = edge.get("node")
         if not isinstance(node, dict):
             continue
-        event = _commit_event_from_node(repo, node, since)
+        cursor_value = cursor if isinstance(cursor, str) else None
+        event = _commit_event_from_node(repo, node, since, cursor=cursor_value)
         if event is not None:
             yield event
 
@@ -365,20 +373,24 @@ def _iter_doc_change_events(
             yield event
 
 
-class _PayloadBuilder[PayloadT: dict[str, typ.Any]](typ.Protocol):
-    """Build an event payload dict from validated node fields."""
+NodePayloadBuilder = cabc.Callable[
+    [RepositoryInfo, dict[str, typ.Any], str],
+    dict[str, typ.Any],
+]
+NodeToEvent = cabc.Callable[
+    [RepositoryInfo, dict[str, typ.Any], dt.datetime],
+    tuple[GitHubIngestedEvent | None, bool],
+]
 
-    def __call__(self, *, database_id: int, updated_at_raw: str) -> PayloadT:
-        """Return the event payload for the given node identifiers."""
-        ...
 
-
-def _generic_event_from_node[PayloadT: dict[str, typ.Any]](
+def _generic_event_from_node(  # noqa: PLR0913
     event_type: str,
+    repo: RepositoryInfo,
     node: dict[str, typ.Any],
     *,
     since: dt.datetime,
-    payload_builder: _PayloadBuilder[PayloadT],
+    payload_builder: NodePayloadBuilder,
+    cursor: str | None = None,
 ) -> tuple[GitHubIngestedEvent | None, bool]:
     """Create a GitHubIngestedEvent from a GraphQL node, or decide to stop.
 
@@ -396,13 +408,15 @@ def _generic_event_from_node[PayloadT: dict[str, typ.Any]](
     if updated_at <= since:
         return (None, True)
 
-    payload = payload_builder(database_id=database_id, updated_at_raw=updated_at_raw)
+    payload = payload_builder(repo, node, updated_at_raw)
+    payload["id"] = database_id
     return (
         GitHubIngestedEvent(
             event_type=event_type,
             source_event_id=str(database_id),
             occurred_at=updated_at,
             payload=payload,
+            cursor=cursor,
         ),
         False,
     )
@@ -411,14 +425,11 @@ def _generic_event_from_node[PayloadT: dict[str, typ.Any]](
 def _build_pr_payload(
     repo: RepositoryInfo,
     node: dict[str, typ.Any],
-    *,
-    database_id: int,
     updated_at_raw: str,
 ) -> dict[str, typ.Any]:
     """Build a pull request payload dict from a GraphQL node."""
     merged_at = node.get("mergedAt")
     return {
-        "id": database_id,
         "number": node.get("number"),
         "title": node.get("title"),
         "author_login": _maybe_login(node.get("author")),
@@ -439,13 +450,10 @@ def _build_pr_payload(
 def _build_issue_payload(
     repo: RepositoryInfo,
     node: dict[str, typ.Any],
-    *,
-    database_id: int,
     updated_at_raw: str,
 ) -> dict[str, typ.Any]:
     """Build an issue payload dict from a GraphQL node."""
     return {
-        "id": database_id,
         "number": node.get("number"),
         "title": node.get("title"),
         "author_login": _maybe_login(node.get("author")),
@@ -459,98 +467,65 @@ def _build_issue_payload(
     }
 
 
-class _NodeTransformer(typ.Protocol):
-    """Transform a node into an optional event and stop signal."""
+def _pull_request_node_to_event(
+    repo: RepositoryInfo,
+    node: dict[str, typ.Any],
+    since: dt.datetime,
+) -> tuple[GitHubIngestedEvent | None, bool]:
+    edge = node
+    raw_node = edge.get("node")
+    if not isinstance(raw_node, dict):
+        return (None, False)
+    cursor = edge.get("cursor")
+    cursor_value = cursor if isinstance(cursor, str) else None
+    return _generic_event_from_node(
+        "github.pull_request",
+        repo,
+        raw_node,
+        since=since,
+        payload_builder=_build_pr_payload,
+        cursor=cursor_value,
+    )
 
-    def __call__(
-        self, repo: RepositoryInfo, node: dict[str, typ.Any], *, since: dt.datetime
-    ) -> tuple[GitHubIngestedEvent | None, bool]:
-        """Return (event, should_stop)."""
-        ...
+
+def _issue_node_to_event(
+    repo: RepositoryInfo,
+    node: dict[str, typ.Any],
+    since: dt.datetime,
+) -> tuple[GitHubIngestedEvent | None, bool]:
+    edge = node
+    raw_node = edge.get("node")
+    if not isinstance(raw_node, dict):
+        return (None, False)
+    cursor = edge.get("cursor")
+    cursor_value = cursor if isinstance(cursor, str) else None
+    return _generic_event_from_node(
+        "github.issue",
+        repo,
+        raw_node,
+        since=since,
+        payload_builder=_build_issue_payload,
+        cursor=cursor_value,
+    )
 
 
-def _generic_events_from_nodes(
+def _events_from_nodes(
     repo: RepositoryInfo,
     nodes: list[dict[str, typ.Any]],
     *,
     since: dt.datetime,
-    node_transformer: _NodeTransformer,
+    node_to_event: NodeToEvent,
 ) -> tuple[list[GitHubIngestedEvent], bool]:
-    """Apply a node transformer across nodes, stopping when requested."""
     events: list[GitHubIngestedEvent] = []
     should_stop = False
     for node in nodes:
-        event, stop = node_transformer(repo, node, since=since)
+        event, stop = node_to_event(repo, node, since)
         if event is not None:
             events.append(event)
         if stop:
             should_stop = True
             break
     return events, should_stop
-
-
-class _EventsExtractor(typ.Protocol):
-    """Extract events (and stop signal) from a list of GraphQL nodes."""
-
-    def __call__(
-        self,
-        repo: RepositoryInfo,
-        nodes: list[dict[str, typ.Any]],
-        *,
-        since: dt.datetime,
-    ) -> tuple[list[GitHubIngestedEvent], bool]:
-        """Return (events, should_stop)."""
-        ...
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class _PaginatedEntityConfig:
-    """Configuration for a paginated GraphQL entity type."""
-
-    query: str
-    connection_path: list[str]
-    entity_name: str
-    events_extractor: _EventsExtractor
-
-
-_PR_CONFIG = _PaginatedEntityConfig(
-    query=_PULL_REQUESTS_QUERY,
-    connection_path=["repository", "pullRequests"],
-    entity_name="pull request",
-    events_extractor=lambda repo, nodes, *, since: _generic_events_from_nodes(
-        repo,
-        nodes,
-        since=since,
-        node_transformer=typ.cast(
-            "_NodeTransformer",
-            lambda r, n, *, since: _generic_event_from_node(
-                "github.pull_request",
-                n,
-                since=since,
-                payload_builder=functools.partial(_build_pr_payload, r, n),
-            ),
-        ),
-    ),
-)
-_ISSUES_CONFIG = _PaginatedEntityConfig(
-    query=_ISSUES_QUERY,
-    connection_path=["repository", "issues"],
-    entity_name="issue",
-    events_extractor=lambda repo, nodes, *, since: _generic_events_from_nodes(
-        repo,
-        nodes,
-        since=since,
-        node_transformer=typ.cast(
-            "_NodeTransformer",
-            lambda r, n, *, since: _generic_event_from_node(
-                "github.issue",
-                n,
-                since=since,
-                payload_builder=functools.partial(_build_issue_payload, r, n),
-            ),
-        ),
-    ),
-)
 
 
 class GitHubGraphQLClient:
@@ -583,12 +558,16 @@ class GitHubGraphQLClient:
             await self._client.aclose()
 
     async def iter_commits(
-        self, repo: RepositoryInfo, *, since: dt.datetime
+        self,
+        repo: RepositoryInfo,
+        *,
+        since: dt.datetime,
+        after: str | None = None,
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Yield commit snapshot events on the default branch."""
         since_utc = _ensure_tzaware(since, field="since")
         qualified_name = f"refs/heads/{repo.default_branch}"
-        after: str | None = None
+        after_cursor: str | None = after
 
         while True:
             data = await self._graphql(
@@ -598,7 +577,7 @@ class GitHubGraphQLClient:
                     "name": repo.name,
                     "qualifiedName": qualified_name,
                     "since": since_utc.isoformat(),
-                    "after": after,
+                    "after": after_cursor,
                     "path": None,
                 },
             )
@@ -610,16 +589,20 @@ class GitHubGraphQLClient:
             page_info = history.get("pageInfo")
             if not isinstance(page_info, dict) or not page_info.get("hasNextPage"):
                 return
-            after = page_info.get("endCursor")
-            if not isinstance(after, str):
+            after_cursor = page_info.get("endCursor")
+            if not isinstance(after_cursor, str):
                 return
 
-    async def _iter_paginated_entities(
+    async def _iter_paginated_entities(  # noqa: PLR0913
         self,
         repo: RepositoryInfo,
         *,
         since: dt.datetime,
-        config: _PaginatedEntityConfig,
+        query: str,
+        connection_path: list[str],
+        entity_name: str,
+        node_to_event: NodeToEvent,
+        after: str | None = None,
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Yield entity snapshot events from a paginated GraphQL connection.
 
@@ -629,15 +612,20 @@ class GitHubGraphQLClient:
         GitHubIngestedEvent instances and signalling when iteration should stop
         because the nodes are older than the `since` watermark.
         """
-        after: str | None = None
+        after_cursor: str | None = after
         while True:
             data = await self._graphql(
-                config.query,
-                {"owner": repo.owner, "name": repo.name, "after": after},
+                query,
+                {"owner": repo.owner, "name": repo.name, "after": after_cursor},
             )
-            connection = _extract_connection(data, config.connection_path)
-            nodes = _connection_nodes(connection, field=config.entity_name)
-            events, should_stop = config.events_extractor(repo, nodes, since=since)
+            connection = _extract_connection(data, connection_path)
+            edges = _connection_edges(connection, field=entity_name)
+            events, should_stop = _events_from_nodes(
+                repo,
+                edges,
+                since=since,
+                node_to_event=node_to_event,
+            )
             for event in events:
                 yield event
             if should_stop:
@@ -646,31 +634,47 @@ class GitHubGraphQLClient:
             page_info = connection.get("pageInfo")
             if not isinstance(page_info, dict) or not page_info.get("hasNextPage"):
                 return
-            after = page_info.get("endCursor")
-            if not isinstance(after, str):
+            after_cursor = page_info.get("endCursor")
+            if not isinstance(after_cursor, str):
                 return
 
     async def iter_pull_requests(
-        self, repo: RepositoryInfo, *, since: dt.datetime
+        self,
+        repo: RepositoryInfo,
+        *,
+        since: dt.datetime,
+        after: str | None = None,
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Yield pull request snapshot events updated since a timestamp."""
         since_utc = _ensure_tzaware(since, field="since")
         async for event in self._iter_paginated_entities(
             repo,
             since=since_utc,
-            config=_PR_CONFIG,
+            query=_PULL_REQUESTS_QUERY,
+            connection_path=["repository", "pullRequests"],
+            entity_name="pull request",
+            node_to_event=_pull_request_node_to_event,
+            after=after,
         ):
             yield event
 
     async def iter_issues(
-        self, repo: RepositoryInfo, *, since: dt.datetime
+        self,
+        repo: RepositoryInfo,
+        *,
+        since: dt.datetime,
+        after: str | None = None,
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Yield issue snapshot events updated since a timestamp."""
         since_utc = _ensure_tzaware(since, field="since")
         async for event in self._iter_paginated_entities(
             repo,
             since=since_utc,
-            config=_ISSUES_CONFIG,
+            query=_ISSUES_QUERY,
+            connection_path=["repository", "issues"],
+            entity_name="issue",
+            node_to_event=_issue_node_to_event,
+            after=after,
         ):
             yield event
 
@@ -680,10 +684,12 @@ class GitHubGraphQLClient:
         *,
         since: dt.datetime,
         documentation_paths: typ.Sequence[str],
+        after: str | None = None,
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Yield documentation change events for documentation path commits."""
         since_utc = _ensure_tzaware(since, field="since")
         qualified_name = f"refs/heads/{repo.default_branch}"
+        del after
 
         for path in documentation_paths:
             after: str | None = None
@@ -727,14 +733,27 @@ class GitHubGraphQLClient:
         )
         if response.status_code >= _HTTP_ERROR_STATUS_THRESHOLD:
             raise GitHubAPIError.http_error(response.status_code)
-        payload = typ.cast("dict[str, typ.Any]", response.json())
+        payload_raw = response.json()
+        if not isinstance(payload_raw, dict):
+            raise GitHubResponseShapeError.missing("response")
+        payload: dict[str, typ.Any] = {}
+        for key, value in payload_raw.items():
+            if not isinstance(key, str):
+                raise GitHubResponseShapeError.missing("response")
+            payload[key] = value
+
         errors = payload.get("errors")
         if errors:
             raise GitHubAPIError.graphql_errors(errors)
         data = payload.get("data")
         if not isinstance(data, dict):
             raise GitHubResponseShapeError.missing("data")
-        return typ.cast("dict[str, typ.Any]", data)
+        result: dict[str, typ.Any] = {}
+        for key, value in data.items():
+            if not isinstance(key, str):
+                raise GitHubResponseShapeError.missing("data")
+            result[key] = value
+        return result
 
 
 def _extract_connection(
@@ -747,7 +766,12 @@ def _extract_connection(
         node = node.get(key)
     if not isinstance(node, dict):
         raise GitHubResponseShapeError.missing(".".join(path))
-    return typ.cast("dict[str, typ.Any]", node)
+    result: dict[str, typ.Any] = {}
+    for key, value in node.items():
+        if not isinstance(key, str):
+            raise GitHubResponseShapeError.missing(".".join(path))
+        result[key] = value
+    return result
 
 
 def _extract_commit_history(data: dict[str, typ.Any]) -> dict[str, typ.Any]:

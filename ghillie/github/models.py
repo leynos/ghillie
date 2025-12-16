@@ -17,3 +17,4 @@ class GitHubIngestedEvent:
     source_event_id: str
     occurred_at: dt.datetime
     payload: dict[str, typ.Any]
+    cursor: str | None = None

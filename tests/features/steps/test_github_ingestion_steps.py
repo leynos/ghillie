@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from ghillie.bronze import RawEvent, init_bronze_storage
+from ghillie.bronze import GithubIngestionOffset, RawEvent, init_bronze_storage
 from ghillie.github import GitHubIngestionConfig, GitHubIngestionWorker
 from ghillie.github.models import GitHubIngestedEvent
 from ghillie.registry import RepositoryRegistryService
@@ -25,6 +25,9 @@ from ghillie.silver.storage import Repository
 
 if typ.TYPE_CHECKING:
     from pathlib import Path
+
+
+_BASE_TIME = dt.datetime(2099, 1, 1, tzinfo=dt.UTC)
 
 
 def run_async[T](coro: typ.Coroutine[typ.Any, typ.Any, T]) -> T:
@@ -55,25 +58,28 @@ class FakeGitHubClient:
         self._events = events
 
     async def iter_commits(
-        self, repo: object, *, since: dt.datetime
+        self, repo: object, *, since: dt.datetime, after: str | None = None
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Yield commit events newer than `since`."""
+        del repo, after
         for event in self._events:
             if event.event_type == "github.commit" and event.occurred_at > since:
                 yield event
 
     async def iter_pull_requests(
-        self, repo: object, *, since: dt.datetime
+        self, repo: object, *, since: dt.datetime, after: str | None = None
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Yield pull request events newer than `since`."""
+        del repo, after
         for event in self._events:
             if event.event_type == "github.pull_request" and event.occurred_at > since:
                 yield event
 
     async def iter_issues(
-        self, repo: object, *, since: dt.datetime
+        self, repo: object, *, since: dt.datetime, after: str | None = None
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Yield issue events newer than `since`."""
+        del repo, after
         for event in self._events:
             if event.event_type == "github.issue" and event.occurred_at > since:
                 yield event
@@ -84,9 +90,10 @@ class FakeGitHubClient:
         *,
         since: dt.datetime,
         documentation_paths: typ.Sequence[str],
+        after: str | None = None,
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Yield documentation change events newer than `since`."""
-        del documentation_paths
+        del repo, documentation_paths, after
         for event in self._events:
             if event.event_type == "github.doc_change" and event.occurred_at > since:
                 yield event
@@ -100,6 +107,7 @@ class IngestionContext(typ.TypedDict, total=False):
     github_client: FakeGitHubClient
     repo_slug: str
     raw_event_count_before: int
+    expected_offsets: dict[str, dt.datetime]
 
 
 def _create_commit_event(
@@ -259,7 +267,7 @@ def managed_repository_registered(
 def github_api_returns_activity(ingestion_context: IngestionContext, slug: str) -> None:
     """Configure a fake GitHub client that returns a fixed activity set."""
     owner, name = slug.split("/", 1)
-    now = dt.datetime.now(dt.UTC)
+    now = _BASE_TIME
     events = [
         _create_commit_event(owner, name, now - dt.timedelta(hours=4)),
         _create_pr_event(owner, name, now - dt.timedelta(hours=3)),
@@ -267,6 +275,36 @@ def github_api_returns_activity(ingestion_context: IngestionContext, slug: str) 
         _create_doc_change_event(owner, name, now - dt.timedelta(hours=1)),
     ]
     ingestion_context["github_client"] = FakeGitHubClient(events)
+    ingestion_context["expected_offsets"] = {
+        "commit": now - dt.timedelta(hours=4),
+        "pull_request": now - dt.timedelta(hours=3),
+        "issue": now - dt.timedelta(hours=2),
+        "doc": now - dt.timedelta(hours=1),
+    }
+
+
+@given(parsers.parse('the GitHub API returns additional activity for "{slug}"'))
+def github_api_returns_additional_activity(
+    ingestion_context: IngestionContext, slug: str
+) -> None:
+    """Add additional activity with timestamps after the initial ingestion run."""
+    owner, name = slug.split("/", 1)
+    now = _BASE_TIME
+    events = [
+        _create_commit_event(owner, name, now - dt.timedelta(hours=4)),
+        _create_pr_event(owner, name, now - dt.timedelta(hours=3)),
+        _create_issue_event(owner, name, now - dt.timedelta(hours=2)),
+        _create_doc_change_event(owner, name, now - dt.timedelta(hours=1)),
+        _create_commit_event(owner, name, now + dt.timedelta(hours=1)),
+        _create_pr_event(owner, name, now + dt.timedelta(hours=2)),
+    ]
+    ingestion_context["github_client"] = FakeGitHubClient(events)
+    ingestion_context["expected_offsets"] = {
+        "commit": now + dt.timedelta(hours=1),
+        "pull_request": now + dt.timedelta(hours=2),
+        "issue": now - dt.timedelta(hours=2),
+        "doc": now - dt.timedelta(hours=1),
+    }
 
 
 @when(parsers.parse('the GitHub ingestion worker runs for "{slug}"'))
@@ -326,3 +364,33 @@ def no_additional_events(ingestion_context: IngestionContext, slug: str) -> None
     """Assert the second ingestion run does not add duplicates."""
     after = _count_raw_events(ingestion_context, slug)
     assert after == ingestion_context["raw_event_count_before"]
+
+
+@then(parsers.parse('additional Bronze raw events are written for "{slug}"'))
+def additional_events_are_written(
+    ingestion_context: IngestionContext, slug: str
+) -> None:
+    """Assert the second ingestion run adds new activity."""
+    after = _count_raw_events(ingestion_context, slug)
+    assert after > ingestion_context["raw_event_count_before"]
+
+
+@then(parsers.parse('GitHub ingestion offsets advance for "{slug}"'))
+def offsets_advance(ingestion_context: IngestionContext, slug: str) -> None:
+    """Verify per-kind ingestion offsets match expected timestamps."""
+    expected = ingestion_context["expected_offsets"]
+
+    async def _assert() -> None:
+        async with ingestion_context["session_factory"]() as session:
+            offsets = await session.scalar(
+                select(GithubIngestionOffset).where(
+                    GithubIngestionOffset.repo_external_id == slug
+                )
+            )
+            assert offsets is not None
+            assert offsets.last_commit_ingested_at == expected["commit"]
+            assert offsets.last_pr_ingested_at == expected["pull_request"]
+            assert offsets.last_issue_ingested_at == expected["issue"]
+            assert offsets.last_doc_ingested_at == expected["doc"]
+
+    run_async(_assert())
