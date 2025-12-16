@@ -36,17 +36,25 @@ class FakeGitHubClient:
         self._issues = issues
         self._doc_changes = doc_changes
 
+    def _find_start_index(
+        self, events: list[GitHubIngestedEvent], after: str | None
+    ) -> int:
+        """Find the starting index after a given cursor, or 0 if no cursor."""
+        if after is None:
+            return 0
+
+        for idx, event in enumerate(events):
+            if event.cursor == after:
+                return idx + 1
+
+        return 0
+
     async def iter_commits(
         self, repo: RepositoryInfo, *, since: dt.datetime, after: str | None = None
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Yield commit events newer than `since`."""
         del repo
-        start = 0
-        if after is not None:
-            for idx, event in enumerate(self._commits):
-                if event.cursor == after:
-                    start = idx + 1
-                    break
+        start = self._find_start_index(self._commits, after)
         for event in self._commits[start:]:
             if event.occurred_at > since:
                 yield event

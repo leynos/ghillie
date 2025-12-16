@@ -528,6 +528,38 @@ def _events_from_nodes(
     return events, should_stop
 
 
+def _validate_string_keyed_dict(
+    raw_dict: dict[typ.Any, typ.Any],
+    *,
+    field_name: str,
+) -> dict[str, typ.Any]:
+    """Validate that a dictionary has only string keys and return typed result."""
+    result: dict[str, typ.Any] = {}
+    for key, value in raw_dict.items():
+        if not isinstance(key, str):
+            raise GitHubResponseShapeError.missing(field_name)
+        result[key] = value
+    return result
+
+
+def _parse_graphql_payload(payload_raw: object) -> dict[str, typ.Any]:
+    """Parse and validate a GraphQL response payload, extracting data field."""
+    if not isinstance(payload_raw, dict):
+        raise GitHubResponseShapeError.missing("response")
+
+    payload = _validate_string_keyed_dict(payload_raw, field_name="response")
+
+    errors = payload.get("errors")
+    if errors:
+        raise GitHubAPIError.graphql_errors(errors)
+
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        raise GitHubResponseShapeError.missing("data")
+
+    return _validate_string_keyed_dict(data, field_name="data")
+
+
 class GitHubGraphQLClient:
     """GitHub GraphQL implementation of :class:`GitHubActivityClient`."""
 
@@ -727,6 +759,7 @@ class GitHubGraphQLClient:
     async def _graphql(
         self, query: str, variables: dict[str, typ.Any]
     ) -> dict[str, typ.Any]:
+        """Execute a GraphQL query and return the validated data field."""
         response = await self._client.post(
             self._config.endpoint,
             json={"query": query, "variables": variables},
@@ -734,44 +767,38 @@ class GitHubGraphQLClient:
         if response.status_code >= _HTTP_ERROR_STATUS_THRESHOLD:
             raise GitHubAPIError.http_error(response.status_code)
         payload_raw = response.json()
-        if not isinstance(payload_raw, dict):
-            raise GitHubResponseShapeError.missing("response")
-        payload: dict[str, typ.Any] = {}
-        for key, value in payload_raw.items():
-            if not isinstance(key, str):
-                raise GitHubResponseShapeError.missing("response")
-            payload[key] = value
-
-        errors = payload.get("errors")
-        if errors:
-            raise GitHubAPIError.graphql_errors(errors)
-        data = payload.get("data")
-        if not isinstance(data, dict):
-            raise GitHubResponseShapeError.missing("data")
-        result: dict[str, typ.Any] = {}
-        for key, value in data.items():
-            if not isinstance(key, str):
-                raise GitHubResponseShapeError.missing("data")
-            result[key] = value
-        return result
+        return _parse_graphql_payload(payload_raw)
 
 
-def _extract_connection(
-    data: dict[str, typ.Any], path: list[str]
-) -> dict[str, typ.Any]:
-    node: typ.Any = data
+def _traverse_path(data: dict[str, typ.Any], path: list[str]) -> object:
+    """Traverse a nested dictionary path, validating each step."""
+    node: object = data
     for key in path:
         if not isinstance(node, dict):
             raise GitHubResponseShapeError.missing(".".join(path))
         node = node.get(key)
+    return node
+
+
+def _validate_and_copy_dict(node: object, path: list[str]) -> dict[str, typ.Any]:
+    """Validate that node is a dict with string keys and return a copy."""
     if not isinstance(node, dict):
         raise GitHubResponseShapeError.missing(".".join(path))
+
     result: dict[str, typ.Any] = {}
     for key, value in node.items():
         if not isinstance(key, str):
             raise GitHubResponseShapeError.missing(".".join(path))
         result[key] = value
     return result
+
+
+def _extract_connection(
+    data: dict[str, typ.Any], path: list[str]
+) -> dict[str, typ.Any]:
+    """Extract a connection from nested GraphQL response data."""
+    node = _traverse_path(data, path)
+    return _validate_and_copy_dict(node, path)
 
 
 def _extract_commit_history(data: dict[str, typ.Any]) -> dict[str, typ.Any]:

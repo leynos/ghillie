@@ -142,6 +142,45 @@ class GitHubIngestionWorker:
             offsets.last_doc_ingested_at = result.max_seen
         return result.ingested
 
+    def _get_stream_for_kind(
+        self,
+        repo: RepositoryInfo,
+        kind: typ.Literal["commit", "pull_request", "issue"],
+        *,
+        since: dt.datetime,
+        after: str | None,
+    ) -> typ.AsyncIterator[GitHubIngestedEvent]:
+        """Select the appropriate activity stream for the given kind."""
+        if kind == "commit":
+            return self._client.iter_commits(repo, since=since, after=after)
+        if kind == "pull_request":
+            return self._client.iter_pull_requests(repo, since=since, after=after)
+        return self._client.iter_issues(repo, since=since, after=after)
+
+    async def _update_watermark_if_complete(  # noqa: PLR0913
+        self,
+        offsets: GithubIngestionOffset,
+        watermark_attr: str,
+        result: _StreamIngestionResult,
+        *,
+        after: str | None,
+        repo_slug: str,
+        kind: typ.Literal["commit", "pull_request", "issue"],
+    ) -> None:
+        """Update the watermark timestamp if the stream completed without truncation."""
+        if result.resume_cursor is not None:
+            return
+        if result.max_seen is None:
+            return
+
+        if after is None:
+            setattr(offsets, watermark_attr, result.max_seen)
+            return
+
+        latest = await self._latest_ingested_at(repo_slug, kind=kind)
+        if latest is not None:
+            setattr(offsets, watermark_attr, latest)
+
     async def _ingest_kind(  # noqa: PLR0913
         self,
         repo: RepositoryInfo,
@@ -165,22 +204,18 @@ class GitHubIngestionWorker:
         since = self._since_for(current, now=now)
         after = typ.cast("str | None", getattr(offsets, cursor_attr))
 
-        if kind == "commit":
-            stream = self._client.iter_commits(repo, since=since, after=after)
-        elif kind == "pull_request":
-            stream = self._client.iter_pull_requests(repo, since=since, after=after)
-        else:
-            stream = self._client.iter_issues(repo, since=since, after=after)
+        stream = self._get_stream_for_kind(repo, kind, since=since, after=after)
 
         result = await self._ingest_events_stream(repo, writer, stream)
         setattr(offsets, cursor_attr, result.resume_cursor)
-        if result.resume_cursor is None and result.max_seen is not None:
-            if after is None:
-                setattr(offsets, watermark_attr, result.max_seen)
-            else:
-                latest = await self._latest_ingested_at(repo.slug, kind=kind)
-                if latest is not None:
-                    setattr(offsets, watermark_attr, latest)
+        await self._update_watermark_if_complete(
+            offsets,
+            watermark_attr,
+            result,
+            after=after,
+            repo_slug=repo.slug,
+            kind=kind,
+        )
         return result.ingested
 
     async def _ingest_events_stream(
