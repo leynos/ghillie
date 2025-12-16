@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import datetime as dt
 import typing as typ
 
@@ -120,33 +121,39 @@ def _create_commit_event(
     )
 
 
-def _create_numbered_item_event(  # noqa: PLR0913
+@dataclasses.dataclass(frozen=True, slots=True)
+class _NumberedItemSpec:
+    """Specification for creating a test numbered item event (PR or issue)."""
+
+    event_type: str
+    item_id: int
+    title: str
+    extra_fields: dict[str, object] | None = None
+
+
+def _create_numbered_item_event(
     owner: str,
     name: str,
     occurred_at: dt.datetime,
-    *,
-    event_type: str,
-    item_id: int,
-    title: str,
-    extra_fields: dict[str, object] | None = None,
+    spec: _NumberedItemSpec,
 ) -> GitHubIngestedEvent:
     """Create a test event for numbered GitHub items (PRs or issues)."""
     payload: dict[str, object] = {
-        "id": item_id,
-        "number": item_id,
-        "title": title,
+        "id": spec.item_id,
+        "number": spec.item_id,
+        "title": spec.title,
         "state": "open",
         "repo_owner": owner,
         "repo_name": name,
         "created_at": occurred_at.isoformat(),
         "metadata": {"updated_at": occurred_at.isoformat()},
     }
-    if extra_fields is not None:
-        payload |= extra_fields
+    if spec.extra_fields is not None:
+        payload |= spec.extra_fields
 
     return GitHubIngestedEvent(
-        event_type=event_type,
-        source_event_id=str(item_id),
+        event_type=spec.event_type,
+        source_event_id=str(spec.item_id),
         occurred_at=occurred_at,
         payload=payload,
     )
@@ -155,10 +162,7 @@ def _create_numbered_item_event(  # noqa: PLR0913
 def _create_pr_event(
     owner: str, name: str, occurred_at: dt.datetime
 ) -> GitHubIngestedEvent:
-    return _create_numbered_item_event(
-        owner,
-        name,
-        occurred_at,
+    spec = _NumberedItemSpec(
         event_type="github.pull_request",
         item_id=17,
         title="Add release checklist",
@@ -167,19 +171,19 @@ def _create_pr_event(
             "head_branch": "feature/release-checklist",
         },
     )
+    return _create_numbered_item_event(owner, name, occurred_at, spec)
 
 
 def _create_issue_event(
     owner: str, name: str, occurred_at: dt.datetime
 ) -> GitHubIngestedEvent:
-    return _create_numbered_item_event(
-        owner,
-        name,
-        occurred_at,
+    spec = _NumberedItemSpec(
         event_type="github.issue",
         item_id=101,
         title="Fix flaky integration test",
+        extra_fields=None,
     )
+    return _create_numbered_item_event(owner, name, occurred_at, spec)
 
 
 def _create_doc_change_event(
