@@ -54,6 +54,87 @@ def _make_client(
     return client, http_client, calls
 
 
+def _make_pr_graphql_response(
+    pr_nodes: list[dict[str, typ.Any]],
+    *,
+    has_next_page: bool = False,
+    end_cursor: str | None = None,
+) -> tuple[int, dict[str, typ.Any]]:
+    """Build a GraphQL response for pull requests query."""
+    edges = [
+        {
+            "cursor": node["cursor"],
+            "node": {key: value for key, value in node.items() if key != "cursor"},
+        }
+        for node in pr_nodes
+    ]
+    return (
+        200,
+        {
+            "data": {
+                "repository": {
+                    "pullRequests": {
+                        "pageInfo": {
+                            "hasNextPage": has_next_page,
+                            "endCursor": end_cursor,
+                        },
+                        "edges": edges,
+                    }
+                }
+            }
+        },
+    )
+
+
+def _make_issue_node(  # noqa: PLR0913
+    database_id: int,
+    number: int,
+    title: str,
+    updated_at: str,
+    *,
+    state: str = "OPEN",
+    author_login: str = "octo",
+) -> dict[str, typ.Any]:
+    """Create a test issue node for GraphQL response mocks."""
+    return {
+        "databaseId": database_id,
+        "number": number,
+        "title": title,
+        "state": state,
+        "createdAt": updated_at,
+        "updatedAt": updated_at,
+        "closedAt": None,
+        "author": {"login": author_login},
+        "labels": {"nodes": []},
+    }
+
+
+def _make_issues_page(
+    issues: list[tuple[str, dict[str, typ.Any]]],
+    *,
+    has_next_page: bool,
+    end_cursor: str,
+) -> tuple[int, dict[str, typ.Any]]:
+    """Create a test GraphQL issues response page."""
+    edges = [{"cursor": cursor, "node": node} for cursor, node in issues]
+    return (
+        200,
+        {
+            "data": {
+                "repository": {
+                    "issues": {
+                        "pageInfo": {
+                            "hasNextPage": has_next_page,
+                            "endCursor": end_cursor,
+                        },
+                        "edges": edges,
+                    }
+                }
+            }
+        },
+    )
+
+
 @pytest.mark.asyncio
 async def test_graphql_raises_on_http_error() -> None:
     """_graphql raises a GitHubAPIError for HTTP error status codes."""
@@ -85,55 +166,42 @@ async def test_iter_pull_requests_paginates_and_applies_since_filter() -> None:
     updated_new = dt.datetime(2025, 1, 2, tzinfo=dt.UTC).isoformat()
     updated_old = dt.datetime(2025, 1, 1, tzinfo=dt.UTC).isoformat()
 
-    page_1 = (
-        200,
-        {
-            "data": {
-                "repository": {
-                    "pullRequests": {
-                        "pageInfo": {"hasNextPage": True, "endCursor": "cursor-next"},
-                        "edges": [
-                            {
-                                "cursor": "cursor-new",
-                                "node": {
-                                    "databaseId": 17,
-                                    "number": 17,
-                                    "title": "Add release checklist",
-                                    "state": "OPEN",
-                                    "isDraft": False,
-                                    "createdAt": updated_new,
-                                    "updatedAt": updated_new,
-                                    "mergedAt": None,
-                                    "closedAt": None,
-                                    "baseRefName": "main",
-                                    "headRefName": "feature/release-checklist",
-                                    "author": {"login": "octo"},
-                                    "labels": {"nodes": [{"name": "docs"}]},
-                                },
-                            },
-                            {
-                                "cursor": "cursor-old",
-                                "node": {
-                                    "databaseId": 99,
-                                    "number": 99,
-                                    "title": "Older PR",
-                                    "state": "OPEN",
-                                    "isDraft": False,
-                                    "createdAt": updated_old,
-                                    "updatedAt": updated_old,
-                                    "mergedAt": None,
-                                    "closedAt": None,
-                                    "baseRefName": "main",
-                                    "headRefName": "feature/old",
-                                    "author": {"login": "octo"},
-                                    "labels": {"nodes": []},
-                                },
-                            },
-                        ],
-                    }
-                }
-            }
-        },
+    pr_new = {
+        "cursor": "cursor-new",
+        "databaseId": 17,
+        "number": 17,
+        "title": "Add release checklist",
+        "state": "OPEN",
+        "isDraft": False,
+        "createdAt": updated_new,
+        "updatedAt": updated_new,
+        "mergedAt": None,
+        "closedAt": None,
+        "baseRefName": "main",
+        "headRefName": "feature/release-checklist",
+        "author": {"login": "octo"},
+        "labels": {"nodes": [{"name": "docs"}]},
+    }
+    pr_old = {
+        "cursor": "cursor-old",
+        "databaseId": 99,
+        "number": 99,
+        "title": "Older PR",
+        "state": "OPEN",
+        "isDraft": False,
+        "createdAt": updated_old,
+        "updatedAt": updated_old,
+        "mergedAt": None,
+        "closedAt": None,
+        "baseRefName": "main",
+        "headRefName": "feature/old",
+        "author": {"login": "octo"},
+        "labels": {"nodes": []},
+    }
+    page_1 = _make_pr_graphql_response(
+        [pr_new, pr_old],
+        has_next_page=True,
+        end_cursor="cursor-next",
     )
     client, http_client, calls = _make_client([page_1])
     try:
@@ -160,64 +228,35 @@ async def test_iter_issues_forwards_after_cursor_and_paginates() -> None:
     updated_1 = dt.datetime(2025, 1, 3, tzinfo=dt.UTC).isoformat()
     updated_2 = dt.datetime(2025, 1, 2, tzinfo=dt.UTC).isoformat()
 
-    page_1 = (
-        200,
-        {
-            "data": {
-                "repository": {
-                    "issues": {
-                        "pageInfo": {"hasNextPage": True, "endCursor": "cursor-page-1"},
-                        "edges": [
-                            {
-                                "cursor": "cursor-1",
-                                "node": {
-                                    "databaseId": 101,
-                                    "number": 101,
-                                    "title": "Fix flaky integration test",
-                                    "state": "OPEN",
-                                    "createdAt": updated_1,
-                                    "updatedAt": updated_1,
-                                    "closedAt": None,
-                                    "author": {"login": "octo"},
-                                    "labels": {"nodes": []},
-                                },
-                            }
-                        ],
-                    }
-                }
-            }
-        },
+    page_1 = _make_issues_page(
+        [
+            (
+                "cursor-1",
+                _make_issue_node(
+                    101,
+                    101,
+                    "Fix flaky integration test",
+                    updated_1,
+                ),
+            ),
+        ],
+        has_next_page=True,
+        end_cursor="cursor-page-1",
     )
-    page_2 = (
-        200,
-        {
-            "data": {
-                "repository": {
-                    "issues": {
-                        "pageInfo": {
-                            "hasNextPage": False,
-                            "endCursor": "cursor-page-2",
-                        },
-                        "edges": [
-                            {
-                                "cursor": "cursor-2",
-                                "node": {
-                                    "databaseId": 102,
-                                    "number": 102,
-                                    "title": "Second page issue",
-                                    "state": "OPEN",
-                                    "createdAt": updated_2,
-                                    "updatedAt": updated_2,
-                                    "closedAt": None,
-                                    "author": {"login": "octo"},
-                                    "labels": {"nodes": []},
-                                },
-                            }
-                        ],
-                    }
-                }
-            }
-        },
+    page_2 = _make_issues_page(
+        [
+            (
+                "cursor-2",
+                _make_issue_node(
+                    102,
+                    102,
+                    "Second page issue",
+                    updated_2,
+                ),
+            ),
+        ],
+        has_next_page=False,
+        end_cursor="cursor-page-2",
     )
     client, http_client, calls = _make_client([page_1, page_2])
     try:

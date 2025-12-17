@@ -105,15 +105,7 @@ def _repo_info() -> RepositoryInfo:
 
 
 def _disabled_repo_info() -> RepositoryInfo:
-    return RepositoryInfo(
-        id="repo-1",
-        owner="octo",
-        name="reef",
-        default_branch="main",
-        ingestion_enabled=False,
-        documentation_paths=("docs/roadmap.md",),
-        estate_id=None,
-    )
+    return dataclasses.replace(_repo_info(), ingestion_enabled=False)
 
 
 def _event(  # noqa: PLR0913
@@ -326,6 +318,35 @@ async def test_ingestion_is_idempotent_for_unchanged_activity(
         assert len(ids) == 1
 
 
+def _create_test_commit_events_with_cursors(
+    repo: RepositoryInfo,
+    specs: list[tuple[str, dt.datetime, str]],
+) -> list[GitHubIngestedEvent]:
+    """Create test commit events with cursor support.
+
+    Args:
+        repo: Repository information
+        specs: List of (sha, occurred_at, cursor) tuples
+
+    """
+    return [
+        _event(
+            event_type="github.commit",
+            source_event_id=sha,
+            occurred_at=occurred_at,
+            payload={
+                "sha": sha,
+                "repo_owner": repo.owner,
+                "repo_name": repo.name,
+                "default_branch": repo.default_branch,
+                "committed_at": occurred_at.isoformat(),
+            },
+            cursor=cursor,
+        )
+        for sha, occurred_at, cursor in specs
+    ]
+
+
 @pytest.mark.asyncio
 async def test_ingestion_preserves_backlog_when_kind_limit_is_hit(
     session_factory: async_sessionmaker[AsyncSession],
@@ -337,48 +358,16 @@ async def test_ingestion_preserves_backlog_when_kind_limit_is_hit(
     middle = now - dt.timedelta(hours=2)
     oldest = now - dt.timedelta(hours=3)
 
-    client = FakeGitHubClient(
-        commits=[
-            _event(
-                event_type="github.commit",
-                source_event_id="c3",
-                occurred_at=newest,
-                payload={
-                    "sha": "c3",
-                    "repo_owner": repo.owner,
-                    "repo_name": repo.name,
-                    "default_branch": repo.default_branch,
-                    "committed_at": newest.isoformat(),
-                },
-                cursor="cursor-3",
-            ),
-            _event(
-                event_type="github.commit",
-                source_event_id="c2",
-                occurred_at=middle,
-                payload={
-                    "sha": "c2",
-                    "repo_owner": repo.owner,
-                    "repo_name": repo.name,
-                    "default_branch": repo.default_branch,
-                    "committed_at": middle.isoformat(),
-                },
-                cursor="cursor-2",
-            ),
-            _event(
-                event_type="github.commit",
-                source_event_id="c1",
-                occurred_at=oldest,
-                payload={
-                    "sha": "c1",
-                    "repo_owner": repo.owner,
-                    "repo_name": repo.name,
-                    "default_branch": repo.default_branch,
-                    "committed_at": oldest.isoformat(),
-                },
-                cursor="cursor-1",
-            ),
+    commits = _create_test_commit_events_with_cursors(
+        repo,
+        [
+            ("c3", newest, "cursor-3"),
+            ("c2", middle, "cursor-2"),
+            ("c1", oldest, "cursor-1"),
         ],
+    )
+    client = FakeGitHubClient(
+        commits=commits,
         pull_requests=[],
         issues=[],
         doc_changes=[],
@@ -435,8 +424,17 @@ async def test_worker_skips_disabled_repository_without_side_effects(
     assert result.doc_changes_ingested == 0
 
     async with session_factory() as session:
-        assert (await session.scalars(select(RawEvent.id))).all() == []
-        offsets = await session.scalar(select(GithubIngestionOffset))
+        raw_ids = (
+            await session.scalars(
+                select(RawEvent.id).where(RawEvent.repo_external_id == repo.slug)
+            )
+        ).all()
+        assert raw_ids == []
+        offsets = await session.scalar(
+            select(GithubIngestionOffset).where(
+                GithubIngestionOffset.repo_external_id == repo.slug
+            )
+        )
         assert offsets is None
 
 
