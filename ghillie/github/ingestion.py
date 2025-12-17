@@ -65,6 +65,23 @@ class _StreamIngestionResult:
     truncated: bool
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class _KindIngestionContext:
+    """Context for ingesting a specific entity kind."""
+
+    kind: typ.Literal["commit", "pull_request", "issue"]
+    now: dt.datetime
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class _IngestionResumeState:
+    """Resume state for watermark updates during ingestion."""
+
+    kind: typ.Literal["commit", "pull_request", "issue"]
+    repo_slug: str
+    cursor: str | None
+
+
 class GitHubIngestionWorker:
     """Poll GitHub and write incremental activity into Bronze raw events."""
 
@@ -93,22 +110,19 @@ class GitHubIngestionWorker:
             repo,
             writer,
             offsets,
-            kind="commit",
-            now=run_started_at,
+            context=_KindIngestionContext(kind="commit", now=run_started_at),
         )
         prs = await self._ingest_kind(
             repo,
             writer,
             offsets,
-            kind="pull_request",
-            now=run_started_at,
+            context=_KindIngestionContext(kind="pull_request", now=run_started_at),
         )
         issues = await self._ingest_kind(
             repo,
             writer,
             offsets,
-            kind="issue",
-            now=run_started_at,
+            context=_KindIngestionContext(kind="issue", now=run_started_at),
         )
         docs = await self._ingest_doc_changes(repo, writer, offsets, now=run_started_at)
 
@@ -157,15 +171,12 @@ class GitHubIngestionWorker:
             return self._client.iter_pull_requests(repo, since=since, after=after)
         return self._client.iter_issues(repo, since=since, after=after)
 
-    async def _update_watermark_if_complete(  # noqa: PLR0913
+    async def _update_watermark_if_complete(
         self,
         offsets: GithubIngestionOffset,
         watermark_attr: str,
         result: _StreamIngestionResult,
-        *,
-        after: str | None,
-        repo_slug: str,
-        kind: typ.Literal["commit", "pull_request", "issue"],
+        resume_state: _IngestionResumeState,
     ) -> None:
         """Update the watermark timestamp if the stream completed without truncation."""
         if result.resume_cursor is not None:
@@ -173,23 +184,27 @@ class GitHubIngestionWorker:
         if result.max_seen is None:
             return
 
-        if after is None:
+        if resume_state.cursor is None:
             setattr(offsets, watermark_attr, result.max_seen)
             return
 
-        latest = await self._latest_ingested_at(repo_slug, kind=kind)
+        latest = await self._latest_ingested_at(
+            resume_state.repo_slug, kind=resume_state.kind
+        )
         if latest is not None:
             setattr(offsets, watermark_attr, latest)
 
-    async def _ingest_kind(  # noqa: PLR0913
+    async def _ingest_kind(
         self,
         repo: RepositoryInfo,
         writer: RawEventWriter,
         offsets: GithubIngestionOffset,
         *,
-        kind: typ.Literal["commit", "pull_request", "issue"],
-        now: dt.datetime,
+        context: _KindIngestionContext,
     ) -> int:
+        kind = context.kind
+        now = context.now
+
         watermark_attr = {
             "commit": "last_commit_ingested_at",
             "pull_request": "last_pr_ingested_at",
@@ -208,13 +223,17 @@ class GitHubIngestionWorker:
 
         result = await self._ingest_events_stream(repo, writer, stream)
         setattr(offsets, cursor_attr, result.resume_cursor)
+
+        resume_state = _IngestionResumeState(
+            kind=kind,
+            repo_slug=repo.slug,
+            cursor=after,
+        )
         await self._update_watermark_if_complete(
             offsets,
             watermark_attr,
             result,
-            after=after,
-            repo_slug=repo.slug,
-            kind=kind,
+            resume_state,
         )
         return result.ingested
 

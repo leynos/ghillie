@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from ghillie.bronze import GithubIngestionOffset, RawEvent, RawEventWriter
 from ghillie.github import GitHubIngestionConfig, GitHubIngestionWorker
-from ghillie.github.ingestion import _StreamIngestionResult
+from ghillie.github.ingestion import _KindIngestionContext, _StreamIngestionResult
 from ghillie.github.models import GitHubIngestedEvent
 from ghillie.registry.models import RepositoryInfo
 
@@ -616,10 +616,14 @@ async def test_ingest_kind_resumes_with_cursor_until_backlog_caught_up(
     )
     offsets = await worker._load_or_create_offsets(repo.slug)
     writer = RawEventWriter(session_factory)
-    await worker._ingest_kind(repo, writer, offsets, kind="commit", now=now)
+    await worker._ingest_kind(
+        repo, writer, offsets, context=_KindIngestionContext(kind="commit", now=now)
+    )
     assert offsets.last_commit_cursor == "cursor-2"
     assert offsets.last_commit_ingested_at is None
 
-    await worker._ingest_kind(repo, writer, offsets, kind="commit", now=now)
+    await worker._ingest_kind(
+        repo, writer, offsets, context=_KindIngestionContext(kind="commit", now=now)
+    )
     assert offsets.last_commit_cursor is None
     assert offsets.last_commit_ingested_at == newest
