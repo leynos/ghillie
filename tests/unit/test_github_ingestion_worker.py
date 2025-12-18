@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 import datetime as dt
 import typing as typ
 
@@ -11,220 +10,26 @@ from sqlalchemy import select
 
 from ghillie.bronze import GithubIngestionOffset, RawEvent, RawEventWriter
 from ghillie.github import GitHubIngestionConfig, GitHubIngestionWorker
+
+# These tests intentionally cover internal ingestion primitives and cursor/watermark
+# edge cases to prevent regressions in backlog preservation behaviour.
 from ghillie.github.ingestion import _KindIngestionContext, _StreamIngestionResult
-from ghillie.github.models import GitHubIngestedEvent
-from ghillie.registry.models import RepositoryInfo
+from tests.unit.github_ingestion_test_helpers import (
+    FakeGitHubClient,
+    make_commit_event,
+    make_commit_events_with_cursors,
+    make_disabled_repo_info,
+    make_doc_change_event,
+    make_event,
+    make_issue_event,
+    make_pr_event,
+    make_repo_info,
+)
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-
-class FakeGitHubClient:
-    """Deterministic GitHubActivityClient implementation for tests."""
-
-    def __init__(
-        self,
-        *,
-        commits: list[GitHubIngestedEvent],
-        pull_requests: list[GitHubIngestedEvent],
-        issues: list[GitHubIngestedEvent],
-        doc_changes: list[GitHubIngestedEvent],
-    ) -> None:
-        """Store event lists returned by iterator methods."""
-        self._commits = commits
-        self._pull_requests = pull_requests
-        self._issues = issues
-        self._doc_changes = doc_changes
-
-    def _find_start_index(
-        self, events: list[GitHubIngestedEvent], after: str | None
-    ) -> int:
-        """Find the starting index after a given cursor, or 0 if no cursor."""
-        if after is None:
-            return 0
-
-        for idx, event in enumerate(events):
-            if event.cursor == after:
-                return idx + 1
-
-        return 0
-
-    async def iter_commits(
-        self, repo: RepositoryInfo, *, since: dt.datetime, after: str | None = None
-    ) -> typ.AsyncIterator[GitHubIngestedEvent]:
-        """Yield commit events newer than `since`."""
-        del repo
-        start = self._find_start_index(self._commits, after)
-        for event in self._commits[start:]:
-            if event.occurred_at > since:
-                yield event
-
-    async def iter_pull_requests(
-        self, repo: RepositoryInfo, *, since: dt.datetime, after: str | None = None
-    ) -> typ.AsyncIterator[GitHubIngestedEvent]:
-        """Yield pull request events newer than `since`."""
-        del repo, after
-        for event in self._pull_requests:
-            if event.occurred_at > since:
-                yield event
-
-    async def iter_issues(
-        self, repo: RepositoryInfo, *, since: dt.datetime, after: str | None = None
-    ) -> typ.AsyncIterator[GitHubIngestedEvent]:
-        """Yield issue events newer than `since`."""
-        del repo, after
-        for event in self._issues:
-            if event.occurred_at > since:
-                yield event
-
-    async def iter_doc_changes(
-        self,
-        repo: RepositoryInfo,
-        *,
-        since: dt.datetime,
-        documentation_paths: typ.Sequence[str],
-        after: str | None = None,
-    ) -> typ.AsyncIterator[GitHubIngestedEvent]:
-        """Yield documentation change events newer than `since`."""
-        del repo, documentation_paths, after
-        for event in self._doc_changes:
-            if event.occurred_at > since:
-                yield event
-
-
-def _repo_info() -> RepositoryInfo:
-    return RepositoryInfo(
-        id="repo-1",
-        owner="octo",
-        name="reef",
-        default_branch="main",
-        ingestion_enabled=True,
-        documentation_paths=("docs/roadmap.md",),
-        estate_id=None,
-    )
-
-
-def _disabled_repo_info() -> RepositoryInfo:
-    return dataclasses.replace(_repo_info(), ingestion_enabled=False)
-
-
-def _event(  # noqa: PLR0913
-    *,
-    event_type: str,
-    source_event_id: str,
-    occurred_at: dt.datetime,
-    payload: dict[str, object],
-    cursor: str | None = None,
-) -> GitHubIngestedEvent:
-    return GitHubIngestedEvent(
-        event_type=event_type,
-        source_event_id=source_event_id,
-        occurred_at=occurred_at,
-        payload=payload,
-        cursor=cursor,
-    )
-
-
-def _create_test_commit_event(
-    repo: RepositoryInfo, occurred_at: dt.datetime
-) -> GitHubIngestedEvent:
-    """Create a test commit event for the ingestion worker."""
-    return _event(
-        event_type="github.commit",
-        source_event_id="abc123",
-        occurred_at=occurred_at,
-        payload={
-            "sha": "abc123",
-            "repo_owner": repo.owner,
-            "repo_name": repo.name,
-            "default_branch": repo.default_branch,
-            "committed_at": occurred_at.isoformat(),
-        },
-    )
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class _TestNumberedItemSpec:
-    """Specification for creating a test numbered item event (PR or issue)."""
-
-    event_type: str
-    item_id: int
-    title: str
-    extra_fields: dict[str, object] | None = None
-
-
-def _create_test_numbered_item_event(
-    repo: RepositoryInfo,
-    occurred_at: dt.datetime,
-    spec: _TestNumberedItemSpec,
-) -> GitHubIngestedEvent:
-    """Create a numbered-item event (PR or issue) with shared payload fields."""
-    payload: dict[str, object] = {
-        "id": spec.item_id,
-        "number": spec.item_id,
-        "title": spec.title,
-        "state": "open",
-        "repo_owner": repo.owner,
-        "repo_name": repo.name,
-        "created_at": occurred_at.isoformat(),
-    }
-    if spec.extra_fields is not None:
-        payload.update(spec.extra_fields)
-    return _event(
-        event_type=spec.event_type,
-        source_event_id=str(spec.item_id),
-        occurred_at=occurred_at,
-        payload=payload,
-    )
-
-
-def _create_test_pr_event(
-    repo: RepositoryInfo, occurred_at: dt.datetime
-) -> GitHubIngestedEvent:
-    """Create a test pull request event for the ingestion worker."""
-    spec = _TestNumberedItemSpec(
-        event_type="github.pull_request",
-        item_id=17,
-        title="Add release checklist",
-        extra_fields={
-            "base_branch": "main",
-            "head_branch": "feature/release-checklist",
-        },
-    )
-    return _create_test_numbered_item_event(repo, occurred_at, spec)
-
-
-def _create_test_issue_event(
-    repo: RepositoryInfo, occurred_at: dt.datetime
-) -> GitHubIngestedEvent:
-    """Create a test issue event for the ingestion worker."""
-    spec = _TestNumberedItemSpec(
-        event_type="github.issue",
-        item_id=101,
-        title="Fix flaky integration test",
-        extra_fields=None,
-    )
-    return _create_test_numbered_item_event(repo, occurred_at, spec)
-
-
-def _create_test_doc_change_event(
-    repo: RepositoryInfo, occurred_at: dt.datetime
-) -> GitHubIngestedEvent:
-    return _event(
-        event_type="github.doc_change",
-        source_event_id="abc123:docs/roadmap.md",
-        occurred_at=occurred_at,
-        payload={
-            "commit_sha": "abc123",
-            "path": "docs/roadmap.md",
-            "change_type": "modified",
-            "repo_owner": repo.owner,
-            "repo_name": repo.name,
-            "occurred_at": occurred_at.isoformat(),
-            "is_roadmap": True,
-            "is_adr": False,
-        },
-    )
+    from ghillie.github.models import GitHubIngestedEvent
 
 
 @pytest.mark.asyncio
@@ -232,7 +37,7 @@ async def test_ingestion_writes_raw_events_and_updates_watermarks(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     """Worker writes raw events and stores per-kind watermarks."""
-    repo = _repo_info()
+    repo = make_repo_info()
     now = dt.datetime.now(dt.UTC)
     commit_time = now - dt.timedelta(hours=4)
     pr_time = now - dt.timedelta(hours=3)
@@ -240,10 +45,10 @@ async def test_ingestion_writes_raw_events_and_updates_watermarks(
     doc_time = now - dt.timedelta(hours=1)
 
     client = FakeGitHubClient(
-        commits=[_create_test_commit_event(repo, commit_time)],
-        pull_requests=[_create_test_pr_event(repo, pr_time)],
-        issues=[_create_test_issue_event(repo, issue_time)],
-        doc_changes=[_create_test_doc_change_event(repo, doc_time)],
+        commits=[make_commit_event(repo, commit_time)],
+        pull_requests=[make_pr_event(repo, pr_time)],
+        issues=[make_issue_event(repo, issue_time)],
+        doc_changes=[make_doc_change_event(repo, doc_time)],
     )
     worker = GitHubIngestionWorker(
         session_factory,
@@ -281,9 +86,9 @@ async def test_ingestion_is_idempotent_for_unchanged_activity(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     """Re-running ingestion does not duplicate unchanged raw events."""
-    repo = _repo_info()
+    repo = make_repo_info()
     occurred_at = dt.datetime.now(dt.UTC) - dt.timedelta(minutes=10)
-    event = _event(
+    event = make_event(
         event_type="github.commit",
         source_event_id="abc999",
         occurred_at=occurred_at,
@@ -296,10 +101,7 @@ async def test_ingestion_is_idempotent_for_unchanged_activity(
         },
     )
     client = FakeGitHubClient(
-        commits=[event],
-        pull_requests=[],
-        issues=[],
-        doc_changes=[],
+        commits=[event], pull_requests=[], issues=[], doc_changes=[]
     )
     worker = GitHubIngestionWorker(
         session_factory,
@@ -318,47 +120,18 @@ async def test_ingestion_is_idempotent_for_unchanged_activity(
         assert len(ids) == 1
 
 
-def _create_test_commit_events_with_cursors(
-    repo: RepositoryInfo,
-    specs: list[tuple[str, dt.datetime, str]],
-) -> list[GitHubIngestedEvent]:
-    """Create test commit events with cursor support.
-
-    Args:
-        repo: Repository information
-        specs: List of (sha, occurred_at, cursor) tuples
-
-    """
-    return [
-        _event(
-            event_type="github.commit",
-            source_event_id=sha,
-            occurred_at=occurred_at,
-            payload={
-                "sha": sha,
-                "repo_owner": repo.owner,
-                "repo_name": repo.name,
-                "default_branch": repo.default_branch,
-                "committed_at": occurred_at.isoformat(),
-            },
-            cursor=cursor,
-        )
-        for sha, occurred_at, cursor in specs
-    ]
-
-
 @pytest.mark.asyncio
 async def test_ingestion_preserves_backlog_when_kind_limit_is_hit(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     """Worker resumes pagination so older events are not skipped."""
-    repo = _repo_info()
+    repo = make_repo_info()
     now = dt.datetime.now(dt.UTC)
     newest = now - dt.timedelta(hours=1)
     middle = now - dt.timedelta(hours=2)
     oldest = now - dt.timedelta(hours=3)
 
-    commits = _create_test_commit_events_with_cursors(
+    commits = make_commit_events_with_cursors(
         repo,
         [
             ("c3", newest, "cursor-3"),
@@ -407,10 +180,10 @@ async def test_worker_skips_disabled_repository_without_side_effects(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     """Disabled repositories do not write raw events or offsets."""
-    repo = _disabled_repo_info()
+    repo = make_disabled_repo_info()
     occurred_at = dt.datetime.now(dt.UTC) - dt.timedelta(minutes=10)
     client = FakeGitHubClient(
-        commits=[_create_test_commit_event(repo, occurred_at)],
+        commits=[make_commit_event(repo, occurred_at)],
         pull_requests=[],
         issues=[],
         doc_changes=[],
@@ -462,7 +235,7 @@ async def test_ingest_events_stream_handles_empty_stream(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     """_ingest_events_stream returns a neutral result when no events exist."""
-    repo = _repo_info()
+    repo = make_repo_info()
     worker = GitHubIngestionWorker(
         session_factory,
         FakeGitHubClient(commits=[], pull_requests=[], issues=[], doc_changes=[]),
@@ -470,13 +243,8 @@ async def test_ingest_events_stream_handles_empty_stream(
     )
 
     async def _events() -> typ.AsyncIterator[GitHubIngestedEvent]:
-        if False:  # pragma: no cover
-            yield GitHubIngestedEvent(
-                event_type="github.commit",
-                source_event_id="never",
-                occurred_at=dt.datetime.now(dt.UTC),
-                payload={},
-            )
+        return
+        yield  # type: ignore[misc]  # Makes this an async generator
 
     result = await worker._ingest_events_stream(
         repo, RawEventWriter(session_factory), _events()
@@ -494,7 +262,7 @@ async def test_ingest_events_stream_sets_resume_cursor_when_truncated(
 ) -> None:
     """_ingest_events_stream captures the last ingested cursor on truncation."""
     limit = 2
-    repo = _repo_info()
+    repo = make_repo_info()
     now = dt.datetime.now(dt.UTC)
     newest = now - dt.timedelta(minutes=1)
     middle = now - dt.timedelta(minutes=2)
@@ -504,47 +272,14 @@ async def test_ingest_events_stream_sets_resume_cursor_when_truncated(
         FakeGitHubClient(commits=[], pull_requests=[], issues=[], doc_changes=[]),
         config=GitHubIngestionConfig(max_events_per_kind=limit),
     )
-    events = [
-        _event(
-            event_type="github.commit",
-            source_event_id="e3",
-            occurred_at=newest,
-            payload={
-                "sha": "e3",
-                "repo_owner": repo.owner,
-                "repo_name": repo.name,
-                "default_branch": repo.default_branch,
-                "committed_at": newest.isoformat(),
-            },
-            cursor="cursor-3",
-        ),
-        _event(
-            event_type="github.commit",
-            source_event_id="e2",
-            occurred_at=middle,
-            payload={
-                "sha": "e2",
-                "repo_owner": repo.owner,
-                "repo_name": repo.name,
-                "default_branch": repo.default_branch,
-                "committed_at": middle.isoformat(),
-            },
-            cursor="cursor-2",
-        ),
-        _event(
-            event_type="github.commit",
-            source_event_id="e1",
-            occurred_at=oldest,
-            payload={
-                "sha": "e1",
-                "repo_owner": repo.owner,
-                "repo_name": repo.name,
-                "default_branch": repo.default_branch,
-                "committed_at": oldest.isoformat(),
-            },
-            cursor="cursor-1",
-        ),
-    ]
+    events = make_commit_events_with_cursors(
+        repo,
+        [
+            ("e3", newest, "cursor-3"),
+            ("e2", middle, "cursor-2"),
+            ("e1", oldest, "cursor-1"),
+        ],
+    )
 
     async def _events() -> typ.AsyncIterator[GitHubIngestedEvent]:
         for event in events:
@@ -568,13 +303,13 @@ async def test_ingest_kind_resumes_with_cursor_until_backlog_caught_up(
     Once catch-up is complete, the kind watermark advances to the latest event
     that has been persisted.
     """
-    repo = _repo_info()
+    repo = make_repo_info()
     now = dt.datetime(2025, 1, 1, tzinfo=dt.UTC)
     newest = now - dt.timedelta(hours=1)
     oldest = now - dt.timedelta(hours=2)
     client = FakeGitHubClient(
         commits=[
-            _event(
+            make_event(
                 event_type="github.commit",
                 source_event_id="c2",
                 occurred_at=newest,
@@ -587,7 +322,7 @@ async def test_ingest_kind_resumes_with_cursor_until_backlog_caught_up(
                 },
                 cursor="cursor-2",
             ),
-            _event(
+            make_event(
                 event_type="github.commit",
                 source_event_id="c1",
                 occurred_at=oldest,

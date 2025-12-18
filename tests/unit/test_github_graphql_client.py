@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import json
 import secrets
@@ -86,25 +87,68 @@ def _make_pr_graphql_response(
     )
 
 
-def _make_issue_node(  # noqa: PLR0913
-    database_id: int,
-    number: int,
-    title: str,
-    updated_at: str,
-    *,
-    state: str = "OPEN",
-    author_login: str = "octo",
-) -> dict[str, typ.Any]:
+@dataclasses.dataclass(frozen=True, slots=True)
+class _PrNodeSpec:
+    """Specification for creating a test pull request node."""
+
+    cursor: str
+    database_id: int
+    number: int
+    title: str
+    updated_at: str
+    state: str = "OPEN"
+    is_draft: bool = False
+    merged_at: str | None = None
+    closed_at: str | None = None
+    base_ref_name: str = "main"
+    head_ref_name: str = "feature/example"
+    author_login: str = "octo"
+    labels: list[str] = dataclasses.field(default_factory=list)
+
+
+def _make_pr_node(spec: _PrNodeSpec) -> dict[str, typ.Any]:
+    """Create a test pull request node for GraphQL response mocks."""
+    return {
+        "cursor": spec.cursor,
+        "databaseId": spec.database_id,
+        "number": spec.number,
+        "title": spec.title,
+        "state": spec.state,
+        "isDraft": spec.is_draft,
+        "createdAt": spec.updated_at,
+        "updatedAt": spec.updated_at,
+        "mergedAt": spec.merged_at,
+        "closedAt": spec.closed_at,
+        "baseRefName": spec.base_ref_name,
+        "headRefName": spec.head_ref_name,
+        "author": {"login": spec.author_login},
+        "labels": {"nodes": [{"name": label} for label in spec.labels]},
+    }
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class _IssueNodeSpec:
+    """Specification for creating a test issue node."""
+
+    database_id: int
+    number: int
+    title: str
+    updated_at: str
+    state: str = "OPEN"
+    author_login: str = "octo"
+
+
+def _make_issue_node(spec: _IssueNodeSpec) -> dict[str, typ.Any]:
     """Create a test issue node for GraphQL response mocks."""
     return {
-        "databaseId": database_id,
-        "number": number,
-        "title": title,
-        "state": state,
-        "createdAt": updated_at,
-        "updatedAt": updated_at,
+        "databaseId": spec.database_id,
+        "number": spec.number,
+        "title": spec.title,
+        "state": spec.state,
+        "createdAt": spec.updated_at,
+        "updatedAt": spec.updated_at,
         "closedAt": None,
-        "author": {"login": author_login},
+        "author": {"login": spec.author_login},
         "labels": {"nodes": []},
     }
 
@@ -128,6 +172,59 @@ def _make_issues_page(
                             "endCursor": end_cursor,
                         },
                         "edges": edges,
+                    }
+                }
+            }
+        },
+    )
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class _CommitNodeSpec:
+    """Specification for creating a test commit node."""
+
+    oid: str
+    message: str
+    authored_date: str
+    committed_date: str
+    author_name: str = "Octo"
+    author_email: str = "o@example.com"
+
+
+def _make_commit_node(spec: _CommitNodeSpec) -> dict[str, typ.Any]:
+    """Create a test commit node for GraphQL response mocks."""
+    return {
+        "oid": spec.oid,
+        "message": spec.message,
+        "authoredDate": spec.authored_date,
+        "committedDate": spec.committed_date,
+        "author": {"name": spec.author_name, "email": spec.author_email},
+    }
+
+
+def _make_doc_changes_page(
+    commits: list[tuple[str, dict[str, typ.Any]]],
+    *,
+    has_next_page: bool,
+    end_cursor: str,
+) -> tuple[int, dict[str, typ.Any]]:
+    """Create a test GraphQL doc changes response page."""
+    edges = [{"cursor": cursor, "node": node} for cursor, node in commits]
+    return (
+        200,
+        {
+            "data": {
+                "repository": {
+                    "ref": {
+                        "target": {
+                            "history": {
+                                "pageInfo": {
+                                    "hasNextPage": has_next_page,
+                                    "endCursor": end_cursor,
+                                },
+                                "edges": edges,
+                            }
+                        }
                     }
                 }
             }
@@ -166,38 +263,27 @@ async def test_iter_pull_requests_paginates_and_applies_since_filter() -> None:
     updated_new = dt.datetime(2025, 1, 2, tzinfo=dt.UTC).isoformat()
     updated_old = dt.datetime(2025, 1, 1, tzinfo=dt.UTC).isoformat()
 
-    pr_new = {
-        "cursor": "cursor-new",
-        "databaseId": 17,
-        "number": 17,
-        "title": "Add release checklist",
-        "state": "OPEN",
-        "isDraft": False,
-        "createdAt": updated_new,
-        "updatedAt": updated_new,
-        "mergedAt": None,
-        "closedAt": None,
-        "baseRefName": "main",
-        "headRefName": "feature/release-checklist",
-        "author": {"login": "octo"},
-        "labels": {"nodes": [{"name": "docs"}]},
-    }
-    pr_old = {
-        "cursor": "cursor-old",
-        "databaseId": 99,
-        "number": 99,
-        "title": "Older PR",
-        "state": "OPEN",
-        "isDraft": False,
-        "createdAt": updated_old,
-        "updatedAt": updated_old,
-        "mergedAt": None,
-        "closedAt": None,
-        "baseRefName": "main",
-        "headRefName": "feature/old",
-        "author": {"login": "octo"},
-        "labels": {"nodes": []},
-    }
+    pr_new = _make_pr_node(
+        _PrNodeSpec(
+            cursor="cursor-new",
+            database_id=17,
+            number=17,
+            title="Add release checklist",
+            updated_at=updated_new,
+            head_ref_name="feature/release-checklist",
+            labels=["docs"],
+        )
+    )
+    pr_old = _make_pr_node(
+        _PrNodeSpec(
+            cursor="cursor-old",
+            database_id=99,
+            number=99,
+            title="Older PR",
+            updated_at=updated_old,
+            head_ref_name="feature/old",
+        )
+    )
     page_1 = _make_pr_graphql_response(
         [pr_new, pr_old],
         has_next_page=True,
@@ -233,10 +319,12 @@ async def test_iter_issues_forwards_after_cursor_and_paginates() -> None:
             (
                 "cursor-1",
                 _make_issue_node(
-                    101,
-                    101,
-                    "Fix flaky integration test",
-                    updated_1,
+                    _IssueNodeSpec(
+                        101,
+                        101,
+                        "Fix flaky integration test",
+                        updated_1,
+                    )
                 ),
             ),
         ],
@@ -248,10 +336,12 @@ async def test_iter_issues_forwards_after_cursor_and_paginates() -> None:
             (
                 "cursor-2",
                 _make_issue_node(
-                    102,
-                    102,
-                    "Second page issue",
-                    updated_2,
+                    _IssueNodeSpec(
+                        102,
+                        102,
+                        "Second page issue",
+                        updated_2,
+                    )
                 ),
             ),
         ],
@@ -280,38 +370,20 @@ async def test_iter_pull_requests_coerces_merged_state() -> None:
     since = dt.datetime(2025, 1, 1, tzinfo=dt.UTC)
     updated = dt.datetime(2025, 1, 2, tzinfo=dt.UTC).isoformat()
 
-    page = (
-        200,
-        {
-            "data": {
-                "repository": {
-                    "pullRequests": {
-                        "pageInfo": {"hasNextPage": False, "endCursor": "c"},
-                        "edges": [
-                            {
-                                "cursor": "cursor",
-                                "node": {
-                                    "databaseId": 55,
-                                    "number": 55,
-                                    "title": "Merge me",
-                                    "state": "CLOSED",
-                                    "isDraft": False,
-                                    "createdAt": updated,
-                                    "updatedAt": updated,
-                                    "mergedAt": updated,
-                                    "closedAt": updated,
-                                    "baseRefName": "main",
-                                    "headRefName": "feature/merge",
-                                    "author": {"login": "octo"},
-                                    "labels": {"nodes": []},
-                                },
-                            }
-                        ],
-                    }
-                }
-            }
-        },
+    pr_merged = _make_pr_node(
+        _PrNodeSpec(
+            cursor="cursor",
+            database_id=55,
+            number=55,
+            title="Merge me",
+            updated_at=updated,
+            state="CLOSED",
+            merged_at=updated,
+            closed_at=updated,
+            head_ref_name="feature/merge",
+        )
     )
+    page = _make_pr_graphql_response([pr_merged], has_next_page=False, end_cursor="c")
     client, http_client, _ = _make_client([page])
     try:
         events = [event async for event in client.iter_pull_requests(repo, since=since)]
@@ -326,36 +398,18 @@ async def test_iter_doc_changes_classifies_documentation_paths() -> None:
     repo = _repo()
     since = dt.datetime(2025, 1, 1, tzinfo=dt.UTC)
     committed = dt.datetime(2025, 1, 2, tzinfo=dt.UTC).isoformat()
-    page = (
-        200,
-        {
-            "data": {
-                "repository": {
-                    "ref": {
-                        "target": {
-                            "history": {
-                                "pageInfo": {"hasNextPage": False, "endCursor": "c"},
-                                "edges": [
-                                    {
-                                        "cursor": "cursor-1",
-                                        "node": {
-                                            "oid": "abc123",
-                                            "message": "docs: refresh roadmap",
-                                            "authoredDate": committed,
-                                            "committedDate": committed,
-                                            "author": {
-                                                "name": "Octo",
-                                                "email": "o@example.com",
-                                            },
-                                        },
-                                    }
-                                ],
-                            }
-                        }
-                    }
-                }
-            }
-        },
+    commit = _make_commit_node(
+        _CommitNodeSpec(
+            "abc123",
+            "docs: refresh roadmap",
+            committed,
+            committed,
+        )
+    )
+    page = _make_doc_changes_page(
+        [("cursor-1", commit)],
+        has_next_page=False,
+        end_cursor="c",
     )
     client, http_client, _ = _make_client([page])
     try:

@@ -82,6 +82,25 @@ class _IngestionResumeState:
     cursor: str | None
 
 
+_KIND_WATERMARK_ATTR: dict[typ.Literal["commit", "pull_request", "issue"], str] = {
+    "commit": "last_commit_ingested_at",
+    "pull_request": "last_pr_ingested_at",
+    "issue": "last_issue_ingested_at",
+}
+
+_KIND_CURSOR_ATTR: dict[typ.Literal["commit", "pull_request", "issue"], str] = {
+    "commit": "last_commit_cursor",
+    "pull_request": "last_pr_cursor",
+    "issue": "last_issue_cursor",
+}
+
+_KIND_EVENT_TYPE: dict[typ.Literal["commit", "pull_request", "issue"], str] = {
+    "commit": "github.commit",
+    "pull_request": "github.pull_request",
+    "issue": "github.issue",
+}
+
+
 class GitHubIngestionWorker:
     """Poll GitHub and write incremental activity into Bronze raw events."""
 
@@ -145,15 +164,25 @@ class GitHubIngestionWorker:
         now: dt.datetime,
     ) -> int:
         since = self._since_for(offsets.last_doc_ingested_at, now=now)
+        after = offsets.last_doc_cursor
         result = await self._ingest_events_stream(
             repo,
             writer,
             self._client.iter_doc_changes(
-                repo, since=since, documentation_paths=repo.documentation_paths
+                repo,
+                since=since,
+                documentation_paths=repo.documentation_paths,
+                after=after,
             ),
         )
-        if result.max_seen is not None and not result.truncated:
-            offsets.last_doc_ingested_at = result.max_seen
+        offsets.last_doc_cursor = result.resume_cursor
+        if result.resume_cursor is None and result.max_seen is not None:
+            if after is None:
+                offsets.last_doc_ingested_at = result.max_seen
+            else:
+                latest = await self._latest_doc_change_ingested_at(repo.slug)
+                if latest is not None:
+                    offsets.last_doc_ingested_at = latest
         return result.ingested
 
     def _get_stream_for_kind(
@@ -205,16 +234,8 @@ class GitHubIngestionWorker:
         kind = context.kind
         now = context.now
 
-        watermark_attr = {
-            "commit": "last_commit_ingested_at",
-            "pull_request": "last_pr_ingested_at",
-            "issue": "last_issue_ingested_at",
-        }[kind]
-        cursor_attr = {
-            "commit": "last_commit_cursor",
-            "pull_request": "last_pr_cursor",
-            "issue": "last_issue_cursor",
-        }[kind]
+        watermark_attr = _KIND_WATERMARK_ATTR[kind]
+        cursor_attr = _KIND_CURSOR_ATTR[kind]
         current = typ.cast("dt.datetime | None", getattr(offsets, watermark_attr))
         since = self._since_for(current, now=now)
         after = typ.cast("str | None", getattr(offsets, cursor_attr))
@@ -253,7 +274,6 @@ class GitHubIngestionWorker:
             if ingested >= limit:
                 truncated = True
                 break
-            last_cursor = event.cursor
             envelope = RawEventEnvelope(
                 source_system="github",
                 source_event_id=event.source_event_id,
@@ -263,6 +283,7 @@ class GitHubIngestionWorker:
                 payload=event.payload,
             )
             await writer.ingest(envelope)
+            last_cursor = event.cursor
             ingested += 1
             if max_seen is None or event.occurred_at > max_seen:
                 max_seen = event.occurred_at
@@ -317,15 +338,23 @@ class GitHubIngestionWorker:
         self, repo_slug: str, *, kind: typ.Literal["commit", "pull_request", "issue"]
     ) -> dt.datetime | None:
         """Return the latest occurred_at persisted for a given repo and kind."""
-        event_type = {
-            "commit": "github.commit",
-            "pull_request": "github.pull_request",
-            "issue": "github.issue",
-        }[kind]
+        event_type = _KIND_EVENT_TYPE[kind]
         async with self._session_factory() as session:
             return await session.scalar(
                 select(func.max(RawEvent.occurred_at)).where(
                     RawEvent.repo_external_id == repo_slug,
                     RawEvent.event_type == event_type,
+                )
+            )
+
+    async def _latest_doc_change_ingested_at(
+        self, repo_slug: str
+    ) -> dt.datetime | None:
+        """Return the latest occurred_at persisted for doc changes in a repo."""
+        async with self._session_factory() as session:
+            return await session.scalar(
+                select(func.max(RawEvent.occurred_at)).where(
+                    RawEvent.repo_external_id == repo_slug,
+                    RawEvent.event_type == "github.doc_change",
                 )
             )

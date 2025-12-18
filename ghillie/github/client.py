@@ -640,7 +640,7 @@ class GitHubGraphQLClient:
 
         This helper centralises the common pagination loop for connections
         ordered by `UPDATED_AT`, such as pull requests and issues. The
-        `events_extractor` is responsible for converting nodes into
+        `node_to_event` callable is responsible for converting nodes into
         GitHubIngestedEvent instances and signalling when iteration should stop
         because the nodes are older than the `since` watermark.
         """

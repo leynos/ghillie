@@ -100,6 +100,7 @@ class GithubIngestionOffset(Base):
     last_commit_cursor: Mapped[str | None] = mapped_column(String(255), default=None)
     last_issue_cursor: Mapped[str | None] = mapped_column(String(255), default=None)
     last_pr_cursor: Mapped[str | None] = mapped_column(String(255), default=None)
+    last_doc_cursor: Mapped[str | None] = mapped_column(String(255), default=None)
     last_commit_ingested_at: Mapped[dt.datetime | None] = mapped_column(
         UTCDateTime(), default=None
     )

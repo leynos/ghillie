@@ -22,6 +22,7 @@ from ghillie.github.models import GitHubIngestedEvent
 from ghillie.registry import RepositoryRegistryService
 from ghillie.silver import init_silver_storage
 from ghillie.silver.storage import Repository
+from tests.unit.github_ingestion_test_helpers import FakeGitHubClient
 
 if typ.TYPE_CHECKING:
     from pathlib import Path
@@ -48,55 +49,6 @@ def _count_raw_events(ingestion_context: IngestionContext, slug: str) -> int:
             return len(ids)
 
     return run_async(_count())
-
-
-class FakeGitHubClient:
-    """Deterministic GitHub client for behavioural tests."""
-
-    def __init__(self, events: list[GitHubIngestedEvent]) -> None:
-        """Store a fixed event list returned by iterator methods."""
-        self._events = events
-
-    async def iter_commits(
-        self, repo: object, *, since: dt.datetime, after: str | None = None
-    ) -> typ.AsyncIterator[GitHubIngestedEvent]:
-        """Yield commit events newer than `since`."""
-        del repo, after
-        for event in self._events:
-            if event.event_type == "github.commit" and event.occurred_at > since:
-                yield event
-
-    async def iter_pull_requests(
-        self, repo: object, *, since: dt.datetime, after: str | None = None
-    ) -> typ.AsyncIterator[GitHubIngestedEvent]:
-        """Yield pull request events newer than `since`."""
-        del repo, after
-        for event in self._events:
-            if event.event_type == "github.pull_request" and event.occurred_at > since:
-                yield event
-
-    async def iter_issues(
-        self, repo: object, *, since: dt.datetime, after: str | None = None
-    ) -> typ.AsyncIterator[GitHubIngestedEvent]:
-        """Yield issue events newer than `since`."""
-        del repo, after
-        for event in self._events:
-            if event.event_type == "github.issue" and event.occurred_at > since:
-                yield event
-
-    async def iter_doc_changes(
-        self,
-        repo: object,
-        *,
-        since: dt.datetime,
-        documentation_paths: typ.Sequence[str],
-        after: str | None = None,
-    ) -> typ.AsyncIterator[GitHubIngestedEvent]:
-        """Yield documentation change events newer than `since`."""
-        del repo, documentation_paths, after
-        for event in self._events:
-            if event.event_type == "github.doc_change" and event.occurred_at > since:
-                yield event
 
 
 class IngestionContext(typ.TypedDict, total=False):
@@ -268,13 +220,14 @@ def github_api_returns_activity(ingestion_context: IngestionContext, slug: str) 
     """Configure a fake GitHub client that returns a fixed activity set."""
     owner, name = slug.split("/", 1)
     now = _BASE_TIME
-    events = [
-        _create_commit_event(owner, name, now - dt.timedelta(hours=4)),
-        _create_pr_event(owner, name, now - dt.timedelta(hours=3)),
-        _create_issue_event(owner, name, now - dt.timedelta(hours=2)),
-        _create_doc_change_event(owner, name, now - dt.timedelta(hours=1)),
-    ]
-    ingestion_context["github_client"] = FakeGitHubClient(events)
+    ingestion_context["github_client"] = FakeGitHubClient(
+        commits=[_create_commit_event(owner, name, now - dt.timedelta(hours=4))],
+        pull_requests=[_create_pr_event(owner, name, now - dt.timedelta(hours=3))],
+        issues=[_create_issue_event(owner, name, now - dt.timedelta(hours=2))],
+        doc_changes=[
+            _create_doc_change_event(owner, name, now - dt.timedelta(hours=1))
+        ],
+    )
     ingestion_context["expected_offsets"] = {
         "commit": now - dt.timedelta(hours=4),
         "pull_request": now - dt.timedelta(hours=3),
@@ -290,15 +243,20 @@ def github_api_returns_additional_activity(
     """Add additional activity with timestamps after the initial ingestion run."""
     owner, name = slug.split("/", 1)
     now = _BASE_TIME
-    events = [
-        _create_commit_event(owner, name, now - dt.timedelta(hours=4)),
-        _create_pr_event(owner, name, now - dt.timedelta(hours=3)),
-        _create_issue_event(owner, name, now - dt.timedelta(hours=2)),
-        _create_doc_change_event(owner, name, now - dt.timedelta(hours=1)),
-        _create_commit_event(owner, name, now + dt.timedelta(hours=1)),
-        _create_pr_event(owner, name, now + dt.timedelta(hours=2)),
-    ]
-    ingestion_context["github_client"] = FakeGitHubClient(events)
+    ingestion_context["github_client"] = FakeGitHubClient(
+        commits=[
+            _create_commit_event(owner, name, now - dt.timedelta(hours=4)),
+            _create_commit_event(owner, name, now + dt.timedelta(hours=1)),
+        ],
+        pull_requests=[
+            _create_pr_event(owner, name, now - dt.timedelta(hours=3)),
+            _create_pr_event(owner, name, now + dt.timedelta(hours=2)),
+        ],
+        issues=[_create_issue_event(owner, name, now - dt.timedelta(hours=2))],
+        doc_changes=[
+            _create_doc_change_event(owner, name, now - dt.timedelta(hours=1))
+        ],
+    )
     ingestion_context["expected_offsets"] = {
         "commit": now + dt.timedelta(hours=1),
         "pull_request": now + dt.timedelta(hours=2),
