@@ -94,10 +94,14 @@ _KIND_CURSOR_ATTR: dict[typ.Literal["commit", "pull_request", "issue"], str] = {
     "issue": "last_issue_cursor",
 }
 
-_KIND_EVENT_TYPE: dict[typ.Literal["commit", "pull_request", "issue"], str] = {
+_KIND_EVENT_TYPE: dict[
+    typ.Literal["commit", "pull_request", "issue", "doc_change"],
+    str,
+] = {
     "commit": "github.commit",
     "pull_request": "github.pull_request",
     "issue": "github.issue",
+    "doc_change": "github.doc_change",
 }
 
 
@@ -155,6 +159,28 @@ class GitHubIngestionWorker:
             doc_changes_ingested=docs,
         )
 
+    async def _update_doc_change_watermark_if_complete(
+        self,
+        offsets: GithubIngestionOffset,
+        result: _StreamIngestionResult,
+        *,
+        after: str | None,
+        repo_slug: str,
+    ) -> None:
+        """Update doc change watermark if the stream completed without truncation."""
+        if result.resume_cursor is not None:
+            return
+        if result.max_seen is None:
+            return
+
+        if after is None:
+            offsets.last_doc_ingested_at = result.max_seen
+            return
+
+        latest = await self._latest_ingested_at(repo_slug, kind="doc_change")
+        if latest is not None:
+            offsets.last_doc_ingested_at = latest
+
     async def _ingest_doc_changes(
         self,
         repo: RepositoryInfo,
@@ -176,13 +202,9 @@ class GitHubIngestionWorker:
             ),
         )
         offsets.last_doc_cursor = result.resume_cursor
-        if result.resume_cursor is None and result.max_seen is not None:
-            if after is None:
-                offsets.last_doc_ingested_at = result.max_seen
-            else:
-                latest = await self._latest_doc_change_ingested_at(repo.slug)
-                if latest is not None:
-                    offsets.last_doc_ingested_at = latest
+        await self._update_doc_change_watermark_if_complete(
+            offsets, result, after=after, repo_slug=repo.slug
+        )
         return result.ingested
 
     def _get_stream_for_kind(
@@ -335,7 +357,10 @@ class GitHubIngestionWorker:
             await session.merge(offsets)
 
     async def _latest_ingested_at(
-        self, repo_slug: str, *, kind: typ.Literal["commit", "pull_request", "issue"]
+        self,
+        repo_slug: str,
+        *,
+        kind: typ.Literal["commit", "pull_request", "issue", "doc_change"],
     ) -> dt.datetime | None:
         """Return the latest occurred_at persisted for a given repo and kind."""
         event_type = _KIND_EVENT_TYPE[kind]
@@ -344,17 +369,5 @@ class GitHubIngestionWorker:
                 select(func.max(RawEvent.occurred_at)).where(
                     RawEvent.repo_external_id == repo_slug,
                     RawEvent.event_type == event_type,
-                )
-            )
-
-    async def _latest_doc_change_ingested_at(
-        self, repo_slug: str
-    ) -> dt.datetime | None:
-        """Return the latest occurred_at persisted for doc changes in a repo."""
-        async with self._session_factory() as session:
-            return await session.scalar(
-                select(func.max(RawEvent.occurred_at)).where(
-                    RawEvent.repo_external_id == repo_slug,
-                    RawEvent.event_type == "github.doc_change",
                 )
             )

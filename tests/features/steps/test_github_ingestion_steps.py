@@ -18,14 +18,22 @@ from sqlalchemy.ext.asyncio import (
 
 from ghillie.bronze import GithubIngestionOffset, RawEvent, init_bronze_storage
 from ghillie.github import GitHubIngestionConfig, GitHubIngestionWorker
-from ghillie.github.models import GitHubIngestedEvent
 from ghillie.registry import RepositoryRegistryService
 from ghillie.silver import init_silver_storage
 from ghillie.silver.storage import Repository
-from tests.unit.github_ingestion_test_helpers import FakeGitHubClient
+from tests.unit.github_ingestion_test_helpers import (
+    FakeGitHubClient,
+    make_commit_event,
+    make_doc_change_event,
+    make_issue_event,
+    make_pr_event,
+    make_repo_info,
+)
 
 if typ.TYPE_CHECKING:
     from pathlib import Path
+
+    from ghillie.github.models import GitHubIngestedEvent
 
 
 _BASE_TIME = dt.datetime(2099, 1, 1, tzinfo=dt.UTC)
@@ -65,106 +73,50 @@ class IngestionContext(typ.TypedDict, total=False):
 def _create_commit_event(
     owner: str, name: str, occurred_at: dt.datetime
 ) -> GitHubIngestedEvent:
-    return GitHubIngestedEvent(
-        event_type="github.commit",
-        source_event_id="abc123",
-        occurred_at=occurred_at,
-        payload={
-            "sha": "abc123",
-            "message": "docs: refresh roadmap",
-            "repo_owner": owner,
-            "repo_name": name,
-            "default_branch": "main",
-            "committed_at": occurred_at.isoformat(),
-            "metadata": {"branch": "main"},
-        },
-    )
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class _NumberedItemSpec:
-    """Specification for creating a test numbered item event (PR or issue)."""
-
-    event_type: str
-    item_id: int
-    title: str
-    extra_fields: dict[str, object] | None = None
-
-
-def _create_numbered_item_event(
-    owner: str,
-    name: str,
-    occurred_at: dt.datetime,
-    spec: _NumberedItemSpec,
-) -> GitHubIngestedEvent:
-    """Create a test event for numbered GitHub items (PRs or issues)."""
-    payload: dict[str, object] = {
-        "id": spec.item_id,
-        "number": spec.item_id,
-        "title": spec.title,
-        "state": "open",
-        "repo_owner": owner,
-        "repo_name": name,
-        "created_at": occurred_at.isoformat(),
-        "metadata": {"updated_at": occurred_at.isoformat()},
-    }
-    if spec.extra_fields is not None:
-        payload |= spec.extra_fields
-
-    return GitHubIngestedEvent(
-        event_type=spec.event_type,
-        source_event_id=str(spec.item_id),
-        occurred_at=occurred_at,
-        payload=payload,
-    )
+    repo = dataclasses.replace(make_repo_info(), owner=owner, name=name)
+    return make_commit_event(repo, occurred_at)
 
 
 def _create_pr_event(
     owner: str, name: str, occurred_at: dt.datetime
 ) -> GitHubIngestedEvent:
-    spec = _NumberedItemSpec(
-        event_type="github.pull_request",
-        item_id=17,
-        title="Add release checklist",
-        extra_fields={
-            "base_branch": "main",
-            "head_branch": "feature/release-checklist",
-        },
-    )
-    return _create_numbered_item_event(owner, name, occurred_at, spec)
+    repo = dataclasses.replace(make_repo_info(), owner=owner, name=name)
+    return make_pr_event(repo, occurred_at)
 
 
 def _create_issue_event(
     owner: str, name: str, occurred_at: dt.datetime
 ) -> GitHubIngestedEvent:
-    spec = _NumberedItemSpec(
-        event_type="github.issue",
-        item_id=101,
-        title="Fix flaky integration test",
-        extra_fields=None,
-    )
-    return _create_numbered_item_event(owner, name, occurred_at, spec)
+    repo = dataclasses.replace(make_repo_info(), owner=owner, name=name)
+    return make_issue_event(repo, occurred_at)
 
 
 def _create_doc_change_event(
     owner: str, name: str, occurred_at: dt.datetime
 ) -> GitHubIngestedEvent:
-    return GitHubIngestedEvent(
-        event_type="github.doc_change",
-        source_event_id="abc123:docs/roadmap.md",
-        occurred_at=occurred_at,
-        payload={
-            "commit_sha": "abc123",
-            "path": "docs/roadmap.md",
-            "change_type": "modified",
-            "repo_owner": owner,
-            "repo_name": name,
-            "occurred_at": occurred_at.isoformat(),
-            "is_roadmap": True,
-            "is_adr": False,
-            "metadata": {"message": "docs: refresh roadmap"},
-        },
+    repo = dataclasses.replace(make_repo_info(), owner=owner, name=name)
+    return make_doc_change_event(repo, occurred_at)
+
+
+def _configure_fake_github_client(  # noqa: PLR0913
+    ingestion_context: IngestionContext,
+    slug: str,
+    *,
+    commits: list[GitHubIngestedEvent],
+    pull_requests: list[GitHubIngestedEvent],
+    issues: list[GitHubIngestedEvent],
+    doc_changes: list[GitHubIngestedEvent],
+    expected_offsets: dict[str, dt.datetime],
+) -> None:
+    """Configure a FakeGitHubClient and expected offsets for the ingestion context."""
+    del slug
+    ingestion_context["github_client"] = FakeGitHubClient(
+        commits=commits,
+        pull_requests=pull_requests,
+        issues=issues,
+        doc_changes=doc_changes,
     )
+    ingestion_context["expected_offsets"] = expected_offsets
 
 
 @scenario(
@@ -220,20 +172,22 @@ def github_api_returns_activity(ingestion_context: IngestionContext, slug: str) 
     """Configure a fake GitHub client that returns a fixed activity set."""
     owner, name = slug.split("/", 1)
     now = _BASE_TIME
-    ingestion_context["github_client"] = FakeGitHubClient(
+    _configure_fake_github_client(
+        ingestion_context,
+        slug,
         commits=[_create_commit_event(owner, name, now - dt.timedelta(hours=4))],
         pull_requests=[_create_pr_event(owner, name, now - dt.timedelta(hours=3))],
         issues=[_create_issue_event(owner, name, now - dt.timedelta(hours=2))],
         doc_changes=[
             _create_doc_change_event(owner, name, now - dt.timedelta(hours=1))
         ],
+        expected_offsets={
+            "commit": now - dt.timedelta(hours=4),
+            "pull_request": now - dt.timedelta(hours=3),
+            "issue": now - dt.timedelta(hours=2),
+            "doc": now - dt.timedelta(hours=1),
+        },
     )
-    ingestion_context["expected_offsets"] = {
-        "commit": now - dt.timedelta(hours=4),
-        "pull_request": now - dt.timedelta(hours=3),
-        "issue": now - dt.timedelta(hours=2),
-        "doc": now - dt.timedelta(hours=1),
-    }
 
 
 @given(parsers.parse('the GitHub API returns additional activity for "{slug}"'))
@@ -243,7 +197,9 @@ def github_api_returns_additional_activity(
     """Add additional activity with timestamps after the initial ingestion run."""
     owner, name = slug.split("/", 1)
     now = _BASE_TIME
-    ingestion_context["github_client"] = FakeGitHubClient(
+    _configure_fake_github_client(
+        ingestion_context,
+        slug,
         commits=[
             _create_commit_event(owner, name, now - dt.timedelta(hours=4)),
             _create_commit_event(owner, name, now + dt.timedelta(hours=1)),
@@ -256,13 +212,13 @@ def github_api_returns_additional_activity(
         doc_changes=[
             _create_doc_change_event(owner, name, now - dt.timedelta(hours=1))
         ],
+        expected_offsets={
+            "commit": now + dt.timedelta(hours=1),
+            "pull_request": now + dt.timedelta(hours=2),
+            "issue": now - dt.timedelta(hours=2),
+            "doc": now - dt.timedelta(hours=1),
+        },
     )
-    ingestion_context["expected_offsets"] = {
-        "commit": now + dt.timedelta(hours=1),
-        "pull_request": now + dt.timedelta(hours=2),
-        "issue": now - dt.timedelta(hours=2),
-        "doc": now - dt.timedelta(hours=1),
-    }
 
 
 @when(parsers.parse('the GitHub ingestion worker runs for "{slug}"'))
@@ -290,6 +246,7 @@ def run_worker(ingestion_context: IngestionContext, slug: str) -> None:
 @then(parsers.parse('Bronze raw events exist for "{slug}"'))
 def raw_events_exist(ingestion_context: IngestionContext, slug: str) -> None:
     """Verify expected event types exist in the Bronze store."""
+    owner, name = slug.split("/", 1)
 
     async def _assert() -> None:
         async with ingestion_context["session_factory"]() as session:
@@ -298,12 +255,37 @@ def raw_events_exist(ingestion_context: IngestionContext, slug: str) -> None:
                     select(RawEvent).where(RawEvent.repo_external_id == slug)
                 )
             ).all()
-            assert {event.event_type for event in events} == {
+            event_types = {event.event_type for event in events}
+            assert event_types == {
                 "github.commit",
                 "github.pull_request",
                 "github.issue",
                 "github.doc_change",
             }
+
+            by_type = {event.event_type: event for event in events}
+            commit_payload = by_type["github.commit"].payload
+            assert commit_payload["repo_owner"] == owner
+            assert commit_payload["repo_name"] == name
+            assert isinstance(commit_payload.get("sha"), str)
+
+            pr_payload = by_type["github.pull_request"].payload
+            assert pr_payload["repo_owner"] == owner
+            assert pr_payload["repo_name"] == name
+            assert isinstance(pr_payload.get("number"), int)
+            assert isinstance(pr_payload.get("title"), str)
+
+            issue_payload = by_type["github.issue"].payload
+            assert issue_payload["repo_owner"] == owner
+            assert issue_payload["repo_name"] == name
+            assert isinstance(issue_payload.get("title"), str)
+
+            doc_payload = by_type["github.doc_change"].payload
+            assert doc_payload["repo_owner"] == owner
+            assert doc_payload["repo_name"] == name
+            assert doc_payload["path"] == "docs/roadmap.md"
+            assert doc_payload["is_roadmap"] is True
+            assert doc_payload["is_adr"] is False
 
     run_async(_assert())
 

@@ -104,21 +104,27 @@ def make_disabled_repo_info() -> RepositoryInfo:
     return dataclasses.replace(make_repo_info(), ingestion_enabled=False)
 
 
-def make_event(  # noqa: PLR0913
-    *,
-    event_type: str,
-    source_event_id: str,
+@dataclasses.dataclass(frozen=True, slots=True)
+class EventSpec:
+    """Specification for creating a test GitHubIngestedEvent."""
+
+    event_type: str
+    source_event_id: str
+    payload: dict[str, typ.Any]
+    cursor: str | None = None
+
+
+def make_event(
     occurred_at: dt.datetime,
-    payload: dict[str, object],
-    cursor: str | None = None,
+    spec: EventSpec,
 ) -> GitHubIngestedEvent:
     """Build a GitHubIngestedEvent for tests."""
     return GitHubIngestedEvent(
-        event_type=event_type,
-        source_event_id=source_event_id,
+        event_type=spec.event_type,
+        source_event_id=spec.source_event_id,
         occurred_at=occurred_at,
-        payload=payload,
-        cursor=cursor,
+        payload=spec.payload,
+        cursor=spec.cursor,
     )
 
 
@@ -127,16 +133,18 @@ def make_commit_event(
 ) -> GitHubIngestedEvent:
     """Create a test commit event for the ingestion worker."""
     return make_event(
-        event_type="github.commit",
-        source_event_id="abc123",
         occurred_at=occurred_at,
-        payload={
-            "sha": "abc123",
-            "repo_owner": repo.owner,
-            "repo_name": repo.name,
-            "default_branch": repo.default_branch,
-            "committed_at": occurred_at.isoformat(),
-        },
+        spec=EventSpec(
+            event_type="github.commit",
+            source_event_id="abc123",
+            payload={
+                "sha": "abc123",
+                "repo_owner": repo.owner,
+                "repo_name": repo.name,
+                "default_branch": repo.default_branch,
+                "committed_at": occurred_at.isoformat(),
+            },
+        ),
     )
 
 
@@ -168,10 +176,12 @@ def make_numbered_item_event(
     if spec.extra_fields is not None:
         payload.update(spec.extra_fields)
     return make_event(
-        event_type=spec.event_type,
-        source_event_id=str(spec.item_id),
         occurred_at=occurred_at,
-        payload=payload,
+        spec=EventSpec(
+            event_type=spec.event_type,
+            source_event_id=str(spec.item_id),
+            payload=payload,
+        ),
     )
 
 
@@ -209,19 +219,21 @@ def make_doc_change_event(
 ) -> GitHubIngestedEvent:
     """Create a test documentation-change event for the ingestion worker."""
     return make_event(
-        event_type="github.doc_change",
-        source_event_id="abc123:docs/roadmap.md",
         occurred_at=occurred_at,
-        payload={
-            "commit_sha": "abc123",
-            "path": "docs/roadmap.md",
-            "change_type": "modified",
-            "repo_owner": repo.owner,
-            "repo_name": repo.name,
-            "occurred_at": occurred_at.isoformat(),
-            "is_roadmap": True,
-            "is_adr": False,
-        },
+        spec=EventSpec(
+            event_type="github.doc_change",
+            source_event_id="abc123:docs/roadmap.md",
+            payload={
+                "commit_sha": "abc123",
+                "path": "docs/roadmap.md",
+                "change_type": "modified",
+                "repo_owner": repo.owner,
+                "repo_name": repo.name,
+                "occurred_at": occurred_at.isoformat(),
+                "is_roadmap": True,
+                "is_adr": False,
+            },
+        ),
     )
 
 
@@ -238,17 +250,19 @@ def make_commit_events_with_cursors(
     """
     return [
         make_event(
-            event_type="github.commit",
-            source_event_id=sha,
             occurred_at=occurred_at,
-            payload={
-                "sha": sha,
-                "repo_owner": repo.owner,
-                "repo_name": repo.name,
-                "default_branch": repo.default_branch,
-                "committed_at": occurred_at.isoformat(),
-            },
-            cursor=cursor,
+            spec=EventSpec(
+                event_type="github.commit",
+                source_event_id=sha,
+                payload={
+                    "sha": sha,
+                    "repo_owner": repo.owner,
+                    "repo_name": repo.name,
+                    "default_branch": repo.default_branch,
+                    "committed_at": occurred_at.isoformat(),
+                },
+                cursor=cursor,
+            ),
         )
         for sha, occurred_at, cursor in specs
     ]

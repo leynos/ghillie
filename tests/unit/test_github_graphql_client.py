@@ -153,6 +153,39 @@ def _make_issue_node(spec: _IssueNodeSpec) -> dict[str, typ.Any]:
     }
 
 
+def _make_graphql_connection_page(
+    items: list[tuple[str, dict[str, typ.Any]]],
+    connection_path: list[str],
+    *,
+    has_next_page: bool,
+    end_cursor: str,
+) -> tuple[int, dict[str, typ.Any]]:
+    """Create a test GraphQL connection response page.
+
+    Args:
+        items: List of (cursor, node) tuples
+        connection_path: Path to the connection in the response structure,
+            e.g. ["repository", "issues"] or ["repository", "ref", "target", "history"]
+        has_next_page: Whether there are more pages
+        end_cursor: Cursor for the next page
+
+    """
+    edges = [{"cursor": cursor, "node": node} for cursor, node in items]
+    connection_data = {
+        "pageInfo": {
+            "hasNextPage": has_next_page,
+            "endCursor": end_cursor,
+        },
+        "edges": edges,
+    }
+
+    result: dict[str, typ.Any] = connection_data
+    for key in reversed(connection_path):
+        result = {key: result}
+
+    return (200, {"data": result})
+
+
 def _make_issues_page(
     issues: list[tuple[str, dict[str, typ.Any]]],
     *,
@@ -160,22 +193,11 @@ def _make_issues_page(
     end_cursor: str,
 ) -> tuple[int, dict[str, typ.Any]]:
     """Create a test GraphQL issues response page."""
-    edges = [{"cursor": cursor, "node": node} for cursor, node in issues]
-    return (
-        200,
-        {
-            "data": {
-                "repository": {
-                    "issues": {
-                        "pageInfo": {
-                            "hasNextPage": has_next_page,
-                            "endCursor": end_cursor,
-                        },
-                        "edges": edges,
-                    }
-                }
-            }
-        },
+    return _make_graphql_connection_page(
+        issues,
+        ["repository", "issues"],
+        has_next_page=has_next_page,
+        end_cursor=end_cursor,
     )
 
 
@@ -209,26 +231,11 @@ def _make_doc_changes_page(
     end_cursor: str,
 ) -> tuple[int, dict[str, typ.Any]]:
     """Create a test GraphQL doc changes response page."""
-    edges = [{"cursor": cursor, "node": node} for cursor, node in commits]
-    return (
-        200,
-        {
-            "data": {
-                "repository": {
-                    "ref": {
-                        "target": {
-                            "history": {
-                                "pageInfo": {
-                                    "hasNextPage": has_next_page,
-                                    "endCursor": end_cursor,
-                                },
-                                "edges": edges,
-                            }
-                        }
-                    }
-                }
-            }
-        },
+    return _make_graphql_connection_page(
+        commits,
+        ["repository", "ref", "target", "history"],
+        has_next_page=has_next_page,
+        end_cursor=end_cursor,
     )
 
 
@@ -393,39 +400,83 @@ async def test_iter_pull_requests_coerces_merged_state() -> None:
 
 
 @pytest.mark.asyncio
+async def test_iter_issues_does_not_turn_null_state_into_string() -> None:
+    """iter_issues emits an empty state when the GraphQL state is null."""
+    repo = _repo()
+    since = dt.datetime(2025, 1, 1, tzinfo=dt.UTC)
+    updated = dt.datetime(2025, 1, 2, tzinfo=dt.UTC).isoformat()
+
+    issue_node = _make_issue_node(_IssueNodeSpec(101, 101, "Null state issue", updated))
+    issue_node["state"] = None
+    page = _make_issues_page(
+        [("cursor-1", issue_node)], has_next_page=False, end_cursor="c"
+    )
+    client, http_client, _ = _make_client([page])
+    try:
+        events = [event async for event in client.iter_issues(repo, since=since)]
+        assert events[0].payload["state"] == ""
+    finally:
+        await http_client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_iter_doc_changes_classifies_documentation_paths() -> None:
     """iter_doc_changes classifies roadmap and ADR paths in payload."""
     repo = _repo()
     since = dt.datetime(2025, 1, 1, tzinfo=dt.UTC)
-    committed = dt.datetime(2025, 1, 2, tzinfo=dt.UTC).isoformat()
-    commit = _make_commit_node(
+    committed_roadmap = dt.datetime(2025, 1, 2, tzinfo=dt.UTC).isoformat()
+    committed_adr = dt.datetime(2025, 1, 3, tzinfo=dt.UTC).isoformat()
+    roadmap_commit = _make_commit_node(
         _CommitNodeSpec(
             "abc123",
             "docs: refresh roadmap",
-            committed,
-            committed,
+            committed_roadmap,
+            committed_roadmap,
         )
     )
-    page = _make_doc_changes_page(
-        [("cursor-1", commit)],
-        has_next_page=False,
-        end_cursor="c",
+    adr_commit = _make_commit_node(
+        _CommitNodeSpec(
+            "def456",
+            "docs: add ADR",
+            committed_adr,
+            committed_adr,
+        )
     )
-    client, http_client, _ = _make_client([page])
+    page_roadmap = _make_doc_changes_page(
+        [("cursor-1", roadmap_commit)],
+        has_next_page=False,
+        end_cursor="c1",
+    )
+    page_adr = _make_doc_changes_page(
+        [("cursor-2", adr_commit)],
+        has_next_page=False,
+        end_cursor="c2",
+    )
+    client, http_client, calls = _make_client([page_roadmap, page_adr])
     try:
+        documentation_paths = ["docs/roadmap.md", "docs/adr/001-decision.md"]
         events = [
             event
             async for event in client.iter_doc_changes(
                 repo,
                 since=since,
-                documentation_paths=["docs/roadmap.md"],
+                documentation_paths=documentation_paths,
+                after="resume",
             )
         ]
-        assert len(events) == 1
-        payload = events[0].payload
-        assert payload["path"] == "docs/roadmap.md"
-        assert payload["is_roadmap"] is True
-        assert payload["is_adr"] is False
-        assert payload["metadata"]["message"] == "docs: refresh roadmap"
+        assert len(events) == len(documentation_paths)
+        payload_by_path = {event.payload["path"]: event.payload for event in events}
+        roadmap_payload = payload_by_path["docs/roadmap.md"]
+        assert roadmap_payload["is_roadmap"] is True
+        assert roadmap_payload["is_adr"] is False
+        assert roadmap_payload["metadata"]["message"] == "docs: refresh roadmap"
+
+        adr_payload = payload_by_path["docs/adr/001-decision.md"]
+        assert adr_payload["is_roadmap"] is False
+        assert adr_payload["is_adr"] is True
+        assert adr_payload["metadata"]["message"] == "docs: add ADR"
+
+        assert calls[0]["variables"]["after"] == "resume"
+        assert calls[1]["variables"]["after"] is None
     finally:
         await http_client.aclose()

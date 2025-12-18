@@ -15,6 +15,7 @@ from ghillie.github import GitHubIngestionConfig, GitHubIngestionWorker
 # edge cases to prevent regressions in backlog preservation behaviour.
 from ghillie.github.ingestion import _KindIngestionContext, _StreamIngestionResult
 from tests.unit.github_ingestion_test_helpers import (
+    EventSpec,
     FakeGitHubClient,
     make_commit_event,
     make_commit_events_with_cursors,
@@ -89,16 +90,18 @@ async def test_ingestion_is_idempotent_for_unchanged_activity(
     repo = make_repo_info()
     occurred_at = dt.datetime.now(dt.UTC) - dt.timedelta(minutes=10)
     event = make_event(
-        event_type="github.commit",
-        source_event_id="abc999",
-        occurred_at=occurred_at,
-        payload={
-            "sha": "abc999",
-            "repo_owner": repo.owner,
-            "repo_name": repo.name,
-            "default_branch": repo.default_branch,
-            "committed_at": occurred_at.isoformat(),
-        },
+        occurred_at,
+        EventSpec(
+            event_type="github.commit",
+            source_event_id="abc999",
+            payload={
+                "sha": "abc999",
+                "repo_owner": repo.owner,
+                "repo_name": repo.name,
+                "default_branch": repo.default_branch,
+                "committed_at": occurred_at.isoformat(),
+            },
+        ),
     )
     client = FakeGitHubClient(
         commits=[event], pull_requests=[], issues=[], doc_changes=[]
@@ -307,35 +310,15 @@ async def test_ingest_kind_resumes_with_cursor_until_backlog_caught_up(
     now = dt.datetime(2025, 1, 1, tzinfo=dt.UTC)
     newest = now - dt.timedelta(hours=1)
     oldest = now - dt.timedelta(hours=2)
-    client = FakeGitHubClient(
-        commits=[
-            make_event(
-                event_type="github.commit",
-                source_event_id="c2",
-                occurred_at=newest,
-                payload={
-                    "sha": "c2",
-                    "repo_owner": repo.owner,
-                    "repo_name": repo.name,
-                    "default_branch": repo.default_branch,
-                    "committed_at": newest.isoformat(),
-                },
-                cursor="cursor-2",
-            ),
-            make_event(
-                event_type="github.commit",
-                source_event_id="c1",
-                occurred_at=oldest,
-                payload={
-                    "sha": "c1",
-                    "repo_owner": repo.owner,
-                    "repo_name": repo.name,
-                    "default_branch": repo.default_branch,
-                    "committed_at": oldest.isoformat(),
-                },
-                cursor="cursor-1",
-            ),
+    commits = make_commit_events_with_cursors(
+        repo,
+        [
+            ("c2", newest, "cursor-2"),
+            ("c1", oldest, "cursor-1"),
         ],
+    )
+    client = FakeGitHubClient(
+        commits=commits,
         pull_requests=[],
         issues=[],
         doc_changes=[],

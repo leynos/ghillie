@@ -368,6 +368,7 @@ CREATE TABLE github_ingestion_offsets (
     last_commit_cursor TEXT,
     last_issue_cursor  TEXT,
     last_pr_cursor     TEXT,
+    last_doc_cursor    TEXT,
     last_commit_ingested_at TIMESTAMPTZ,
     last_issue_ingested_at  TIMESTAMPTZ,
     last_pr_ingested_at     TIMESTAMPTZ,
@@ -385,11 +386,13 @@ CREATE TABLE github_ingestion_offsets (
   `RawEventWriter.ingest` deep copies payloads, enforces timezone-aware
   `occurred_at`, and returns the existing row on conflicts to keep the store
   append-only.
-- `github_ingestion_offsets` is wired via
+- `github_ingestion_offsets` (GitHub ingestion offsets) is wired via
   `ghillie.github.GitHubIngestionWorker`. The worker records per-repository
   watermarks (the `*_ingested_at` columns) so each run polls GitHub for
   activity since the last successful ingestion time, with a small overlap
-  window to tolerate clock skew and eventual consistency.
+  window to tolerate clock skew and eventual consistency. When a backlog
+  exceeds the per-kind ingestion limit, it records the corresponding `*_cursor`
+  so the next run can resume without dropping older events.
 - A minimal Silver staging table, `event_facts`, reuses the Bronze declarative
   base. `RawEventTransformer` copies Bronze payloads into `event_facts`, marks
   `transform_state` as processed, and verifies on reprocessing that the stored

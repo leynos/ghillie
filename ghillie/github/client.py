@@ -222,11 +222,12 @@ def _coerce_pr_state(state: str, merged_at: str | None) -> str:
 
 def _classify_documentation_path(path: str) -> tuple[bool, bool]:
     lowered = path.lower()
+    normalised = lowered.replace("\\", "/")
     is_roadmap = "roadmap" in lowered
     is_adr = (
-        "/adr" in lowered
-        or lowered.endswith("adr")
-        or "architecture-decision" in lowered
+        "/adr" in normalised
+        or normalised.split("/")[-1] == "adr"
+        or "architecture-decision" in normalised
     )
     return is_roadmap, is_adr
 
@@ -317,13 +318,39 @@ class _DocChangeSpec:
     is_adr: bool
 
 
-def _doc_change_event_from_node(
+_DOC_CURSOR_SEPARATOR = "\n"
+
+
+def _decode_doc_cursor(after: str | None) -> tuple[str | None, str | None]:
+    """Decode a stored doc cursor into (path, cursor) components."""
+    if after is None:
+        return (None, None)
+    if _DOC_CURSOR_SEPARATOR not in after:
+        return (None, after)
+    path, cursor = after.split(_DOC_CURSOR_SEPARATOR, 1)
+    return (path, cursor or None)
+
+
+def _encode_doc_cursor(path: str, cursor: str | None) -> str | None:
+    """Encode a doc cursor by pairing a path with a history cursor."""
+    if cursor is None:
+        return None
+    return f"{path}{_DOC_CURSOR_SEPARATOR}{cursor}"
+
+
+def _doc_change_event_from_edge(
     repo: RepositoryInfo,
-    node: dict[str, typ.Any],
+    edge: dict[str, typ.Any],
     *,
     since: dt.datetime,
     spec: _DocChangeSpec,
 ) -> GitHubIngestedEvent | None:
+    cursor = edge.get("cursor")
+    node = edge.get("node")
+    if not isinstance(node, dict):
+        return None
+
+    cursor_value = cursor if isinstance(cursor, str) else None
     oid = node.get("oid")
     committed_date = node.get("committedDate")
     if not isinstance(oid, str) or not isinstance(committed_date, str):
@@ -349,6 +376,7 @@ def _doc_change_event_from_node(
         source_event_id=f"{oid}:{spec.path}",
         occurred_at=occurred_at,
         payload=payload,
+        cursor=_encode_doc_cursor(spec.path, cursor_value),
     )
 
 
@@ -360,12 +388,9 @@ def _iter_doc_change_events(
     spec: _DocChangeSpec,
 ) -> typ.Iterator[GitHubIngestedEvent]:
     for edge in edges:
-        node = edge.get("node")
-        if not isinstance(node, dict):
-            continue
-        event = _doc_change_event_from_node(
+        event = _doc_change_event_from_edge(
             repo,
-            node,
+            edge,
             since=since,
             spec=spec,
         )
@@ -373,53 +398,10 @@ def _iter_doc_change_events(
             yield event
 
 
-NodePayloadBuilder = cabc.Callable[
-    [RepositoryInfo, dict[str, typ.Any], str],
-    dict[str, typ.Any],
-]
 NodeToEvent = cabc.Callable[
     [RepositoryInfo, dict[str, typ.Any], dt.datetime],
     tuple[GitHubIngestedEvent | None, bool],
 ]
-
-
-def _generic_event_from_node(  # noqa: PLR0913
-    event_type: str,
-    repo: RepositoryInfo,
-    node: dict[str, typ.Any],
-    *,
-    since: dt.datetime,
-    payload_builder: NodePayloadBuilder,
-    cursor: str | None = None,
-) -> tuple[GitHubIngestedEvent | None, bool]:
-    """Create a GitHubIngestedEvent from a GraphQL node, or decide to stop.
-
-    This helper centralises the shared parsing of `updatedAt` and `databaseId`
-    fields for GitHub entities ordered by `UPDATED_AT`. It returns `(event,
-    should_stop)`, where `should_stop=True` indicates the caller should stop
-    paginating because results are older than or equal to the `since` watermark.
-    """
-    updated_at_raw = node.get("updatedAt")
-    database_id = node.get("databaseId")
-    if not isinstance(updated_at_raw, str) or not isinstance(database_id, int):
-        return (None, False)
-
-    updated_at = _parse_github_datetime(updated_at_raw)
-    if updated_at <= since:
-        return (None, True)
-
-    payload = payload_builder(repo, node, updated_at_raw)
-    payload["id"] = database_id
-    return (
-        GitHubIngestedEvent(
-            event_type=event_type,
-            source_event_id=str(database_id),
-            occurred_at=updated_at,
-            payload=payload,
-            cursor=cursor,
-        ),
-        False,
-    )
 
 
 def _build_pr_payload(
@@ -429,11 +411,13 @@ def _build_pr_payload(
 ) -> dict[str, typ.Any]:
     """Build a pull request payload dict from a GraphQL node."""
     merged_at = node.get("mergedAt")
+    raw_state = node.get("state")
+    state = raw_state if isinstance(raw_state, str) else ""
     return {
         "number": node.get("number"),
         "title": node.get("title"),
         "author_login": _maybe_login(node.get("author")),
-        "state": _coerce_pr_state(str(node.get("state", "")), merged_at),
+        "state": _coerce_pr_state(state, merged_at),
         "created_at": node.get("createdAt"),
         "merged_at": merged_at,
         "closed_at": node.get("closedAt"),
@@ -453,11 +437,12 @@ def _build_issue_payload(
     updated_at_raw: str,
 ) -> dict[str, typ.Any]:
     """Build an issue payload dict from a GraphQL node."""
+    raw_state = node.get("state")
     return {
         "number": node.get("number"),
         "title": node.get("title"),
         "author_login": _maybe_login(node.get("author")),
-        "state": str(node.get("state", "")).lower(),
+        "state": raw_state.lower() if isinstance(raw_state, str) else "",
         "created_at": node.get("createdAt"),
         "closed_at": node.get("closedAt"),
         "labels": _label_names(node.get("labels")),
@@ -467,46 +452,68 @@ def _build_issue_payload(
     }
 
 
-def _pull_request_node_to_event(
+def _event_from_edge(
     repo: RepositoryInfo,
-    node: dict[str, typ.Any],
+    edge: dict[str, typ.Any],
     since: dt.datetime,
+    *,
+    kind: typ.Literal["pull_request", "issue"],
 ) -> tuple[GitHubIngestedEvent | None, bool]:
-    edge = node
+    """Convert a GraphQL edge into a GitHubIngestedEvent, if applicable.
+
+    Returns ``(event, should_stop)``, where ``should_stop`` signals that
+    pagination should stop because events are now at or before the ``since``
+    watermark.
+    """
     raw_node = edge.get("node")
     if not isinstance(raw_node, dict):
         return (None, False)
+
     cursor = edge.get("cursor")
     cursor_value = cursor if isinstance(cursor, str) else None
-    return _generic_event_from_node(
-        "github.pull_request",
-        repo,
-        raw_node,
-        since=since,
-        payload_builder=_build_pr_payload,
-        cursor=cursor_value,
+
+    updated_at_raw = raw_node.get("updatedAt")
+    database_id = raw_node.get("databaseId")
+    if not isinstance(updated_at_raw, str) or not isinstance(database_id, int):
+        return (None, False)
+
+    updated_at = _parse_github_datetime(updated_at_raw)
+    if updated_at <= since:
+        return (None, True)
+
+    payload_builder = (
+        _build_pr_payload if kind == "pull_request" else _build_issue_payload
     )
+    payload = payload_builder(repo, raw_node, updated_at_raw)
+    payload["id"] = database_id
+
+    event_type = "github.pull_request" if kind == "pull_request" else "github.issue"
+    return (
+        GitHubIngestedEvent(
+            event_type=event_type,
+            source_event_id=str(database_id),
+            occurred_at=updated_at,
+            payload=payload,
+            cursor=cursor_value,
+        ),
+        False,
+    )
+
+
+def _pull_request_node_to_event(
+    repo: RepositoryInfo,
+    edge: dict[str, typ.Any],
+    since: dt.datetime,
+) -> tuple[GitHubIngestedEvent | None, bool]:
+    return _event_from_edge(repo, edge, since, kind="pull_request")
 
 
 def _issue_node_to_event(
     repo: RepositoryInfo,
-    node: dict[str, typ.Any],
+    edge: dict[str, typ.Any],
     since: dt.datetime,
 ) -> tuple[GitHubIngestedEvent | None, bool]:
-    edge = node
-    raw_node = edge.get("node")
-    if not isinstance(raw_node, dict):
-        return (None, False)
-    cursor = edge.get("cursor")
-    cursor_value = cursor if isinstance(cursor, str) else None
-    return _generic_event_from_node(
-        "github.issue",
-        repo,
-        raw_node,
-        since=since,
-        payload_builder=_build_issue_payload,
-        cursor=cursor_value,
-    )
+    return _event_from_edge(repo, edge, since, kind="issue")
 
 
 def _events_from_nodes(
@@ -625,25 +632,33 @@ class GitHubGraphQLClient:
             if not isinstance(after_cursor, str):
                 return
 
-    async def _iter_paginated_entities(  # noqa: PLR0913
+    async def _iter_paginated_entities(
         self,
         repo: RepositoryInfo,
         *,
         since: dt.datetime,
-        query: str,
-        connection_path: list[str],
-        entity_name: str,
-        node_to_event: NodeToEvent,
+        entity_kind: typ.Literal["pull_request", "issue"],
         after: str | None = None,
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Yield entity snapshot events from a paginated GraphQL connection.
 
         This helper centralises the common pagination loop for connections
         ordered by `UPDATED_AT`, such as pull requests and issues. The
-        `node_to_event` callable is responsible for converting nodes into
-        GitHubIngestedEvent instances and signalling when iteration should stop
-        because the nodes are older than the `since` watermark.
+        entity-specific node-to-event callable is responsible for converting
+        nodes into GitHubIngestedEvent instances and signalling when iteration
+        should stop because the nodes are older than the `since` watermark.
         """
+        if entity_kind == "pull_request":
+            query = _PULL_REQUESTS_QUERY
+            connection_path = ["repository", "pullRequests"]
+            entity_name = "pull request"
+            node_to_event = _pull_request_node_to_event
+        else:
+            query = _ISSUES_QUERY
+            connection_path = ["repository", "issues"]
+            entity_name = "issue"
+            node_to_event = _issue_node_to_event
+
         after_cursor: str | None = after
         while True:
             data = await self._graphql(
@@ -682,10 +697,7 @@ class GitHubGraphQLClient:
         async for event in self._iter_paginated_entities(
             repo,
             since=since_utc,
-            query=_PULL_REQUESTS_QUERY,
-            connection_path=["repository", "pullRequests"],
-            entity_name="pull request",
-            node_to_event=_pull_request_node_to_event,
+            entity_kind="pull_request",
             after=after,
         ):
             yield event
@@ -702,10 +714,7 @@ class GitHubGraphQLClient:
         async for event in self._iter_paginated_entities(
             repo,
             since=since_utc,
-            query=_ISSUES_QUERY,
-            connection_path=["repository", "issues"],
-            entity_name="issue",
-            node_to_event=_issue_node_to_event,
+            entity_kind="issue",
             after=after,
         ):
             yield event
@@ -721,10 +730,13 @@ class GitHubGraphQLClient:
         """Yield documentation change events for documentation path commits."""
         since_utc = _ensure_tzaware(since, field="since")
         qualified_name = f"refs/heads/{repo.default_branch}"
-        del after
+        resume_path, resume_cursor = _decode_doc_cursor(after)
 
         for path in documentation_paths:
-            after: str | None = None
+            if resume_path is not None and path != resume_path:
+                continue
+            path_cursor, resume_cursor = resume_cursor, None
+            resume_path = None
             is_roadmap, is_adr = _classify_documentation_path(path)
             spec = _DocChangeSpec(path=path, is_roadmap=is_roadmap, is_adr=is_adr)
             while True:
@@ -735,7 +747,7 @@ class GitHubGraphQLClient:
                         "name": repo.name,
                         "qualifiedName": qualified_name,
                         "since": since_utc.isoformat(),
-                        "after": after,
+                        "after": path_cursor,
                         "path": path,
                     },
                 )
@@ -752,8 +764,8 @@ class GitHubGraphQLClient:
                 page_info = history.get("pageInfo")
                 if not isinstance(page_info, dict) or not page_info.get("hasNextPage"):
                     break
-                after = page_info.get("endCursor")
-                if not isinstance(after, str):
+                path_cursor = page_info.get("endCursor")
+                if not isinstance(path_cursor, str):
                     break
 
     async def _graphql(
