@@ -62,23 +62,7 @@ def _create_pr_event(
             "head_branch": "feature/release-checklist",
         },
     )
-    payload: dict[str, typ.Any] = {
-        "id": spec.item_id,
-        "number": spec.item_id,
-        "title": spec.title,
-        "state": "open",
-        "repo_owner": owner,
-        "repo_name": name,
-        "created_at": occurred_at.isoformat(),
-    }
-    if spec.extra_fields is not None:
-        payload.update(spec.extra_fields)
-    return GitHubIngestedEvent(
-        event_type=spec.event_type,
-        source_event_id=str(spec.item_id),
-        occurred_at=occurred_at,
-        payload=payload,
-    )
+    return _create_numbered_item_event(owner, name, occurred_at, spec)
 
 
 def _create_issue_event(
@@ -91,6 +75,15 @@ def _create_issue_event(
         title="Fix flaky integration test",
         extra_fields=None,
     )
+    return _create_numbered_item_event(owner, name, occurred_at, spec)
+
+
+def _create_numbered_item_event(
+    owner: str,
+    name: str,
+    occurred_at: dt.datetime,
+    spec: _NumberedItemSpec,
+) -> GitHubIngestedEvent:
     payload: dict[str, typ.Any] = {
         "id": spec.item_id,
         "number": spec.item_id,
@@ -100,6 +93,8 @@ def _create_issue_event(
         "repo_name": name,
         "created_at": occurred_at.isoformat(),
     }
+    if spec.extra_fields is not None:
+        payload.update(spec.extra_fields)
     return GitHubIngestedEvent(
         event_type=spec.event_type,
         source_event_id=str(spec.item_id),

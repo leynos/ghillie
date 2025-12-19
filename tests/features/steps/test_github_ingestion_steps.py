@@ -139,24 +139,62 @@ def managed_repository_registered(
     run_async(_create())
 
 
+def _build_event_configuration(
+    slug: str,
+    event_spec: dict[str, list[dt.timedelta]],
+) -> tuple[
+    list[GitHubIngestedEvent],
+    list[GitHubIngestedEvent],
+    list[GitHubIngestedEvent],
+    list[GitHubIngestedEvent],
+    dict[str, dt.datetime],
+]:
+    owner, name = slug.split("/", 1)
+    now = _BASE_TIME
+
+    commit_deltas = event_spec.get("commits", [])
+    pr_deltas = event_spec.get("pull_requests", [])
+    issue_deltas = event_spec.get("issues", [])
+    doc_deltas = event_spec.get("doc_changes", [])
+
+    commits = [create_commit_event(owner, name, now + delta) for delta in commit_deltas]
+    pull_requests = [create_pr_event(owner, name, now + delta) for delta in pr_deltas]
+    issues = [create_issue_event(owner, name, now + delta) for delta in issue_deltas]
+    doc_changes = [
+        create_doc_change_event(owner, name, now + delta) for delta in doc_deltas
+    ]
+
+    expected_offsets = {
+        "commit": now + max(commit_deltas, default=dt.timedelta(0)),
+        "pull_request": now + max(pr_deltas, default=dt.timedelta(0)),
+        "issue": now + max(issue_deltas, default=dt.timedelta(0)),
+        "doc": now + max(doc_deltas, default=dt.timedelta(0)),
+    }
+    return commits, pull_requests, issues, doc_changes, expected_offsets
+
+
 @given(parsers.parse('the GitHub API returns activity for "{slug}"'))
 def github_api_returns_activity(ingestion_context: IngestionContext, slug: str) -> None:
     """Configure a fake GitHub client that returns a fixed activity set."""
-    owner, name = slug.split("/", 1)
-    now = _BASE_TIME
+    commits, pull_requests, issues, doc_changes, expected_offsets = (
+        _build_event_configuration(
+            slug,
+            {
+                "commits": [dt.timedelta(hours=-4)],
+                "pull_requests": [dt.timedelta(hours=-3)],
+                "issues": [dt.timedelta(hours=-2)],
+                "doc_changes": [dt.timedelta(hours=-1)],
+            },
+        )
+    )
     _configure_fake_github_client(
         ingestion_context,
         slug,
-        commits=[create_commit_event(owner, name, now - dt.timedelta(hours=4))],
-        pull_requests=[create_pr_event(owner, name, now - dt.timedelta(hours=3))],
-        issues=[create_issue_event(owner, name, now - dt.timedelta(hours=2))],
-        doc_changes=[create_doc_change_event(owner, name, now - dt.timedelta(hours=1))],
-        expected_offsets={
-            "commit": now - dt.timedelta(hours=4),
-            "pull_request": now - dt.timedelta(hours=3),
-            "issue": now - dt.timedelta(hours=2),
-            "doc": now - dt.timedelta(hours=1),
-        },
+        commits=commits,
+        pull_requests=pull_requests,
+        issues=issues,
+        doc_changes=doc_changes,
+        expected_offsets=expected_offsets,
     )
 
 
@@ -165,27 +203,25 @@ def github_api_returns_additional_activity(
     ingestion_context: IngestionContext, slug: str
 ) -> None:
     """Add additional activity with timestamps after the initial ingestion run."""
-    owner, name = slug.split("/", 1)
-    now = _BASE_TIME
+    commits, pull_requests, issues, doc_changes, expected_offsets = (
+        _build_event_configuration(
+            slug,
+            {
+                "commits": [dt.timedelta(hours=-4), dt.timedelta(hours=1)],
+                "pull_requests": [dt.timedelta(hours=-3), dt.timedelta(hours=2)],
+                "issues": [dt.timedelta(hours=-2)],
+                "doc_changes": [dt.timedelta(hours=-1)],
+            },
+        )
+    )
     _configure_fake_github_client(
         ingestion_context,
         slug,
-        commits=[
-            create_commit_event(owner, name, now - dt.timedelta(hours=4)),
-            create_commit_event(owner, name, now + dt.timedelta(hours=1)),
-        ],
-        pull_requests=[
-            create_pr_event(owner, name, now - dt.timedelta(hours=3)),
-            create_pr_event(owner, name, now + dt.timedelta(hours=2)),
-        ],
-        issues=[create_issue_event(owner, name, now - dt.timedelta(hours=2))],
-        doc_changes=[create_doc_change_event(owner, name, now - dt.timedelta(hours=1))],
-        expected_offsets={
-            "commit": now + dt.timedelta(hours=1),
-            "pull_request": now + dt.timedelta(hours=2),
-            "issue": now - dt.timedelta(hours=2),
-            "doc": now - dt.timedelta(hours=1),
-        },
+        commits=commits,
+        pull_requests=pull_requests,
+        issues=issues,
+        doc_changes=doc_changes,
+        expected_offsets=expected_offsets,
     )
 
 
