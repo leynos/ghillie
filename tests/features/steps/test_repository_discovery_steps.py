@@ -17,6 +17,7 @@ from ghillie.catalogue import (
     RepositoryRecord,
     init_catalogue_storage,
 )
+from ghillie.common.slug import parse_repo_slug
 from ghillie.registry import RepositoryInfo, RepositoryRegistryService, SyncResult
 from ghillie.silver import init_silver_storage
 from ghillie.silver.storage import Repository
@@ -43,13 +44,10 @@ def parse_slug(slug: str) -> tuple[str, str]:
     Raises
     ------
     ValueError
-        If the slug does not contain a "/" character.
+        If the slug is not in "owner/name" format.
 
     """
-    if "/" not in slug:
-        msg = f"Invalid slug format: {slug}"
-        raise ValueError(msg)
-    return tuple(slug.split("/", 1))  # type: ignore[return-value]
+    return parse_repo_slug(slug)
 
 
 async def get_repository_by_slug(

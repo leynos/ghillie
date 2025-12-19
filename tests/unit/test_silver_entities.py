@@ -10,6 +10,7 @@ import pytest
 from sqlalchemy import func, select
 
 from ghillie.bronze import RawEventEnvelope, RawEventWriter
+from ghillie.common.slug import parse_repo_slug
 from ghillie.silver import (
     Commit,
     DocumentationChange,
@@ -66,7 +67,7 @@ class PullRequestState:
 
 def _make_commit_event_envelope(config: CommitEventConfig) -> RawEventEnvelope:
     """Build a GitHub commit raw event envelope."""
-    owner, name = config.repo_slug.split("/")
+    owner, name = parse_repo_slug(config.repo_slug)
     return RawEventEnvelope(
         source_system="github",
         source_event_id=config.source_event_id,
@@ -96,7 +97,7 @@ def _make_doc_change_event_envelope(
     config: DocChangeEventConfig,
 ) -> RawEventEnvelope:
     """Build a GitHub documentation change raw event envelope."""
-    owner, name = config.repo_slug.split("/")
+    owner, name = parse_repo_slug(config.repo_slug)
     return RawEventEnvelope(
         source_system="github",
         source_event_id=config.source_event_id,

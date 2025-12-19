@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from ghillie.bronze import GithubIngestionOffset, RawEvent, init_bronze_storage
+from ghillie.common.slug import parse_repo_slug
 from ghillie.github import GitHubIngestionConfig, GitHubIngestionWorker
 from ghillie.registry import RepositoryRegistryService
 from ghillie.silver import init_silver_storage
@@ -147,7 +148,7 @@ def managed_repository_registered(
     ingestion_context: IngestionContext, slug: str
 ) -> None:
     """Create a Silver repository row with ingestion enabled."""
-    owner, name = slug.split("/", 1)
+    owner, name = parse_repo_slug(slug)
     ingestion_context["repo_slug"] = slug
 
     async def _create() -> None:
@@ -175,7 +176,7 @@ def _build_event_configuration(
     list[GitHubIngestedEvent],
     dict[str, dt.datetime],
 ]:
-    owner, name = slug.split("/", 1)
+    owner, name = parse_repo_slug(slug)
     now = _BASE_TIME
 
     commit_deltas = event_spec.get("commits", [])
@@ -256,7 +257,7 @@ def run_worker(ingestion_context: IngestionContext, slug: str) -> None:
 @then(parsers.parse('Bronze raw events exist for "{slug}"'))
 def raw_events_exist(ingestion_context: IngestionContext, slug: str) -> None:
     """Verify expected event types exist in the Bronze store."""
-    owner, name = slug.split("/", 1)
+    owner, name = parse_repo_slug(slug)
 
     async def _assert() -> None:
         async with ingestion_context["session_factory"]() as session:
