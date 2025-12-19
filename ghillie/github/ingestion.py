@@ -1,0 +1,373 @@
+"""Incremental GitHub ingestion worker.
+
+The worker polls GitHub for commits, pull requests, issues, and documentation
+changes per managed repository and appends them to the Bronze `raw_events`
+store. It records a per-repository watermark so subsequent runs ingest only
+newer activity, with an overlap window to tolerate clock skew and eventual
+consistency.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+import datetime as dt
+import typing as typ
+
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+
+from ghillie.bronze import (
+    GithubIngestionOffset,
+    RawEvent,
+    RawEventEnvelope,
+    RawEventWriter,
+)
+from ghillie.common.time import utcnow
+
+if typ.TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+    from ghillie.registry.models import RepositoryInfo
+
+    from .client import GitHubActivityClient
+    from .models import GitHubIngestedEvent
+
+    type SessionFactory = async_sessionmaker[AsyncSession]
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class GitHubIngestionConfig:
+    """Runtime knobs for incremental ingestion."""
+
+    initial_lookback: dt.timedelta = dt.timedelta(days=7)
+    overlap: dt.timedelta = dt.timedelta(minutes=5)
+    max_events_per_kind: int = 500
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class GitHubIngestionResult:
+    """Summary of a single repository ingestion run."""
+
+    repo_slug: str
+    commits_ingested: int = 0
+    pull_requests_ingested: int = 0
+    issues_ingested: int = 0
+    doc_changes_ingested: int = 0
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class _StreamIngestionResult:
+    """Outcome of ingesting a single activity stream."""
+
+    ingested: int
+    max_seen: dt.datetime | None
+    resume_cursor: str | None
+    truncated: bool
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class _KindIngestionContext:
+    """Context for ingesting a specific entity kind."""
+
+    kind: typ.Literal["commit", "pull_request", "issue"]
+    now: dt.datetime
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class _IngestionResumeState:
+    """Resume state for watermark updates during ingestion."""
+
+    kind: typ.Literal["commit", "pull_request", "issue"]
+    repo_slug: str
+    cursor: str | None
+
+
+_KIND_WATERMARK_ATTR: dict[typ.Literal["commit", "pull_request", "issue"], str] = {
+    "commit": "last_commit_ingested_at",
+    "pull_request": "last_pr_ingested_at",
+    "issue": "last_issue_ingested_at",
+}
+
+_KIND_CURSOR_ATTR: dict[typ.Literal["commit", "pull_request", "issue"], str] = {
+    "commit": "last_commit_cursor",
+    "pull_request": "last_pr_cursor",
+    "issue": "last_issue_cursor",
+}
+
+_KIND_EVENT_TYPE: dict[
+    typ.Literal["commit", "pull_request", "issue", "doc_change"],
+    str,
+] = {
+    "commit": "github.commit",
+    "pull_request": "github.pull_request",
+    "issue": "github.issue",
+    "doc_change": "github.doc_change",
+}
+
+
+class GitHubIngestionWorker:
+    """Poll GitHub and write incremental activity into Bronze raw events."""
+
+    def __init__(
+        self,
+        session_factory: SessionFactory,
+        client: GitHubActivityClient,
+        *,
+        config: GitHubIngestionConfig | None = None,
+    ) -> None:
+        """Create a worker bound to a database session factory and GitHub client."""
+        self._session_factory = session_factory
+        self._client = client
+        self._config = config or GitHubIngestionConfig()
+
+    async def ingest_repository(self, repo: RepositoryInfo) -> GitHubIngestionResult:
+        """Ingest activity for a single repository."""
+        if not repo.ingestion_enabled:
+            return GitHubIngestionResult(repo_slug=repo.slug)
+
+        run_started_at = utcnow()
+        offsets = await self._load_or_create_offsets(repo.slug)
+        writer = RawEventWriter(self._session_factory)
+
+        commits = await self._ingest_kind(
+            repo,
+            writer,
+            offsets,
+            context=_KindIngestionContext(kind="commit", now=run_started_at),
+        )
+        prs = await self._ingest_kind(
+            repo,
+            writer,
+            offsets,
+            context=_KindIngestionContext(kind="pull_request", now=run_started_at),
+        )
+        issues = await self._ingest_kind(
+            repo,
+            writer,
+            offsets,
+            context=_KindIngestionContext(kind="issue", now=run_started_at),
+        )
+        docs = await self._ingest_doc_changes(repo, writer, offsets, now=run_started_at)
+
+        await self._persist_offsets(offsets)
+
+        return GitHubIngestionResult(
+            repo_slug=repo.slug,
+            commits_ingested=commits,
+            pull_requests_ingested=prs,
+            issues_ingested=issues,
+            doc_changes_ingested=docs,
+        )
+
+    async def _update_doc_change_watermark_if_complete(
+        self,
+        offsets: GithubIngestionOffset,
+        result: _StreamIngestionResult,
+        *,
+        after: str | None,
+        repo_slug: str,
+    ) -> None:
+        """Update doc change watermark if the stream completed without truncation."""
+        if result.truncated:
+            return
+        if result.max_seen is None:
+            return
+
+        if after is None:
+            offsets.last_doc_ingested_at = result.max_seen
+            return
+
+        latest = await self._latest_ingested_at(repo_slug, kind="doc_change")
+        if latest is not None:
+            offsets.last_doc_ingested_at = latest
+
+    async def _ingest_doc_changes(
+        self,
+        repo: RepositoryInfo,
+        writer: RawEventWriter,
+        offsets: GithubIngestionOffset,
+        *,
+        now: dt.datetime,
+    ) -> int:
+        since = self._since_for(offsets.last_doc_ingested_at, now=now)
+        after = offsets.last_doc_cursor
+        result = await self._ingest_events_stream(
+            repo,
+            writer,
+            self._client.iter_doc_changes(
+                repo,
+                since=since,
+                documentation_paths=repo.documentation_paths,
+                after=after,
+            ),
+        )
+        offsets.last_doc_cursor = result.resume_cursor
+        await self._update_doc_change_watermark_if_complete(
+            offsets, result, after=after, repo_slug=repo.slug
+        )
+        return result.ingested
+
+    def _get_stream_for_kind(
+        self,
+        repo: RepositoryInfo,
+        kind: typ.Literal["commit", "pull_request", "issue"],
+        *,
+        since: dt.datetime,
+        after: str | None,
+    ) -> typ.AsyncIterator[GitHubIngestedEvent]:
+        """Select the appropriate activity stream for the given kind."""
+        if kind == "commit":
+            return self._client.iter_commits(repo, since=since, after=after)
+        if kind == "pull_request":
+            return self._client.iter_pull_requests(repo, since=since, after=after)
+        return self._client.iter_issues(repo, since=since, after=after)
+
+    async def _update_watermark_if_complete(
+        self,
+        offsets: GithubIngestionOffset,
+        watermark_attr: str,
+        result: _StreamIngestionResult,
+        resume_state: _IngestionResumeState,
+    ) -> None:
+        """Update the watermark timestamp if the stream completed without truncation."""
+        if result.truncated:
+            return
+        if result.max_seen is None:
+            return
+
+        if resume_state.cursor is None:
+            setattr(offsets, watermark_attr, result.max_seen)
+            return
+
+        latest = await self._latest_ingested_at(
+            resume_state.repo_slug, kind=resume_state.kind
+        )
+        if latest is not None:
+            setattr(offsets, watermark_attr, latest)
+
+    async def _ingest_kind(
+        self,
+        repo: RepositoryInfo,
+        writer: RawEventWriter,
+        offsets: GithubIngestionOffset,
+        *,
+        context: _KindIngestionContext,
+    ) -> int:
+        kind = context.kind
+        now = context.now
+
+        watermark_attr = _KIND_WATERMARK_ATTR[kind]
+        cursor_attr = _KIND_CURSOR_ATTR[kind]
+        current = typ.cast("dt.datetime | None", getattr(offsets, watermark_attr))
+        since = self._since_for(current, now=now)
+        after = typ.cast("str | None", getattr(offsets, cursor_attr))
+
+        stream = self._get_stream_for_kind(repo, kind, since=since, after=after)
+
+        result = await self._ingest_events_stream(repo, writer, stream)
+        setattr(offsets, cursor_attr, result.resume_cursor)
+
+        resume_state = _IngestionResumeState(
+            kind=kind,
+            repo_slug=repo.slug,
+            cursor=after,
+        )
+        await self._update_watermark_if_complete(
+            offsets,
+            watermark_attr,
+            result,
+            resume_state,
+        )
+        return result.ingested
+
+    async def _ingest_events_stream(
+        self,
+        repo: RepositoryInfo,
+        writer: RawEventWriter,
+        events: typ.AsyncIterator[GitHubIngestedEvent],
+    ) -> _StreamIngestionResult:
+        max_seen: dt.datetime | None = None
+        last_cursor: str | None = None
+        ingested = 0
+        limit = self._config.max_events_per_kind
+        truncated = False
+
+        async for event in events:
+            if ingested >= limit:
+                truncated = True
+                break
+            envelope = RawEventEnvelope(
+                source_system="github",
+                source_event_id=event.source_event_id,
+                event_type=event.event_type,
+                repo_external_id=repo.slug,
+                occurred_at=event.occurred_at,
+                payload=event.payload,
+            )
+            await writer.ingest(envelope)
+            last_cursor = event.cursor
+            ingested += 1
+            if max_seen is None or event.occurred_at > max_seen:
+                max_seen = event.occurred_at
+
+        resume_cursor = last_cursor if truncated else None
+        return _StreamIngestionResult(
+            ingested=ingested,
+            max_seen=max_seen,
+            resume_cursor=resume_cursor,
+            truncated=truncated,
+        )
+
+    def _since_for(
+        self, watermark: dt.datetime | None, *, now: dt.datetime
+    ) -> dt.datetime:
+        """Compute the lower bound timestamp for a kind ingestion run."""
+        baseline = watermark or (now - self._config.initial_lookback)
+        return baseline - self._config.overlap
+
+    async def _load_or_create_offsets(self, repo_slug: str) -> GithubIngestionOffset:
+        async with self._session_factory() as session:
+            existing = await session.scalar(
+                select(GithubIngestionOffset).where(
+                    GithubIngestionOffset.repo_external_id == repo_slug
+                )
+            )
+            if existing is not None:
+                return existing
+
+            offsets = GithubIngestionOffset(repo_external_id=repo_slug)
+            session.add(offsets)
+            try:
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+                existing = await session.scalar(
+                    select(GithubIngestionOffset).where(
+                        GithubIngestionOffset.repo_external_id == repo_slug
+                    )
+                )
+                if existing is not None:
+                    return existing
+                raise
+            await session.refresh(offsets)
+            return offsets
+
+    async def _persist_offsets(self, offsets: GithubIngestionOffset) -> None:
+        async with self._session_factory() as session, session.begin():
+            await session.merge(offsets)
+
+    async def _latest_ingested_at(
+        self,
+        repo_slug: str,
+        *,
+        kind: typ.Literal["commit", "pull_request", "issue", "doc_change"],
+    ) -> dt.datetime | None:
+        """Return the latest occurred_at persisted for a given repo and kind."""
+        event_type = _KIND_EVENT_TYPE[kind]
+        async with self._session_factory() as session:
+            return await session.scalar(
+                select(func.max(RawEvent.occurred_at)).where(
+                    RawEvent.repo_external_id == repo_slug,
+                    RawEvent.event_type == event_type,
+                )
+            )
