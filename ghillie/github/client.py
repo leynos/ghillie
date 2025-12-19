@@ -452,6 +452,45 @@ def _build_issue_payload(
     }
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class _EntitySpec:
+    """Configuration for a paginated GraphQL entity type."""
+
+    query: str
+    connection_path: list[str]
+    entity_name: str
+    node_to_event: NodeToEvent
+
+
+_ENTITY_SPECS: dict[typ.Literal["pull_request", "issue"], _EntitySpec] = {
+    "pull_request": _EntitySpec(
+        query=_PULL_REQUESTS_QUERY,
+        connection_path=["repository", "pullRequests"],
+        entity_name="pull request",
+        node_to_event=lambda repo, edge, since: _event_from_edge(
+            repo, edge, since, kind="pull_request"
+        ),
+    ),
+    "issue": _EntitySpec(
+        query=_ISSUES_QUERY,
+        connection_path=["repository", "issues"],
+        entity_name="issue",
+        node_to_event=lambda repo, edge, since: _event_from_edge(
+            repo, edge, since, kind="issue"
+        ),
+    ),
+}
+
+
+def _next_cursor(connection: dict[str, typ.Any]) -> str | None:
+    """Return the next pagination cursor, or None when pagination is complete."""
+    page_info = connection.get("pageInfo")
+    if not isinstance(page_info, dict) or not page_info.get("hasNextPage"):
+        return None
+    after_cursor = page_info.get("endCursor")
+    return after_cursor if isinstance(after_cursor, str) else None
+
+
 def _event_from_edge(
     repo: RepositoryInfo,
     edge: dict[str, typ.Any],
@@ -648,16 +687,11 @@ class GitHubGraphQLClient:
         nodes into GitHubIngestedEvent instances and signalling when iteration
         should stop because the nodes are older than the `since` watermark.
         """
-        if entity_kind == "pull_request":
-            query = _PULL_REQUESTS_QUERY
-            connection_path = ["repository", "pullRequests"]
-            entity_name = "pull request"
-            node_to_event = _pull_request_node_to_event
-        else:
-            query = _ISSUES_QUERY
-            connection_path = ["repository", "issues"]
-            entity_name = "issue"
-            node_to_event = _issue_node_to_event
+        spec = _ENTITY_SPECS[entity_kind]
+        query = spec.query
+        connection_path = spec.connection_path
+        entity_name = spec.entity_name
+        node_to_event = spec.node_to_event
 
         after_cursor: str | None = after
         while True:
@@ -678,11 +712,8 @@ class GitHubGraphQLClient:
             if should_stop:
                 return
 
-            page_info = connection.get("pageInfo")
-            if not isinstance(page_info, dict) or not page_info.get("hasNextPage"):
-                return
-            after_cursor = page_info.get("endCursor")
-            if not isinstance(after_cursor, str):
+            after_cursor = _next_cursor(connection)
+            if after_cursor is None:
                 return
 
     async def iter_pull_requests(
