@@ -75,11 +75,7 @@ def _commit_envelope(
         ValueError: If repo_slug is not in 'owner/name' format.
 
     """
-    try:
-        owner, name = parse_repo_slug(repo_slug)
-    except ValueError as exc:
-        msg = f"Expected 'owner/name' format, got: {repo_slug}"
-        raise ValueError(msg) from exc
+    owner, name = parse_repo_slug(repo_slug)
     return RawEventEnvelope(
         source_system="github",
         source_event_id="commit-gold",

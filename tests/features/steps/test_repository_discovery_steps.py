@@ -28,33 +28,11 @@ def run_async[T](coro: typ.Coroutine[typ.Any, typ.Any, T]) -> T:
     return asyncio.run(coro)
 
 
-def parse_slug(slug: str) -> tuple[str, str]:
-    """Parse owner/name slug into (owner, name) tuple.
-
-    Parameters
-    ----------
-    slug:
-        Repository slug in "owner/name" format.
-
-    Returns
-    -------
-    tuple[str, str]
-        A tuple of (owner, name).
-
-    Raises
-    ------
-    ValueError
-        If the slug is not in "owner/name" format.
-
-    """
-    return parse_repo_slug(slug)
-
-
 async def get_repository_by_slug(
     session_factory: async_sessionmaker[AsyncSession], slug: str
 ) -> Repository | None:
     """Fetch a repository from Silver by owner/name slug."""
-    owner, name = parse_slug(slug)
+    owner, name = parse_repo_slug(slug)
     async with session_factory() as session:
         return await session.scalar(
             select(Repository).where(
@@ -167,7 +145,7 @@ def sync_registry(discovery_context: DiscoveryContext) -> None:
 @when(parsers.parse('repository "{slug}" is removed from catalogue'))
 def remove_from_catalogue(discovery_context: DiscoveryContext, slug: str) -> None:
     """Remove a repository from the catalogue database."""
-    owner, name = parse_slug(slug)
+    owner, name = parse_repo_slug(slug)
 
     async def _remove() -> None:
         async with discovery_context["session_factory"]() as session, session.begin():
@@ -187,7 +165,7 @@ def remove_from_catalogue(discovery_context: DiscoveryContext, slug: str) -> Non
 @when(parsers.parse('ingestion is disabled for "{slug}"'))
 def disable_ingestion(discovery_context: DiscoveryContext, slug: str) -> None:
     """Disable ingestion for a repository."""
-    owner, name = parse_slug(slug)
+    owner, name = parse_repo_slug(slug)
 
     async def _disable() -> None:
         service = discovery_context["service"]
@@ -199,7 +177,7 @@ def disable_ingestion(discovery_context: DiscoveryContext, slug: str) -> None:
 @when(parsers.parse('ingestion is enabled for "{slug}"'))
 def enable_ingestion(discovery_context: DiscoveryContext, slug: str) -> None:
     """Enable ingestion for a repository."""
-    owner, name = parse_slug(slug)
+    owner, name = parse_repo_slug(slug)
 
     async def _enable() -> None:
         service = discovery_context["service"]

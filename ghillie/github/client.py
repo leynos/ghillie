@@ -233,7 +233,10 @@ def _classify_documentation_path(path: str) -> tuple[bool, bool]:
         if path_parts and PurePosixPath(path_parts[-1]).suffix
         else path_parts
     )
-    is_adr = "adr" in path_parts or any(
+    is_adr_directory = any(
+        segment == "adr" or segment.startswith("adr.") for segment in directory_parts
+    )
+    is_adr = is_adr_directory or any(
         "architecture-decision" in segment for segment in directory_parts
     )
     return is_roadmap, is_adr

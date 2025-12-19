@@ -16,13 +16,18 @@ def test_repo_slug_combines_owner_and_name() -> None:
 def test_parse_repo_slug_splits_owner_and_name() -> None:
     """parse_repo_slug returns (owner, name) for valid slugs."""
     assert parse_repo_slug("leynos/ghillie") == ("leynos", "ghillie")
+    assert parse_repo_slug("Owner-Org/Repo_Name") == ("Owner-Org", "Repo_Name")
 
 
 @pytest.mark.parametrize(
     "slug",
     [
+        "",
+        "   ",
+        "/",
         "invalid",
         "owner/name/extra",
+        r"owner\\name",
         "owner/",
         "/name",
         "owner//name",
