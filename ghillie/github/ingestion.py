@@ -168,7 +168,7 @@ class GitHubIngestionWorker:
         repo_slug: str,
     ) -> None:
         """Update doc change watermark if the stream completed without truncation."""
-        if result.resume_cursor is not None:
+        if result.truncated:
             return
         if result.max_seen is None:
             return
@@ -230,7 +230,7 @@ class GitHubIngestionWorker:
         resume_state: _IngestionResumeState,
     ) -> None:
         """Update the watermark timestamp if the stream completed without truncation."""
-        if result.resume_cursor is not None:
+        if result.truncated:
             return
         if result.max_seen is None:
             return

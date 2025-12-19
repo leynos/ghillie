@@ -224,11 +224,8 @@ def _classify_documentation_path(path: str) -> tuple[bool, bool]:
     lowered = path.lower()
     normalised = lowered.replace("\\", "/")
     is_roadmap = "roadmap" in lowered
-    is_adr = (
-        "/adr" in normalised
-        or normalised.split("/")[-1] == "adr"
-        or "architecture-decision" in normalised
-    )
+    segments = [segment for segment in normalised.split("/") if segment]
+    is_adr = "adr" in segments or "architecture-decision" in normalised
     return is_roadmap, is_adr
 
 
@@ -316,6 +313,18 @@ class _DocChangeSpec:
     path: str
     is_roadmap: bool
     is_adr: bool
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class _DocChangePathContext:
+    """Context required to paginate doc changes for a single path."""
+
+    repo: RepositoryInfo
+    path: str
+    since: dt.datetime
+    qualified_name: str
+    cursor: str | None
+    spec: _DocChangeSpec
 
 
 _DOC_CURSOR_SEPARATOR = "\n"
@@ -579,7 +588,11 @@ def _validate_string_keyed_dict(
     *,
     field_name: str,
 ) -> dict[str, typ.Any]:
-    """Validate that a dictionary has only string keys and return typed result."""
+    """Validate that a dictionary has only string keys and return typed result.
+
+    JSON object keys are always strings, but this validation is kept as
+    defence-in-depth against malformed responses or future changes in parsing.
+    """
     result: dict[str, typ.Any] = {}
     for key, value in raw_dict.items():
         if not isinstance(key, str):
@@ -750,33 +763,28 @@ class GitHubGraphQLClient:
         ):
             yield event
 
-    async def _iter_doc_changes_for_path(  # noqa: PLR0913
-        self,
-        repo: RepositoryInfo,
-        path: str,
-        *,
-        since: dt.datetime,
-        qualified_name: str,
-        cursor: str | None,
-        spec: _DocChangeSpec,
+    async def _iter_doc_changes_for_path(
+        self, context: _DocChangePathContext
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Yield documentation change events for a single path with pagination."""
-        path_cursor = cursor
+        path_cursor = context.cursor
         while True:
             data = await self._graphql(
                 _COMMITS_QUERY,
                 {
-                    "owner": repo.owner,
-                    "name": repo.name,
-                    "qualifiedName": qualified_name,
-                    "since": since.isoformat(),
+                    "owner": context.repo.owner,
+                    "name": context.repo.name,
+                    "qualifiedName": context.qualified_name,
+                    "since": context.since.isoformat(),
                     "after": path_cursor,
-                    "path": path,
+                    "path": context.path,
                 },
             )
             history = _extract_commit_history(data)
             edges = _connection_edges(history, field="doc change commit history")
-            for event in _iter_doc_change_events(repo, edges, since=since, spec=spec):
+            for event in _iter_doc_change_events(
+                context.repo, edges, since=context.since, spec=context.spec
+            ):
                 yield event
 
             page_info = history.get("pageInfo")
@@ -806,14 +814,15 @@ class GitHubGraphQLClient:
             resume_path = None
             is_roadmap, is_adr = _classify_documentation_path(path)
             spec = _DocChangeSpec(path=path, is_roadmap=is_roadmap, is_adr=is_adr)
-            async for event in self._iter_doc_changes_for_path(
-                repo,
-                path,
+            context = _DocChangePathContext(
+                repo=repo,
+                path=path,
                 since=since_utc,
                 qualified_name=qualified_name,
                 cursor=path_cursor,
                 spec=spec,
-            ):
+            )
+            async for event in self._iter_doc_changes_for_path(context):
                 yield event
 
     async def _graphql(

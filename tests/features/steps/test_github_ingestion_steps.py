@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import datetime as dt
 import typing as typ
 
@@ -70,25 +71,50 @@ class IngestionContext(typ.TypedDict, total=False):
     expected_offsets: dict[str, dt.datetime]
 
 
-def _configure_fake_github_client(  # noqa: PLR0913
+@dataclasses.dataclass(frozen=True, slots=True)
+class _FakeGitHubClientConfig:
+    """Configuration for a FakeGitHubClient within a BDD scenario."""
+
+    commits: list[GitHubIngestedEvent]
+    pull_requests: list[GitHubIngestedEvent]
+    issues: list[GitHubIngestedEvent]
+    doc_changes: list[GitHubIngestedEvent]
+    expected_offsets: dict[str, dt.datetime]
+
+
+def _configure_fake_github_client(
+    ingestion_context: IngestionContext, config: _FakeGitHubClientConfig
+) -> None:
+    """Configure a FakeGitHubClient and expected offsets for the ingestion context."""
+    ingestion_context["github_client"] = FakeGitHubClient(
+        commits=config.commits,
+        pull_requests=config.pull_requests,
+        issues=config.issues,
+        doc_changes=config.doc_changes,
+    )
+    ingestion_context["expected_offsets"] = config.expected_offsets
+
+
+def _configure_activity(
     ingestion_context: IngestionContext,
     slug: str,
     *,
-    commits: list[GitHubIngestedEvent],
-    pull_requests: list[GitHubIngestedEvent],
-    issues: list[GitHubIngestedEvent],
-    doc_changes: list[GitHubIngestedEvent],
-    expected_offsets: dict[str, dt.datetime],
+    event_spec: dict[str, list[dt.timedelta]],
 ) -> None:
-    """Configure a FakeGitHubClient and expected offsets for the ingestion context."""
-    del slug
-    ingestion_context["github_client"] = FakeGitHubClient(
-        commits=commits,
-        pull_requests=pull_requests,
-        issues=issues,
-        doc_changes=doc_changes,
+    """Configure FakeGitHubClient activity and expected offsets."""
+    commits, pull_requests, issues, doc_changes, expected_offsets = (
+        _build_event_configuration(slug, event_spec)
     )
-    ingestion_context["expected_offsets"] = expected_offsets
+    _configure_fake_github_client(
+        ingestion_context,
+        _FakeGitHubClientConfig(
+            commits=commits,
+            pull_requests=pull_requests,
+            issues=issues,
+            doc_changes=doc_changes,
+            expected_offsets=expected_offsets,
+        ),
+    )
 
 
 @scenario(
@@ -176,25 +202,15 @@ def _build_event_configuration(
 @given(parsers.parse('the GitHub API returns activity for "{slug}"'))
 def github_api_returns_activity(ingestion_context: IngestionContext, slug: str) -> None:
     """Configure a fake GitHub client that returns a fixed activity set."""
-    commits, pull_requests, issues, doc_changes, expected_offsets = (
-        _build_event_configuration(
-            slug,
-            {
-                "commits": [dt.timedelta(hours=-4)],
-                "pull_requests": [dt.timedelta(hours=-3)],
-                "issues": [dt.timedelta(hours=-2)],
-                "doc_changes": [dt.timedelta(hours=-1)],
-            },
-        )
-    )
-    _configure_fake_github_client(
+    _configure_activity(
         ingestion_context,
         slug,
-        commits=commits,
-        pull_requests=pull_requests,
-        issues=issues,
-        doc_changes=doc_changes,
-        expected_offsets=expected_offsets,
+        event_spec={
+            "commits": [dt.timedelta(hours=-4)],
+            "pull_requests": [dt.timedelta(hours=-3)],
+            "issues": [dt.timedelta(hours=-2)],
+            "doc_changes": [dt.timedelta(hours=-1)],
+        },
     )
 
 
@@ -203,25 +219,15 @@ def github_api_returns_additional_activity(
     ingestion_context: IngestionContext, slug: str
 ) -> None:
     """Add additional activity with timestamps after the initial ingestion run."""
-    commits, pull_requests, issues, doc_changes, expected_offsets = (
-        _build_event_configuration(
-            slug,
-            {
-                "commits": [dt.timedelta(hours=-4), dt.timedelta(hours=1)],
-                "pull_requests": [dt.timedelta(hours=-3), dt.timedelta(hours=2)],
-                "issues": [dt.timedelta(hours=-2)],
-                "doc_changes": [dt.timedelta(hours=-1)],
-            },
-        )
-    )
-    _configure_fake_github_client(
+    _configure_activity(
         ingestion_context,
         slug,
-        commits=commits,
-        pull_requests=pull_requests,
-        issues=issues,
-        doc_changes=doc_changes,
-        expected_offsets=expected_offsets,
+        event_spec={
+            "commits": [dt.timedelta(hours=-4), dt.timedelta(hours=1)],
+            "pull_requests": [dt.timedelta(hours=-3), dt.timedelta(hours=2)],
+            "issues": [dt.timedelta(hours=-2)],
+            "doc_changes": [dt.timedelta(hours=-1)],
+        },
     )
 
 
