@@ -21,10 +21,10 @@ from ghillie.registry import RepositoryRegistryService
 from ghillie.silver import init_silver_storage
 from ghillie.silver.storage import Repository
 from tests.helpers.github_events import (
-    _create_commit_event,
-    _create_doc_change_event,
-    _create_issue_event,
-    _create_pr_event,
+    create_commit_event,
+    create_doc_change_event,
+    create_issue_event,
+    create_pr_event,
 )
 from tests.unit.github_ingestion_test_helpers import (
     FakeGitHubClient,
@@ -147,12 +147,10 @@ def github_api_returns_activity(ingestion_context: IngestionContext, slug: str) 
     _configure_fake_github_client(
         ingestion_context,
         slug,
-        commits=[_create_commit_event(owner, name, now - dt.timedelta(hours=4))],
-        pull_requests=[_create_pr_event(owner, name, now - dt.timedelta(hours=3))],
-        issues=[_create_issue_event(owner, name, now - dt.timedelta(hours=2))],
-        doc_changes=[
-            _create_doc_change_event(owner, name, now - dt.timedelta(hours=1))
-        ],
+        commits=[create_commit_event(owner, name, now - dt.timedelta(hours=4))],
+        pull_requests=[create_pr_event(owner, name, now - dt.timedelta(hours=3))],
+        issues=[create_issue_event(owner, name, now - dt.timedelta(hours=2))],
+        doc_changes=[create_doc_change_event(owner, name, now - dt.timedelta(hours=1))],
         expected_offsets={
             "commit": now - dt.timedelta(hours=4),
             "pull_request": now - dt.timedelta(hours=3),
@@ -173,17 +171,15 @@ def github_api_returns_additional_activity(
         ingestion_context,
         slug,
         commits=[
-            _create_commit_event(owner, name, now - dt.timedelta(hours=4)),
-            _create_commit_event(owner, name, now + dt.timedelta(hours=1)),
+            create_commit_event(owner, name, now - dt.timedelta(hours=4)),
+            create_commit_event(owner, name, now + dt.timedelta(hours=1)),
         ],
         pull_requests=[
-            _create_pr_event(owner, name, now - dt.timedelta(hours=3)),
-            _create_pr_event(owner, name, now + dt.timedelta(hours=2)),
+            create_pr_event(owner, name, now - dt.timedelta(hours=3)),
+            create_pr_event(owner, name, now + dt.timedelta(hours=2)),
         ],
-        issues=[_create_issue_event(owner, name, now - dt.timedelta(hours=2))],
-        doc_changes=[
-            _create_doc_change_event(owner, name, now - dt.timedelta(hours=1))
-        ],
+        issues=[create_issue_event(owner, name, now - dt.timedelta(hours=2))],
+        doc_changes=[create_doc_change_event(owner, name, now - dt.timedelta(hours=1))],
         expected_offsets={
             "commit": now + dt.timedelta(hours=1),
             "pull_request": now + dt.timedelta(hours=2),

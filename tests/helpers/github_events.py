@@ -28,7 +28,11 @@ class _NumberedItemSpec:
 
 
 def _create_commit_event(
-    owner: str, name: str, occurred_at: dt.datetime
+    owner: str,
+    name: str,
+    occurred_at: dt.datetime,
+    *,
+    default_branch: str,
 ) -> GitHubIngestedEvent:
     """Create a test commit event."""
     return GitHubIngestedEvent(
@@ -39,7 +43,7 @@ def _create_commit_event(
             "sha": "abc123",
             "repo_owner": owner,
             "repo_name": name,
-            "default_branch": "main",
+            "default_branch": default_branch,
             "committed_at": occurred_at.isoformat(),
         },
     )
@@ -129,9 +133,12 @@ def make_commit_event(
     repo: RepositoryInfo, occurred_at: dt.datetime
 ) -> GitHubIngestedEvent:
     """Create a test commit event for the given repository."""
-    event = _create_commit_event(repo.owner, repo.name, occurred_at)
-    event.payload["default_branch"] = repo.default_branch
-    return event
+    return _create_commit_event(
+        repo.owner,
+        repo.name,
+        occurred_at,
+        default_branch=repo.default_branch,
+    )
 
 
 def make_pr_event(
@@ -153,3 +160,43 @@ def make_doc_change_event(
 ) -> GitHubIngestedEvent:
     """Create a test documentation-change event for the given repository."""
     return _create_doc_change_event(repo.owner, repo.name, occurred_at)
+
+
+def create_commit_event(
+    owner: str, name: str, occurred_at: dt.datetime
+) -> GitHubIngestedEvent:
+    """Create a test commit event."""
+    return _create_commit_event(owner, name, occurred_at, default_branch="main")
+
+
+def create_pr_event(
+    owner: str, name: str, occurred_at: dt.datetime
+) -> GitHubIngestedEvent:
+    """Create a test pull request event."""
+    return _create_pr_event(owner, name, occurred_at)
+
+
+def create_issue_event(
+    owner: str, name: str, occurred_at: dt.datetime
+) -> GitHubIngestedEvent:
+    """Create a test issue event."""
+    return _create_issue_event(owner, name, occurred_at)
+
+
+def create_doc_change_event(
+    owner: str, name: str, occurred_at: dt.datetime
+) -> GitHubIngestedEvent:
+    """Create a test documentation-change event."""
+    return _create_doc_change_event(owner, name, occurred_at)
+
+
+__all__ = [
+    "create_commit_event",
+    "create_doc_change_event",
+    "create_issue_event",
+    "create_pr_event",
+    "make_commit_event",
+    "make_doc_change_event",
+    "make_issue_event",
+    "make_pr_event",
+]
