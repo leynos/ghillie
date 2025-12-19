@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 import datetime as dt
 import typing as typ
 
@@ -21,13 +20,14 @@ from ghillie.github import GitHubIngestionConfig, GitHubIngestionWorker
 from ghillie.registry import RepositoryRegistryService
 from ghillie.silver import init_silver_storage
 from ghillie.silver.storage import Repository
+from tests.helpers.github_events import (
+    _create_commit_event,
+    _create_doc_change_event,
+    _create_issue_event,
+    _create_pr_event,
+)
 from tests.unit.github_ingestion_test_helpers import (
     FakeGitHubClient,
-    make_commit_event,
-    make_doc_change_event,
-    make_issue_event,
-    make_pr_event,
-    make_repo_info,
 )
 
 if typ.TYPE_CHECKING:
@@ -68,34 +68,6 @@ class IngestionContext(typ.TypedDict, total=False):
     repo_slug: str
     raw_event_count_before: int
     expected_offsets: dict[str, dt.datetime]
-
-
-def _create_commit_event(
-    owner: str, name: str, occurred_at: dt.datetime
-) -> GitHubIngestedEvent:
-    repo = dataclasses.replace(make_repo_info(), owner=owner, name=name)
-    return make_commit_event(repo, occurred_at)
-
-
-def _create_pr_event(
-    owner: str, name: str, occurred_at: dt.datetime
-) -> GitHubIngestedEvent:
-    repo = dataclasses.replace(make_repo_info(), owner=owner, name=name)
-    return make_pr_event(repo, occurred_at)
-
-
-def _create_issue_event(
-    owner: str, name: str, occurred_at: dt.datetime
-) -> GitHubIngestedEvent:
-    repo = dataclasses.replace(make_repo_info(), owner=owner, name=name)
-    return make_issue_event(repo, occurred_at)
-
-
-def _create_doc_change_event(
-    owner: str, name: str, occurred_at: dt.datetime
-) -> GitHubIngestedEvent:
-    repo = dataclasses.replace(make_repo_info(), owner=owner, name=name)
-    return make_doc_change_event(repo, occurred_at)
 
 
 def _configure_fake_github_client(  # noqa: PLR0913

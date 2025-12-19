@@ -719,6 +719,42 @@ class GitHubGraphQLClient:
         ):
             yield event
 
+    async def _iter_doc_changes_for_path(  # noqa: PLR0913
+        self,
+        repo: RepositoryInfo,
+        path: str,
+        *,
+        since: dt.datetime,
+        qualified_name: str,
+        cursor: str | None,
+        spec: _DocChangeSpec,
+    ) -> typ.AsyncIterator[GitHubIngestedEvent]:
+        """Yield documentation change events for a single path with pagination."""
+        path_cursor = cursor
+        while True:
+            data = await self._graphql(
+                _COMMITS_QUERY,
+                {
+                    "owner": repo.owner,
+                    "name": repo.name,
+                    "qualifiedName": qualified_name,
+                    "since": since.isoformat(),
+                    "after": path_cursor,
+                    "path": path,
+                },
+            )
+            history = _extract_commit_history(data)
+            edges = _connection_edges(history, field="doc change commit history")
+            for event in _iter_doc_change_events(repo, edges, since=since, spec=spec):
+                yield event
+
+            page_info = history.get("pageInfo")
+            if not isinstance(page_info, dict) or not page_info.get("hasNextPage"):
+                break
+            path_cursor = page_info.get("endCursor")
+            if not isinstance(path_cursor, str):
+                break
+
     async def iter_doc_changes(
         self,
         repo: RepositoryInfo,
@@ -739,34 +775,15 @@ class GitHubGraphQLClient:
             resume_path = None
             is_roadmap, is_adr = _classify_documentation_path(path)
             spec = _DocChangeSpec(path=path, is_roadmap=is_roadmap, is_adr=is_adr)
-            while True:
-                data = await self._graphql(
-                    _COMMITS_QUERY,
-                    {
-                        "owner": repo.owner,
-                        "name": repo.name,
-                        "qualifiedName": qualified_name,
-                        "since": since_utc.isoformat(),
-                        "after": path_cursor,
-                        "path": path,
-                    },
-                )
-                history = _extract_commit_history(data)
-                edges = _connection_edges(history, field="doc change commit history")
-                for event in _iter_doc_change_events(
-                    repo,
-                    edges,
-                    since=since_utc,
-                    spec=spec,
-                ):
-                    yield event
-
-                page_info = history.get("pageInfo")
-                if not isinstance(page_info, dict) or not page_info.get("hasNextPage"):
-                    break
-                path_cursor = page_info.get("endCursor")
-                if not isinstance(path_cursor, str):
-                    break
+            async for event in self._iter_doc_changes_for_path(
+                repo,
+                path,
+                since=since_utc,
+                qualified_name=qualified_name,
+                cursor=path_cursor,
+                spec=spec,
+            ):
+                yield event
 
     async def _graphql(
         self, query: str, variables: dict[str, typ.Any]

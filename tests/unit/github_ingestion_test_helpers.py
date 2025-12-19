@@ -8,6 +8,25 @@ import typing as typ
 
 from ghillie.github.models import GitHubIngestedEvent
 from ghillie.registry.models import RepositoryInfo
+from tests.helpers.github_events import (
+    make_commit_event,
+    make_doc_change_event,
+    make_issue_event,
+    make_pr_event,
+)
+
+__all__ = [
+    "EventSpec",
+    "FakeGitHubClient",
+    "make_commit_event",
+    "make_commit_events_with_cursors",
+    "make_disabled_repo_info",
+    "make_doc_change_event",
+    "make_event",
+    "make_issue_event",
+    "make_pr_event",
+    "make_repo_info",
+]
 
 
 class FakeGitHubClient:
@@ -125,115 +144,6 @@ def make_event(
         occurred_at=occurred_at,
         payload=spec.payload,
         cursor=spec.cursor,
-    )
-
-
-def make_commit_event(
-    repo: RepositoryInfo, occurred_at: dt.datetime
-) -> GitHubIngestedEvent:
-    """Create a test commit event for the ingestion worker."""
-    return make_event(
-        occurred_at=occurred_at,
-        spec=EventSpec(
-            event_type="github.commit",
-            source_event_id="abc123",
-            payload={
-                "sha": "abc123",
-                "repo_owner": repo.owner,
-                "repo_name": repo.name,
-                "default_branch": repo.default_branch,
-                "committed_at": occurred_at.isoformat(),
-            },
-        ),
-    )
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class NumberedItemSpec:
-    """Specification for creating a test numbered item event (PR or issue)."""
-
-    event_type: str
-    item_id: int
-    title: str
-    extra_fields: dict[str, object] | None = None
-
-
-def make_numbered_item_event(
-    repo: RepositoryInfo,
-    occurred_at: dt.datetime,
-    spec: NumberedItemSpec,
-) -> GitHubIngestedEvent:
-    """Create a numbered-item event (PR or issue) with shared payload fields."""
-    payload: dict[str, object] = {
-        "id": spec.item_id,
-        "number": spec.item_id,
-        "title": spec.title,
-        "state": "open",
-        "repo_owner": repo.owner,
-        "repo_name": repo.name,
-        "created_at": occurred_at.isoformat(),
-    }
-    if spec.extra_fields is not None:
-        payload.update(spec.extra_fields)
-    return make_event(
-        occurred_at=occurred_at,
-        spec=EventSpec(
-            event_type=spec.event_type,
-            source_event_id=str(spec.item_id),
-            payload=payload,
-        ),
-    )
-
-
-def make_pr_event(
-    repo: RepositoryInfo, occurred_at: dt.datetime
-) -> GitHubIngestedEvent:
-    """Create a test pull request event for the ingestion worker."""
-    spec = NumberedItemSpec(
-        event_type="github.pull_request",
-        item_id=17,
-        title="Add release checklist",
-        extra_fields={
-            "base_branch": "main",
-            "head_branch": "feature/release-checklist",
-        },
-    )
-    return make_numbered_item_event(repo, occurred_at, spec)
-
-
-def make_issue_event(
-    repo: RepositoryInfo, occurred_at: dt.datetime
-) -> GitHubIngestedEvent:
-    """Create a test issue event for the ingestion worker."""
-    spec = NumberedItemSpec(
-        event_type="github.issue",
-        item_id=101,
-        title="Fix flaky integration test",
-        extra_fields=None,
-    )
-    return make_numbered_item_event(repo, occurred_at, spec)
-
-
-def make_doc_change_event(
-    repo: RepositoryInfo, occurred_at: dt.datetime
-) -> GitHubIngestedEvent:
-    """Create a test documentation-change event for the ingestion worker."""
-    return make_event(
-        occurred_at=occurred_at,
-        spec=EventSpec(
-            event_type="github.doc_change",
-            source_event_id="abc123:docs/roadmap.md",
-            payload={
-                "commit_sha": "abc123",
-                "path": "docs/roadmap.md",
-                "change_type": "modified",
-                "repo_owner": repo.owner,
-                "repo_name": repo.name,
-                "occurred_at": occurred_at.isoformat(),
-                "is_roadmap": True,
-                "is_adr": False,
-            },
-        ),
     )
 
 
