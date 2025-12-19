@@ -225,7 +225,10 @@ def _classify_documentation_path(path: str) -> tuple[bool, bool]:
     normalised = lowered.replace("\\", "/")
     is_roadmap = "roadmap" in lowered
     segments = [segment for segment in normalised.split("/") if segment]
-    is_adr = "adr" in segments or "architecture-decision" in normalised
+    directory_segments = segments[:-1] if segments and "." in segments[-1] else segments
+    is_adr = "adr" in segments or any(
+        "architecture-decision" in segment for segment in directory_segments
+    )
     return is_roadmap, is_adr
 
 
@@ -808,6 +811,8 @@ class GitHubGraphQLClient:
         resume_path, resume_cursor = _decode_doc_cursor(after)
 
         for path in documentation_paths:
+            # If resuming, skip earlier paths; apply the resume cursor once on the
+            # matching path then clear resume state so subsequent paths start fresh.
             if resume_path is not None and path != resume_path:
                 continue
             path_cursor, resume_cursor = resume_cursor, None
