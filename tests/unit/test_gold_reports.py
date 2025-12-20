@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from ghillie.bronze import RawEventEnvelope, RawEventWriter
+from ghillie.common.slug import parse_repo_slug
 from ghillie.gold import Report, ReportCoverage, ReportProject, ReportScope
 from ghillie.silver import EventFact, RawEventTransformer, Repository
 
@@ -21,7 +22,7 @@ def _commit_event(
     repo_slug: str, commit_sha: str, occurred_at: dt.datetime
 ) -> RawEventEnvelope:
     """Create a minimal commit raw event envelope for coverage tests."""
-    owner, name = repo_slug.split("/")
+    owner, name = parse_repo_slug(repo_slug)
     return RawEventEnvelope(
         source_system="github",
         source_event_id="commit-gold",

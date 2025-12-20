@@ -6,6 +6,7 @@ import typing as typ
 
 from sqlalchemy import select
 
+from ghillie.common.slug import parse_repo_slug
 from ghillie.registry.errors import RepositoryNotFoundError
 from ghillie.registry.mapping import to_repository_info
 from ghillie.silver.storage import Repository
@@ -85,11 +86,9 @@ async def get_repository_by_slug(
         Repository metadata if found, otherwise None.
 
     """
-    if slug.count("/") != 1:
-        return None
-
-    owner, name = slug.split("/")
-    if not owner or not name:
+    try:
+        owner, name = parse_repo_slug(slug)
+    except ValueError:
         return None
 
     async with session_factory() as session:

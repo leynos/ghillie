@@ -7,6 +7,7 @@ import dataclasses
 import datetime as dt
 import os
 import typing as typ
+from pathlib import PurePosixPath, PureWindowsPath
 
 import httpx
 
@@ -222,12 +223,21 @@ def _coerce_pr_state(state: str, merged_at: str | None) -> str:
 
 def _classify_documentation_path(path: str) -> tuple[bool, bool]:
     lowered = path.lower()
-    normalised = lowered.replace("\\", "/")
     is_roadmap = "roadmap" in lowered
-    segments = [segment for segment in normalised.split("/") if segment]
-    directory_segments = segments[:-1] if segments and "." in segments[-1] else segments
-    is_adr = "adr" in segments or any(
-        "architecture-decision" in segment for segment in directory_segments
+    normalised = PureWindowsPath(lowered).as_posix()
+    path_parts = [
+        part for part in PurePosixPath(normalised).parts if part not in {"", "/"}
+    ]
+    directory_parts = (
+        path_parts[:-1]
+        if path_parts and PurePosixPath(path_parts[-1]).suffix
+        else path_parts
+    )
+    is_adr_directory = any(
+        segment == "adr" or segment.startswith("adr.") for segment in directory_parts
+    )
+    is_adr = is_adr_directory or any(
+        "architecture-decision" in segment for segment in directory_parts
     )
     return is_roadmap, is_adr
 
