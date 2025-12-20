@@ -237,9 +237,16 @@
     },
     "NoiseFilters": {
       "title": "NoiseFilters",
-      "description": "Noise control for ingestion and reporting.\n\n    Attributes\n    ----------\n    ignore_authors\n        Authors whose commits/issues/PRs should be skipped.\n    ignore_labels\n        Labels that should suppress events.\n    ignore_paths\n        Path globs for files to ignore.\n    ignore_title_prefixes\n        Title prefixes whose events should be skipped.",
+      "description": "Noise control for ingestion and reporting.\n\n    Attributes\n    ----------\n    enabled\n        Global toggle for all noise filters on this project.\n    toggles\n        Per-filter toggles, allowing specific filters to be enabled or disabled\n        without removing their configured values.\n    ignore_authors\n        Authors whose commits/issues/PRs should be skipped.\n    ignore_labels\n        Labels that should suppress events.\n    ignore_paths\n        Path globs for files to ignore.\n    ignore_title_prefixes\n        Title prefixes whose events should be skipped.",
       "type": "object",
       "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "toggles": {
+          "$ref": "#/$defs/NoiseFilterToggles"
+        },
         "ignore_authors": {
           "type": "array",
           "items": {
@@ -267,6 +274,30 @@
             "type": "string"
           },
           "default": []
+        }
+      },
+      "required": []
+    },
+    "NoiseFilterToggles": {
+      "title": "NoiseFilterToggles",
+      "description": "Enable/disable individual noise filters for a project.",
+      "type": "object",
+      "properties": {
+        "ignore_authors": {
+          "type": "boolean",
+          "default": true
+        },
+        "ignore_labels": {
+          "type": "boolean",
+          "default": true
+        },
+        "ignore_paths": {
+          "type": "boolean",
+          "default": true
+        },
+        "ignore_title_prefixes": {
+          "type": "boolean",
+          "default": true
         }
       },
       "required": []

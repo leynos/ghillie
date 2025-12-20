@@ -203,8 +203,10 @@ correctly, regardless of the underlying compliance check that generated it.
   repository-scoped roadmaps and ADR directories instead of relying only on
   project-level documentation paths.
 - Noise filters and status preferences live in the catalogue and are persisted
-  onto project rows during import. Setting `summarise_dependency_prs: false`
-  tells downstream reporting jobs to drop dependency-only pull requests.
+  onto project rows during import. Noise filters include a global `enabled`
+  flag plus per-filter toggles, so operators can switch filters on or off via
+  catalogue updates. Setting `summarise_dependency_prs: false` tells downstream
+  reporting jobs to drop dependency-only pull requests.
 - The schema is defined with `msgspec` structures and exported as a JSON Schema
   consumed by `pajv`. The shipped example catalogue
   (`examples/wildside-catalogue.yaml`) exercises multi-repo projects, planned
@@ -261,10 +263,18 @@ classDiagram
         +str rationale
     }
     class NoiseFilters {
+        +bool enabled
+        +NoiseFilterToggles toggles
         +List~str~ ignore_authors
         +List~str~ ignore_labels
         +List~str~ ignore_paths
         +List~str~ ignore_title_prefixes
+    }
+    class NoiseFilterToggles {
+        +bool ignore_authors
+        +bool ignore_labels
+        +bool ignore_paths
+        +bool ignore_title_prefixes
     }
     class StatusSettings {
         +bool summarise_dependency_prs
@@ -280,8 +290,29 @@ classDiagram
     Component "many" o-- ComponentLink : blocked_by
     Component "many" o-- ComponentLink : emits_events_to
     Project "1" o-- NoiseFilters
+    NoiseFilters "1" o-- NoiseFilterToggles
     Project "1" o-- StatusSettings
 ```
+
+#### Noise filter ingestion behaviour (Task 1.3.c)
+
+Noise filters are applied at GitHub ingestion time, before persisting to the
+Bronze `raw_events` table. The ingestion worker loads the project noise
+configuration from the catalogue database each run so changes take effect
+without code changes.
+
+To prevent ingestion from stalling when filtered events dominate an activity
+stream, `github_ingestion_offsets` tracks both the persisted watermark
+(`*_ingested_at`) and a catch-up "seen" watermark (`*_seen_at`). During backlog
+catch-up (cursor-based pagination), the worker keeps the query watermark stable
+while storing the newest timestamp it has _seen_; when catch-up completes it
+advances the persisted watermark to the newest seen timestamp even if those
+newest events were dropped as noise.
+
+`ignore_paths` is currently evaluated only for events that include a `path`
+field (documentation change events). Commit ingestion does not yet fetch a
+per-commit file list in Phase 1, so path-based filtering cannot be applied to
+generic commit events without additional GitHub API calls.
 
 ## 4. The Intelligence Engine: Hierarchical Summarization
 

@@ -5,15 +5,24 @@ from __future__ import annotations
 import datetime as dt
 import typing as typ
 
+import msgspec
 import pytest
 from sqlalchemy import select
 
 from ghillie.bronze import GithubIngestionOffset, RawEvent, RawEventWriter
+from ghillie.catalogue.models import NoiseFilters
+from ghillie.catalogue.storage import (
+    ComponentRecord,
+    Estate,
+    ProjectRecord,
+    RepositoryRecord,
+)
 from ghillie.github import GitHubIngestionConfig, GitHubIngestionWorker
 
 # These tests intentionally cover internal ingestion primitives and cursor/watermark
 # edge cases to prevent regressions in backlog preservation behaviour.
-from ghillie.github.ingestion import _KindIngestionContext, _StreamIngestionResult
+from ghillie.github.ingestion import _RepositoryIngestionContext, _StreamIngestionResult
+from ghillie.github.noise import CompiledNoiseFilters
 from tests.unit.github_ingestion_test_helpers import (
     EventSpec,
     FakeGitHubClient,
@@ -121,6 +130,105 @@ async def test_ingestion_is_idempotent_for_unchanged_activity(
     async with session_factory() as session:
         ids = (await session.scalars(select(RawEvent.id))).all()
         assert len(ids) == 1
+
+
+@pytest.mark.asyncio
+async def test_ingestion_applies_project_noise_filters_from_catalogue(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Catalogue-defined noise filters drop bot events before Bronze persistence."""
+    repo = make_repo_info()
+    now = dt.datetime.now(dt.UTC)
+    occurred_at = now - dt.timedelta(minutes=10)
+
+    noise = NoiseFilters(ignore_authors=["dependabot[bot]"])
+
+    async with session_factory() as session, session.begin():
+        estate = Estate(key="noise-estate", name="Noise Estate")
+        session.add(estate)
+        await session.flush()
+
+        repo_record = RepositoryRecord(
+            owner=repo.owner,
+            name=repo.name,
+            default_branch=repo.default_branch,
+            documentation_paths=[],
+        )
+        session.add(repo_record)
+        await session.flush()
+
+        project = ProjectRecord(
+            estate_id=estate.id,
+            key="noise-project",
+            name="Noise Project",
+            noise=msgspec.to_builtins(noise),
+            status_preferences={},
+            documentation_paths=[],
+        )
+        session.add(project)
+        await session.flush()
+
+        session.add(
+            ComponentRecord(
+                project_id=project.id,
+                repository_id=repo_record.id,
+                key="noise-component",
+                name="Noise Component",
+                type="service",
+                lifecycle="active",
+                notes=[],
+            )
+        )
+
+    event = make_event(
+        occurred_at,
+        EventSpec(
+            event_type="github.commit",
+            source_event_id="bot-commit",
+            payload={
+                "sha": "bot-commit",
+                "repo_owner": repo.owner,
+                "repo_name": repo.name,
+                "default_branch": repo.default_branch,
+                "committed_at": occurred_at.isoformat(),
+                "author_name": "dependabot[bot]",
+                "message": "chore: bump deps",
+            },
+            cursor="cursor-1",
+        ),
+    )
+    client = FakeGitHubClient(
+        commits=[event],
+        pull_requests=[],
+        issues=[],
+        doc_changes=[],
+    )
+    worker = GitHubIngestionWorker(
+        session_factory,
+        client,
+        config=GitHubIngestionConfig(
+            overlap=dt.timedelta(0),
+            initial_lookback=dt.timedelta(days=1),
+        ),
+    )
+
+    result = await worker.ingest_repository(repo)
+    assert result.commits_ingested == 0
+
+    async with session_factory() as session:
+        raw_events = (
+            await session.scalars(
+                select(RawEvent).where(RawEvent.repo_external_id == repo.slug)
+            )
+        ).all()
+        assert raw_events == []
+        offsets = await session.scalar(
+            select(GithubIngestionOffset).where(
+                GithubIngestionOffset.repo_external_id == repo.slug
+            )
+        )
+        assert offsets is not None
+        assert offsets.last_commit_ingested_at == occurred_at
 
 
 @pytest.mark.asyncio
@@ -250,7 +358,10 @@ async def test_ingest_events_stream_handles_empty_stream(
         yield  # type: ignore[misc]  # Makes this an async generator
 
     result = await worker._ingest_events_stream(
-        repo, RawEventWriter(session_factory), _events()
+        repo,
+        RawEventWriter(session_factory),
+        _events(),
+        noise=CompiledNoiseFilters(),
     )
     assert isinstance(result, _StreamIngestionResult)
     assert result.ingested == 0
@@ -289,7 +400,10 @@ async def test_ingest_events_stream_sets_resume_cursor_when_truncated(
             yield event
 
     result = await worker._ingest_events_stream(
-        repo, RawEventWriter(session_factory), _events()
+        repo,
+        RawEventWriter(session_factory),
+        _events(),
+        noise=CompiledNoiseFilters(),
     )
     assert result.ingested == limit
     assert result.truncated is True
@@ -334,14 +448,17 @@ async def test_ingest_kind_resumes_with_cursor_until_backlog_caught_up(
     )
     offsets = await worker._load_or_create_offsets(repo.slug)
     writer = RawEventWriter(session_factory)
-    await worker._ingest_kind(
-        repo, writer, offsets, context=_KindIngestionContext(kind="commit", now=now)
+    context = _RepositoryIngestionContext(
+        repo=repo,
+        writer=writer,
+        offsets=offsets,
+        noise=CompiledNoiseFilters(),
+        now=now,
     )
+    await worker._ingest_kind(context, kind="commit")
     assert offsets.last_commit_cursor == "cursor-2"
     assert offsets.last_commit_ingested_at is None
 
-    await worker._ingest_kind(
-        repo, writer, offsets, context=_KindIngestionContext(kind="commit", now=now)
-    )
+    await worker._ingest_kind(context, kind="commit")
     assert offsets.last_commit_cursor is None
     assert offsets.last_commit_ingested_at == newest

@@ -369,6 +369,10 @@ CREATE TABLE github_ingestion_offsets (
     last_issue_cursor  TEXT,
     last_pr_cursor     TEXT,
     last_doc_cursor    TEXT,
+    last_commit_seen_at TIMESTAMPTZ,
+    last_issue_seen_at  TIMESTAMPTZ,
+    last_pr_seen_at     TIMESTAMPTZ,
+    last_doc_seen_at    TIMESTAMPTZ,
     last_commit_ingested_at TIMESTAMPTZ,
     last_issue_ingested_at  TIMESTAMPTZ,
     last_pr_ingested_at     TIMESTAMPTZ,
@@ -392,7 +396,10 @@ CREATE TABLE github_ingestion_offsets (
   activity since the last successful ingestion time, with a small overlap
   window to tolerate clock skew and eventual consistency. When a backlog
   exceeds the per-kind ingestion limit, it records the corresponding `*_cursor`
-  so the next run can resume without dropping older events.
+  so the next run can resume without dropping older events. During backlog
+  catch-up it also records `*_seen_at` so filtering (for example, bot noise
+  suppression) does not cause the ingestion watermark to stall when the newest
+  events are intentionally dropped.
 - A minimal Silver staging table, `event_facts`, reuses the Bronze declarative
   base. `RawEventTransformer` copies Bronze payloads into `event_facts`, marks
   `transform_state` as processed, and verifies on reprocessing that the stored
