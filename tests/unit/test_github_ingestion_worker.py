@@ -40,6 +40,7 @@ if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from ghillie.github.models import GitHubIngestedEvent
+    from ghillie.registry.models import RepositoryInfo
 
 
 @pytest.mark.asyncio
@@ -132,17 +133,12 @@ async def test_ingestion_is_idempotent_for_unchanged_activity(
         assert len(ids) == 1
 
 
-@pytest.mark.asyncio
-async def test_ingestion_applies_project_noise_filters_from_catalogue(
+async def _setup_catalogue_with_noise(
     session_factory: async_sessionmaker[AsyncSession],
+    repo: RepositoryInfo,
+    noise: NoiseFilters,
 ) -> None:
-    """Catalogue-defined noise filters drop bot events before Bronze persistence."""
-    repo = make_repo_info()
-    now = dt.datetime.now(dt.UTC)
-    occurred_at = now - dt.timedelta(minutes=10)
-
-    noise = NoiseFilters(ignore_authors=["dependabot[bot]"])
-
+    """Set up estate, repository, project, and component with noise configuration."""
     async with session_factory() as session, session.begin():
         estate = Estate(key="noise-estate", name="Noise Estate")
         session.add(estate)
@@ -180,13 +176,20 @@ async def test_ingestion_applies_project_noise_filters_from_catalogue(
             )
         )
 
+
+def _make_bot_commit_event(
+    repo: RepositoryInfo,
+    occurred_at: dt.datetime,
+) -> tuple[GitHubIngestedEvent, str]:
+    """Create a bot commit event for noise filtering tests."""
+    sha = "bot-commit"
     event = make_event(
         occurred_at,
         EventSpec(
             event_type="github.commit",
-            source_event_id="bot-commit",
+            source_event_id=sha,
             payload={
-                "sha": "bot-commit",
+                "sha": sha,
                 "repo_owner": repo.owner,
                 "repo_name": repo.name,
                 "default_branch": repo.default_branch,
@@ -197,6 +200,22 @@ async def test_ingestion_applies_project_noise_filters_from_catalogue(
             cursor="cursor-1",
         ),
     )
+    return (event, sha)
+
+
+@pytest.mark.asyncio
+async def test_ingestion_applies_project_noise_filters_from_catalogue(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Catalogue-defined noise filters drop bot events before Bronze persistence."""
+    # Arrange
+    repo = make_repo_info()
+    now = dt.datetime.now(dt.UTC)
+    occurred_at = now - dt.timedelta(minutes=10)
+    noise = NoiseFilters(ignore_authors=["dependabot[bot]"])
+    await _setup_catalogue_with_noise(session_factory, repo, noise)
+    event, expected_sha = _make_bot_commit_event(repo, occurred_at)
+    del expected_sha
     client = FakeGitHubClient(
         commits=[event],
         pull_requests=[],
@@ -212,9 +231,11 @@ async def test_ingestion_applies_project_noise_filters_from_catalogue(
         ),
     )
 
+    # Act
     result = await worker.ingest_repository(repo)
     assert result.commits_ingested == 0
 
+    # Assert
     async with session_factory() as session:
         raw_events = (
             await session.scalars(
