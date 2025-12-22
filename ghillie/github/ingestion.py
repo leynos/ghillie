@@ -175,22 +175,34 @@ class GitHubIngestionWorker:
             ),
             noise=context.noise,
         )
+        self._update_doc_watermarks(offsets, result, resuming=resuming)
+        return result.ingested
+
+    def _update_doc_watermarks(
+        self,
+        offsets: GithubIngestionOffset,
+        result: _StreamIngestionResult,
+        *,
+        resuming: bool,
+    ) -> None:
+        """Update doc change watermarks based on ingestion result."""
         offsets.last_doc_cursor = result.resume_cursor
         if result.truncated:
             offsets.last_doc_seen_at = _max_dt(
                 offsets.last_doc_seen_at, result.max_seen
             )
-        elif resuming:
-            offsets.last_doc_cursor = None
-            final_seen = offsets.last_doc_seen_at or result.max_seen
-            if final_seen is not None:
-                offsets.last_doc_ingested_at = final_seen
-            offsets.last_doc_seen_at = None
-        else:
-            offsets.last_doc_cursor = None
+            return
+
+        offsets.last_doc_cursor = None
+        if not resuming:
             if result.max_seen is not None:
                 offsets.last_doc_ingested_at = result.max_seen
-        return result.ingested
+            return
+
+        final_seen = offsets.last_doc_seen_at or result.max_seen
+        if final_seen is not None:
+            offsets.last_doc_ingested_at = final_seen
+        offsets.last_doc_seen_at = None
 
     def _get_stream_for_kind(
         self,

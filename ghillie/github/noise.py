@@ -37,19 +37,25 @@ def _iter_author_candidates(payload: dict[str, typ.Any]) -> typ.Iterator[str]:
             yield value
 
 
+def _extract_metadata_message(metadata: typ.Any) -> str | None:  # noqa: ANN401
+    """Extract message from metadata dict if present and non-empty."""
+    if not isinstance(metadata, dict):
+        return None
+
+    message = metadata.get("message")
+    if not isinstance(message, str) or not message.strip():
+        return None
+
+    return message
+
+
 def _title_for_payload(payload: dict[str, typ.Any]) -> str | None:
     for key in ("title", "message"):
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
             return value
 
-    metadata = payload.get("metadata")
-    if isinstance(metadata, dict):
-        message = metadata.get("message")
-        if isinstance(message, str) and message.strip():
-            return message
-
-    return None
+    return _extract_metadata_message(payload.get("metadata"))
 
 
 def _labels_for_payload(payload: dict[str, typ.Any]) -> list[str]:
