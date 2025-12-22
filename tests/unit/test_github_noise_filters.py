@@ -3,12 +3,22 @@
 from __future__ import annotations
 
 import datetime as dt
+from dataclasses import dataclass  # noqa: ICN003
 
 import pytest
 
 from ghillie.catalogue.models import NoiseFilters, NoiseFilterToggles
 from ghillie.github.models import GitHubIngestedEvent
 from ghillie.github.noise import compile_noise_filters
+
+
+@dataclass(frozen=True)
+class EventSpec:
+    """Specification for constructing a test GitHub event."""
+
+    event_type: str
+    source_event_id: str
+    payload: dict[str, object]
 
 
 def _assert_noise_filter_drops_event(
@@ -23,13 +33,15 @@ def _assert_noise_filter_drops_event(
 
 
 @pytest.mark.parametrize(
-    ("noise_filters", "event_type", "source_event_id", "payload", "expected_drop"),
+    ("noise_filters", "event_spec", "expected_drop"),
     [
         pytest.param(
             NoiseFilters(ignore_authors=["dependabot[bot]"]),
-            "github.pull_request",
-            "17",
-            {"author_login": "dependabot[bot]"},
+            EventSpec(
+                event_type="github.pull_request",
+                source_event_id="17",
+                payload={"author_login": "dependabot[bot]"},
+            ),
             True,
             id="ignore_authors_drops_matching_author_login",
         ),
@@ -38,52 +50,58 @@ def _assert_noise_filter_drops_event(
                 toggles=NoiseFilterToggles(ignore_authors=False),
                 ignore_authors=["dependabot[bot]"],
             ),
-            "github.pull_request",
-            "17",
-            {"author_login": "dependabot[bot]"},
+            EventSpec(
+                event_type="github.pull_request",
+                source_event_id="17",
+                payload={"author_login": "dependabot[bot]"},
+            ),
             False,
             id="ignore_authors_can_be_disabled_per_project",
         ),
         pytest.param(
             NoiseFilters(ignore_title_prefixes=["chore:"]),
-            "github.issue",
-            "101",
-            {"title": "Chore: bump dependencies"},
+            EventSpec(
+                event_type="github.issue",
+                source_event_id="101",
+                payload={"title": "Chore: bump dependencies"},
+            ),
             True,
             id="ignore_title_prefixes_drops_case_insensitive_prefix_match",
         ),
         pytest.param(
             NoiseFilters(ignore_labels=["chore/deps"]),
-            "github.pull_request",
-            "17",
-            {"labels": ["chore/deps", "ci"]},
+            EventSpec(
+                event_type="github.pull_request",
+                source_event_id="17",
+                payload={"labels": ["chore/deps", "ci"]},
+            ),
             True,
             id="ignore_labels_drops_matching_label",
         ),
         pytest.param(
             NoiseFilters(ignore_paths=["docs/generated/**"]),
-            "github.doc_change",
-            "abc123:docs/generated/index.md",
-            {"path": "docs/generated/index.md"},
+            EventSpec(
+                event_type="github.doc_change",
+                source_event_id="abc123:docs/generated/index.md",
+                payload={"path": "docs/generated/index.md"},
+            ),
             True,
             id="ignore_paths_drops_matching_doc_change_path_glob",
         ),
     ],
 )
-def test_noise_filter_behavior(  # noqa: PLR0913
+def test_noise_filter_behavior(
     noise_filters: NoiseFilters,
-    event_type: str,
-    source_event_id: str,
-    payload: dict[str, object],
+    event_spec: EventSpec,
     *,
     expected_drop: bool,
 ) -> None:
     """Verify noise filters drop or retain events based on configuration."""
     event = GitHubIngestedEvent(
-        event_type=event_type,
-        source_event_id=source_event_id,
+        event_type=event_spec.event_type,
+        source_event_id=event_spec.source_event_id,
         occurred_at=dt.datetime.now(dt.UTC),
-        payload=dict(payload),
+        payload=dict(event_spec.payload),
     )
     _assert_noise_filter_drops_event(
         noise_filters=noise_filters,
