@@ -175,15 +175,14 @@ class GitHubIngestionWorker:
             ),
             noise=context.noise,
         )
-        self._update_doc_watermarks(offsets, result, resuming=resuming)
+        self._update_doc_watermarks(offsets, result, resuming)
         return result.ingested
 
     def _update_doc_watermarks(
         self,
         offsets: GithubIngestionOffset,
         result: _StreamIngestionResult,
-        *,
-        resuming: bool,
+        resuming: bool,  # noqa: FBT001
     ) -> None:
         """Update doc change watermarks based on ingestion result."""
         offsets.last_doc_cursor = result.resume_cursor
