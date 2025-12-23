@@ -89,6 +89,23 @@ def _commit_event(slug: str, spec: _CommitSpec) -> GitHubIngestedEvent:
     )
 
 
+async def _get_commit_source_ids(
+    session_factory: async_sessionmaker[AsyncSession],
+    slug: str,
+) -> set[str]:
+    """Query and return all commit source event IDs for a repository."""
+    async with session_factory() as session:
+        events = (
+            await session.scalars(
+                select(RawEvent).where(
+                    RawEvent.repo_external_id == slug,
+                    RawEvent.event_type == "github.commit",
+                )
+            )
+        ).all()
+        return {event.source_event_id for event in events}
+
+
 @scenario(
     "../github_noise_filters.feature",
     "Toggling a noise filter changes subsequent ingestion",
@@ -261,18 +278,11 @@ def only_human_commit_ingested(
     bot_sha = ingestion_context["bot_commit_id"]
 
     async def _assert() -> None:
-        async with ingestion_context["session_factory"]() as session:
-            events = (
-                await session.scalars(
-                    select(RawEvent).where(
-                        RawEvent.repo_external_id == slug,
-                        RawEvent.event_type == "github.commit",
-                    )
-                )
-            ).all()
-            source_ids = {event.source_event_id for event in events}
-            assert human_sha in source_ids
-            assert bot_sha not in source_ids
+        source_ids = await _get_commit_source_ids(
+            ingestion_context["session_factory"], slug
+        )
+        assert human_sha in source_ids
+        assert bot_sha not in source_ids
 
     run_async(_assert())
 
@@ -333,16 +343,9 @@ def new_bot_commit_ingested(
     sha = ingestion_context["new_bot_commit_id"]
 
     async def _assert() -> None:
-        async with ingestion_context["session_factory"]() as session:
-            events = (
-                await session.scalars(
-                    select(RawEvent).where(
-                        RawEvent.repo_external_id == slug,
-                        RawEvent.event_type == "github.commit",
-                    )
-                )
-            ).all()
-            source_ids = {event.source_event_id for event in events}
-            assert sha in source_ids
+        source_ids = await _get_commit_source_ids(
+            ingestion_context["session_factory"], slug
+        )
+        assert sha in source_ids
 
     run_async(_assert())

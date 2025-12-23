@@ -225,7 +225,6 @@ class GitHubIngestionWorker:
         kind: typ.Literal["commit", "pull_request", "issue"],
     ) -> int:
         watermark_attr = _KIND_WATERMARK_ATTR[kind]
-        seen_attr = _KIND_SEEN_ATTR[kind]
         cursor_attr = _KIND_CURSOR_ATTR[kind]
         offsets = context.offsets
         current = typ.cast("dt.datetime | None", getattr(offsets, watermark_attr))
@@ -238,26 +237,46 @@ class GitHubIngestionWorker:
         result = await self._ingest_events_stream(
             context.repo, context.writer, stream, noise=context.noise
         )
-        setattr(offsets, cursor_attr, result.resume_cursor)
+        self._update_kind_watermarks(
+            offsets,
+            kind=kind,
+            result=result,
+            resuming=resuming,
+        )
+        return result.ingested
 
+    def _update_kind_watermarks(
+        self,
+        offsets: GithubIngestionOffset,
+        *,
+        kind: typ.Literal["commit", "pull_request", "issue"],
+        result: _StreamIngestionResult,
+        resuming: bool,
+    ) -> None:
+        """Update ingestion watermarks/cursors for a single entity kind."""
+        watermark_attr = _KIND_WATERMARK_ATTR[kind]
+        seen_attr = _KIND_SEEN_ATTR[kind]
+        cursor_attr = _KIND_CURSOR_ATTR[kind]
+        setattr(offsets, cursor_attr, result.resume_cursor)
         if result.truncated:
             setattr(
                 offsets,
                 seen_attr,
                 _max_dt(getattr(offsets, seen_attr), result.max_seen),
             )
-        elif resuming:
-            setattr(offsets, cursor_attr, None)
-            final_seen = typ.cast("dt.datetime | None", getattr(offsets, seen_attr))
-            watermark = final_seen or result.max_seen
-            if watermark is not None:
-                setattr(offsets, watermark_attr, watermark)
-            setattr(offsets, seen_attr, None)
-        else:
-            setattr(offsets, cursor_attr, None)
+            return
+
+        setattr(offsets, cursor_attr, None)
+        if not resuming:
             if result.max_seen is not None:
                 setattr(offsets, watermark_attr, result.max_seen)
-        return result.ingested
+            return
+
+        final_seen = typ.cast("dt.datetime | None", getattr(offsets, seen_attr))
+        watermark = final_seen or result.max_seen
+        if watermark is not None:
+            setattr(offsets, watermark_attr, watermark)
+        setattr(offsets, seen_attr, None)
 
     async def _ingest_events_stream(
         self,
