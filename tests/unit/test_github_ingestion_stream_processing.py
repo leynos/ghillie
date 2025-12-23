@@ -38,8 +38,8 @@ async def test_ingest_events_stream_handles_empty_stream(
     )
 
     async def _events() -> typ.AsyncIterator[GitHubIngestedEvent]:
-        return
-        yield  # type: ignore[misc]  # Makes this an async generator
+        if False:  # pragma: no cover
+            yield  # type: ignore[misc]  # Makes this an async generator
 
     result = await worker._ingest_events_stream(
         repo,

@@ -206,7 +206,7 @@ correctly, regardless of the underlying compliance check that generated it.
   onto project rows during import. Noise filters include a global `enabled`
   flag plus per-filter toggles, so operators can switch filters on or off via
   catalogue updates. Setting `summarise_dependency_prs: false` tells downstream
-  reporting jobs to drop dependency-only pull requests.
+  reporting jobs not to summarize dependency-only pull requests.
 - The schema is defined with `msgspec` structures and exported as a JSON Schema
   consumed by `pajv`. The shipped example catalogue
   (`examples/wildside-catalogue.yaml`) exercises multi-repo projects, planned
@@ -298,11 +298,11 @@ classDiagram
 
 Noise filters are applied at GitHub ingestion time, before persisting to the
 Bronze `raw_events` table. The ingestion worker loads the project noise
-configuration from the catalogue database each run so changes take effect
+configuration from the catalogue database each run, so changes take effect
 without code changes.
 
 When the catalogue query fails due to a transient connectivity error, the
-worker logs a warning and proceeds with an effectively empty noise filter set
+worker logs a warning and proceeds with an effectively empty noise filter set,
 so ingestion can continue. Non-operational SQLAlchemy errors (schema drift,
 query bugs) are treated as fatal and cause the ingestion run to fail, making
 misconfiguration visible to operators rather than silently failing open.

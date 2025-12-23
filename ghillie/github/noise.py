@@ -20,12 +20,12 @@ if typ.TYPE_CHECKING:
 
 
 def _normalise_path(path: str) -> str:
-    lowered = path.strip()
-    if not lowered:
+    stripped = path.strip()
+    if not stripped:
         return ""
     # GitHub paths are POSIX-style; normalise any accidental Windows separators
     # before matching glob patterns.
-    return PurePosixPath(lowered.replace("\\", "/")).as_posix()
+    return PurePosixPath(stripped.replace("\\", "/")).as_posix()
 
 
 def _normalise_text(value: str) -> str:

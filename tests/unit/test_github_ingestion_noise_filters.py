@@ -105,7 +105,7 @@ def _make_bot_commit_event(
     return (event, sha)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MultiProjectCatalogueSetup:
     """Configuration for setting up a multi-project catalogue in tests."""
 
@@ -213,85 +213,97 @@ async def test_ingestion_applies_project_noise_filters_from_catalogue(
         assert offsets.last_commit_ingested_at == occurred_at
 
 
+@dataclass(frozen=True, slots=True)
+class NoiseFilterTestSetup:
+    """Configuration for a multi-project noise filter test scenario."""
+
+    estate_key: str
+    noise_a: NoiseFilters
+    noise_b: NoiseFilters
+    project_a_key: str
+    project_b_key: str
+
+
+@dataclass(frozen=True, slots=True)
+class NoiseFilterExpectedResults:
+    """Expected results for noise filter compilation."""
+
+    authors: frozenset[str]
+    labels: frozenset[str]
+    paths: tuple[str, ...]
+    prefixes: tuple[str, ...]
+
+
 @pytest.mark.parametrize(
-    (
-        "estate_key",
-        "noise_a",
-        "noise_b",
-        "project_a_key",
-        "project_b_key",
-        "expected_authors",
-        "expected_labels",
-        "expected_paths",
-        "expected_prefixes",
-    ),
+    ("setup", "expected"),
     [
         pytest.param(
-            "noise-estate-merge",
-            NoiseFilters(ignore_authors=["dependabot[bot]"]),
-            NoiseFilters(
-                ignore_labels=["chore/deps"],
-                ignore_paths=["docs/", "docs"],
-                ignore_title_prefixes=["Chore:"],
+            NoiseFilterTestSetup(
+                estate_key="noise-estate-merge",
+                noise_a=NoiseFilters(ignore_authors=["dependabot[bot]"]),
+                noise_b=NoiseFilters(
+                    ignore_labels=["chore/deps"],
+                    ignore_paths=["docs/", "docs"],
+                    ignore_title_prefixes=["Chore:"],
+                ),
+                project_a_key="noise-project-a",
+                project_b_key="noise-project-b",
             ),
-            "noise-project-a",
-            "noise-project-b",
-            frozenset({"dependabot[bot]"}),
-            frozenset({"chore/deps"}),
-            ("docs",),
-            ("chore:",),
+            NoiseFilterExpectedResults(
+                authors=frozenset({"dependabot[bot]"}),
+                labels=frozenset({"chore/deps"}),
+                paths=("docs",),
+                prefixes=("chore:",),
+            ),
             id="merges_multiple_projects",
         ),
         pytest.param(
-            "noise-estate-disabled",
-            NoiseFilters(ignore_authors=["dependabot[bot]"]),
-            NoiseFilters(
-                enabled=False,
-                ignore_labels=["chore/deps"],
-                ignore_paths=["docs/**"],
-                ignore_title_prefixes=["chore:"],
+            NoiseFilterTestSetup(
+                estate_key="noise-estate-disabled",
+                noise_a=NoiseFilters(ignore_authors=["dependabot[bot]"]),
+                noise_b=NoiseFilters(
+                    enabled=False,
+                    ignore_labels=["chore/deps"],
+                    ignore_paths=["docs/**"],
+                    ignore_title_prefixes=["chore:"],
+                ),
+                project_a_key="noise-project-enabled",
+                project_b_key="noise-project-disabled",
             ),
-            "noise-project-enabled",
-            "noise-project-disabled",
-            frozenset({"dependabot[bot]"}),
-            frozenset(),
-            (),
-            (),
+            NoiseFilterExpectedResults(
+                authors=frozenset({"dependabot[bot]"}),
+                labels=frozenset(),
+                paths=(),
+                prefixes=(),
+            ),
             id="skips_disabled_projects",
         ),
     ],
 )
 @pytest.mark.asyncio
-async def test_compile_noise_filters(  # noqa: PLR0913
+async def test_compile_noise_filters(
     session_factory: async_sessionmaker[AsyncSession],
-    estate_key: str,
-    noise_a: NoiseFilters,
-    noise_b: NoiseFilters,
-    project_a_key: str,
-    project_b_key: str,
-    expected_authors: frozenset[str],
-    expected_labels: frozenset[str],
-    expected_paths: tuple[str, ...],
-    expected_prefixes: tuple[str, ...],
+    setup: NoiseFilterTestSetup,
+    expected: NoiseFilterExpectedResults,
 ) -> None:
     """_compile_noise_filters merges enabled projects and skips disabled ones."""
     repo = make_repo_info()
     await _setup_multi_project_catalogue(
         session_factory,
         MultiProjectCatalogueSetup(
-            estate_key=estate_key,
+            estate_key=setup.estate_key,
             estate_name="Noise Estate",
             repo=repo,
             projects=[
                 (
-                    project_a_key,
-                    f"Noise Project {project_a_key}",
-                    noise_a,
+                    setup.project_a_key,
+                    f"Noise Project {setup.project_a_key}",
+                    setup.noise_a,
                 ),
                 (
-                    project_b_key,
-                    f"Noise Project {project_b_key}",
-                    noise_b,
+                    setup.project_b_key,
+                    f"Noise Project {setup.project_b_key}",
+                    setup.noise_b,
                 ),
             ],
         ),
@@ -302,10 +314,10 @@ async def test_compile_noise_filters(  # noqa: PLR0913
         FakeGitHubClient(commits=[], pull_requests=[], issues=[], doc_changes=[]),
     )
     compiled = await worker._compile_noise_filters(repo)
-    assert compiled.ignore_authors == expected_authors
-    assert compiled.ignore_labels == expected_labels
-    assert compiled.ignore_paths == expected_paths
-    assert compiled.ignore_title_prefixes == expected_prefixes
+    assert compiled.ignore_authors == expected.authors
+    assert compiled.ignore_labels == expected.labels
+    assert compiled.ignore_paths == expected.paths
+    assert compiled.ignore_title_prefixes == expected.prefixes
 
 
 @pytest.mark.asyncio
