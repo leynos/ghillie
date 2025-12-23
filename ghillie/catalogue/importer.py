@@ -303,7 +303,7 @@ class CatalogueImporter:
                 changed |= _set_if_changed(record, "description", project.description)
                 changed |= _set_if_changed(record, "programme", project.programme)
                 changed |= _set_if_changed(
-                    record, "noise", msgspec.structs.asdict(project.noise)
+                    record, "noise", msgspec.to_builtins(project.noise)
                 )
                 changed |= _set_if_changed(
                     record,
@@ -322,7 +322,7 @@ class CatalogueImporter:
                     name=project.name,
                     description=project.description,
                     programme=project.programme,
-                    noise=msgspec.structs.asdict(project.noise),
+                    noise=msgspec.to_builtins(project.noise),
                     status_preferences=msgspec.structs.asdict(project.status),
                     documentation_paths=project.documentation_paths,
                 )

@@ -17,8 +17,11 @@ validated with `msgspec` and exposed as a JSON Schema for external linters.
   `kind` (`runtime`, `dev`, `test`, `ops`) plus a short rationale.
 - Configure per-project noise filters (`ignore_authors`, `ignore_labels`,
   `ignore_paths`, `ignore_title_prefixes`) and status preferences under `noise`
-  and `status`. Setting `summarise_dependency_prs: false` signals that
-  dependency update pull requests should be ignored in downstream summaries.
+  and `status`. Set `noise.enabled: false` to disable all filters for a
+  project, or use `noise.toggles.*` to disable individual filters without
+  deleting the configured values. Setting `summarise_dependency_prs: false`
+  signals that dependency update pull requests should be ignored in downstream
+  summaries.
 - Record documentation paths at both project level (`documentation_paths`) and
   per repository (`repository.documentation_paths`) so roadmaps and ADRs are
   discoverable to ingestion and summarization jobs.
@@ -470,6 +473,8 @@ async def main() -> None:
 
     client = GitHubGraphQLClient(GitHubGraphQLConfig.from_env())
     worker = GitHubIngestionWorker(session_factory, client)
+    # If the catalogue database is separate from Bronze/Silver, pass
+    # catalogue_session_factory=... so project noise filters are applied.
 
     for repo in repos:
         await worker.ingest_repository(repo)

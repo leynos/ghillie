@@ -120,7 +120,7 @@ Silver layers with controlled noise and back-pressure.
   issues, and documentation changes are captured into `raw_events` within a
   bounded delay after they occur.
 
-- [ ] **Task 1.3.c – Apply noise filters from configuration**  
+- [x] **Task 1.3.c – Apply noise filters from configuration**  
   Apply project-specific filters to ignore events from known bots, dependency
   update tools, or paths deemed irrelevant, as defined in the catalogue.
 

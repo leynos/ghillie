@@ -245,6 +245,115 @@ projects:
     assert branch == "develop"
 
 
+def _make_noise_catalogue_yaml(
+    enabled: bool,  # noqa: FBT001
+    toggles: dict[str, bool],
+) -> str:
+    """Generate a catalogue YAML with noise configuration."""
+    return f"""\
+version: 1
+projects:
+  - key: alpha
+    name: Alpha
+    noise:
+      enabled: {str(enabled).lower()}
+      toggles:
+        ignore_authors: {str(toggles["ignore_authors"]).lower()}
+        ignore_labels: {str(toggles["ignore_labels"]).lower()}
+        ignore_paths: {str(toggles["ignore_paths"]).lower()}
+        ignore_title_prefixes: {str(toggles["ignore_title_prefixes"]).lower()}
+      ignore_authors:
+        - dependabot[bot]
+      ignore_labels:
+        - chore/deps
+      ignore_paths:
+        - docs/generated/**
+      ignore_title_prefixes:
+        - "chore:"
+    components:
+      - key: alpha-api
+        name: Alpha API
+        repository:
+          owner: org
+          name: alpha-api
+          default_branch: main
+"""
+
+
+async def _load_project_noise(
+    session_factory: async_sessionmaker[AsyncSession],
+    project_key: str,
+) -> dict[str, typ.Any]:
+    """Load noise configuration from a project record."""
+    async with session_factory() as session:
+        project = await session.scalar(
+            select(ProjectRecord).where(ProjectRecord.key == project_key)
+        )
+        assert project is not None
+        return project.noise
+
+
+def _assert_noise_config(
+    noise: dict[str, typ.Any],
+    *,
+    enabled: bool,
+    toggles: dict[str, bool],
+) -> None:
+    """Assert noise configuration matches expected values."""
+    assert noise["enabled"] is enabled
+    assert noise["toggles"] == toggles
+    assert noise["ignore_authors"] == ["dependabot[bot]"]
+    assert noise["ignore_labels"] == ["chore/deps"]
+    assert noise["ignore_paths"] == ["docs/generated/**"]
+    assert noise["ignore_title_prefixes"] == ["chore:"]
+
+
+def test_importer_persists_noise_configuration(  # noqa: D103
+    session_factory: async_sessionmaker[AsyncSession],
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    importer = CatalogueImporter(session_factory, estate_key="noise-test")
+    toggles_v1 = {
+        "ignore_authors": False,
+        "ignore_labels": True,
+        "ignore_paths": False,
+        "ignore_title_prefixes": True,
+    }
+    toggles_v2 = {
+        "ignore_authors": True,
+        "ignore_labels": False,
+        "ignore_paths": True,
+        "ignore_title_prefixes": False,
+    }
+
+    first = tmp_path / "catalogue-noise-v1.yaml"
+    first.write_text(
+        _make_noise_catalogue_yaml(enabled=False, toggles=toggles_v1),
+        encoding="utf-8",
+    )
+
+    second = tmp_path / "catalogue-noise-v2.yaml"
+    second.write_text(
+        _make_noise_catalogue_yaml(enabled=True, toggles=toggles_v2),
+        encoding="utf-8",
+    )
+
+    # Act
+    asyncio.run(importer.import_path(first, commit_sha="noise-v1"))
+
+    # Assert
+    noise = asyncio.run(_load_project_noise(session_factory, "alpha"))
+    _assert_noise_config(noise, enabled=False, toggles=toggles_v1)
+
+    # Act
+    asyncio.run(importer.import_path(second, commit_sha="noise-v2"))
+
+    # Assert
+    noise_updated = asyncio.run(_load_project_noise(session_factory, "alpha"))
+    _assert_noise_config(noise_updated, enabled=True, toggles=toggles_v2)
+
+
 def test_ensure_repository_normalises_documentation_paths(  # noqa: D103
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:

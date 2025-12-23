@@ -125,11 +125,25 @@ class Component(msgspec.Struct, kw_only=True):
     notes: list[str] = msgspec.field(default_factory=list)
 
 
+class NoiseFilterToggles(msgspec.Struct, kw_only=True):
+    """Enable/disable individual noise filters for a project."""
+
+    ignore_authors: bool = True
+    ignore_labels: bool = True
+    ignore_paths: bool = True
+    ignore_title_prefixes: bool = True
+
+
 class NoiseFilters(msgspec.Struct, kw_only=True):
     """Noise control for ingestion and reporting.
 
     Attributes
     ----------
+    enabled
+        Global toggle for all noise filters on this project.
+    toggles
+        Per-filter toggles, allowing specific filters to be enabled or disabled
+        without removing their configured values.
     ignore_authors
         Authors whose commits/issues/PRs should be skipped.
     ignore_labels
@@ -141,6 +155,8 @@ class NoiseFilters(msgspec.Struct, kw_only=True):
 
     """
 
+    enabled: bool = True
+    toggles: NoiseFilterToggles = msgspec.field(default_factory=NoiseFilterToggles)
     ignore_authors: list[str] = msgspec.field(default_factory=list)
     ignore_labels: list[str] = msgspec.field(default_factory=list)
     ignore_paths: list[str] = msgspec.field(default_factory=list)
