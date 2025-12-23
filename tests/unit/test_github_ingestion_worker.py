@@ -253,6 +253,63 @@ async def test_ingestion_applies_project_noise_filters_from_catalogue(
         assert offsets.last_commit_ingested_at == occurred_at
 
 
+async def _setup_multi_project_catalogue(  # noqa: PLR0913
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    estate_key: str,
+    estate_name: str,
+    repo: RepositoryInfo,
+    projects: list[tuple[str, str, NoiseFilters]],
+) -> None:
+    """Set up catalogue with multiple projects referencing the same repository.
+
+    Args:
+        session_factory: Database session factory
+        estate_key: Estate key
+        estate_name: Estate name
+        repo: Repository information
+        projects: List of (key, name, noise_filters) tuples for projects
+
+    """
+    async with session_factory() as session, session.begin():
+        estate = Estate(key=estate_key, name=estate_name)
+        session.add(estate)
+        await session.flush()
+
+        repo_record = RepositoryRecord(
+            owner=repo.owner,
+            name=repo.name,
+            default_branch=repo.default_branch,
+            documentation_paths=[],
+        )
+        session.add(repo_record)
+        await session.flush()
+
+        for project_key, project_name, noise in projects:
+            project = ProjectRecord(
+                estate_id=estate.id,
+                key=project_key,
+                name=project_name,
+                noise=msgspec.to_builtins(noise),
+                status_preferences={},
+                documentation_paths=[],
+            )
+            session.add(project)
+            await session.flush()
+
+            session.add(
+                ComponentRecord(
+                    project_id=project.id,
+                    repository_id=repo_record.id,
+                    key=f"{project_key}-component",
+                    name=f"{project_name} Component",
+                    type="service",
+                    lifecycle="active",
+                    notes=[],
+                )
+            )
+
+
 @pytest.mark.asyncio
 async def test_compile_noise_filters_merges_multiple_projects(
     session_factory: async_sessionmaker[AsyncSession],
@@ -266,61 +323,16 @@ async def test_compile_noise_filters_merges_multiple_projects(
         ignore_title_prefixes=["Chore:"],
     )
 
-    async with session_factory() as session, session.begin():
-        estate = Estate(key="noise-estate-merge", name="Noise Estate")
-        session.add(estate)
-        await session.flush()
-
-        repo_record = RepositoryRecord(
-            owner=repo.owner,
-            name=repo.name,
-            default_branch=repo.default_branch,
-            documentation_paths=[],
-        )
-        session.add(repo_record)
-        await session.flush()
-
-        project_a = ProjectRecord(
-            estate_id=estate.id,
-            key="noise-project-a",
-            name="Noise Project A",
-            noise=msgspec.to_builtins(noise_a),
-            status_preferences={},
-            documentation_paths=[],
-        )
-        project_b = ProjectRecord(
-            estate_id=estate.id,
-            key="noise-project-b",
-            name="Noise Project B",
-            noise=msgspec.to_builtins(noise_b),
-            status_preferences={},
-            documentation_paths=[],
-        )
-        session.add_all([project_a, project_b])
-        await session.flush()
-
-        session.add_all(
-            [
-                ComponentRecord(
-                    project_id=project_a.id,
-                    repository_id=repo_record.id,
-                    key="noise-component-a",
-                    name="Noise Component A",
-                    type="service",
-                    lifecycle="active",
-                    notes=[],
-                ),
-                ComponentRecord(
-                    project_id=project_b.id,
-                    repository_id=repo_record.id,
-                    key="noise-component-b",
-                    name="Noise Component B",
-                    type="service",
-                    lifecycle="active",
-                    notes=[],
-                ),
-            ]
-        )
+    await _setup_multi_project_catalogue(
+        session_factory,
+        estate_key="noise-estate-merge",
+        estate_name="Noise Estate",
+        repo=repo,
+        projects=[
+            ("noise-project-a", "Noise Project A", noise_a),
+            ("noise-project-b", "Noise Project B", noise_b),
+        ],
+    )
 
     worker = GitHubIngestionWorker(
         session_factory,
@@ -347,61 +359,16 @@ async def test_compile_noise_filters_skips_disabled_projects(
         ignore_title_prefixes=["chore:"],
     )
 
-    async with session_factory() as session, session.begin():
-        estate = Estate(key="noise-estate-disabled", name="Noise Estate")
-        session.add(estate)
-        await session.flush()
-
-        repo_record = RepositoryRecord(
-            owner=repo.owner,
-            name=repo.name,
-            default_branch=repo.default_branch,
-            documentation_paths=[],
-        )
-        session.add(repo_record)
-        await session.flush()
-
-        project_enabled = ProjectRecord(
-            estate_id=estate.id,
-            key="noise-project-enabled",
-            name="Noise Project Enabled",
-            noise=msgspec.to_builtins(enabled),
-            status_preferences={},
-            documentation_paths=[],
-        )
-        project_disabled = ProjectRecord(
-            estate_id=estate.id,
-            key="noise-project-disabled",
-            name="Noise Project Disabled",
-            noise=msgspec.to_builtins(disabled),
-            status_preferences={},
-            documentation_paths=[],
-        )
-        session.add_all([project_enabled, project_disabled])
-        await session.flush()
-
-        session.add_all(
-            [
-                ComponentRecord(
-                    project_id=project_enabled.id,
-                    repository_id=repo_record.id,
-                    key="noise-component-enabled",
-                    name="Noise Component Enabled",
-                    type="service",
-                    lifecycle="active",
-                    notes=[],
-                ),
-                ComponentRecord(
-                    project_id=project_disabled.id,
-                    repository_id=repo_record.id,
-                    key="noise-component-disabled",
-                    name="Noise Component Disabled",
-                    type="service",
-                    lifecycle="active",
-                    notes=[],
-                ),
-            ]
-        )
+    await _setup_multi_project_catalogue(
+        session_factory,
+        estate_key="noise-estate-disabled",
+        estate_name="Noise Estate",
+        repo=repo,
+        projects=[
+            ("noise-project-enabled", "Noise Project Enabled", enabled),
+            ("noise-project-disabled", "Noise Project Disabled", disabled),
+        ],
+    )
 
     worker = GitHubIngestionWorker(
         session_factory,
