@@ -33,6 +33,7 @@ from ghillie.catalogue.storage import ComponentRecord, ProjectRecord, Repository
 from ghillie.common.time import utcnow
 
 from .noise import CompiledNoiseFilters, compile_noise_filters
+from .observability import IngestionEventLogger, IngestionRunContext
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -132,19 +133,21 @@ _KIND_CURSOR_ATTR: dict[typ.Literal["commit", "pull_request", "issue"], str] = {
 class GitHubIngestionWorker:
     """Poll GitHub and write incremental activity into Bronze raw events."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         session_factory: SessionFactory,
         client: GitHubActivityClient,
         *,
         config: GitHubIngestionConfig | None = None,
         catalogue_session_factory: SessionFactory | None = None,
+        event_logger: IngestionEventLogger | None = None,
     ) -> None:
         """Create a worker bound to a database session factory and GitHub client."""
         self._session_factory = session_factory
         self._catalogue_sf = catalogue_session_factory or session_factory
         self._client = client
         self._config = config or GitHubIngestionConfig()
+        self._event_logger = event_logger or IngestionEventLogger()
 
     async def ingest_repository(self, repo: RepositoryInfo) -> GitHubIngestionResult:
         """Ingest activity for a single repository."""
@@ -152,6 +155,28 @@ class GitHubIngestionWorker:
             return GitHubIngestionResult(repo_slug=repo.slug)
 
         run_started_at = utcnow()
+        obs_context = IngestionRunContext(
+            repo_slug=repo.slug,
+            estate_id=repo.estate_id,
+            started_at=run_started_at,
+        )
+        self._event_logger.log_run_started(obs_context)
+
+        try:
+            result = await self._ingest_repository_inner(repo, run_started_at)
+        except BaseException as exc:
+            duration = utcnow() - run_started_at
+            self._event_logger.log_run_failed(obs_context, exc, duration)
+            raise
+
+        duration = utcnow() - run_started_at
+        self._event_logger.log_run_completed(obs_context, result, duration)
+        return result
+
+    async def _ingest_repository_inner(
+        self, repo: RepositoryInfo, run_started_at: dt.datetime
+    ) -> GitHubIngestionResult:
+        """Inner ingestion logic separated for observability wrapping."""
         offsets = await self._load_or_create_offsets(repo.slug)
         writer = RawEventWriter(self._session_factory)
         noise = await self._compile_noise_filters(repo)
@@ -162,11 +187,16 @@ class GitHubIngestionWorker:
             noise=noise,
             now=run_started_at,
         )
+        obs_context = IngestionRunContext(
+            repo_slug=repo.slug,
+            estate_id=repo.estate_id,
+            started_at=run_started_at,
+        )
 
-        commits = await self._ingest_kind(context, kind="commit")
-        prs = await self._ingest_kind(context, kind="pull_request")
-        issues = await self._ingest_kind(context, kind="issue")
-        docs = await self._ingest_doc_changes(context)
+        commits = await self._ingest_kind_with_logging(context, obs_context, "commit")
+        prs = await self._ingest_kind_with_logging(context, obs_context, "pull_request")
+        issues = await self._ingest_kind_with_logging(context, obs_context, "issue")
+        docs = await self._ingest_doc_changes_with_logging(context, obs_context)
 
         await self._persist_offsets(context.offsets)
 
@@ -177,6 +207,68 @@ class GitHubIngestionWorker:
             issues_ingested=issues,
             doc_changes_ingested=docs,
         )
+
+    async def _ingest_kind_with_logging(
+        self,
+        context: _RepositoryIngestionContext,
+        obs_context: IngestionRunContext,
+        kind: typ.Literal["commit", "pull_request", "issue"],
+    ) -> int:
+        """Ingest a kind with observability logging."""
+        result = await self._ingest_kind(context, kind=kind)
+        stream_result = self._get_last_stream_result(context.offsets, kind)
+        self._log_stream_result(obs_context, kind, result, stream_result)
+        return result
+
+    async def _ingest_doc_changes_with_logging(
+        self,
+        context: _RepositoryIngestionContext,
+        obs_context: IngestionRunContext,
+    ) -> int:
+        """Ingest doc changes with observability logging."""
+        result = await self._ingest_doc_changes(context)
+        # Check if doc stream was truncated by looking at the cursor
+        has_cursor = context.offsets.last_doc_cursor is not None
+        if has_cursor:
+            self._event_logger.log_stream_truncated(
+                obs_context,
+                kind="doc_change",
+                events_processed=self._config.max_events_per_kind,
+                max_events=self._config.max_events_per_kind,
+                resume_cursor=context.offsets.last_doc_cursor,
+            )
+        self._event_logger.log_stream_completed(obs_context, "doc_change", result)
+        return result
+
+    def _get_last_stream_result(
+        self,
+        offsets: GithubIngestionOffset,
+        kind: typ.Literal["commit", "pull_request", "issue"],
+    ) -> bool:
+        """Check if the stream was truncated by looking at cursor state."""
+        cursor_attr = _KIND_CURSOR_ATTR[kind]
+        return getattr(offsets, cursor_attr) is not None
+
+    def _log_stream_result(
+        self,
+        obs_context: IngestionRunContext,
+        kind: str,
+        ingested: int,
+        was_truncated: bool,  # noqa: FBT001
+    ) -> None:
+        """Log stream completion or truncation."""
+        if was_truncated:
+            cursor_attr = _KIND_CURSOR_ATTR.get(
+                typ.cast("typ.Literal['commit', 'pull_request', 'issue']", kind)
+            )
+            self._event_logger.log_stream_truncated(
+                obs_context,
+                kind=kind,
+                events_processed=self._config.max_events_per_kind,
+                max_events=self._config.max_events_per_kind,
+                resume_cursor=cursor_attr,
+            )
+        self._event_logger.log_stream_completed(obs_context, kind, ingested)
 
     async def _ingest_doc_changes(
         self,

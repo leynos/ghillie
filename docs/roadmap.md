@@ -128,7 +128,7 @@ Silver layers with controlled noise and back-pressure.
   Toggling a filter changes the set of events ingested for the next run without
   code changes.
 
-- [ ] **Task 1.3.d – Add observability for ingestion health**  
+- [x] **Task 1.3.d – Add observability for ingestion health**
   Emit metrics and logs for ingestion throughput, failures, and backlog, and
   define basic alerts for stalled ingestion.
 
