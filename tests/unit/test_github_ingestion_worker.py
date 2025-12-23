@@ -8,6 +8,7 @@ import typing as typ
 import msgspec
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 
 from ghillie.bronze import GithubIngestionOffset, RawEvent, RawEventWriter
 from ghillie.catalogue.models import NoiseFilters
@@ -253,6 +254,191 @@ async def test_ingestion_applies_project_noise_filters_from_catalogue(
 
 
 @pytest.mark.asyncio
+async def test_compile_noise_filters_merges_multiple_projects(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """_compile_noise_filters merges noise configuration across projects."""
+    repo = make_repo_info()
+    noise_a = NoiseFilters(ignore_authors=["dependabot[bot]"])
+    noise_b = NoiseFilters(
+        ignore_labels=["chore/deps"],
+        ignore_paths=["docs/", "docs"],
+        ignore_title_prefixes=["Chore:"],
+    )
+
+    async with session_factory() as session, session.begin():
+        estate = Estate(key="noise-estate-merge", name="Noise Estate")
+        session.add(estate)
+        await session.flush()
+
+        repo_record = RepositoryRecord(
+            owner=repo.owner,
+            name=repo.name,
+            default_branch=repo.default_branch,
+            documentation_paths=[],
+        )
+        session.add(repo_record)
+        await session.flush()
+
+        project_a = ProjectRecord(
+            estate_id=estate.id,
+            key="noise-project-a",
+            name="Noise Project A",
+            noise=msgspec.to_builtins(noise_a),
+            status_preferences={},
+            documentation_paths=[],
+        )
+        project_b = ProjectRecord(
+            estate_id=estate.id,
+            key="noise-project-b",
+            name="Noise Project B",
+            noise=msgspec.to_builtins(noise_b),
+            status_preferences={},
+            documentation_paths=[],
+        )
+        session.add_all([project_a, project_b])
+        await session.flush()
+
+        session.add_all(
+            [
+                ComponentRecord(
+                    project_id=project_a.id,
+                    repository_id=repo_record.id,
+                    key="noise-component-a",
+                    name="Noise Component A",
+                    type="service",
+                    lifecycle="active",
+                    notes=[],
+                ),
+                ComponentRecord(
+                    project_id=project_b.id,
+                    repository_id=repo_record.id,
+                    key="noise-component-b",
+                    name="Noise Component B",
+                    type="service",
+                    lifecycle="active",
+                    notes=[],
+                ),
+            ]
+        )
+
+    worker = GitHubIngestionWorker(
+        session_factory,
+        FakeGitHubClient(commits=[], pull_requests=[], issues=[], doc_changes=[]),
+    )
+    compiled = await worker._compile_noise_filters(repo)
+    assert compiled.ignore_authors == frozenset({"dependabot[bot]"})
+    assert compiled.ignore_labels == frozenset({"chore/deps"})
+    assert compiled.ignore_paths == ("docs",)
+    assert compiled.ignore_title_prefixes == ("chore:",)
+
+
+@pytest.mark.asyncio
+async def test_compile_noise_filters_skips_disabled_projects(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Disabled NoiseFilters entries are ignored when compiling filters."""
+    repo = make_repo_info()
+    enabled = NoiseFilters(ignore_authors=["dependabot[bot]"])
+    disabled = NoiseFilters(
+        enabled=False,
+        ignore_labels=["chore/deps"],
+        ignore_paths=["docs/**"],
+        ignore_title_prefixes=["chore:"],
+    )
+
+    async with session_factory() as session, session.begin():
+        estate = Estate(key="noise-estate-disabled", name="Noise Estate")
+        session.add(estate)
+        await session.flush()
+
+        repo_record = RepositoryRecord(
+            owner=repo.owner,
+            name=repo.name,
+            default_branch=repo.default_branch,
+            documentation_paths=[],
+        )
+        session.add(repo_record)
+        await session.flush()
+
+        project_enabled = ProjectRecord(
+            estate_id=estate.id,
+            key="noise-project-enabled",
+            name="Noise Project Enabled",
+            noise=msgspec.to_builtins(enabled),
+            status_preferences={},
+            documentation_paths=[],
+        )
+        project_disabled = ProjectRecord(
+            estate_id=estate.id,
+            key="noise-project-disabled",
+            name="Noise Project Disabled",
+            noise=msgspec.to_builtins(disabled),
+            status_preferences={},
+            documentation_paths=[],
+        )
+        session.add_all([project_enabled, project_disabled])
+        await session.flush()
+
+        session.add_all(
+            [
+                ComponentRecord(
+                    project_id=project_enabled.id,
+                    repository_id=repo_record.id,
+                    key="noise-component-enabled",
+                    name="Noise Component Enabled",
+                    type="service",
+                    lifecycle="active",
+                    notes=[],
+                ),
+                ComponentRecord(
+                    project_id=project_disabled.id,
+                    repository_id=repo_record.id,
+                    key="noise-component-disabled",
+                    name="Noise Component Disabled",
+                    type="service",
+                    lifecycle="active",
+                    notes=[],
+                ),
+            ]
+        )
+
+    worker = GitHubIngestionWorker(
+        session_factory,
+        FakeGitHubClient(commits=[], pull_requests=[], issues=[], doc_changes=[]),
+    )
+    compiled = await worker._compile_noise_filters(repo)
+    assert compiled.ignore_authors == frozenset({"dependabot[bot]"})
+    assert compiled.ignore_labels == frozenset()
+    assert compiled.ignore_paths == ()
+    assert compiled.ignore_title_prefixes == ()
+
+
+@pytest.mark.asyncio
+async def test_compile_noise_filters_defaults_to_noop_on_catalogue_error(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Operational catalogue errors result in a no-op CompiledNoiseFilters."""
+    repo = make_repo_info()
+
+    class _FailingCatalogueSessionFactory:
+        def __call__(self) -> AsyncSession:
+            statement = "SELECT 1"
+            raise OperationalError(statement, {}, Exception("boom"))
+
+    worker = GitHubIngestionWorker(
+        session_factory,
+        FakeGitHubClient(commits=[], pull_requests=[], issues=[], doc_changes=[]),
+        catalogue_session_factory=typ.cast(
+            "async_sessionmaker[AsyncSession]",
+            _FailingCatalogueSessionFactory(),
+        ),
+    )
+    compiled = await worker._compile_noise_filters(repo)
+    assert compiled == CompiledNoiseFilters()
+
+
+@pytest.mark.asyncio
 async def test_ingestion_preserves_backlog_when_kind_limit_is_hit(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
@@ -427,6 +613,62 @@ async def test_ingest_events_stream_sets_resume_cursor_when_truncated(
         noise=CompiledNoiseFilters(),
     )
     assert result.ingested == limit
+    assert result.truncated is True
+    assert result.resume_cursor == "cursor-2"
+    assert result.max_seen == newest
+
+
+@pytest.mark.asyncio
+async def test_ingest_events_stream_advances_cursors_for_dropped_events(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Dropped events still advance max_seen and resume_cursor tracking."""
+    limit = 2
+    repo = make_repo_info()
+    now = dt.datetime.now(dt.UTC)
+    newest = now - dt.timedelta(minutes=1)
+    middle = now - dt.timedelta(minutes=2)
+    oldest = now - dt.timedelta(minutes=3)
+    worker = GitHubIngestionWorker(
+        session_factory,
+        FakeGitHubClient(commits=[], pull_requests=[], issues=[], doc_changes=[]),
+        config=GitHubIngestionConfig(max_events_per_kind=limit),
+    )
+    events = [
+        make_event(
+            occurred_at=occurred_at,
+            spec=EventSpec(
+                event_type="github.commit",
+                source_event_id=sha,
+                payload={
+                    "sha": sha,
+                    "repo_owner": repo.owner,
+                    "repo_name": repo.name,
+                    "default_branch": repo.default_branch,
+                    "committed_at": occurred_at.isoformat(),
+                    "author_name": "dependabot[bot]",
+                },
+                cursor=cursor,
+            ),
+        )
+        for sha, occurred_at, cursor in [
+            ("e3", newest, "cursor-3"),
+            ("e2", middle, "cursor-2"),
+            ("e1", oldest, "cursor-1"),
+        ]
+    ]
+
+    async def _events() -> typ.AsyncIterator[GitHubIngestedEvent]:
+        for event in events:
+            yield event
+
+    result = await worker._ingest_events_stream(
+        repo,
+        RawEventWriter(session_factory),
+        _events(),
+        noise=CompiledNoiseFilters(ignore_authors=frozenset({"dependabot[bot]"})),
+    )
+    assert result.ingested == 0
     assert result.truncated is True
     assert result.resume_cursor == "cursor-2"
     assert result.max_seen == newest

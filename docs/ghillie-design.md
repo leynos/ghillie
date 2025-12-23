@@ -301,6 +301,12 @@ Bronze `raw_events` table. The ingestion worker loads the project noise
 configuration from the catalogue database each run so changes take effect
 without code changes.
 
+When the catalogue query fails due to a transient connectivity error, the
+worker logs a warning and proceeds with an effectively empty noise filter set
+so ingestion can continue. Non-operational SQLAlchemy errors (schema drift,
+query bugs) are treated as fatal and cause the ingestion run to fail, making
+misconfiguration visible to operators rather than silently failing open.
+
 To prevent ingestion from stalling when filtered events dominate an activity
 stream, `github_ingestion_offsets` tracks both the persisted watermark
 (`*_ingested_at`) and a catch-up "seen" watermark (`*_seen_at`). During backlog

@@ -11,11 +11,17 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
+import logging
 import typing as typ
 
 import msgspec
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import (
+    IntegrityError,
+    InterfaceError,
+    OperationalError,
+    SQLAlchemyError,
+)
 
 from ghillie.bronze import (
     GithubIngestionOffset,
@@ -37,6 +43,8 @@ if typ.TYPE_CHECKING:
     from .models import GitHubIngestedEvent
 
     type SessionFactory = async_sessionmaker[AsyncSession]
+
+logger = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -86,6 +94,20 @@ class _RepositoryIngestionContext:
     offsets: GithubIngestionOffset
     noise: CompiledNoiseFilters
     now: dt.datetime
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class _WatermarkAttrs:
+    cursor: str
+    seen: str
+    watermark: str
+
+
+_DOC_WATERMARK_ATTRS = _WatermarkAttrs(
+    cursor="last_doc_cursor",
+    seen="last_doc_seen_at",
+    watermark="last_doc_ingested_at",
+)
 
 
 _KIND_WATERMARK_ATTR: dict[typ.Literal["commit", "pull_request", "issue"], str] = {
@@ -185,23 +207,45 @@ class GitHubIngestionWorker:
         resuming: bool,  # noqa: FBT001
     ) -> None:
         """Update doc change watermarks based on ingestion result."""
-        offsets.last_doc_cursor = result.resume_cursor
+        self._update_stream_watermarks(
+            offsets,
+            attrs=_DOC_WATERMARK_ATTRS,
+            result=result,
+            resuming=resuming,
+        )
+
+    def _update_stream_watermarks(
+        self,
+        offsets: GithubIngestionOffset,
+        *,
+        attrs: _WatermarkAttrs,
+        result: _StreamIngestionResult,
+        resuming: bool,
+    ) -> None:
+        """Update offsets for a kind/doc ingestion stream."""
+        setattr(offsets, attrs.cursor, result.resume_cursor)
         if result.truncated:
-            offsets.last_doc_seen_at = _max_dt(
-                offsets.last_doc_seen_at, result.max_seen
+            setattr(
+                offsets,
+                attrs.seen,
+                _max_dt(
+                    typ.cast("dt.datetime | None", getattr(offsets, attrs.seen)),
+                    result.max_seen,
+                ),
             )
             return
 
-        offsets.last_doc_cursor = None
+        setattr(offsets, attrs.cursor, None)
         if not resuming:
             if result.max_seen is not None:
-                offsets.last_doc_ingested_at = result.max_seen
+                setattr(offsets, attrs.watermark, result.max_seen)
             return
 
-        final_seen = offsets.last_doc_seen_at or result.max_seen
+        previous_seen = typ.cast("dt.datetime | None", getattr(offsets, attrs.seen))
+        final_seen = previous_seen or result.max_seen
         if final_seen is not None:
-            offsets.last_doc_ingested_at = final_seen
-        offsets.last_doc_seen_at = None
+            setattr(offsets, attrs.watermark, final_seen)
+        setattr(offsets, attrs.seen, None)
 
     def _get_stream_for_kind(
         self,
@@ -257,26 +301,16 @@ class GitHubIngestionWorker:
         watermark_attr = _KIND_WATERMARK_ATTR[kind]
         seen_attr = _KIND_SEEN_ATTR[kind]
         cursor_attr = _KIND_CURSOR_ATTR[kind]
-        setattr(offsets, cursor_attr, result.resume_cursor)
-        if result.truncated:
-            setattr(
-                offsets,
-                seen_attr,
-                _max_dt(getattr(offsets, seen_attr), result.max_seen),
-            )
-            return
-
-        setattr(offsets, cursor_attr, None)
-        if not resuming:
-            if result.max_seen is not None:
-                setattr(offsets, watermark_attr, result.max_seen)
-            return
-
-        final_seen = typ.cast("dt.datetime | None", getattr(offsets, seen_attr))
-        watermark = final_seen or result.max_seen
-        if watermark is not None:
-            setattr(offsets, watermark_attr, watermark)
-        setattr(offsets, seen_attr, None)
+        self._update_stream_watermarks(
+            offsets,
+            attrs=_WatermarkAttrs(
+                cursor=cursor_attr,
+                seen=seen_attr,
+                watermark=watermark_attr,
+            ),
+            result=result,
+            resuming=resuming,
+        )
 
     async def _ingest_events_stream(
         self,
@@ -298,6 +332,12 @@ class GitHubIngestionWorker:
                 truncated = True
                 break
             seen += 1
+            last_cursor = event.cursor
+            if max_seen is None or event.occurred_at > max_seen:
+                max_seen = event.occurred_at
+            if noise.should_drop(event):
+                continue
+
             envelope = RawEventEnvelope(
                 source_system="github",
                 source_event_id=event.source_event_id,
@@ -306,12 +346,8 @@ class GitHubIngestionWorker:
                 occurred_at=event.occurred_at,
                 payload=event.payload,
             )
-            last_cursor = event.cursor
-            if not noise.should_drop(event):
-                await writer.ingest(envelope)
-                ingested += 1
-            if max_seen is None or event.occurred_at > max_seen:
-                max_seen = event.occurred_at
+            await writer.ingest(envelope)
+            ingested += 1
 
         resume_cursor = last_cursor if truncated else None
         return _StreamIngestionResult(
@@ -382,8 +418,25 @@ class GitHubIngestionWorker:
                 if repo.estate_id is not None:
                     query = query.where(ProjectRecord.estate_id == repo.estate_id)
                 rows = (await session.scalars(query)).all()
-        except SQLAlchemyError:
+        except (OperationalError, InterfaceError) as exc:
+            logger.warning(
+                (
+                    "Failed to load noise filters for repo %s due to DB connectivity "
+                    "issue; defaulting to no noise filters."
+                ),
+                repo.slug,
+                exc_info=exc,
+            )
             rows = []
+        except SQLAlchemyError:
+            logger.exception(
+                (
+                    "Failed to load noise filters for repo %s due to SQLAlchemy error; "
+                    "failing ingestion."
+                ),
+                repo.slug,
+            )
+            raise
 
         filters = [
             msgspec.convert(row, NoiseFilters) for row in rows if isinstance(row, dict)

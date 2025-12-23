@@ -11,7 +11,7 @@ from __future__ import annotations
 import dataclasses
 import fnmatch
 import typing as typ
-from pathlib import PureWindowsPath
+from pathlib import PurePosixPath
 
 if typ.TYPE_CHECKING:
     from ghillie.catalogue.models import NoiseFilters
@@ -23,7 +23,9 @@ def _normalise_path(path: str) -> str:
     lowered = path.strip()
     if not lowered:
         return ""
-    return PureWindowsPath(lowered).as_posix()
+    # GitHub paths are POSIX-style; normalise any accidental Windows separators
+    # before matching glob patterns.
+    return PurePosixPath(lowered.replace("\\", "/")).as_posix()
 
 
 def _normalise_text(value: str) -> str:

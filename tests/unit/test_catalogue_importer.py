@@ -245,6 +245,117 @@ projects:
     assert branch == "develop"
 
 
+def test_importer_persists_noise_configuration(  # noqa: D103
+    session_factory: async_sessionmaker[AsyncSession],
+    tmp_path: Path,
+) -> None:
+    importer = CatalogueImporter(session_factory, estate_key="noise-test")
+
+    first = tmp_path / "catalogue-noise-v1.yaml"
+    first.write_text(
+        """
+version: 1
+projects:
+  - key: alpha
+    name: Alpha
+    noise:
+      enabled: false
+      toggles:
+        ignore_authors: false
+        ignore_labels: true
+        ignore_paths: false
+        ignore_title_prefixes: true
+      ignore_authors:
+        - dependabot[bot]
+      ignore_labels:
+        - chore/deps
+      ignore_paths:
+        - docs/generated/**
+      ignore_title_prefixes:
+        - "chore:"
+    components:
+      - key: alpha-api
+        name: Alpha API
+        repository:
+          owner: org
+          name: alpha-api
+          default_branch: main
+""",
+        encoding="utf-8",
+    )
+
+    second = tmp_path / "catalogue-noise-v2.yaml"
+    second.write_text(
+        """
+version: 1
+projects:
+  - key: alpha
+    name: Alpha
+    noise:
+      enabled: true
+      toggles:
+        ignore_authors: true
+        ignore_labels: false
+        ignore_paths: true
+        ignore_title_prefixes: false
+      ignore_authors:
+        - dependabot[bot]
+      ignore_labels:
+        - chore/deps
+      ignore_paths:
+        - docs/generated/**
+      ignore_title_prefixes:
+        - "chore:"
+    components:
+      - key: alpha-api
+        name: Alpha API
+        repository:
+          owner: org
+          name: alpha-api
+          default_branch: main
+""",
+        encoding="utf-8",
+    )
+
+    asyncio.run(importer.import_path(first, commit_sha="noise-v1"))
+
+    async def _load_noise() -> dict[str, typ.Any]:
+        async with session_factory() as session:
+            project = await session.scalar(
+                select(ProjectRecord).where(ProjectRecord.key == "alpha")
+            )
+            assert project is not None
+            return project.noise
+
+    noise = asyncio.run(_load_noise())
+    assert noise["enabled"] is False
+    assert noise["toggles"] == {
+        "ignore_authors": False,
+        "ignore_labels": True,
+        "ignore_paths": False,
+        "ignore_title_prefixes": True,
+    }
+    assert noise["ignore_authors"] == ["dependabot[bot]"]
+    assert noise["ignore_labels"] == ["chore/deps"]
+    assert noise["ignore_paths"] == ["docs/generated/**"]
+    assert noise["ignore_title_prefixes"] == ["chore:"]
+
+    asyncio.run(importer.import_path(second, commit_sha="noise-v2"))
+
+    noise_updated = asyncio.run(_load_noise())
+    assert noise_updated["enabled"] is True
+    assert noise_updated["toggles"] == {
+        "ignore_authors": True,
+        "ignore_labels": False,
+        "ignore_paths": True,
+        "ignore_title_prefixes": False,
+    }
+    assert noise_updated["ignore_authors"] == ["dependabot[bot]"]
+    assert noise_updated["ignore_labels"] == ["chore/deps"]
+    assert noise_updated["ignore_paths"] == ["docs/generated/**"]
+    assert noise_updated["ignore_title_prefixes"] == ["chore:"]
+
+
 def test_ensure_repository_normalises_documentation_paths(  # noqa: D103
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
