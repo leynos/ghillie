@@ -130,6 +130,40 @@ class CompiledNoiseFilters:
         )
 
 
+def _merge_author_filters(noise: NoiseFilters, target: set[str]) -> None:
+    """Merge author filters into the target set if enabled."""
+    if not noise.toggles.ignore_authors:
+        return
+    target.update(_normalise_text(v) for v in noise.ignore_authors if v.strip())
+
+
+def _merge_label_filters(noise: NoiseFilters, target: set[str]) -> None:
+    """Merge label filters into the target set if enabled."""
+    if not noise.toggles.ignore_labels:
+        return
+    target.update(_normalise_text(v) for v in noise.ignore_labels if v.strip())
+
+
+def _merge_path_filters(noise: NoiseFilters, target: list[str]) -> None:
+    """Merge path filters into the target list if enabled."""
+    if not noise.toggles.ignore_paths:
+        return
+    target.extend(
+        _normalise_path(pattern) for pattern in noise.ignore_paths if pattern.strip()
+    )
+
+
+def _merge_title_prefix_filters(noise: NoiseFilters, target: list[str]) -> None:
+    """Merge title prefix filters into the target list if enabled."""
+    if not noise.toggles.ignore_title_prefixes:
+        return
+    target.extend(
+        _normalise_text(prefix)
+        for prefix in noise.ignore_title_prefixes
+        if prefix.strip()
+    )
+
+
 def compile_noise_filters(
     project_filters: typ.Sequence[NoiseFilters],
 ) -> CompiledNoiseFilters:
@@ -147,29 +181,12 @@ def compile_noise_filters(
         if not noise.enabled:
             continue
 
-        toggles = noise.toggles
-        if toggles.ignore_authors:
-            ignore_authors.update(
-                _normalise_text(v) for v in noise.ignore_authors if v.strip()
-            )
-        if toggles.ignore_labels:
-            ignore_labels.update(
-                _normalise_text(v) for v in noise.ignore_labels if v.strip()
-            )
-        if toggles.ignore_paths:
-            ignore_paths.extend(
-                _normalise_path(pattern)
-                for pattern in noise.ignore_paths
-                if pattern.strip()
-            )
-        if toggles.ignore_title_prefixes:
-            ignore_title_prefixes.extend(
-                _normalise_text(prefix)
-                for prefix in noise.ignore_title_prefixes
-                if prefix.strip()
-            )
+        _merge_author_filters(noise, ignore_authors)
+        _merge_label_filters(noise, ignore_labels)
+        _merge_path_filters(noise, ignore_paths)
+        _merge_title_prefix_filters(noise, ignore_title_prefixes)
 
-    # De-dupe while preserving configured order for the tuple-based fields.
+    # De-dupe whilst preserving configured order for the tuple-based fields.
     dedup_paths = tuple(dict.fromkeys(ignore_paths))
     dedup_prefixes = tuple(dict.fromkeys(ignore_title_prefixes))
 

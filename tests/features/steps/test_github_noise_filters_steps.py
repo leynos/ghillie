@@ -103,7 +103,11 @@ async def _get_commit_source_ids(
                 )
             )
         ).all()
-        return {event.source_event_id for event in events}
+        return {
+            source_event_id
+            for event in events
+            if isinstance((source_event_id := event.source_event_id), str)
+        }
 
 
 @scenario(
