@@ -128,12 +128,28 @@ Silver layers with controlled noise and back-pressure.
   Toggling a filter changes the set of events ingested for the next run without
   code changes.
 
-- [ ] **Task 1.3.d – Add observability for ingestion health**  
+- [ ] **Task 1.3.d – Add observability for ingestion health**
   Emit metrics and logs for ingestion throughput, failures, and backlog, and
   define basic alerts for stalled ingestion.
 
   *Completion criteria:* Operators can see ingestion lag per repository and can
   identify failing ingestion runs through the metrics and logs alone.
+
+- [ ] **Task 1.3.e – Migrate to femtologging library**
+  Replace Python stdlib logging with femtologging across the codebase.
+  Femtologging provides async-friendly logging with bounded queues, aligning
+  with Ghillie's async architecture and supporting the structured logging
+  patterns required for observability.
+
+  *Prerequisites:* Femtologging must implement `exc_info` and
+  `logger.exception()` support before migration can proceed. See ADR-001 for
+  details.
+
+  *Completion criteria:* All logging calls use femtologging. Logging
+  configuration is centralised at application entry points. The exception and
+  logging guidelines in
+  `.rules/python-exception-design-raising-handling-and-logging.md` are updated
+  to reflect femtologging patterns.
 
 ### Step 1.4: Secure integration with GitHub
 
