@@ -55,6 +55,7 @@ class GitHubIngestionConfig:
     initial_lookback: dt.timedelta = dt.timedelta(days=7)
     overlap: dt.timedelta = dt.timedelta(minutes=5)
     max_events_per_kind: int = 500
+    catalogue_session_factory: SessionFactory | None = None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -133,20 +134,22 @@ _KIND_CURSOR_ATTR: dict[typ.Literal["commit", "pull_request", "issue"], str] = {
 class GitHubIngestionWorker:
     """Poll GitHub and write incremental activity into Bronze raw events."""
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         session_factory: SessionFactory,
         client: GitHubActivityClient,
         *,
         config: GitHubIngestionConfig | None = None,
-        catalogue_session_factory: SessionFactory | None = None,
         event_logger: IngestionEventLogger | None = None,
     ) -> None:
         """Create a worker bound to a database session factory and GitHub client."""
         self._session_factory = session_factory
-        self._catalogue_sf = catalogue_session_factory or session_factory
         self._client = client
-        self._config = config or GitHubIngestionConfig()
+        resolved_config = config or GitHubIngestionConfig()
+        self._config = resolved_config
+        self._catalogue_sf = (
+            resolved_config.catalogue_session_factory or session_factory
+        )
         self._event_logger = event_logger or IngestionEventLogger()
 
     async def ingest_repository(self, repo: RepositoryInfo) -> GitHubIngestionResult:

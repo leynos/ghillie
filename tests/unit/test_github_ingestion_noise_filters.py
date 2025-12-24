@@ -335,9 +335,11 @@ async def test_compile_noise_filters_defaults_to_noop_on_catalogue_error(
     worker = GitHubIngestionWorker(
         session_factory,
         FakeGitHubClient(commits=[], pull_requests=[], issues=[], doc_changes=[]),
-        catalogue_session_factory=typ.cast(
-            "async_sessionmaker[AsyncSession]",
-            _FailingCatalogueSessionFactory(),
+        config=GitHubIngestionConfig(
+            catalogue_session_factory=typ.cast(
+                "async_sessionmaker[AsyncSession]",
+                _FailingCatalogueSessionFactory(),
+            ),
         ),
     )
     compiled = await worker._compile_noise_filters(repo)

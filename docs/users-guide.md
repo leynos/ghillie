@@ -472,9 +472,9 @@ async def main() -> None:
     repos = await registry.list_active_repositories()
 
     client = GitHubGraphQLClient(GitHubGraphQLConfig.from_env())
+    # If the catalogue database is separate from Bronze/Silver, pass it via config:
+    # config = GitHubIngestionConfig(catalogue_session_factory=catalogue_sf)
     worker = GitHubIngestionWorker(session_factory, client)
-    # If the catalogue database is separate from Bronze/Silver, pass
-    # catalogue_session_factory=... so project noise filters are applied.
 
     for repo in repos:
         await worker.ingest_repository(repo)

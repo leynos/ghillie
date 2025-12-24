@@ -64,13 +64,24 @@ class IngestionRunContext:
     started_at: dt.datetime
 
 
-def categorize_error(exc: BaseException) -> ErrorCategory:  # noqa: PLR0911
+_EXCEPTION_CATEGORY_MAP: tuple[tuple[type[BaseException], ErrorCategory], ...] = (
+    (GitHubResponseShapeError, ErrorCategory.SCHEMA_DRIFT),
+    (GitHubConfigError, ErrorCategory.CONFIGURATION),
+    (OperationalError, ErrorCategory.DATABASE_CONNECTIVITY),
+    (InterfaceError, ErrorCategory.DATABASE_CONNECTIVITY),
+    (IntegrityError, ErrorCategory.DATA_INTEGRITY),
+    (SQLAlchemyError, ErrorCategory.DATABASE_ERROR),
+)
+
+
+def categorize_error(exc: BaseException) -> ErrorCategory:
     """Categorize an exception for alerting purposes.
 
     Returns:
         ErrorCategory indicating the type of failure for alert routing.
 
     """
+    # GitHubAPIError requires special handling for status code distinction
     if isinstance(exc, GitHubAPIError):
         if (
             exc.status_code is not None
@@ -78,16 +89,12 @@ def categorize_error(exc: BaseException) -> ErrorCategory:  # noqa: PLR0911
         ):
             return ErrorCategory.TRANSIENT
         return ErrorCategory.CLIENT_ERROR
-    if isinstance(exc, GitHubResponseShapeError):
-        return ErrorCategory.SCHEMA_DRIFT
-    if isinstance(exc, GitHubConfigError):
-        return ErrorCategory.CONFIGURATION
-    if isinstance(exc, (OperationalError, InterfaceError)):
-        return ErrorCategory.DATABASE_CONNECTIVITY
-    if isinstance(exc, IntegrityError):
-        return ErrorCategory.DATA_INTEGRITY
-    if isinstance(exc, SQLAlchemyError):
-        return ErrorCategory.DATABASE_ERROR
+
+    # Use mapping for remaining exception types
+    for exc_type, category in _EXCEPTION_CATEGORY_MAP:
+        if isinstance(exc, exc_type):
+            return category
+
     return ErrorCategory.UNKNOWN
 
 
