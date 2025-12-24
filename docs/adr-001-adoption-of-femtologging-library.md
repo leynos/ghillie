@@ -72,11 +72,11 @@ The following must be in place before migration can proceed:
 2. Update `ghillie/silver/services.py`:
    - Replace `import logging` with `from femtologging import get_logger`
    - Replace `logging.getLogger(__name__)` with `get_logger(__name__)`
-   - Replace `logger.warning(...)` with `logger.log("WARNING", ...)`
+   - Replace `logger.warning(…)` with `logger.log("WARNING", …)`
 3. Update `ghillie/github/ingestion.py`:
    - Same import changes
-   - Replace `logger.warning(..., exc_info=exc)` with femtologging equivalent
-   - Replace `logger.exception(...)` with femtologging equivalent
+   - Replace `logger.warning(…, exc_info=exc)` with femtologging equivalent
+   - Replace `logger.exception(…)` with femtologging equivalent
 4. Update `tests/conftest.py`:
    - Same import and method changes
 5. Configure femtologging at application entry points (worker main, CLI)

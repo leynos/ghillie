@@ -145,9 +145,11 @@ Silver layers with controlled noise and back-pressure.
   `logger.exception()` support before migration can proceed. See ADR-001 for
   details.
 
-  *Completion criteria:* All logging calls use femtologging. Logging
-  configuration is centralised at application entry points. The exception and
-  logging guidelines in
+  *Completion criteria:* All four logging calls across
+  `ghillie/silver/services.py`, `ghillie/github/ingestion.py`, and
+  `tests/conftest.py` use femtologging. Logging configuration is centralised at
+  application entry points (worker main, CLI). The exception and logging
+  guidelines in
   `.rules/python-exception-design-raising-handling-and-logging.md` are updated
   to reflect femtologging patterns.
 
