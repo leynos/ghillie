@@ -74,6 +74,13 @@ _EXCEPTION_CATEGORY_MAP: tuple[tuple[type[BaseException], ErrorCategory], ...] =
 )
 
 
+def _categorize_github_api_error(exc: GitHubAPIError) -> ErrorCategory:
+    """Categorize a GitHubAPIError based on HTTP status code."""
+    if exc.status_code is not None and exc.status_code >= _HTTP_SERVER_ERROR_THRESHOLD:
+        return ErrorCategory.TRANSIENT
+    return ErrorCategory.CLIENT_ERROR
+
+
 def categorize_error(exc: BaseException) -> ErrorCategory:
     """Categorize an exception for alerting purposes.
 
@@ -81,14 +88,8 @@ def categorize_error(exc: BaseException) -> ErrorCategory:
         ErrorCategory indicating the type of failure for alert routing.
 
     """
-    # GitHubAPIError requires special handling for status code distinction
     if isinstance(exc, GitHubAPIError):
-        if (
-            exc.status_code is not None
-            and exc.status_code >= _HTTP_SERVER_ERROR_THRESHOLD
-        ):
-            return ErrorCategory.TRANSIENT
-        return ErrorCategory.CLIENT_ERROR
+        return _categorize_github_api_error(exc)
 
     # Use mapping for remaining exception types
     for exc_type, category in _EXCEPTION_CATEGORY_MAP:
