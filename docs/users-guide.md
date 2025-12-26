@@ -449,7 +449,9 @@ paths (for example, roadmaps and ADR directories).
 
 The GraphQL client expects a GitHub token in `GHILLIE_GITHUB_TOKEN`. For pilot
 deployments, use a fine-scoped token or GitHub App installation token with
-read-only access to the managed repositories.
+read-only access to the managed repositories. For production deployments, see
+[GitHub Application configuration](github-application-configuration.md) for
+guidance on creating a GitHub App with least-privilege permissions.
 
 ```python
 import asyncio

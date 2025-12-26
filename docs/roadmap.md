@@ -158,14 +158,15 @@ Silver layers with controlled noise and back-pressure.
 **Goal:** Ensure Ghillie’s access to GitHub is secure, minimal, and
 operationally manageable.
 
-- [ ] **Task 1.4.a – Configure a GitHub App with least privilege scopes**  
-  Create and configure a GitHub App with read-only access to metadata and
-  documentation paths required for Ghillie. Avoid direct source code blob
+- [x] **Task 1.4.a – Configure a GitHub App with least privilege scopes**
+  Document the requirements for a GitHub App with read-only access to metadata
+  and documentation paths required for Ghillie. Avoid direct source code blob
   access where possible.
 
-  *Completion criteria:* All GitHub traffic for Ghillie uses the configured
-  App. The system operates correctly when the App’s permissions are audited or
-  rotated.
+  *Completion criteria:* A document `docs/github-application-configuration.md`
+  is created that clearly sets out the process for creation of this application
+  and the capabilities needed. The document must be easy to follow for someone
+  unfamiliar with this process.
 
 - [ ] **Task 1.4.b – Implement secure credential storage and rotation**  
   Store GitHub App secrets in an approved secrets manager and define a
