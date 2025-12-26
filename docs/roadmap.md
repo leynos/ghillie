@@ -135,6 +135,24 @@ Silver layers with controlled noise and back-pressure.
   *Completion criteria:* Operators can see ingestion lag per repository and can
   identify failing ingestion runs through the metrics and logs alone.
 
+- [ ] **Task 1.3.e – Migrate to femtologging library**
+  Replace Python stdlib logging with femtologging across the codebase.
+  Femtologging provides async-friendly logging with bounded queues, aligning
+  with Ghillie's async architecture and supporting the structured logging
+  patterns required for observability.
+
+  *Prerequisites:* Femtologging must implement `exc_info` and
+  `logger.exception()` support before migration can proceed. See ADR-001 for
+  details.
+
+  *Completion criteria:* All four logging calls across
+  `ghillie/silver/services.py`, `ghillie/github/ingestion.py`, and
+  `tests/conftest.py` use femtologging. Logging configuration is centralised at
+  application entry points (worker main, CLI). The exception and logging
+  guidelines in
+  `.rules/python-exception-design-raising-handling-and-logging.md` are updated
+  to reflect femtologging patterns.
+
 ### Step 1.4: Secure integration with GitHub
 
 **Goal:** Ensure Ghillie’s access to GitHub is secure, minimal, and
