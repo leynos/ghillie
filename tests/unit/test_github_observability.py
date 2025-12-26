@@ -19,6 +19,7 @@ from ghillie.github.observability import (
     IngestionEventLogger,
     IngestionEventType,
     IngestionRunContext,
+    StreamTruncationDetails,
     categorize_error,
 )
 
@@ -191,14 +192,14 @@ class TestIngestionEventLogger:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Stream truncated events are logged at WARNING level."""
+        details = StreamTruncationDetails(
+            kind="commit",
+            events_processed=500,
+            max_events=500,
+            resume_cursor="Y3Vyc29yOjEyMzQ1",
+        )
         with caplog.at_level(logging.WARNING, logger="ghillie.github.observability"):
-            logger_instance.log_stream_truncated(
-                context,
-                kind="commit",
-                events_processed=500,
-                max_events=500,
-                resume_cursor="Y3Vyc29yOjEyMzQ1",
-            )
+            logger_instance.log_stream_truncated(context, details)
 
         assert len(caplog.records) == 1
         record = caplog.records[0]
@@ -216,14 +217,14 @@ class TestIngestionEventLogger:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Stream truncated events correctly report missing cursor."""
+        details = StreamTruncationDetails(
+            kind="pull_request",
+            events_processed=500,
+            max_events=500,
+            resume_cursor=None,
+        )
         with caplog.at_level(logging.WARNING, logger="ghillie.github.observability"):
-            logger_instance.log_stream_truncated(
-                context,
-                kind="pull_request",
-                events_processed=500,
-                max_events=500,
-                resume_cursor=None,
-            )
+            logger_instance.log_stream_truncated(context, details)
 
         assert len(caplog.records) == 1
         record = caplog.records[0]

@@ -64,6 +64,16 @@ class IngestionRunContext:
     started_at: dt.datetime
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class StreamTruncationDetails:
+    """Details about a truncated stream event."""
+
+    kind: str
+    events_processed: int
+    max_events: int
+    resume_cursor: str | None
+
+
 _EXCEPTION_CATEGORY_MAP: tuple[tuple[type[BaseException], ErrorCategory], ...] = (
     (GitHubResponseShapeError, ErrorCategory.SCHEMA_DRIFT),
     (GitHubConfigError, ErrorCategory.CONFIGURATION),
@@ -181,13 +191,10 @@ class IngestionEventLogger:
             events_ingested,
         )
 
-    def log_stream_truncated(  # noqa: PLR0913
+    def log_stream_truncated(
         self,
         context: IngestionRunContext,
-        kind: str,
-        events_processed: int,
-        max_events: int,
-        resume_cursor: str | None,
+        details: StreamTruncationDetails,
     ) -> None:
         """Log stream truncation (backlog warning)."""
         logger.warning(
@@ -195,8 +202,8 @@ class IngestionEventLogger:
             "max_events=%d has_resume_cursor=%s",
             IngestionEventType.STREAM_TRUNCATED,
             context.repo_slug,
-            kind,
-            events_processed,
-            max_events,
-            resume_cursor is not None,
+            details.kind,
+            details.events_processed,
+            details.max_events,
+            details.resume_cursor is not None,
         )

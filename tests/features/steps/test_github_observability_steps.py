@@ -142,13 +142,43 @@ def _build_events(
     return commits, prs, issues, docs
 
 
+def _configure_github_client(  # noqa: PLR0913
+    context: ObservabilityContext,
+    *,
+    commits: list[GitHubIngestedEvent] | None = None,
+    pull_requests: list[GitHubIngestedEvent] | None = None,
+    issues: list[GitHubIngestedEvent] | None = None,
+    doc_changes: list[GitHubIngestedEvent] | None = None,
+) -> None:
+    """Configure a fake GitHub client and store it in the context."""
+    context["github_client"] = FakeGitHubClient(
+        commits=commits or [],
+        pull_requests=pull_requests or [],
+        issues=issues or [],
+        doc_changes=doc_changes or [],
+    )
+
+
+def _get_run_completed_record(context: ObservabilityContext) -> logging.LogRecord:
+    """Get the single RUN_COMPLETED log record from the context."""
+    records = context.get("log_records", [])
+    completed_records = [
+        r for r in records if IngestionEventType.RUN_COMPLETED in r.message
+    ]
+    assert len(completed_records) == 1, (
+        f"Expected exactly 1 RUN_COMPLETED record, found {len(completed_records)}"
+    )
+    return completed_records[0]
+
+
 @given(parsers.parse('the GitHub API returns activity for "{slug}"'))
 def github_api_returns_activity(
     observability_context: ObservabilityContext, slug: str
 ) -> None:
     """Configure a fake GitHub client that returns activity."""
     commits, prs, issues, docs = _build_events(slug)
-    observability_context["github_client"] = FakeGitHubClient(
+    _configure_github_client(
+        observability_context,
         commits=commits,
         pull_requests=prs,
         issues=issues,
@@ -162,12 +192,7 @@ def github_api_returns_no_activity(
 ) -> None:
     """Configure a fake GitHub client that returns no activity."""
     del slug
-    observability_context["github_client"] = FakeGitHubClient(
-        commits=[],
-        pull_requests=[],
-        issues=[],
-        doc_changes=[],
-    )
+    _configure_github_client(observability_context)
 
 
 @given(parsers.parse('the repository "{slug}" has never been successfully ingested'))
@@ -219,12 +244,8 @@ def run_completed_event_emitted(
     observability_context: ObservabilityContext, slug: str
 ) -> None:
     """Verify that a RUN_COMPLETED log event was emitted."""
-    records = observability_context.get("log_records", [])
-    completed_records = [
-        r for r in records if IngestionEventType.RUN_COMPLETED in r.message
-    ]
-    assert len(completed_records) == 1
-    assert slug in completed_records[0].message
+    record = _get_run_completed_record(observability_context)
+    assert slug in record.message
 
 
 @then("the log event contains the total events ingested")
@@ -232,12 +253,8 @@ def log_event_contains_total_events(
     observability_context: ObservabilityContext,
 ) -> None:
     """Verify that the completion log contains total_events."""
-    records = observability_context.get("log_records", [])
-    completed_records = [
-        r for r in records if IngestionEventType.RUN_COMPLETED in r.message
-    ]
-    assert len(completed_records) == 1
-    assert "total_events=" in completed_records[0].message
+    record = _get_run_completed_record(observability_context)
+    assert "total_events=" in record.message
 
 
 @then(parsers.parse('ingestion lag metrics are available for "{slug}"'))

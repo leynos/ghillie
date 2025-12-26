@@ -33,7 +33,11 @@ from ghillie.catalogue.storage import ComponentRecord, ProjectRecord, Repository
 from ghillie.common.time import utcnow
 
 from .noise import CompiledNoiseFilters, compile_noise_filters
-from .observability import IngestionEventLogger, IngestionRunContext
+from .observability import (
+    IngestionEventLogger,
+    IngestionRunContext,
+    StreamTruncationDetails,
+)
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -235,10 +239,12 @@ class GitHubIngestionWorker:
         if has_cursor:
             self._event_logger.log_stream_truncated(
                 obs_context,
-                kind="doc_change",
-                events_processed=self._config.max_events_per_kind,
-                max_events=self._config.max_events_per_kind,
-                resume_cursor=context.offsets.last_doc_cursor,
+                StreamTruncationDetails(
+                    kind="doc_change",
+                    events_processed=self._config.max_events_per_kind,
+                    max_events=self._config.max_events_per_kind,
+                    resume_cursor=context.offsets.last_doc_cursor,
+                ),
             )
         self._event_logger.log_stream_completed(obs_context, "doc_change", result)
         return result
@@ -266,10 +272,12 @@ class GitHubIngestionWorker:
             )
             self._event_logger.log_stream_truncated(
                 obs_context,
-                kind=kind,
-                events_processed=self._config.max_events_per_kind,
-                max_events=self._config.max_events_per_kind,
-                resume_cursor=cursor_attr,
+                StreamTruncationDetails(
+                    kind=kind,
+                    events_processed=self._config.max_events_per_kind,
+                    max_events=self._config.max_events_per_kind,
+                    resume_cursor=cursor_attr,
+                ),
             )
         self._event_logger.log_stream_completed(obs_context, kind, ingested)
 

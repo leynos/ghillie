@@ -22,6 +22,21 @@ if typ.TYPE_CHECKING:
 class TestComputeLagMetrics:
     """Tests for the _compute_lag_metrics helper function."""
 
+    @staticmethod
+    def _create_offset_and_compute(
+        offset_kwargs: dict[str, typ.Any],
+        now: dt.datetime | None = None,
+        threshold: dt.timedelta | None = None,
+    ) -> IngestionLagMetrics:
+        """Create offset and compute lag metrics with sensible defaults."""
+        if now is None:
+            now = dt.datetime(2025, 1, 15, 12, 0, 0, tzinfo=dt.UTC)
+        if threshold is None:
+            threshold = dt.timedelta(hours=1)
+        offset_kwargs.setdefault("repo_external_id", "octo/reef")
+        offset = GithubIngestionOffset(**offset_kwargs)
+        return _compute_lag_metrics(offset, now, threshold)
+
     def test_all_watermarks_present(self) -> None:
         """Correctly computes lag when all watermarks are set."""
         now = dt.datetime(2025, 1, 15, 12, 0, 0, tzinfo=dt.UTC)
@@ -74,29 +89,25 @@ class TestComputeLagMetrics:
     def test_pending_cursors_detected(self) -> None:
         """Pending cursors are correctly detected."""
         now = dt.datetime(2025, 1, 15, 12, 0, 0, tzinfo=dt.UTC)
-        offset = GithubIngestionOffset(
-            repo_external_id="octo/reef",
-            last_commit_ingested_at=now - dt.timedelta(minutes=30),
-            last_commit_cursor="Y3Vyc29yOjEyMzQ1",
+        result = self._create_offset_and_compute(
+            {
+                "last_commit_ingested_at": now - dt.timedelta(minutes=30),
+                "last_commit_cursor": "Y3Vyc29yOjEyMzQ1",
+            },
+            now=now,
         )
-        threshold = dt.timedelta(hours=1)
-
-        result = _compute_lag_metrics(offset, now, threshold)
 
         assert result.has_pending_cursors is True
         assert result.is_stalled is False
 
     def test_multiple_pending_cursors(self) -> None:
         """Multiple pending cursors are detected."""
-        now = dt.datetime(2025, 1, 15, 12, 0, 0, tzinfo=dt.UTC)
-        offset = GithubIngestionOffset(
-            repo_external_id="octo/reef",
-            last_commit_cursor="cursor1",
-            last_pr_cursor="cursor2",
+        result = self._create_offset_and_compute(
+            {
+                "last_commit_cursor": "cursor1",
+                "last_pr_cursor": "cursor2",
+            },
         )
-        threshold = dt.timedelta(hours=1)
-
-        result = _compute_lag_metrics(offset, now, threshold)
 
         assert result.has_pending_cursors is True
 
@@ -120,6 +131,16 @@ class TestComputeLagMetrics:
 
 class TestIngestionHealthService:
     """Tests for the IngestionHealthService."""
+
+    @staticmethod
+    async def _add_offsets(
+        session_factory: async_sessionmaker[AsyncSession],
+        *offsets: GithubIngestionOffset,
+    ) -> None:
+        """Add multiple offset records to the database."""
+        async with session_factory() as session, session.begin():
+            for offset in offsets:
+                session.add(offset)
 
     @pytest.fixture
     def service(
@@ -184,19 +205,17 @@ class TestIngestionHealthService:
     ) -> None:
         """Returns lag metrics for all tracked repositories."""
         now = dt.datetime.now(dt.UTC)
-        async with session_factory() as session, session.begin():
-            session.add(
-                GithubIngestionOffset(
-                    repo_external_id="octo/reef",
-                    last_commit_ingested_at=now - dt.timedelta(minutes=10),
-                )
-            )
-            session.add(
-                GithubIngestionOffset(
-                    repo_external_id="octo/coral",
-                    last_commit_ingested_at=now - dt.timedelta(minutes=20),
-                )
-            )
+        await self._add_offsets(
+            session_factory,
+            GithubIngestionOffset(
+                repo_external_id="octo/reef",
+                last_commit_ingested_at=now - dt.timedelta(minutes=10),
+            ),
+            GithubIngestionOffset(
+                repo_external_id="octo/coral",
+                last_commit_ingested_at=now - dt.timedelta(minutes=20),
+            ),
+        )
 
         result = await service.get_all_repository_lags()
 
@@ -232,21 +251,19 @@ class TestIngestionHealthService:
     ) -> None:
         """Returns stalled repositories exceeding threshold."""
         now = dt.datetime.now(dt.UTC)
-        async with session_factory() as session, session.begin():
+        await self._add_offsets(
+            session_factory,
             # Recent ingestion - not stalled
-            session.add(
-                GithubIngestionOffset(
-                    repo_external_id="octo/reef",
-                    last_commit_ingested_at=now - dt.timedelta(minutes=2),
-                )
-            )
+            GithubIngestionOffset(
+                repo_external_id="octo/reef",
+                last_commit_ingested_at=now - dt.timedelta(minutes=2),
+            ),
             # Old ingestion - stalled (exceeds 5 minute threshold)
-            session.add(
-                GithubIngestionOffset(
-                    repo_external_id="octo/coral",
-                    last_commit_ingested_at=now - dt.timedelta(minutes=10),
-                )
-            )
+            GithubIngestionOffset(
+                repo_external_id="octo/coral",
+                last_commit_ingested_at=now - dt.timedelta(minutes=10),
+            ),
+        )
 
         result = await service_short_threshold.get_stalled_repositories()
 
