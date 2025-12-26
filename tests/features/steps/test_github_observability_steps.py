@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import datetime as dt
 import logging
 import typing as typ
@@ -142,20 +143,27 @@ def _build_events(
     return commits, prs, issues, docs
 
 
-def _configure_github_client(  # noqa: PLR0913
+@dataclasses.dataclass
+class FakeGitHubEvents:
+    """Container for fake GitHub events used in testing."""
+
+    commits: list[GitHubIngestedEvent] = dataclasses.field(default_factory=list)
+    pull_requests: list[GitHubIngestedEvent] = dataclasses.field(default_factory=list)
+    issues: list[GitHubIngestedEvent] = dataclasses.field(default_factory=list)
+    doc_changes: list[GitHubIngestedEvent] = dataclasses.field(default_factory=list)
+
+
+def _configure_github_client(
     context: ObservabilityContext,
-    *,
-    commits: list[GitHubIngestedEvent] | None = None,
-    pull_requests: list[GitHubIngestedEvent] | None = None,
-    issues: list[GitHubIngestedEvent] | None = None,
-    doc_changes: list[GitHubIngestedEvent] | None = None,
+    events: FakeGitHubEvents | None = None,
 ) -> None:
     """Configure a fake GitHub client and store it in the context."""
+    evt = events or FakeGitHubEvents()
     context["github_client"] = FakeGitHubClient(
-        commits=commits or [],
-        pull_requests=pull_requests or [],
-        issues=issues or [],
-        doc_changes=doc_changes or [],
+        commits=evt.commits,
+        pull_requests=evt.pull_requests,
+        issues=evt.issues,
+        doc_changes=evt.doc_changes,
     )
 
 
@@ -179,10 +187,9 @@ def github_api_returns_activity(
     commits, prs, issues, docs = _build_events(slug)
     _configure_github_client(
         observability_context,
-        commits=commits,
-        pull_requests=prs,
-        issues=issues,
-        doc_changes=docs,
+        FakeGitHubEvents(
+            commits=commits, pull_requests=prs, issues=issues, doc_changes=docs
+        ),
     )
 
 
