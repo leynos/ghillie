@@ -135,8 +135,13 @@ class IngestionHealthService:
     async def get_stalled_repositories(self) -> list[IngestionLagMetrics]:
         """Return repositories exceeding the stalled threshold.
 
-        This includes repositories with pending cursors (backlog) and those
-        where the newest watermark is older than the configured threshold.
+        This includes repositories where the newest watermark is older than
+        the configured threshold, or repositories with no watermarks (never
+        successfully ingested).
+
+        Note: Repositories with pending cursors (backlog) are tracked via
+        the `has_pending_cursors` field but are not considered stalled unless
+        they also exceed the time threshold.
         """
         all_lags = await self.get_all_repository_lags()
         return [lag for lag in all_lags if lag.is_stalled]

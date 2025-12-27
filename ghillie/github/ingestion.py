@@ -170,7 +170,9 @@ class GitHubIngestionWorker:
         self._event_logger.log_run_started(obs_context)
 
         try:
-            result = await self._ingest_repository_inner(repo, run_started_at)
+            result = await self._ingest_repository_inner(
+                repo, run_started_at, obs_context
+            )
         except BaseException as exc:
             duration = utcnow() - run_started_at
             self._event_logger.log_run_failed(obs_context, exc, duration)
@@ -181,7 +183,10 @@ class GitHubIngestionWorker:
         return result
 
     async def _ingest_repository_inner(
-        self, repo: RepositoryInfo, run_started_at: dt.datetime
+        self,
+        repo: RepositoryInfo,
+        run_started_at: dt.datetime,
+        obs_context: IngestionRunContext,
     ) -> GitHubIngestionResult:
         """Inner ingestion logic separated for observability wrapping."""
         offsets = await self._load_or_create_offsets(repo.slug)
@@ -193,11 +198,6 @@ class GitHubIngestionWorker:
             offsets=offsets,
             noise=noise,
             now=run_started_at,
-        )
-        obs_context = IngestionRunContext(
-            repo_slug=repo.slug,
-            estate_id=repo.estate_id,
-            started_at=run_started_at,
         )
 
         commits = await self._ingest_kind_with_logging(context, obs_context, "commit")
@@ -223,8 +223,8 @@ class GitHubIngestionWorker:
     ) -> int:
         """Ingest a kind with observability logging."""
         result = await self._ingest_kind(context, kind=kind)
-        stream_result = self._get_last_stream_result(context.offsets, kind)
-        self._log_stream_result(obs_context, kind, result, stream_result)
+        cursor = self._get_cursor_value(context.offsets, kind)
+        self._log_stream_result(obs_context, kind, result, cursor)
         return result
 
     async def _ingest_doc_changes_with_logging(
@@ -249,34 +249,31 @@ class GitHubIngestionWorker:
         self._event_logger.log_stream_completed(obs_context, "doc_change", result)
         return result
 
-    def _get_last_stream_result(
+    def _get_cursor_value(
         self,
         offsets: GithubIngestionOffset,
         kind: typ.Literal["commit", "pull_request", "issue"],
-    ) -> bool:
-        """Check if the stream was truncated by looking at cursor state."""
+    ) -> str | None:
+        """Get the actual cursor value for a stream kind."""
         cursor_attr = _KIND_CURSOR_ATTR[kind]
-        return getattr(offsets, cursor_attr) is not None
+        return typ.cast("str | None", getattr(offsets, cursor_attr))
 
     def _log_stream_result(
         self,
         obs_context: IngestionRunContext,
         kind: str,
         ingested: int,
-        was_truncated: bool,  # noqa: FBT001
+        cursor: str | None,
     ) -> None:
         """Log stream completion or truncation."""
-        if was_truncated:
-            cursor_attr = _KIND_CURSOR_ATTR.get(
-                typ.cast("typ.Literal['commit', 'pull_request', 'issue']", kind)
-            )
+        if cursor is not None:
             self._event_logger.log_stream_truncated(
                 obs_context,
                 StreamTruncationDetails(
                     kind=kind,
                     events_processed=self._config.max_events_per_kind,
                     max_events=self._config.max_events_per_kind,
-                    resume_cursor=cursor_attr,
+                    resume_cursor=cursor,
                 ),
             )
         self._event_logger.log_stream_completed(obs_context, kind, ingested)

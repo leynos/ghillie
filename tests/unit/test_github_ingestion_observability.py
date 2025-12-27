@@ -10,11 +10,13 @@ import pytest
 
 from ghillie.github import GitHubIngestionConfig, GitHubIngestionWorker
 from ghillie.github.errors import GitHubAPIError
+from ghillie.github.models import GitHubIngestedEvent
 from ghillie.github.observability import IngestionEventType
 from tests.unit.github_ingestion_test_helpers import (
     FailingGitHubClient,
     FakeGitHubClient,
     make_commit_event,
+    make_commit_events_with_cursors,
     make_disabled_repo_info,
     make_doc_change_event,
     make_issue_event,
@@ -230,3 +232,149 @@ async def test_worker_logs_estate_id_when_present(
     ]
     assert len(started_records) == 1
     assert "estate_id=wildside" in started_records[0].message
+
+
+@pytest.mark.asyncio
+async def test_worker_logs_stream_truncated_for_kind(
+    session_factory: async_sessionmaker[AsyncSession],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Worker logs STREAM_TRUNCATED when max_events_per_kind is exceeded."""
+    repo = make_repo_info()
+    now = dt.datetime.now(dt.UTC)
+
+    # Create more commits than max_events_per_kind allows (with cursors for truncation)
+    commits = make_commit_events_with_cursors(
+        repo,
+        [(f"sha{i}", now - dt.timedelta(minutes=i), f"cursor{i}") for i in range(5)],
+    )
+    client = FakeGitHubClient(
+        commits=commits,
+        pull_requests=[],
+        issues=[],
+        doc_changes=[],
+    )
+    # Use low max_events_per_kind to trigger truncation
+    worker = GitHubIngestionWorker(
+        session_factory,
+        client,
+        config=GitHubIngestionConfig(
+            overlap=dt.timedelta(0),
+            initial_lookback=dt.timedelta(days=1),
+            max_events_per_kind=2,
+        ),
+    )
+
+    with caplog.at_level(logging.WARNING, logger="ghillie.github.observability"):
+        await worker.ingest_repository(repo)
+
+    # Check for STREAM_TRUNCATED event for commits
+    truncated_records = [
+        r for r in caplog.records if IngestionEventType.STREAM_TRUNCATED in r.message
+    ]
+    assert len(truncated_records) >= 1, "Expected at least one STREAM_TRUNCATED event"
+
+    commit_truncated = [
+        r for r in truncated_records if "stream_kind=commit" in r.message
+    ]
+    assert len(commit_truncated) == 1, "Expected STREAM_TRUNCATED for commit stream"
+    assert "events_processed=2" in commit_truncated[0].message
+    assert "max_events=2" in commit_truncated[0].message
+    assert "has_resume_cursor=True" in commit_truncated[0].message
+
+
+@pytest.mark.asyncio
+async def test_worker_logs_stream_truncated_for_doc_changes(
+    session_factory: async_sessionmaker[AsyncSession],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Worker logs STREAM_TRUNCATED for doc changes when truncated."""
+    repo = make_repo_info()
+    now = dt.datetime.now(dt.UTC)
+
+    # Create more doc changes than max_events_per_kind allows (with cursors)
+    doc_changes = [
+        GitHubIngestedEvent(
+            event_type="github.doc_change",
+            source_event_id=f"sha{i}:docs/file{i}.md",
+            occurred_at=now - dt.timedelta(minutes=i),
+            payload={
+                "commit_sha": f"sha{i}",
+                "path": f"docs/file{i}.md",
+                "change_type": "modified",
+                "repo_owner": repo.owner,
+                "repo_name": repo.name,
+                "occurred_at": (now - dt.timedelta(minutes=i)).isoformat(),
+            },
+            cursor=f"doc_cursor{i}",
+        )
+        for i in range(5)
+    ]
+    client = FakeGitHubClient(
+        commits=[],
+        pull_requests=[],
+        issues=[],
+        doc_changes=doc_changes,
+    )
+    # Use low max_events_per_kind to trigger truncation
+    worker = GitHubIngestionWorker(
+        session_factory,
+        client,
+        config=GitHubIngestionConfig(
+            overlap=dt.timedelta(0),
+            initial_lookback=dt.timedelta(days=1),
+            max_events_per_kind=2,
+        ),
+    )
+
+    with caplog.at_level(logging.WARNING, logger="ghillie.github.observability"):
+        await worker.ingest_repository(repo)
+
+    # Check for STREAM_TRUNCATED event for doc_change
+    truncated_records = [
+        r for r in caplog.records if IngestionEventType.STREAM_TRUNCATED in r.message
+    ]
+    doc_truncated = [
+        r for r in truncated_records if "stream_kind=doc_change" in r.message
+    ]
+    assert len(doc_truncated) == 1, "Expected STREAM_TRUNCATED for doc_change stream"
+    assert "events_processed=2" in doc_truncated[0].message
+    assert "max_events=2" in doc_truncated[0].message
+    assert "has_resume_cursor=True" in doc_truncated[0].message
+
+
+@pytest.mark.asyncio
+async def test_worker_no_truncation_when_under_limit(
+    session_factory: async_sessionmaker[AsyncSession],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Worker does not log STREAM_TRUNCATED when events are under the limit."""
+    repo = make_repo_info()
+    now = dt.datetime.now(dt.UTC)
+
+    # Create fewer commits than max_events_per_kind
+    commits = [make_commit_event(repo, now - dt.timedelta(minutes=i)) for i in range(2)]
+    client = FakeGitHubClient(
+        commits=commits,
+        pull_requests=[],
+        issues=[],
+        doc_changes=[],
+    )
+    worker = GitHubIngestionWorker(
+        session_factory,
+        client,
+        config=GitHubIngestionConfig(
+            overlap=dt.timedelta(0),
+            initial_lookback=dt.timedelta(days=1),
+            max_events_per_kind=10,  # Higher than number of events
+        ),
+    )
+
+    with caplog.at_level(logging.WARNING, logger="ghillie.github.observability"):
+        await worker.ingest_repository(repo)
+
+    # No STREAM_TRUNCATED events should be logged
+    truncated_records = [
+        r for r in caplog.records if IngestionEventType.STREAM_TRUNCATED in r.message
+    ]
+    assert len(truncated_records) == 0, "Expected no STREAM_TRUNCATED events"

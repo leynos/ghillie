@@ -614,8 +614,8 @@ Configure alerts based on structured log queries:
    investigation of GitHub API changes.
 
 4. **Stalled ingestion:** Query
-   `IngestionHealthService.get_stalled_repositories()`
-   periodically and alert when the list is non-empty.
+   `IngestionHealthService.get_stalled_repositories()` periodically and alert
+   when the list is non-empty.
 
 5. **Backlog accumulation:** Alert when `ingestion.stream.truncated` events
    occur repeatedly for the same repository (indicates sustained high activity
