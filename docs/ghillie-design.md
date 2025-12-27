@@ -320,6 +320,44 @@ field (documentation change events). Commit ingestion does not yet fetch a
 per-commit file list in Phase 1, so path-based filtering cannot be applied to
 generic commit events without additional GitHub API calls.
 
+#### Ingestion observability (Task 1.3.d)
+
+The ingestion worker emits structured log events at key lifecycle points,
+enabling operators to monitor throughput, identify failures, and detect stalled
+ingestion without inspecting database state directly.
+
+**Event types:**
+
+- `ingestion.run.started`: Emitted when ingestion begins for a repository.
+- `ingestion.run.completed`: Emitted on successful completion with counts and
+  duration.
+- `ingestion.run.failed`: Emitted on error with categorized error type and
+  message.
+- `ingestion.stream.completed`: Emitted after each stream (commit, PR, issue,
+  doc) completes.
+- `ingestion.stream.truncated`: Emitted when a stream hits `max_events_per_kind`
+  and backlog exists.
+
+All events include `repo_slug` and `estate_id` for log aggregator filtering.
+Failure events classify errors into categories (`transient`, `client_error`,
+`schema_drift`, `configuration`, `database_connectivity`, `data_integrity`,
+`database_error`, `unknown`) to support alert routing.
+
+**Lag computation:**
+
+Ingestion lag is computed on-demand from `github_ingestion_offsets` watermarks
+via `IngestionHealthService`:
+
+- `time_since_last_ingestion_seconds`: Age of newest watermark (None if never
+  ingested).
+- `oldest_watermark_age_seconds`: Age of oldest stream watermark.
+- `has_pending_cursors`: True if any stream has a resume cursor (backlog).
+- `is_stalled`: True if lag exceeds configurable threshold (default 1 hour) or
+  repository has never been successfully ingested.
+
+Operators can query `get_stalled_repositories()` periodically to detect
+ingestion health issues without parsing logs.
+
 ## 4. The Intelligence Engine: Hierarchical Summarization
 
 The defining feature of Ghillie is its ability to transform raw data into

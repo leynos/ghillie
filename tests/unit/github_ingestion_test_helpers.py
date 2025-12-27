@@ -17,6 +17,7 @@ from tests.helpers.github_events import (
 
 __all__ = [
     "EventSpec",
+    "FailingGitHubClient",
     "FakeGitHubClient",
     "make_commit_event",
     "make_commit_events_with_cursors",
@@ -105,7 +106,53 @@ class FakeGitHubClient:
                 yield event
 
 
-def make_repo_info() -> RepositoryInfo:
+class FailingGitHubClient:
+    """GitHubActivityClient implementation that raises errors for testing."""
+
+    def __init__(self, error: BaseException) -> None:
+        """Store the error to raise on any method call."""
+        self._error = error
+
+    async def iter_commits(
+        self, repo: RepositoryInfo, *, since: dt.datetime, after: str | None = None
+    ) -> typ.AsyncIterator[GitHubIngestedEvent]:
+        """Raise the configured error."""
+        del repo, since, after
+        raise self._error
+        # Unreachable but needed for type checker
+        yield  # type: ignore[misc]  # pragma: no cover
+
+    async def iter_pull_requests(
+        self, repo: RepositoryInfo, *, since: dt.datetime, after: str | None = None
+    ) -> typ.AsyncIterator[GitHubIngestedEvent]:
+        """Raise the configured error."""
+        del repo, since, after
+        raise self._error
+        yield  # type: ignore[misc]  # pragma: no cover
+
+    async def iter_issues(
+        self, repo: RepositoryInfo, *, since: dt.datetime, after: str | None = None
+    ) -> typ.AsyncIterator[GitHubIngestedEvent]:
+        """Raise the configured error."""
+        del repo, since, after
+        raise self._error
+        yield  # type: ignore[misc]  # pragma: no cover
+
+    async def iter_doc_changes(
+        self,
+        repo: RepositoryInfo,
+        *,
+        since: dt.datetime,
+        documentation_paths: typ.Sequence[str],
+        after: str | None = None,
+    ) -> typ.AsyncIterator[GitHubIngestedEvent]:
+        """Raise the configured error."""
+        del repo, since, documentation_paths, after
+        raise self._error
+        yield  # type: ignore[misc]  # pragma: no cover
+
+
+def make_repo_info(*, estate_id: str | None = None) -> RepositoryInfo:
     """Build a RepositoryInfo for ingestion tests."""
     return RepositoryInfo(
         id="repo-1",
@@ -114,7 +161,7 @@ def make_repo_info() -> RepositoryInfo:
         default_branch="main",
         ingestion_enabled=True,
         documentation_paths=("docs/roadmap.md",),
-        estate_id=None,
+        estate_id=estate_id,
     )
 
 

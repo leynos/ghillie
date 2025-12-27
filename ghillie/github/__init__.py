@@ -8,12 +8,28 @@ from .ingestion import (
     GitHubIngestionResult,
     GitHubIngestionWorker,
 )
+from .lag import IngestionHealthConfig, IngestionHealthService, IngestionLagMetrics
+from .observability import (
+    ErrorCategory,
+    IngestionEventLogger,
+    IngestionEventType,
+    IngestionRunContext,
+    categorize_error,
+)
 
 __all__ = [
+    "ErrorCategory",
     "GitHubActivityClient",
     "GitHubGraphQLClient",
     "GitHubGraphQLConfig",
     "GitHubIngestionConfig",
     "GitHubIngestionResult",
     "GitHubIngestionWorker",
+    "IngestionEventLogger",
+    "IngestionEventType",
+    "IngestionHealthConfig",
+    "IngestionHealthService",
+    "IngestionLagMetrics",
+    "IngestionRunContext",
+    "categorize_error",
 ]

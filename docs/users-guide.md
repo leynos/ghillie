@@ -472,9 +472,9 @@ async def main() -> None:
     repos = await registry.list_active_repositories()
 
     client = GitHubGraphQLClient(GitHubGraphQLConfig.from_env())
+    # If the catalogue database is separate from Bronze/Silver, pass it via config:
+    # config = GitHubIngestionConfig(catalogue_session_factory=catalogue_sf)
     worker = GitHubIngestionWorker(session_factory, client)
-    # If the catalogue database is separate from Bronze/Silver, pass
-    # catalogue_session_factory=... so project noise filters are applied.
 
     for repo in repos:
         await worker.ingest_repository(repo)
@@ -497,3 +497,126 @@ cannot start (for example, Node.js is missing), the fixtures automatically fall
 back to SQLite to keep the suite runnable. To force SQLite explicitly, set
 `GHILLIE_TEST_DB=sqlite` before invoking `make test`. See
 `docs/testing-sqlalchemy-with-pytest-and-py-pglite.md` for full guidance.
+
+## GitHub ingestion observability (Phase 1.3.d)
+
+Ghillie emits structured log events for ingestion health monitoring. All events
+use Python's standard logging module with consistent field schemas suitable for
+parsing by log aggregators (Datadog, Loki, CloudWatch Logs Insights, etc.).
+
+### Log events
+
+The ingestion worker emits the following structured events:
+
+| Event Type                   | Level   | Description                                 |
+| ---------------------------- | ------- | ------------------------------------------- |
+| `ingestion.run.started`      | INFO    | Ingestion run begins for a repository       |
+| `ingestion.run.completed`    | INFO    | Ingestion run finished successfully         |
+| `ingestion.run.failed`       | ERROR   | Ingestion run failed with error             |
+| `ingestion.stream.completed` | INFO    | Stream (commit/PR/issue/doc) ingested       |
+| `ingestion.stream.truncated` | WARNING | Stream hit max_events limit, backlog exists |
+
+Each event includes `repo_slug` and `estate_id` for filtering. Completion
+events include duration and event counts. Failure events categorize errors for
+alert routing.
+
+Example log output:
+
+```text
+INFO ghillie.github.observability [ingestion.run.completed]
+  repo_slug=octo/reef estate_id=wildside duration_seconds=45.200
+  commits_ingested=12 pull_requests_ingested=3 issues_ingested=5
+  doc_changes_ingested=2 total_events=22
+```
+
+### Error categories
+
+Failed ingestion runs are classified into categories for alerting:
+
+| Category                | Description                   | Typical Action          |
+| ----------------------- | ----------------------------- | ----------------------- |
+| `transient`             | GitHub 5xx errors             | Retry automatically     |
+| `client_error`          | GitHub 4xx errors             | Check token/permissions |
+| `schema_drift`          | Unexpected API response shape | Investigate API changes |
+| `configuration`         | Missing or invalid config     | Fix environment/config  |
+| `database_connectivity` | DB connection issues          | Check infrastructure    |
+| `data_integrity`        | Constraint violations         | Investigate data issues |
+| `database_error`        | Other DB errors               | Check database health   |
+| `unknown`               | Unclassified errors           | Investigate logs        |
+
+### Querying ingestion lag
+
+Use `IngestionHealthService` to query per-repository lag and identify stalled
+ingestion:
+
+```python
+import asyncio
+import datetime as dt
+
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from ghillie.github import (
+    IngestionHealthConfig,
+    IngestionHealthService,
+)
+
+
+async def main() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///ghillie.db")
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    # Default threshold is 1 hour
+    service = IngestionHealthService(session_factory)
+
+    # Or configure a custom threshold
+    config = IngestionHealthConfig(stalled_threshold=dt.timedelta(minutes=30))
+    service = IngestionHealthService(session_factory, config=config)
+
+    # Query a single repository
+    metrics = await service.get_lag_for_repository("octo/reef")
+    if metrics:
+        print(f"Lag: {metrics.time_since_last_ingestion_seconds}s")
+        print(f"Has backlog: {metrics.has_pending_cursors}")
+        print(f"Stalled: {metrics.is_stalled}")
+
+    # Find all stalled repositories
+    stalled = await service.get_stalled_repositories()
+    for repo in stalled:
+        print(f"STALLED: {repo.repo_slug}")
+
+
+asyncio.run(main())
+```
+
+### Lag metrics
+
+The `IngestionLagMetrics` dataclass provides:
+
+- `repo_slug`: Repository identifier (owner/name)
+- `time_since_last_ingestion_seconds`: Seconds since newest watermark (None if
+  never ingested)
+- `oldest_watermark_age_seconds`: Age of oldest stream watermark
+- `has_pending_cursors`: True if any stream has a pagination cursor (backlog)
+- `is_stalled`: True if lag exceeds threshold or never ingested
+
+### Alerting recommendations
+
+Configure alerts based on structured log queries:
+
+1. **Transient failures (repeated):** Alert if `ingestion.run.failed` with
+   `error_category=transient` occurs 3+ times in 15 minutes for the same
+   repository.
+
+2. **Configuration errors:** Alert immediately on any `ingestion.run.failed`
+   with `error_category=configuration`.
+
+3. **Schema drift:** Alert on `error_category=schema_drift` for prompt
+   investigation of GitHub API changes.
+
+4. **Stalled ingestion:** Query
+   `IngestionHealthService.get_stalled_repositories()` periodically and alert
+   when the list is non-empty.
+
+5. **Backlog accumulation:** Alert when `ingestion.stream.truncated` events
+   occur repeatedly for the same repository (indicates sustained high activity
+   or processing issues).
