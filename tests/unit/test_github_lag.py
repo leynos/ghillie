@@ -186,7 +186,11 @@ class TestIngestionHealthService:
         assert result.repo_slug == "octo/reef"
         assert result.time_since_last_ingestion_seconds is not None
         # 30 minutes = 1800 seconds, but allow some tolerance for test execution
-        assert 1799 <= result.time_since_last_ingestion_seconds <= 1810
+        lag_s = result.time_since_last_ingestion_seconds
+        assert 1799 <= lag_s <= 1810, (
+            f"Expected ~1800s (30 min), got {lag_s}s; "
+            "tolerance accounts for test execution time"
+        )
         assert result.is_stalled is False  # default threshold is 1 hour
 
     @pytest.mark.asyncio
