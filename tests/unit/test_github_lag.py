@@ -24,7 +24,7 @@ class TestComputeLagMetrics:
 
     @staticmethod
     def _create_offset_and_compute(
-        offset_kwargs: dict[str, typ.Any],
+        offset_kwargs: dict[str, str | dt.datetime | None],
         now: dt.datetime | None = None,
         threshold: dt.timedelta | None = None,
     ) -> IngestionLagMetrics:
