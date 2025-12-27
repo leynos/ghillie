@@ -4,6 +4,27 @@ Ghillie accesses GitHub to ingest repository activity for status reporting. This
 document explains how to create and configure a GitHub App with the minimal
 permissions required for Ghillie's read-only operations.
 
+## Quick start: required permissions at a glance
+
+For operators who need the minimal configuration without reading the full
+document, the following table summarises the required GitHub App permissions:
+
+| Category | Permission | Access level |
+|----------|------------|--------------|
+| Repository | Metadata | Read-only |
+| Repository | Contents | Read-only |
+| Repository | Issues | Read-only |
+| Repository | Pull requests | Read-only |
+| Organisation | Members | Read-only (optional) |
+
+**Installation scope:** Install on all repositories that Ghillie should monitor,
+or use organisation-wide installation with selective repository access.
+
+**Environment variable:** Set `GHILLIE_GITHUB_TOKEN` to the installation access
+token (not the private key).
+
+For detailed configuration steps, continue reading the sections below.
+
 ## Why use a GitHub App
 
 GitHub Apps offer several advantages over Personal Access Tokens (PATs) for
@@ -27,7 +48,8 @@ metadata, pull requests, issues, and documentation paths.
 
 ## Prerequisites
 
-Before creating a GitHub App for Ghillie, ensure you have:
+Before creating a GitHub App for Ghillie, ensure the following prerequisites are
+met:
 
 - **Organisation administrator access** to create and install GitHub Apps, or
   the ability to request installation approval from an administrator.
@@ -42,34 +64,34 @@ Before creating a GitHub App for Ghillie, ensure you have:
 ### Step 1: Navigate to GitHub App settings
 
 1. Sign in to GitHub as an organisation owner or administrator.
-2. Navigate to your organisation's settings page:
-   `https://github.com/organizations/<your-org>/settings`
+2. Navigate to the organisation settings page:
+   `https://github.com/organizations/<org-name>/settings`
 3. In the left sidebar, select **Developer settings** then **GitHub Apps**.
 4. Click **New GitHub App**.
 
 ### Step 2: Configure App metadata
 
-Fill in the basic information for your App:
+Fill in the basic information for the App:
 
 | Field | Recommended value |
 |-------|-------------------|
-| GitHub App name | `ghillie-status-reporter` (or include your organisation name for uniqueness) |
+| GitHub App name | `ghillie-status-reporter` (or include the organisation name for uniqueness) |
 | Description | Read-only status reporting for engineering estate monitoring |
-| Homepage URL | Your Ghillie deployment URL or internal documentation page |
+| Homepage URL | The Ghillie deployment URL or internal documentation page |
 
-Under **Identifying and authorizing users**, leave the defaults unless you
-require user-level OAuth flows (Ghillie does not).
+Under **Identifying and authorizing users**, leave the defaults unless
+user-level OAuth flows are required (Ghillie does not use them).
 
-Under **Post installation**, you may leave the setup URL blank unless you have a
-custom onboarding flow.
+Under **Post installation**, leave the setup URL blank unless a custom
+onboarding flow is required.
 
 ### Step 3: Configure webhook (optional)
 
-Ghillie currently uses polling rather than webhooks for ingestion. You may leave
-the webhook URL blank and uncheck **Active** under the Webhook section.
+Ghillie currently uses polling rather than webhooks for ingestion. Leave the
+webhook URL blank and uncheck **Active** under the Webhook section.
 
-If you plan to implement real-time ingestion in future, you can configure
-webhooks later without recreating the App.
+If real-time ingestion is planned for the future, webhooks can be configured
+later without recreating the App.
 
 ### Step 4: Configure repository permissions
 
@@ -91,13 +113,13 @@ Do not request any other repository permissions. In particular, do not request:
 - **Deployments:** Ghillie does not track deployment status.
 - **Environments:** Ghillie does not access deployment environments.
 - **Secrets:** Ghillie never accesses repository secrets.
-- **Webhooks:** Ghillie does not configure webhooks (even if you enable incoming
-  webhooks, you do not need this permission).
+- **Webhooks:** Ghillie does not configure webhooks (even with incoming webhooks
+  enabled, this permission is not required).
 
 ### Step 5: Configure organisation permissions (optional)
 
-Organisation permissions are not required for basic Ghillie operation. If you
-wish to attribute activity to organisation members in reports, you may request:
+Organisation permissions are not required for basic Ghillie operation. To
+attribute activity to organisation members in reports, request:
 
 | Permission | Access level | Rationale |
 |------------|--------------|-----------|
@@ -112,46 +134,47 @@ empty.
 
 ### Step 7: Select where the App can be installed
 
-Choose **Only on this account** to restrict installation to your organisation,
-or **Any account** if you intend to share the App across multiple organisations.
+Choose **Only on this account** to restrict installation to the current
+organisation, or **Any account** if the App is intended to be shared across
+multiple organisations.
 
 For most deployments, **Only on this account** is appropriate.
 
 ### Step 8: Create the App
 
-Click **Create GitHub App**. GitHub will display your new App's settings page.
+Click **Create GitHub App**. GitHub will display the new App's settings page.
 
 ### Step 9: Generate and secure the private key
 
 1. On the App settings page, scroll to **Private keys**.
 2. Click **Generate a private key**. GitHub will download a `.pem` file.
-3. Store this private key securely in your secrets management system (for
+3. Store this private key securely in an approved secrets management system (for
    example, HashiCorp Vault, AWS Secrets Manager, or Azure Key Vault).
 4. Never commit the private key to version control or store it in plain text.
 
-Record the **App ID** displayed at the top of the App settings page. You will
-need both the App ID and the private key to generate installation tokens.
+Record the **App ID** displayed at the top of the App settings page. Both the
+App ID and the private key are required to generate installation tokens.
 
 ## Installing the App on repositories
 
 ### Organisation-wide installation
 
 1. Navigate to the App's public page:
-   `https://github.com/apps/<your-app-name>`
+   `https://github.com/apps/<app-name>`
 2. Click **Install** or **Configure**.
-3. Select your organisation.
+3. Select the target organisation.
 4. Choose **All repositories** to grant access to every repository, or **Only
    select repositories** to choose specific repositories.
 5. Click **Install**.
 
 ### Per-repository installation
 
-If you selected **Only select repositories** during installation, you can modify
-the repository list at any time:
+If **Only select repositories** was selected during installation, the repository
+list can be modified at any time:
 
-1. Navigate to your organisation settings.
+1. Navigate to the organisation settings.
 2. Select **Installed GitHub Apps** in the left sidebar.
-3. Click **Configure** next to your Ghillie App.
+3. Click **Configure** next to the Ghillie App.
 4. Add or remove repositories as needed.
 5. Click **Save**.
 
@@ -160,9 +183,9 @@ the repository list at any time:
 After installation, verify the App appears in each repository's settings:
 
 1. Navigate to a repository Ghillie should monitor.
-2. Go to **Settings** then **Integrations** (or **GitHub Apps** depending on
-   your GitHub version).
-3. Confirm your Ghillie App is listed with the expected permissions.
+2. Go to **Settings** then **Integrations** (or **GitHub Apps** depending on the
+   GitHub version).
+3. Confirm the Ghillie App is listed with the expected permissions.
 
 ## Configuring Ghillie to use the GitHub App
 
@@ -201,7 +224,7 @@ Ghillie reads the GitHub token from an environment variable:
 | `GHILLIE_GITHUB_TOKEN` | Installation access token for GitHub API | `ghs_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx` |
 
 The token value should be an installation access token, not the App's private
-key directly. You must implement token exchange logic externally or use a
+key directly. Token exchange logic must be implemented externally, or use a
 secrets manager that handles GitHub App authentication.
 
 ### Obtaining an installation access token
@@ -209,10 +232,10 @@ secrets manager that handles GitHub App authentication.
 To exchange App credentials for an installation token:
 
 1. **Generate a JSON Web Token (JWT)** signed with the App's private key:
-   - Set the `iss` (issuer) claim to your App ID.
+   - Set the `iss` (issuer) claim to the App ID.
    - Set the `iat` (issued at) claim to the current time.
    - Set the `exp` (expiration) claim to no more than 10 minutes in the future.
-   - Sign with the RS256 algorithm using your private key.
+   - Sign with the RS256 algorithm using the private key.
 
 2. **Request an installation token** by calling the GitHub API:
 
@@ -223,7 +246,7 @@ To exchange App credentials for an installation token:
      https://api.github.com/app/installations/<installation-id>/access_tokens
    ```
 
-   Replace `<JWT>` with your generated token and `<installation-id>` with your
+   Replace `<JWT>` with the generated token and `<installation-id>` with the
    App's installation ID (visible in the installation URL or via the API).
 
 3. **Extract the token** from the response:
@@ -244,7 +267,7 @@ To exchange App credentials for an installation token:
 ### Token refresh considerations
 
 Installation access tokens expire after one hour. For long-running Ghillie
-deployments, you must refresh the token before expiry. Common approaches
+deployments, the token must be refreshed before expiry. Common approaches
 include:
 
 - **External token manager:** A sidecar process or cron job that refreshes the
@@ -266,7 +289,7 @@ failures.
 - Store the App's private key in an approved secrets management system.
 - Restrict access to the private key to only the services that need it.
 - Rotate the private key periodically by generating a new key in GitHub App
-  settings, updating your secrets store, and then deleting the old key.
+  settings, updating the secrets store, and then deleting the old key.
 - Never log or expose the private key in error messages or debug output.
 
 ### Installation token handling
@@ -339,7 +362,7 @@ errors.
   Update the App permissions in GitHub settings.
 - The repository is not included in the App installation. Add the repository to
   the installation scope.
-- Organisation policies restrict App access. Check with your organisation
+- Organisation policies restrict App access. Check with the organisation
   administrator.
 
 ### Rate limiting
@@ -378,8 +401,8 @@ activity.
 
 ## Migrating from Personal Access Tokens
 
-If you are currently using a Personal Access Token with Ghillie, follow these
-steps to migrate to a GitHub App:
+For deployments currently using a Personal Access Token with Ghillie, follow
+these steps to migrate to a GitHub App:
 
 1. **Create the GitHub App** following the steps in this document.
 2. **Install the App** on all repositories currently accessed by Ghillie.
@@ -388,7 +411,26 @@ steps to migrate to a GitHub App:
    the PAT.
 5. **Verify ingestion** by running Ghillie and checking that events are captured
    correctly.
-6. **Revoke the PAT** once you have confirmed the App is working correctly.
+6. **Revoke the PAT** once the App is confirmed to be working correctly.
+
+For screen readers: The following flowchart illustrates the migration process
+from Personal Access Tokens to GitHub App authentication.
+
+```mermaid
+flowchart TD
+    A[Start migration] --> B[Create GitHub App with read-only permissions]
+    B --> C[Install App on all required repositories]
+    C --> D[Store private key securely in secrets manager]
+    D --> E[Implement JWT generation and token exchange]
+    E --> F[Obtain installation access token]
+    F --> G[Set GHILLIE_GITHUB_TOKEN to installation token]
+    G --> H[Run Ghillie and verify repository ingestion]
+    H --> I{Ingestion successful for all target repositories?}
+    I -->|Yes| J[Revoke existing Personal Access Token]
+    I -->|No| K[Check App permissions, installation scope, and token validity]
+    K --> E
+    J --> L[Migration complete]
+```
 
 The migration is transparent to Ghillie's internals because both PATs and
 installation tokens use the same `Authorization: Bearer <token>` header format.
@@ -414,7 +456,8 @@ roadmaps and Architecture Decision Records (ADRs). Ghillie does not read source
 code blobs; it only queries commit history filtered by configured documentation
 paths.
 
-If your organisation requires stricter controls, you may:
+If stricter controls are required by the organisation, consider the following
+options:
 
 - Limit the App installation to repositories that contain documentation.
 - Use repository-level path restrictions where GitHub supports them.
