@@ -33,8 +33,9 @@ class TestComputeLagMetrics:
             now = dt.datetime(2025, 1, 15, 12, 0, 0, tzinfo=dt.UTC)
         if threshold is None:
             threshold = dt.timedelta(hours=1)
-        offset_kwargs.setdefault("repo_external_id", "octo/reef")
-        offset = GithubIngestionOffset(**offset_kwargs)
+        # Merge defaults without mutating input dict
+        merged_kwargs = {"repo_external_id": "octo/reef", **offset_kwargs}
+        offset = GithubIngestionOffset(**merged_kwargs)
         return _compute_lag_metrics(offset, now, threshold)
 
     def test_all_watermarks_present(self) -> None:
@@ -173,12 +174,13 @@ class TestIngestionHealthService:
     ) -> None:
         """Returns lag metrics for repositories with offset records."""
         now = dt.datetime.now(dt.UTC)
-        async with session_factory() as session, session.begin():
-            offset = GithubIngestionOffset(
+        await self._add_offsets(
+            session_factory,
+            GithubIngestionOffset(
                 repo_external_id="octo/reef",
                 last_commit_ingested_at=now - dt.timedelta(minutes=30),
-            )
-            session.add(offset)
+            ),
+        )
 
         result = await service.get_lag_for_repository("octo/reef")
 
@@ -235,13 +237,13 @@ class TestIngestionHealthService:
     ) -> None:
         """Returns empty list when no repositories are stalled."""
         now = dt.datetime.now(dt.UTC)
-        async with session_factory() as session, session.begin():
-            session.add(
-                GithubIngestionOffset(
-                    repo_external_id="octo/reef",
-                    last_commit_ingested_at=now - dt.timedelta(minutes=30),
-                )
-            )
+        await self._add_offsets(
+            session_factory,
+            GithubIngestionOffset(
+                repo_external_id="octo/reef",
+                last_commit_ingested_at=now - dt.timedelta(minutes=30),
+            ),
+        )
 
         result = await service.get_stalled_repositories()
 
@@ -282,8 +284,10 @@ class TestIngestionHealthService:
         service: IngestionHealthService,
     ) -> None:
         """Repositories with no watermarks are considered stalled."""
-        async with session_factory() as session, session.begin():
-            session.add(GithubIngestionOffset(repo_external_id="octo/reef"))
+        await self._add_offsets(
+            session_factory,
+            GithubIngestionOffset(repo_external_id="octo/reef"),
+        )
 
         result = await service.get_stalled_repositories()
 
