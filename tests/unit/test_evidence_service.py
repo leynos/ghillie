@@ -1,9 +1,8 @@
 """Unit tests for EvidenceBundleService."""
 
-# ruff: noqa: PLR0913, FBT001, FBT002
-
 from __future__ import annotations
 
+import dataclasses as dc
 import datetime as dt
 import typing as typ
 
@@ -21,6 +20,123 @@ from ghillie.silver import EventFact, RawEventTransformer, Repository
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+
+# ---------------------------------------------------------------------------
+# Test event builders - using dataclasses to reduce function argument counts
+# ---------------------------------------------------------------------------
+
+
+@dc.dataclass(frozen=True, slots=True, kw_only=True)
+class PREventSpec:
+    """Specification for creating a pull request test event."""
+
+    repo_slug: str
+    pr_id: int
+    pr_number: int
+    created_at: dt.datetime
+    title: str = "Add feature"
+    state: str = "open"
+    labels: tuple[str, ...] = ()
+    merged_at: dt.datetime | None = None
+
+    def build(self) -> RawEventEnvelope:
+        """Build a RawEventEnvelope from this specification."""
+        owner, name = parse_repo_slug(self.repo_slug)
+        return RawEventEnvelope(
+            source_system="github",
+            source_event_id=f"pr-{self.pr_id}",
+            event_type="github.pull_request",
+            repo_external_id=self.repo_slug,
+            occurred_at=self.created_at,
+            payload={
+                "id": self.pr_id,
+                "number": self.pr_number,
+                "title": self.title,
+                "state": self.state,
+                "base_branch": "main",
+                "head_branch": "feature",
+                "repo_owner": owner,
+                "repo_name": name,
+                "created_at": self.created_at.isoformat(),
+                "author_login": "dev",
+                "merged_at": self.merged_at.isoformat() if self.merged_at else None,
+                "closed_at": None,
+                "labels": list(self.labels),
+                "is_draft": False,
+                "metadata": {},
+            },
+        )
+
+
+@dc.dataclass(frozen=True, slots=True, kw_only=True)
+class IssueEventSpec:
+    """Specification for creating an issue test event."""
+
+    repo_slug: str
+    issue_id: int
+    issue_number: int
+    created_at: dt.datetime
+    title: str = "Bug report"
+    state: str = "open"
+    labels: tuple[str, ...] = ()
+
+    def build(self) -> RawEventEnvelope:
+        """Build a RawEventEnvelope from this specification."""
+        owner, name = parse_repo_slug(self.repo_slug)
+        return RawEventEnvelope(
+            source_system="github",
+            source_event_id=f"issue-{self.issue_id}",
+            event_type="github.issue",
+            repo_external_id=self.repo_slug,
+            occurred_at=self.created_at,
+            payload={
+                "id": self.issue_id,
+                "number": self.issue_number,
+                "title": self.title,
+                "state": self.state,
+                "repo_owner": owner,
+                "repo_name": name,
+                "created_at": self.created_at.isoformat(),
+                "author_login": "user",
+                "closed_at": None,
+                "labels": list(self.labels),
+                "metadata": {},
+            },
+        )
+
+
+@dc.dataclass(frozen=True, slots=True, kw_only=True)
+class DocChangeEventSpec:
+    """Specification for creating a documentation change test event."""
+
+    repo_slug: str
+    commit_sha: str
+    path: str
+    occurred_at: dt.datetime
+    is_roadmap: bool = False
+
+    def build(self) -> RawEventEnvelope:
+        """Build a RawEventEnvelope from this specification."""
+        owner, name = parse_repo_slug(self.repo_slug)
+        return RawEventEnvelope(
+            source_system="github",
+            source_event_id=f"doc-{self.commit_sha}-{self.path}",
+            event_type="github.doc_change",
+            repo_external_id=self.repo_slug,
+            occurred_at=self.occurred_at,
+            payload={
+                "commit_sha": self.commit_sha,
+                "path": self.path,
+                "change_type": "modified",
+                "repo_owner": owner,
+                "repo_name": name,
+                "occurred_at": self.occurred_at.isoformat(),
+                "is_roadmap": self.is_roadmap,
+                "is_adr": False,
+                "metadata": {},
+            },
+        )
 
 
 def _commit_event(
@@ -47,106 +163,6 @@ def _commit_event(
             "repo_owner": owner,
             "repo_name": name,
             "default_branch": "main",
-            "metadata": {},
-        },
-    )
-
-
-def _pr_event(
-    repo_slug: str,
-    pr_id: int,
-    pr_number: int,
-    created_at: dt.datetime,
-    title: str = "Add feature",
-    state: str = "open",
-    labels: list[str] | None = None,
-    merged_at: dt.datetime | None = None,
-) -> RawEventEnvelope:
-    """Create a minimal pull request raw event envelope."""
-    owner, name = parse_repo_slug(repo_slug)
-    return RawEventEnvelope(
-        source_system="github",
-        source_event_id=f"pr-{pr_id}",
-        event_type="github.pull_request",
-        repo_external_id=repo_slug,
-        occurred_at=created_at,
-        payload={
-            "id": pr_id,
-            "number": pr_number,
-            "title": title,
-            "state": state,
-            "base_branch": "main",
-            "head_branch": "feature",
-            "repo_owner": owner,
-            "repo_name": name,
-            "created_at": created_at.isoformat(),
-            "author_login": "dev",
-            "merged_at": merged_at.isoformat() if merged_at else None,
-            "closed_at": None,
-            "labels": labels or [],
-            "is_draft": False,
-            "metadata": {},
-        },
-    )
-
-
-def _issue_event(
-    repo_slug: str,
-    issue_id: int,
-    issue_number: int,
-    created_at: dt.datetime,
-    title: str = "Bug report",
-    state: str = "open",
-    labels: list[str] | None = None,
-) -> RawEventEnvelope:
-    """Create a minimal issue raw event envelope."""
-    owner, name = parse_repo_slug(repo_slug)
-    return RawEventEnvelope(
-        source_system="github",
-        source_event_id=f"issue-{issue_id}",
-        event_type="github.issue",
-        repo_external_id=repo_slug,
-        occurred_at=created_at,
-        payload={
-            "id": issue_id,
-            "number": issue_number,
-            "title": title,
-            "state": state,
-            "repo_owner": owner,
-            "repo_name": name,
-            "created_at": created_at.isoformat(),
-            "author_login": "user",
-            "closed_at": None,
-            "labels": labels or [],
-            "metadata": {},
-        },
-    )
-
-
-def _doc_change_event(
-    repo_slug: str,
-    commit_sha: str,
-    path: str,
-    occurred_at: dt.datetime,
-    is_roadmap: bool = False,
-) -> RawEventEnvelope:
-    """Create a minimal documentation change event."""
-    owner, name = parse_repo_slug(repo_slug)
-    return RawEventEnvelope(
-        source_system="github",
-        source_event_id=f"doc-{commit_sha}-{path}",
-        event_type="github.doc_change",
-        repo_external_id=repo_slug,
-        occurred_at=occurred_at,
-        payload={
-            "commit_sha": commit_sha,
-            "path": path,
-            "change_type": "modified",
-            "repo_owner": owner,
-            "repo_name": name,
-            "occurred_at": occurred_at.isoformat(),
-            "is_roadmap": is_roadmap,
-            "is_adr": False,
             "metadata": {},
         },
     )
@@ -207,9 +223,14 @@ class TestEvidenceBundleServiceBuildBundle:
 
         pr_time = dt.datetime(2024, 7, 3, tzinfo=dt.UTC)
         await writer.ingest(
-            _pr_event(
-                repo_slug, 123, 45, pr_time, title="fix: resolve bug", labels=["bug"]
-            )
+            PREventSpec(
+                repo_slug=repo_slug,
+                pr_id=123,
+                pr_number=45,
+                created_at=pr_time,
+                title="fix: resolve bug",
+                labels=("bug",),
+            ).build()
         )
         await transformer.process_pending()
 
@@ -242,14 +263,14 @@ class TestEvidenceBundleServiceBuildBundle:
 
         issue_time = dt.datetime(2024, 7, 4, tzinfo=dt.UTC)
         await writer.ingest(
-            _issue_event(
-                repo_slug,
-                789,
-                12,
-                issue_time,
+            IssueEventSpec(
+                repo_slug=repo_slug,
+                issue_id=789,
+                issue_number=12,
+                created_at=issue_time,
                 title="Feature request",
-                labels=["enhancement"],
-            )
+                labels=("enhancement",),
+            ).build()
         )
         await transformer.process_pending()
 
@@ -284,9 +305,13 @@ class TestEvidenceBundleServiceBuildBundle:
         # Need a commit first for the doc change
         await writer.ingest(_commit_event(repo_slug, "doc123", doc_time))
         await writer.ingest(
-            _doc_change_event(
-                repo_slug, "doc123", "docs/roadmap.md", doc_time, is_roadmap=True
-            )
+            DocChangeEventSpec(
+                repo_slug=repo_slug,
+                commit_sha="doc123",
+                path="docs/roadmap.md",
+                occurred_at=doc_time,
+                is_roadmap=True,
+            ).build()
         )
         await transformer.process_pending()
 
@@ -426,14 +451,14 @@ class TestEvidenceBundleServiceBuildBundle:
         )
         # Bug PR
         await writer.ingest(
-            _pr_event(
-                repo_slug,
-                100,
-                10,
-                dt.datetime(2024, 7, 4, tzinfo=dt.UTC),
+            PREventSpec(
+                repo_slug=repo_slug,
+                pr_id=100,
+                pr_number=10,
+                created_at=dt.datetime(2024, 7, 4, tzinfo=dt.UTC),
                 title="Fix bug",
-                labels=["bug"],
-            )
+                labels=("bug",),
+            ).build()
         )
         await transformer.process_pending()
 

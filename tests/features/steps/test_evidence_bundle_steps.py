@@ -1,10 +1,9 @@
 """Behavioural tests for evidence bundle generation."""
 
-# ruff: noqa: PLR0913, FBT001, FBT002
-
 from __future__ import annotations
 
 import asyncio
+import dataclasses as dc
 import datetime as dt
 import typing as typ
 
@@ -65,7 +64,118 @@ def test_classification_from_title_scenario() -> None:
     """Wrapper for pytest-bdd scenario."""
 
 
-# Helper functions
+# ---------------------------------------------------------------------------
+# Test event builders - using dataclasses to reduce function argument counts
+# ---------------------------------------------------------------------------
+
+
+@dc.dataclass(frozen=True, slots=True, kw_only=True)
+class PREnvelopeSpec:
+    """Specification for creating a pull request envelope."""
+
+    repo_slug: str
+    pr_id: int
+    pr_number: int
+    created_at: dt.datetime
+    title: str = "Add feature"
+    labels: tuple[str, ...] = ()
+
+    def build(self) -> RawEventEnvelope:
+        """Build a RawEventEnvelope from this specification."""
+        owner, name = parse_repo_slug(self.repo_slug)
+        return RawEventEnvelope(
+            source_system="github",
+            source_event_id=f"pr-{self.pr_id}",
+            event_type="github.pull_request",
+            repo_external_id=self.repo_slug,
+            occurred_at=self.created_at,
+            payload={
+                "id": self.pr_id,
+                "number": self.pr_number,
+                "title": self.title,
+                "state": "open",
+                "base_branch": "main",
+                "head_branch": "feature",
+                "repo_owner": owner,
+                "repo_name": name,
+                "created_at": self.created_at.isoformat(),
+                "author_login": "dev",
+                "merged_at": None,
+                "closed_at": None,
+                "labels": list(self.labels),
+                "is_draft": False,
+                "metadata": {},
+            },
+        )
+
+
+@dc.dataclass(frozen=True, slots=True, kw_only=True)
+class IssueEnvelopeSpec:
+    """Specification for creating an issue envelope."""
+
+    repo_slug: str
+    issue_id: int
+    issue_number: int
+    created_at: dt.datetime
+    title: str = "Bug report"
+    labels: tuple[str, ...] = ()
+
+    def build(self) -> RawEventEnvelope:
+        """Build a RawEventEnvelope from this specification."""
+        owner, name = parse_repo_slug(self.repo_slug)
+        return RawEventEnvelope(
+            source_system="github",
+            source_event_id=f"issue-{self.issue_id}",
+            event_type="github.issue",
+            repo_external_id=self.repo_slug,
+            occurred_at=self.created_at,
+            payload={
+                "id": self.issue_id,
+                "number": self.issue_number,
+                "title": self.title,
+                "state": "open",
+                "repo_owner": owner,
+                "repo_name": name,
+                "created_at": self.created_at.isoformat(),
+                "author_login": "user",
+                "closed_at": None,
+                "labels": list(self.labels),
+                "metadata": {},
+            },
+        )
+
+
+@dc.dataclass(frozen=True, slots=True, kw_only=True)
+class DocChangeEnvelopeSpec:
+    """Specification for creating a documentation change envelope."""
+
+    repo_slug: str
+    commit_sha: str
+    path: str
+    occurred_at: dt.datetime
+    is_roadmap: bool = False
+
+    def build(self) -> RawEventEnvelope:
+        """Build a RawEventEnvelope from this specification."""
+        owner, name = parse_repo_slug(self.repo_slug)
+        return RawEventEnvelope(
+            source_system="github",
+            source_event_id=f"doc-{self.commit_sha}-{self.path}",
+            event_type="github.doc_change",
+            repo_external_id=self.repo_slug,
+            occurred_at=self.occurred_at,
+            payload={
+                "commit_sha": self.commit_sha,
+                "path": self.path,
+                "change_type": "modified",
+                "repo_owner": owner,
+                "repo_name": name,
+                "occurred_at": self.occurred_at.isoformat(),
+                "is_roadmap": self.is_roadmap,
+                "is_adr": False,
+                "metadata": {},
+            },
+        )
 
 
 def _commit_envelope(
@@ -92,103 +202,6 @@ def _commit_envelope(
             "repo_owner": owner,
             "repo_name": name,
             "default_branch": "main",
-            "metadata": {},
-        },
-    )
-
-
-def _pr_envelope(
-    repo_slug: str,
-    pr_id: int,
-    pr_number: int,
-    created_at: dt.datetime,
-    title: str = "Add feature",
-    labels: list[str] | None = None,
-) -> RawEventEnvelope:
-    """Construct a pull request event envelope."""
-    owner, name = parse_repo_slug(repo_slug)
-    return RawEventEnvelope(
-        source_system="github",
-        source_event_id=f"pr-{pr_id}",
-        event_type="github.pull_request",
-        repo_external_id=repo_slug,
-        occurred_at=created_at,
-        payload={
-            "id": pr_id,
-            "number": pr_number,
-            "title": title,
-            "state": "open",
-            "base_branch": "main",
-            "head_branch": "feature",
-            "repo_owner": owner,
-            "repo_name": name,
-            "created_at": created_at.isoformat(),
-            "author_login": "dev",
-            "merged_at": None,
-            "closed_at": None,
-            "labels": labels or [],
-            "is_draft": False,
-            "metadata": {},
-        },
-    )
-
-
-def _issue_envelope(
-    repo_slug: str,
-    issue_id: int,
-    issue_number: int,
-    created_at: dt.datetime,
-    title: str = "Bug report",
-    labels: list[str] | None = None,
-) -> RawEventEnvelope:
-    """Construct an issue event envelope."""
-    owner, name = parse_repo_slug(repo_slug)
-    return RawEventEnvelope(
-        source_system="github",
-        source_event_id=f"issue-{issue_id}",
-        event_type="github.issue",
-        repo_external_id=repo_slug,
-        occurred_at=created_at,
-        payload={
-            "id": issue_id,
-            "number": issue_number,
-            "title": title,
-            "state": "open",
-            "repo_owner": owner,
-            "repo_name": name,
-            "created_at": created_at.isoformat(),
-            "author_login": "user",
-            "closed_at": None,
-            "labels": labels or [],
-            "metadata": {},
-        },
-    )
-
-
-def _doc_change_envelope(
-    repo_slug: str,
-    commit_sha: str,
-    path: str,
-    occurred_at: dt.datetime,
-    is_roadmap: bool = False,
-) -> RawEventEnvelope:
-    """Construct a documentation change event envelope."""
-    owner, name = parse_repo_slug(repo_slug)
-    return RawEventEnvelope(
-        source_system="github",
-        source_event_id=f"doc-{commit_sha}-{path}",
-        event_type="github.doc_change",
-        repo_external_id=repo_slug,
-        occurred_at=occurred_at,
-        payload={
-            "commit_sha": commit_sha,
-            "path": path,
-            "change_type": "modified",
-            "repo_owner": owner,
-            "repo_name": name,
-            "occurred_at": occurred_at.isoformat(),
-            "is_roadmap": is_roadmap,
-            "is_adr": False,
             "metadata": {},
         },
     )
@@ -231,22 +244,38 @@ def given_repo_with_events(evidence_context: EvidenceContext) -> None:
         # Pull request
         pr_time = dt.datetime(2024, 7, 4, tzinfo=dt.UTC)
         await writer.ingest(
-            _pr_envelope(repo_slug, 100, 10, pr_time, "Add login feature")
+            PREnvelopeSpec(
+                repo_slug=repo_slug,
+                pr_id=100,
+                pr_number=10,
+                created_at=pr_time,
+                title="Add login feature",
+            ).build()
         )
 
         # Issue
         issue_time = dt.datetime(2024, 7, 5, tzinfo=dt.UTC)
         await writer.ingest(
-            _issue_envelope(repo_slug, 200, 20, issue_time, "Bug report")
+            IssueEnvelopeSpec(
+                repo_slug=repo_slug,
+                issue_id=200,
+                issue_number=20,
+                created_at=issue_time,
+                title="Bug report",
+            ).build()
         )
 
         # Documentation change
         doc_time = dt.datetime(2024, 7, 6, tzinfo=dt.UTC)
         await writer.ingest(_commit_envelope(repo_slug, "doc456", doc_time))
         await writer.ingest(
-            _doc_change_envelope(
-                repo_slug, "doc456", "docs/roadmap.md", doc_time, is_roadmap=True
-            )
+            DocChangeEnvelopeSpec(
+                repo_slug=repo_slug,
+                commit_sha="doc456",
+                path="docs/roadmap.md",
+                occurred_at=doc_time,
+                is_roadmap=True,
+            ).build()
         )
 
         await transformer.process_pending()
@@ -312,7 +341,14 @@ def given_repo_with_bug_pr(evidence_context: EvidenceContext) -> None:
 
         pr_time = dt.datetime(2024, 7, 5, tzinfo=dt.UTC)
         await writer.ingest(
-            _pr_envelope(repo_slug, 100, 10, pr_time, "Fix login issue", labels=["bug"])
+            PREnvelopeSpec(
+                repo_slug=repo_slug,
+                pr_id=100,
+                pr_number=10,
+                created_at=pr_time,
+                title="Fix login issue",
+                labels=("bug",),
+            ).build()
         )
         await transformer.process_pending()
 

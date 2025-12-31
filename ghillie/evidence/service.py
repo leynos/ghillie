@@ -407,21 +407,26 @@ class EvidenceBundleService:
         issues: list[IssueEvidence],
     ) -> list[WorkTypeGrouping]:
         """Group events by work type for summary generation."""
-        groupings: dict[WorkType, dict[str, typ.Any]] = {}
+        groupings = self._build_grouping_buckets(commits, prs, issues)
+        return self._build_grouping_results(groupings)
 
-        for work_type in WorkType:
-            groupings[work_type] = {
-                "commits": [],
-                "prs": [],
-                "issues": [],
-                "titles": [],
-            }
+    def _build_grouping_buckets(
+        self,
+        commits: list[CommitEvidence],
+        prs: list[PullRequestEvidence],
+        issues: list[IssueEvidence],
+    ) -> dict[WorkType, dict[str, list[typ.Any]]]:
+        """Bucket events by work type."""
+        groupings: dict[WorkType, dict[str, list[typ.Any]]] = {
+            work_type: {"commits": [], "prs": [], "issues": [], "titles": []}
+            for work_type in WorkType
+        }
 
-        for c in commits:
-            if not c.is_merge_commit:  # Exclude merge commits from groupings
-                groupings[c.work_type]["commits"].append(c)
-                if c.message:
-                    groupings[c.work_type]["titles"].append(c.message[:100])
+        # Exclude merge commits from groupings
+        for c in (c for c in commits if not c.is_merge_commit):
+            groupings[c.work_type]["commits"].append(c)
+            if c.message:
+                groupings[c.work_type]["titles"].append(c.message[:100])
 
         for pr in prs:
             groupings[pr.work_type]["prs"].append(pr)
@@ -431,6 +436,13 @@ class EvidenceBundleService:
             groupings[issue.work_type]["issues"].append(issue)
             groupings[issue.work_type]["titles"].append(issue.title)
 
+        return groupings
+
+    def _build_grouping_results(
+        self,
+        groupings: dict[WorkType, dict[str, list[typ.Any]]],
+    ) -> list[WorkTypeGrouping]:
+        """Convert bucketed groupings to WorkTypeGrouping objects."""
         result = []
         for work_type, data in groupings.items():
             commit_count = len(data["commits"])
@@ -438,11 +450,8 @@ class EvidenceBundleService:
             issue_count = len(data["issues"])
 
             # Skip empty groupings
-            if commit_count == 0 and pr_count == 0 and issue_count == 0:
+            if not any((commit_count, pr_count, issue_count)):
                 continue
-
-            # Take up to 5 sample titles
-            sample_titles = tuple(data["titles"][:5])
 
             result.append(
                 WorkTypeGrouping(
@@ -450,7 +459,7 @@ class EvidenceBundleService:
                     commit_count=commit_count,
                     pr_count=pr_count,
                     issue_count=issue_count,
-                    sample_titles=sample_titles,
+                    sample_titles=tuple(data["titles"][:5]),
                 )
             )
 
