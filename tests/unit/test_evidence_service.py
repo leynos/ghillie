@@ -245,70 +245,73 @@ class TestEvidenceBundleServiceBuildBundle:
         assert bundle.commits[0].work_type == WorkType.FEATURE
 
     @pytest.mark.asyncio
-    async def test_builds_bundle_with_prs(
+    @pytest.mark.parametrize(
+        "params",
+        [
+            pytest.param(
+                (
+                    lambda repo_slug, event_time: PREventSpec(
+                        repo_slug=repo_slug,
+                        pr_id=123,
+                        pr_number=45,
+                        created_at=event_time,
+                        title="fix: resolve bug",
+                        labels=("bug",),
+                    ),
+                    "pull_requests",
+                    45,
+                    WorkType.BUG,
+                ),
+                id="pull_requests",
+            ),
+            pytest.param(
+                (
+                    lambda repo_slug, event_time: IssueEventSpec(
+                        repo_slug=repo_slug,
+                        issue_id=789,
+                        issue_number=12,
+                        created_at=event_time,
+                        title="Feature request",
+                        labels=("enhancement",),
+                    ),
+                    "issues",
+                    12,
+                    WorkType.FEATURE,
+                ),
+                id="issues",
+            ),
+        ],
+    )
+    async def test_builds_bundle_with_prs_and_issues(
         self,
         session_factory: async_sessionmaker[AsyncSession],
         evidence_service_stack: EvidenceServiceStack,
+        params: tuple[
+            typ.Callable[[str, dt.datetime], PREventSpec | IssueEventSpec],
+            str,
+            int,
+            WorkType,
+        ],
     ) -> None:
-        """Bundle includes pull requests created in window."""
+        """Bundle includes pull requests and issues created in window."""
+        event_spec, bundle_attr, expected_number, expected_work_type = params
         writer, transformer, service = evidence_service_stack
 
         repo_slug = "octo/reef"
         window_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
         window_end = dt.datetime(2024, 7, 8, tzinfo=dt.UTC)
 
-        pr_time = dt.datetime(2024, 7, 3, tzinfo=dt.UTC)
-        await writer.ingest(
-            PREventSpec(
-                repo_slug=repo_slug,
-                pr_id=123,
-                pr_number=45,
-                created_at=pr_time,
-                title="fix: resolve bug",
-                labels=("bug",),
-            ).build()
-        )
+        event_time = dt.datetime(2024, 7, 3, tzinfo=dt.UTC)
+        await writer.ingest(event_spec(repo_slug, event_time).build())
         await transformer.process_pending()
 
         repo_id = await get_repo_id(session_factory)
         bundle = await service.build_bundle(repo_id, window_start, window_end)
 
-        assert len(bundle.pull_requests) == 1
-        assert bundle.pull_requests[0].number == 45
-        assert bundle.pull_requests[0].work_type == WorkType.BUG
-
-    @pytest.mark.asyncio
-    async def test_builds_bundle_with_issues(
-        self,
-        session_factory: async_sessionmaker[AsyncSession],
-        evidence_service_stack: EvidenceServiceStack,
-    ) -> None:
-        """Bundle includes issues created in window."""
-        writer, transformer, service = evidence_service_stack
-
-        repo_slug = "octo/reef"
-        window_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
-        window_end = dt.datetime(2024, 7, 8, tzinfo=dt.UTC)
-
-        issue_time = dt.datetime(2024, 7, 4, tzinfo=dt.UTC)
-        await writer.ingest(
-            IssueEventSpec(
-                repo_slug=repo_slug,
-                issue_id=789,
-                issue_number=12,
-                created_at=issue_time,
-                title="Feature request",
-                labels=("enhancement",),
-            ).build()
-        )
-        await transformer.process_pending()
-
-        repo_id = await get_repo_id(session_factory)
-        bundle = await service.build_bundle(repo_id, window_start, window_end)
-
-        assert len(bundle.issues) == 1
-        assert bundle.issues[0].number == 12
-        assert bundle.issues[0].work_type == WorkType.FEATURE
+        items = getattr(bundle, bundle_attr)
+        assert len(items) == 1
+        assert items[0].number == expected_number
+        assert items[0].work_type == expected_work_type
 
     @pytest.mark.asyncio
     async def test_builds_bundle_with_doc_changes(
