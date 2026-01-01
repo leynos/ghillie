@@ -199,7 +199,7 @@ def _commit_envelope(
 
 @dc.dataclass(frozen=True, slots=True, kw_only=True)
 class _BaseEnvelopeSpec:
-    """Base specification for building RawEventEnvelope with repo metadata."""
+    """Base specification for creating event envelopes with repo metadata."""
 
     repo_slug: str
     source_event_id: str
@@ -210,18 +210,18 @@ class _BaseEnvelopeSpec:
     def build(self) -> RawEventEnvelope:
         """Build a RawEventEnvelope with common repo metadata enrichment."""
         owner, name = parse_repo_slug(self.repo_slug)
-        payload = dict(self.payload)
-        payload["repo_owner"] = owner
-        payload["repo_name"] = name
-        if "metadata" not in payload:
-            payload["metadata"] = {}
+        enriched_payload = dict(self.payload)
+        enriched_payload["repo_owner"] = owner
+        enriched_payload["repo_name"] = name
+        if "metadata" not in enriched_payload:
+            enriched_payload["metadata"] = {}
         return RawEventEnvelope(
             source_system="github",
             source_event_id=self.source_event_id,
             event_type=self.event_type,
             repo_external_id=self.repo_slug,
             occurred_at=self.occurred_at,
-            payload=payload,
+            payload=enriched_payload,
         )
 
 
@@ -377,36 +377,27 @@ def given_repo_with_fix_commit(evidence_context: EvidenceContext) -> None:
 # When steps
 
 
+async def _build_bundle_async(evidence_context: EvidenceContext) -> None:
+    """Build the evidence bundle and store it in context."""
+    service = evidence_context["service"]
+    repo_id = evidence_context["repo_id"]
+    window_start = evidence_context["window_start"]
+    window_end = evidence_context["window_end"]
+
+    bundle = await service.build_bundle(repo_id, window_start, window_end)
+    evidence_context["bundle"] = bundle
+
+
 @when('I build an evidence bundle for "octo/reef" for the reporting window')
 def when_build_bundle(evidence_context: EvidenceContext) -> None:
     """Build the evidence bundle."""
-
-    async def _run() -> None:
-        service = evidence_context["service"]
-        repo_id = evidence_context["repo_id"]
-        window_start = evidence_context["window_start"]
-        window_end = evidence_context["window_end"]
-
-        bundle = await service.build_bundle(repo_id, window_start, window_end)
-        evidence_context["bundle"] = bundle
-
-    asyncio.run(_run())
+    asyncio.run(_build_bundle_async(evidence_context))
 
 
 @when("I build an evidence bundle for the next window")
 def when_build_bundle_next_window(evidence_context: EvidenceContext) -> None:
     """Build the evidence bundle for the next window."""
-
-    async def _run() -> None:
-        service = evidence_context["service"]
-        repo_id = evidence_context["repo_id"]
-        window_start = evidence_context["window_start"]
-        window_end = evidence_context["window_end"]
-
-        bundle = await service.build_bundle(repo_id, window_start, window_end)
-        evidence_context["bundle"] = bundle
-
-    asyncio.run(_run())
+    asyncio.run(_build_bundle_async(evidence_context))
 
 
 # Then steps

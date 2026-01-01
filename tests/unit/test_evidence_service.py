@@ -31,6 +31,34 @@ EvidenceServiceStack = tuple[RawEventWriter, RawEventTransformer, EvidenceBundle
 
 
 @dc.dataclass(frozen=True, slots=True, kw_only=True)
+class _BaseEventSpec:
+    """Base specification for creating event envelopes with repo metadata."""
+
+    repo_slug: str
+    source_event_id: str
+    event_type: str
+    occurred_at: dt.datetime
+    payload: dict[str, typ.Any]
+
+    def build(self) -> RawEventEnvelope:
+        """Build a RawEventEnvelope with common repo metadata enrichment."""
+        owner, name = parse_repo_slug(self.repo_slug)
+        enriched_payload = dict(self.payload)
+        enriched_payload["repo_owner"] = owner
+        enriched_payload["repo_name"] = name
+        if "metadata" not in enriched_payload:
+            enriched_payload["metadata"] = {}
+        return RawEventEnvelope(
+            source_system="github",
+            source_event_id=self.source_event_id,
+            event_type=self.event_type,
+            repo_external_id=self.repo_slug,
+            occurred_at=self.occurred_at,
+            payload=enriched_payload,
+        )
+
+
+@dc.dataclass(frozen=True, slots=True, kw_only=True)
 class PREventSpec:
     """Specification for creating a pull request test event."""
 
@@ -45,12 +73,10 @@ class PREventSpec:
 
     def build(self) -> RawEventEnvelope:
         """Build a RawEventEnvelope from this specification."""
-        owner, name = parse_repo_slug(self.repo_slug)
-        return RawEventEnvelope(
-            source_system="github",
+        return _BaseEventSpec(
+            repo_slug=self.repo_slug,
             source_event_id=f"pr-{self.pr_id}",
             event_type="github.pull_request",
-            repo_external_id=self.repo_slug,
             occurred_at=self.created_at,
             payload={
                 "id": self.pr_id,
@@ -59,17 +85,14 @@ class PREventSpec:
                 "state": self.state,
                 "base_branch": "main",
                 "head_branch": "feature",
-                "repo_owner": owner,
-                "repo_name": name,
                 "created_at": self.created_at.isoformat(),
                 "author_login": "dev",
                 "merged_at": self.merged_at.isoformat() if self.merged_at else None,
                 "closed_at": None,
                 "labels": list(self.labels),
                 "is_draft": False,
-                "metadata": {},
             },
-        )
+        ).build()
 
 
 @dc.dataclass(frozen=True, slots=True, kw_only=True)
@@ -86,27 +109,22 @@ class IssueEventSpec:
 
     def build(self) -> RawEventEnvelope:
         """Build a RawEventEnvelope from this specification."""
-        owner, name = parse_repo_slug(self.repo_slug)
-        return RawEventEnvelope(
-            source_system="github",
+        return _BaseEventSpec(
+            repo_slug=self.repo_slug,
             source_event_id=f"issue-{self.issue_id}",
             event_type="github.issue",
-            repo_external_id=self.repo_slug,
             occurred_at=self.created_at,
             payload={
                 "id": self.issue_id,
                 "number": self.issue_number,
                 "title": self.title,
                 "state": self.state,
-                "repo_owner": owner,
-                "repo_name": name,
                 "created_at": self.created_at.isoformat(),
                 "author_login": "user",
                 "closed_at": None,
                 "labels": list(self.labels),
-                "metadata": {},
             },
-        )
+        ).build()
 
 
 @dc.dataclass(frozen=True, slots=True, kw_only=True)
@@ -121,25 +139,20 @@ class DocChangeEventSpec:
 
     def build(self) -> RawEventEnvelope:
         """Build a RawEventEnvelope from this specification."""
-        owner, name = parse_repo_slug(self.repo_slug)
-        return RawEventEnvelope(
-            source_system="github",
+        return _BaseEventSpec(
+            repo_slug=self.repo_slug,
             source_event_id=f"doc-{self.commit_sha}-{self.path}",
             event_type="github.doc_change",
-            repo_external_id=self.repo_slug,
             occurred_at=self.occurred_at,
             payload={
                 "commit_sha": self.commit_sha,
                 "path": self.path,
                 "change_type": "modified",
-                "repo_owner": owner,
-                "repo_name": name,
                 "occurred_at": self.occurred_at.isoformat(),
                 "is_roadmap": self.is_roadmap,
                 "is_adr": False,
-                "metadata": {},
             },
-        )
+        ).build()
 
 
 def _commit_event(
