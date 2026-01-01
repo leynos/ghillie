@@ -21,6 +21,9 @@ from ghillie.silver import EventFact, RawEventTransformer, Repository
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+# Type alias for the evidence service stack fixture
+EvidenceServiceStack = tuple[RawEventWriter, RawEventTransformer, EvidenceBundleService]
+
 
 # ---------------------------------------------------------------------------
 # Test event builders - using dataclasses to reduce function argument counts
@@ -168,6 +171,35 @@ def _commit_event(
     )
 
 
+# ---------------------------------------------------------------------------
+# Fixtures and helpers to reduce code duplication in tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def evidence_service_stack(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> tuple[RawEventWriter, RawEventTransformer, EvidenceBundleService]:
+    """Return writer, transformer, and service instances."""
+    return (
+        RawEventWriter(session_factory),
+        RawEventTransformer(session_factory),
+        EvidenceBundleService(session_factory),
+    )
+
+
+async def get_repo_id(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> str:
+    """Query the database and return the repository ID."""
+    from sqlalchemy import select
+
+    async with session_factory() as session:
+        repo = await session.scalar(select(Repository))
+        assert repo is not None
+        return repo.id
+
+
 class TestEvidenceBundleServiceBuildBundle:
     """Tests for EvidenceBundleService.build_bundle."""
 
@@ -175,11 +207,10 @@ class TestEvidenceBundleServiceBuildBundle:
     async def test_builds_bundle_with_commits(
         self,
         session_factory: async_sessionmaker[AsyncSession],
+        evidence_service_stack: EvidenceServiceStack,
     ) -> None:
         """Bundle includes commits within the window."""
-        writer = RawEventWriter(session_factory)
-        transformer = RawEventTransformer(session_factory)
-        service = EvidenceBundleService(session_factory)
+        writer, transformer, service = evidence_service_stack
 
         repo_slug = "octo/reef"
         window_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
@@ -192,14 +223,7 @@ class TestEvidenceBundleServiceBuildBundle:
         )
         await transformer.process_pending()
 
-        # Get repo ID
-        async with session_factory() as session:
-            from sqlalchemy import select
-
-            repo = await session.scalar(select(Repository))
-            assert repo is not None
-            repo_id = repo.id
-
+        repo_id = await get_repo_id(session_factory)
         bundle = await service.build_bundle(repo_id, window_start, window_end)
 
         assert bundle.repository.slug == "octo/reef"
@@ -211,11 +235,10 @@ class TestEvidenceBundleServiceBuildBundle:
     async def test_builds_bundle_with_prs(
         self,
         session_factory: async_sessionmaker[AsyncSession],
+        evidence_service_stack: EvidenceServiceStack,
     ) -> None:
         """Bundle includes pull requests created in window."""
-        writer = RawEventWriter(session_factory)
-        transformer = RawEventTransformer(session_factory)
-        service = EvidenceBundleService(session_factory)
+        writer, transformer, service = evidence_service_stack
 
         repo_slug = "octo/reef"
         window_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
@@ -234,13 +257,7 @@ class TestEvidenceBundleServiceBuildBundle:
         )
         await transformer.process_pending()
 
-        async with session_factory() as session:
-            from sqlalchemy import select
-
-            repo = await session.scalar(select(Repository))
-            assert repo is not None
-            repo_id = repo.id
-
+        repo_id = await get_repo_id(session_factory)
         bundle = await service.build_bundle(repo_id, window_start, window_end)
 
         assert len(bundle.pull_requests) == 1
@@ -251,11 +268,10 @@ class TestEvidenceBundleServiceBuildBundle:
     async def test_builds_bundle_with_issues(
         self,
         session_factory: async_sessionmaker[AsyncSession],
+        evidence_service_stack: EvidenceServiceStack,
     ) -> None:
         """Bundle includes issues created in window."""
-        writer = RawEventWriter(session_factory)
-        transformer = RawEventTransformer(session_factory)
-        service = EvidenceBundleService(session_factory)
+        writer, transformer, service = evidence_service_stack
 
         repo_slug = "octo/reef"
         window_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
@@ -274,13 +290,7 @@ class TestEvidenceBundleServiceBuildBundle:
         )
         await transformer.process_pending()
 
-        async with session_factory() as session:
-            from sqlalchemy import select
-
-            repo = await session.scalar(select(Repository))
-            assert repo is not None
-            repo_id = repo.id
-
+        repo_id = await get_repo_id(session_factory)
         bundle = await service.build_bundle(repo_id, window_start, window_end)
 
         assert len(bundle.issues) == 1
@@ -291,11 +301,10 @@ class TestEvidenceBundleServiceBuildBundle:
     async def test_builds_bundle_with_doc_changes(
         self,
         session_factory: async_sessionmaker[AsyncSession],
+        evidence_service_stack: EvidenceServiceStack,
     ) -> None:
         """Bundle includes documentation changes in window."""
-        writer = RawEventWriter(session_factory)
-        transformer = RawEventTransformer(session_factory)
-        service = EvidenceBundleService(session_factory)
+        writer, transformer, service = evidence_service_stack
 
         repo_slug = "octo/reef"
         window_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
@@ -315,13 +324,7 @@ class TestEvidenceBundleServiceBuildBundle:
         )
         await transformer.process_pending()
 
-        async with session_factory() as session:
-            from sqlalchemy import select
-
-            repo = await session.scalar(select(Repository))
-            assert repo is not None
-            repo_id = repo.id
-
+        repo_id = await get_repo_id(session_factory)
         bundle = await service.build_bundle(repo_id, window_start, window_end)
 
         assert len(bundle.documentation_changes) == 1
@@ -332,11 +335,10 @@ class TestEvidenceBundleServiceBuildBundle:
     async def test_excludes_events_outside_window(
         self,
         session_factory: async_sessionmaker[AsyncSession],
+        evidence_service_stack: EvidenceServiceStack,
     ) -> None:
         """Bundle excludes events outside the window."""
-        writer = RawEventWriter(session_factory)
-        transformer = RawEventTransformer(session_factory)
-        service = EvidenceBundleService(session_factory)
+        writer, transformer, service = evidence_service_stack
 
         repo_slug = "octo/reef"
         window_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
@@ -355,13 +357,7 @@ class TestEvidenceBundleServiceBuildBundle:
 
         await transformer.process_pending()
 
-        async with session_factory() as session:
-            from sqlalchemy import select
-
-            repo = await session.scalar(select(Repository))
-            assert repo is not None
-            repo_id = repo.id
-
+        repo_id = await get_repo_id(session_factory)
         bundle = await service.build_bundle(repo_id, window_start, window_end)
 
         assert len(bundle.commits) == 1
@@ -371,11 +367,10 @@ class TestEvidenceBundleServiceBuildBundle:
     async def test_includes_previous_reports(
         self,
         session_factory: async_sessionmaker[AsyncSession],
+        evidence_service_stack: EvidenceServiceStack,
     ) -> None:
         """Bundle includes previous reports for context."""
-        writer = RawEventWriter(session_factory)
-        transformer = RawEventTransformer(session_factory)
-        service = EvidenceBundleService(session_factory)
+        writer, transformer, service = evidence_service_stack
 
         repo_slug = "octo/reef"
         window_start = dt.datetime(2024, 7, 8, tzinfo=dt.UTC)
@@ -386,16 +381,13 @@ class TestEvidenceBundleServiceBuildBundle:
         await writer.ingest(_commit_event(repo_slug, "abc123", commit_time))
         await transformer.process_pending()
 
+        repo_id = await get_repo_id(session_factory)
+
+        # Create a previous report
         async with session_factory() as session:
-            from sqlalchemy import select
-
-            repo = await session.scalar(select(Repository))
-            assert repo is not None
-
-            # Create a previous report
             prev_report = Report(
                 scope=ReportScope.REPOSITORY,
-                repository_id=repo.id,
+                repository_id=repo_id,
                 window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
                 window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
                 model="test-model",
@@ -407,7 +399,6 @@ class TestEvidenceBundleServiceBuildBundle:
             )
             session.add(prev_report)
             await session.commit()
-            repo_id = repo.id
 
         bundle = await service.build_bundle(repo_id, window_start, window_end)
 
@@ -421,11 +412,10 @@ class TestEvidenceBundleServiceBuildBundle:
     async def test_computes_work_type_groupings(
         self,
         session_factory: async_sessionmaker[AsyncSession],
+        evidence_service_stack: EvidenceServiceStack,
     ) -> None:
         """Bundle computes work type groupings."""
-        writer = RawEventWriter(session_factory)
-        transformer = RawEventTransformer(session_factory)
-        service = EvidenceBundleService(session_factory)
+        writer, transformer, service = evidence_service_stack
 
         repo_slug = "octo/reef"
         window_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
@@ -462,13 +452,7 @@ class TestEvidenceBundleServiceBuildBundle:
         )
         await transformer.process_pending()
 
-        async with session_factory() as session:
-            from sqlalchemy import select
-
-            repo = await session.scalar(select(Repository))
-            assert repo is not None
-            repo_id = repo.id
-
+        repo_id = await get_repo_id(session_factory)
         bundle = await service.build_bundle(repo_id, window_start, window_end)
 
         # Should have groupings for feature and bug
@@ -485,11 +469,10 @@ class TestEvidenceBundleServiceBuildBundle:
     async def test_collects_event_fact_ids(
         self,
         session_factory: async_sessionmaker[AsyncSession],
+        evidence_service_stack: EvidenceServiceStack,
     ) -> None:
         """Bundle collects event fact IDs for coverage tracking."""
-        writer = RawEventWriter(session_factory)
-        transformer = RawEventTransformer(session_factory)
-        service = EvidenceBundleService(session_factory)
+        writer, transformer, service = evidence_service_stack
 
         repo_slug = "octo/reef"
         window_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
@@ -499,14 +482,12 @@ class TestEvidenceBundleServiceBuildBundle:
         await writer.ingest(_commit_event(repo_slug, "abc123", commit_time))
         await transformer.process_pending()
 
+        repo_id = await get_repo_id(session_factory)
+
+        # Verify event facts exist
         async with session_factory() as session:
             from sqlalchemy import select
 
-            repo = await session.scalar(select(Repository))
-            assert repo is not None
-            repo_id = repo.id
-
-            # Verify event facts exist
             facts = (await session.scalars(select(EventFact))).all()
             assert len(facts) == 1
 
@@ -518,10 +499,10 @@ class TestEvidenceBundleServiceBuildBundle:
     @pytest.mark.asyncio
     async def test_raises_for_missing_repository(
         self,
-        session_factory: async_sessionmaker[AsyncSession],
+        evidence_service_stack: EvidenceServiceStack,
     ) -> None:
         """Build raises ValueError for missing repository."""
-        service = EvidenceBundleService(session_factory)
+        _writer, _transformer, service = evidence_service_stack
 
         with pytest.raises(ValueError, match="Repository not found"):
             await service.build_bundle(
@@ -534,11 +515,10 @@ class TestEvidenceBundleServiceBuildBundle:
     async def test_empty_window_returns_empty_bundle(
         self,
         session_factory: async_sessionmaker[AsyncSession],
+        evidence_service_stack: EvidenceServiceStack,
     ) -> None:
         """Bundle with no events in window is empty."""
-        writer = RawEventWriter(session_factory)
-        transformer = RawEventTransformer(session_factory)
-        service = EvidenceBundleService(session_factory)
+        writer, transformer, service = evidence_service_stack
 
         repo_slug = "octo/reef"
         # Commit outside window to create repo
@@ -547,12 +527,7 @@ class TestEvidenceBundleServiceBuildBundle:
         )
         await transformer.process_pending()
 
-        async with session_factory() as session:
-            from sqlalchemy import select
-
-            repo = await session.scalar(select(Repository))
-            assert repo is not None
-            repo_id = repo.id
+        repo_id = await get_repo_id(session_factory)
 
         # Query for a window with no events
         bundle = await service.build_bundle(
@@ -572,11 +547,10 @@ class TestEvidenceBundleServiceBuildBundle:
     async def test_sets_generated_at(
         self,
         session_factory: async_sessionmaker[AsyncSession],
+        evidence_service_stack: EvidenceServiceStack,
     ) -> None:
         """Bundle records generation timestamp."""
-        writer = RawEventWriter(session_factory)
-        transformer = RawEventTransformer(session_factory)
-        service = EvidenceBundleService(session_factory)
+        writer, transformer, service = evidence_service_stack
 
         repo_slug = "octo/reef"
         await writer.ingest(
@@ -584,12 +558,7 @@ class TestEvidenceBundleServiceBuildBundle:
         )
         await transformer.process_pending()
 
-        async with session_factory() as session:
-            from sqlalchemy import select
-
-            repo = await session.scalar(select(Repository))
-            assert repo is not None
-            repo_id = repo.id
+        repo_id = await get_repo_id(session_factory)
 
         before = dt.datetime.now(dt.UTC)
         bundle = await service.build_bundle(

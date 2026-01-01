@@ -82,12 +82,10 @@ class PREnvelopeSpec:
 
     def build(self) -> RawEventEnvelope:
         """Build a RawEventEnvelope from this specification."""
-        owner, name = parse_repo_slug(self.repo_slug)
-        return RawEventEnvelope(
-            source_system="github",
+        return _BaseEnvelopeSpec(
+            repo_slug=self.repo_slug,
             source_event_id=f"pr-{self.pr_id}",
             event_type="github.pull_request",
-            repo_external_id=self.repo_slug,
             occurred_at=self.created_at,
             payload={
                 "id": self.pr_id,
@@ -96,17 +94,14 @@ class PREnvelopeSpec:
                 "state": "open",
                 "base_branch": "main",
                 "head_branch": "feature",
-                "repo_owner": owner,
-                "repo_name": name,
                 "created_at": self.created_at.isoformat(),
                 "author_login": "dev",
                 "merged_at": None,
                 "closed_at": None,
                 "labels": list(self.labels),
                 "is_draft": False,
-                "metadata": {},
             },
-        )
+        ).build()
 
 
 @dc.dataclass(frozen=True, slots=True, kw_only=True)
@@ -122,27 +117,22 @@ class IssueEnvelopeSpec:
 
     def build(self) -> RawEventEnvelope:
         """Build a RawEventEnvelope from this specification."""
-        owner, name = parse_repo_slug(self.repo_slug)
-        return RawEventEnvelope(
-            source_system="github",
+        return _BaseEnvelopeSpec(
+            repo_slug=self.repo_slug,
             source_event_id=f"issue-{self.issue_id}",
             event_type="github.issue",
-            repo_external_id=self.repo_slug,
             occurred_at=self.created_at,
             payload={
                 "id": self.issue_id,
                 "number": self.issue_number,
                 "title": self.title,
                 "state": "open",
-                "repo_owner": owner,
-                "repo_name": name,
                 "created_at": self.created_at.isoformat(),
                 "author_login": "user",
                 "closed_at": None,
                 "labels": list(self.labels),
-                "metadata": {},
             },
-        )
+        ).build()
 
 
 @dc.dataclass(frozen=True, slots=True, kw_only=True)
@@ -157,25 +147,20 @@ class DocChangeEnvelopeSpec:
 
     def build(self) -> RawEventEnvelope:
         """Build a RawEventEnvelope from this specification."""
-        owner, name = parse_repo_slug(self.repo_slug)
-        return RawEventEnvelope(
-            source_system="github",
+        return _BaseEnvelopeSpec(
+            repo_slug=self.repo_slug,
             source_event_id=f"doc-{self.commit_sha}-{self.path}",
             event_type="github.doc_change",
-            repo_external_id=self.repo_slug,
             occurred_at=self.occurred_at,
             payload={
                 "commit_sha": self.commit_sha,
                 "path": self.path,
                 "change_type": "modified",
-                "repo_owner": owner,
-                "repo_name": name,
                 "occurred_at": self.occurred_at.isoformat(),
                 "is_roadmap": self.is_roadmap,
                 "is_adr": False,
-                "metadata": {},
             },
-        )
+        ).build()
 
 
 def _commit_envelope(
@@ -207,6 +192,57 @@ def _commit_envelope(
     )
 
 
+# ---------------------------------------------------------------------------
+# Helpers to reduce code duplication
+# ---------------------------------------------------------------------------
+
+
+@dc.dataclass(frozen=True, slots=True, kw_only=True)
+class _BaseEnvelopeSpec:
+    """Base specification for building RawEventEnvelope with repo metadata."""
+
+    repo_slug: str
+    source_event_id: str
+    event_type: str
+    occurred_at: dt.datetime
+    payload: dict[str, typ.Any]
+
+    def build(self) -> RawEventEnvelope:
+        """Build a RawEventEnvelope with common repo metadata enrichment."""
+        owner, name = parse_repo_slug(self.repo_slug)
+        payload = dict(self.payload)
+        payload["repo_owner"] = owner
+        payload["repo_name"] = name
+        if "metadata" not in payload:
+            payload["metadata"] = {}
+        return RawEventEnvelope(
+            source_system="github",
+            source_event_id=self.source_event_id,
+            event_type=self.event_type,
+            repo_external_id=self.repo_slug,
+            occurred_at=self.occurred_at,
+            payload=payload,
+        )
+
+
+async def _setup_repo_from_events(
+    evidence_context: EvidenceContext,
+    events: list[RawEventEnvelope],
+) -> None:
+    """Ingest events, process with transformer, and set repo_id in context."""
+    writer = evidence_context["writer"]
+    transformer = evidence_context["transformer"]
+
+    for event in events:
+        await writer.ingest(event)
+    await transformer.process_pending()
+
+    async with evidence_context["session_factory"]() as session:
+        repo = await session.scalar(select(Repository))
+        assert repo is not None
+        evidence_context["repo_id"] = repo.id
+
+
 # Given steps
 
 
@@ -229,88 +265,63 @@ def given_empty_store(
 @given('a repository "octo/reef" with ingested GitHub events')
 def given_repo_with_events(evidence_context: EvidenceContext) -> None:
     """Ingest a variety of GitHub events for the repository."""
+    repo_slug = evidence_context["repo_slug"]
 
-    async def _run() -> None:
-        writer = evidence_context["writer"]
-        transformer = evidence_context["transformer"]
-        repo_slug = evidence_context["repo_slug"]
+    # Commit
+    commit_time = dt.datetime(2024, 7, 3, 10, 0, tzinfo=dt.UTC)
+    # Pull request
+    pr_time = dt.datetime(2024, 7, 4, tzinfo=dt.UTC)
+    # Issue
+    issue_time = dt.datetime(2024, 7, 5, tzinfo=dt.UTC)
+    # Documentation change
+    doc_time = dt.datetime(2024, 7, 6, tzinfo=dt.UTC)
 
-        # Commit
-        commit_time = dt.datetime(2024, 7, 3, 10, 0, tzinfo=dt.UTC)
-        await writer.ingest(
-            _commit_envelope(repo_slug, "abc123", commit_time, "feat: add auth")
-        )
+    events = [
+        _commit_envelope(repo_slug, "abc123", commit_time, "feat: add auth"),
+        PREnvelopeSpec(
+            repo_slug=repo_slug,
+            pr_id=100,
+            pr_number=10,
+            created_at=pr_time,
+            title="Add login feature",
+        ).build(),
+        IssueEnvelopeSpec(
+            repo_slug=repo_slug,
+            issue_id=200,
+            issue_number=20,
+            created_at=issue_time,
+            title="Bug report",
+        ).build(),
+        _commit_envelope(repo_slug, "doc456", doc_time),
+        DocChangeEnvelopeSpec(
+            repo_slug=repo_slug,
+            commit_sha="doc456",
+            path="docs/roadmap.md",
+            occurred_at=doc_time,
+            is_roadmap=True,
+        ).build(),
+    ]
 
-        # Pull request
-        pr_time = dt.datetime(2024, 7, 4, tzinfo=dt.UTC)
-        await writer.ingest(
-            PREnvelopeSpec(
-                repo_slug=repo_slug,
-                pr_id=100,
-                pr_number=10,
-                created_at=pr_time,
-                title="Add login feature",
-            ).build()
-        )
-
-        # Issue
-        issue_time = dt.datetime(2024, 7, 5, tzinfo=dt.UTC)
-        await writer.ingest(
-            IssueEnvelopeSpec(
-                repo_slug=repo_slug,
-                issue_id=200,
-                issue_number=20,
-                created_at=issue_time,
-                title="Bug report",
-            ).build()
-        )
-
-        # Documentation change
-        doc_time = dt.datetime(2024, 7, 6, tzinfo=dt.UTC)
-        await writer.ingest(_commit_envelope(repo_slug, "doc456", doc_time))
-        await writer.ingest(
-            DocChangeEnvelopeSpec(
-                repo_slug=repo_slug,
-                commit_sha="doc456",
-                path="docs/roadmap.md",
-                occurred_at=doc_time,
-                is_roadmap=True,
-            ).build()
-        )
-
-        await transformer.process_pending()
-
-        async with evidence_context["session_factory"]() as session:
-            repo = await session.scalar(select(Repository))
-            assert repo is not None
-            evidence_context["repo_id"] = repo.id
-
-    asyncio.run(_run())
+    asyncio.run(_setup_repo_from_events(evidence_context, events))
 
 
 @given('a repository "octo/reef" with a previous report')
 def given_repo_with_previous_report(evidence_context: EvidenceContext) -> None:
     """Create a repository with a previous report."""
+    repo_slug = evidence_context["repo_slug"]
 
-    async def _run() -> None:
-        writer = evidence_context["writer"]
-        transformer = evidence_context["transformer"]
-        repo_slug = evidence_context["repo_slug"]
+    # Commit to establish repo
+    commit_time = dt.datetime(2024, 7, 10, tzinfo=dt.UTC)
+    events = [_commit_envelope(repo_slug, "abc123", commit_time)]
 
-        # Commit to establish repo
-        commit_time = dt.datetime(2024, 7, 10, tzinfo=dt.UTC)
-        await writer.ingest(_commit_envelope(repo_slug, "abc123", commit_time))
-        await transformer.process_pending()
+    async def _setup_with_report() -> None:
+        await _setup_repo_from_events(evidence_context, events)
 
+        # Create previous report
         async with evidence_context["session_factory"]() as session:
-            repo = await session.scalar(select(Repository))
-            assert repo is not None
-            evidence_context["repo_id"] = repo.id
-
-            # Create previous report
             prev_report = Report(
                 scope=ReportScope.REPOSITORY,
-                repository_id=repo.id,
+                repository_id=evidence_context["repo_id"],
                 window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
                 window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
                 model="test-model",
@@ -323,66 +334,44 @@ def given_repo_with_previous_report(evidence_context: EvidenceContext) -> None:
             session.add(prev_report)
             await session.commit()
 
-        # Update window for next report
-        evidence_context["window_start"] = dt.datetime(2024, 7, 8, tzinfo=dt.UTC)
-        evidence_context["window_end"] = dt.datetime(2024, 7, 15, tzinfo=dt.UTC)
+    asyncio.run(_setup_with_report())
 
-    asyncio.run(_run())
+    # Update window for next report
+    evidence_context["window_start"] = dt.datetime(2024, 7, 8, tzinfo=dt.UTC)
+    evidence_context["window_end"] = dt.datetime(2024, 7, 15, tzinfo=dt.UTC)
 
 
 @given('a repository "octo/reef" with a pull request labelled "bug"')
 def given_repo_with_bug_pr(evidence_context: EvidenceContext) -> None:
     """Create a repository with a bug-labelled PR."""
+    repo_slug = evidence_context["repo_slug"]
+    pr_time = dt.datetime(2024, 7, 5, tzinfo=dt.UTC)
 
-    async def _run() -> None:
-        writer = evidence_context["writer"]
-        transformer = evidence_context["transformer"]
-        repo_slug = evidence_context["repo_slug"]
+    events = [
+        PREnvelopeSpec(
+            repo_slug=repo_slug,
+            pr_id=100,
+            pr_number=10,
+            created_at=pr_time,
+            title="Fix login issue",
+            labels=("bug",),
+        ).build(),
+    ]
 
-        pr_time = dt.datetime(2024, 7, 5, tzinfo=dt.UTC)
-        await writer.ingest(
-            PREnvelopeSpec(
-                repo_slug=repo_slug,
-                pr_id=100,
-                pr_number=10,
-                created_at=pr_time,
-                title="Fix login issue",
-                labels=("bug",),
-            ).build()
-        )
-        await transformer.process_pending()
-
-        async with evidence_context["session_factory"]() as session:
-            repo = await session.scalar(select(Repository))
-            assert repo is not None
-            evidence_context["repo_id"] = repo.id
-
-    asyncio.run(_run())
+    asyncio.run(_setup_repo_from_events(evidence_context, events))
 
 
 @given('a repository "octo/reef" with a commit message "fix: resolve login issue"')
 def given_repo_with_fix_commit(evidence_context: EvidenceContext) -> None:
     """Create a repository with a fix commit."""
+    repo_slug = evidence_context["repo_slug"]
+    commit_time = dt.datetime(2024, 7, 5, tzinfo=dt.UTC)
 
-    async def _run() -> None:
-        writer = evidence_context["writer"]
-        transformer = evidence_context["transformer"]
-        repo_slug = evidence_context["repo_slug"]
+    events = [
+        _commit_envelope(repo_slug, "fix123", commit_time, "fix: resolve login issue"),
+    ]
 
-        commit_time = dt.datetime(2024, 7, 5, tzinfo=dt.UTC)
-        await writer.ingest(
-            _commit_envelope(
-                repo_slug, "fix123", commit_time, "fix: resolve login issue"
-            )
-        )
-        await transformer.process_pending()
-
-        async with evidence_context["session_factory"]() as session:
-            repo = await session.scalar(select(Repository))
-            assert repo is not None
-            evidence_context["repo_id"] = repo.id
-
-    asyncio.run(_run())
+    asyncio.run(_setup_repo_from_events(evidence_context, events))
 
 
 # When steps
