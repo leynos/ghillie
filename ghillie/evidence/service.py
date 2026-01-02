@@ -62,6 +62,17 @@ class _WorkTypeBucket:
     titles: list[str]
 
 
+class _ClassifiableEvidence(typ.Protocol):
+    """Protocol for evidence with work type and title."""
+
+    work_type: WorkType
+    title: str
+
+
+# TypeVar for entities that satisfy the ClassifiableEvidence protocol
+_E = typ.TypeVar("_E", bound=_ClassifiableEvidence)
+
+
 class EvidenceBundleService:
     """Generates evidence bundles for repository status reporting.
 
@@ -481,6 +492,29 @@ class EvidenceBundleService:
             for dc in doc_changes
         ]
 
+    def _populate_entity_bucket(
+        self,
+        buckets: dict[WorkType, _WorkTypeBucket],
+        entities: list[_E],
+        get_bucket_list: typ.Callable[[_WorkTypeBucket], list[_E]],
+    ) -> None:
+        """Populate buckets with entities (PRs or issues).
+
+        Parameters
+        ----------
+        buckets
+            Dictionary mapping work types to their buckets.
+        entities
+            List of evidence entities to process.
+        get_bucket_list
+            Function that extracts the appropriate list from a bucket.
+
+        """
+        for entity in entities:
+            bucket = buckets[entity.work_type]
+            get_bucket_list(bucket).append(entity)
+            bucket.titles.append(entity.title)
+
     def _populate_commit_bucket(
         self,
         buckets: dict[WorkType, _WorkTypeBucket],
@@ -512,40 +546,16 @@ class EvidenceBundleService:
         buckets: dict[WorkType, _WorkTypeBucket],
         prs: list[PullRequestEvidence],
     ) -> None:
-        """Populate buckets with pull requests.
-
-        Parameters
-        ----------
-        buckets
-            Dictionary mapping work types to their buckets.
-        prs
-            List of pull request evidence to process.
-
-        """
-        for pr in prs:
-            bucket = buckets[pr.work_type]
-            bucket.prs.append(pr)
-            bucket.titles.append(pr.title)
+        """Populate buckets with pull requests."""
+        self._populate_entity_bucket(buckets, prs, lambda b: b.prs)
 
     def _populate_issue_bucket(
         self,
         buckets: dict[WorkType, _WorkTypeBucket],
         issues: list[IssueEvidence],
     ) -> None:
-        """Populate buckets with issues.
-
-        Parameters
-        ----------
-        buckets
-            Dictionary mapping work types to their buckets.
-        issues
-            List of issue evidence to process.
-
-        """
-        for issue in issues:
-            bucket = buckets[issue.work_type]
-            bucket.issues.append(issue)
-            bucket.titles.append(issue.title)
+        """Populate buckets with issues."""
+        self._populate_entity_bucket(buckets, issues, lambda b: b.issues)
 
     def _build_grouping_from_bucket(
         self,
