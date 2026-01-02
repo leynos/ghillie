@@ -8,9 +8,6 @@ import typing as typ
 from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 
-if typ.TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
 from ghillie.common.time import utcnow
 from ghillie.gold.storage import Report, ReportScope
 from ghillie.silver.storage import (
@@ -42,6 +39,12 @@ from .models import (
     WorkType,
     WorkTypeGrouping,
 )
+
+if typ.TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+    from sqlalchemy.sql import ColumnElement
+
+T = typ.TypeVar("T")
 
 
 class EvidenceBundleService:
@@ -76,6 +79,85 @@ class EvidenceBundleService:
             classification_config or DEFAULT_CLASSIFICATION_CONFIG
         )
         self._max_previous_reports = max_previous_reports
+
+    async def _fetch_entities_in_window(  # noqa: PLR0913
+        self,
+        session: AsyncSession,
+        model: type[T],
+        repository_id: str,
+        window_start: dt.datetime,
+        window_end: dt.datetime,
+        time_field: ColumnElement[dt.datetime],
+        repo_field: ColumnElement[str] | None = None,
+        order_by: ColumnElement[dt.datetime] | None = None,
+        additional_filters: ColumnElement[bool] | None = None,
+    ) -> list[T]:
+        """Fetch entities within a time window.
+
+        Parameters
+        ----------
+        session
+            Database session.
+        model
+            SQLAlchemy model class to query.
+        repository_id
+            The repository ID to filter by.
+        window_start
+            Start of the window (inclusive).
+        window_end
+            End of the window (exclusive).
+        time_field
+            Column to use for time filtering.
+        repo_field
+            Column to use for repository filtering (defaults to model.repo_id).
+        order_by
+            Column to order by (defaults to time_field descending).
+        additional_filters
+            Optional additional filter conditions.
+
+        Returns
+        -------
+        list[T]
+            List of matching entities.
+
+        """
+        if repo_field is None:
+            repo_field = model.repo_id  # type: ignore[attr-defined]
+        if order_by is None:
+            order_by = time_field.desc()
+
+        conditions = [
+            repo_field == repository_id,
+            time_field >= window_start,
+            time_field < window_end,
+        ]
+        if additional_filters is not None:
+            conditions.append(additional_filters)
+
+        stmt = select(model).where(*conditions).order_by(order_by)
+        return list((await session.scalars(stmt)).all())
+
+    def _build_classified_evidence(
+        self,
+        entities: list[T],
+        builder: typ.Callable[[T], typ.Any],
+    ) -> list[typ.Any]:
+        """Build evidence list by applying a builder function to each entity.
+
+        Parameters
+        ----------
+        entities
+            List of ORM entities to convert.
+        builder
+            Function that converts an entity to an evidence struct.
+
+        Returns
+        -------
+        list
+            List of evidence structs.
+
+        """
+        return [builder(entity) for entity in entities]
 
     async def build_bundle(
         self,
@@ -240,16 +322,14 @@ class EvidenceBundleService:
         window_end: dt.datetime,
     ) -> list[Commit]:
         """Fetch commits within the window."""
-        stmt = (
-            select(Commit)
-            .where(
-                Commit.repo_id == repository_id,
-                Commit.committed_at >= window_start,
-                Commit.committed_at < window_end,
-            )
-            .order_by(Commit.committed_at.desc())
+        return await self._fetch_entities_in_window(
+            session,
+            Commit,
+            repository_id,
+            window_start,
+            window_end,
+            time_field=Commit.committed_at,
         )
-        return list((await session.scalars(stmt)).all())
 
     async def _fetch_pull_requests(
         self,
@@ -307,16 +387,14 @@ class EvidenceBundleService:
         window_end: dt.datetime,
     ) -> list[DocumentationChange]:
         """Fetch documentation changes within the window."""
-        stmt = (
-            select(DocumentationChange)
-            .where(
-                DocumentationChange.repo_id == repository_id,
-                DocumentationChange.occurred_at >= window_start,
-                DocumentationChange.occurred_at < window_end,
-            )
-            .order_by(DocumentationChange.occurred_at.desc())
+        return await self._fetch_entities_in_window(
+            session,
+            DocumentationChange,
+            repository_id,
+            window_start,
+            window_end,
+            time_field=DocumentationChange.occurred_at,
         )
-        return list((await session.scalars(stmt)).all())
 
     async def _fetch_event_fact_ids(
         self,
@@ -335,8 +413,9 @@ class EvidenceBundleService:
 
     def _build_commit_evidence(self, commits: list[Commit]) -> list[CommitEvidence]:
         """Convert Commit models to CommitEvidence structs."""
-        return [
-            CommitEvidence(
+
+        def build_commit(c: Commit) -> CommitEvidence:
+            return CommitEvidence(
                 sha=c.sha,
                 message=c.message,
                 author_name=c.author_name,
@@ -345,13 +424,14 @@ class EvidenceBundleService:
                 work_type=classify_commit(c, self._classification_config),
                 is_merge_commit=is_merge_commit(c),
             )
-            for c in commits
-        ]
+
+        return self._build_classified_evidence(commits, build_commit)
 
     def _build_pr_evidence(self, prs: list[PullRequest]) -> list[PullRequestEvidence]:
         """Convert PullRequest models to PullRequestEvidence structs."""
-        return [
-            PullRequestEvidence(
+
+        def build_pr(pr: PullRequest) -> PullRequestEvidence:
+            return PullRequestEvidence(
                 id=pr.id,
                 number=pr.number,
                 title=pr.title,
@@ -364,13 +444,14 @@ class EvidenceBundleService:
                 work_type=classify_pull_request(pr, self._classification_config),
                 is_draft=pr.is_draft,
             )
-            for pr in prs
-        ]
+
+        return self._build_classified_evidence(prs, build_pr)
 
     def _build_issue_evidence(self, issues: list[Issue]) -> list[IssueEvidence]:
         """Convert Issue models to IssueEvidence structs."""
-        return [
-            IssueEvidence(
+
+        def build_issue(i: Issue) -> IssueEvidence:
+            return IssueEvidence(
                 id=i.id,
                 number=i.number,
                 title=i.title,
@@ -381,8 +462,8 @@ class EvidenceBundleService:
                 closed_at=i.closed_at,
                 work_type=classify_issue(i, self._classification_config),
             )
-            for i in issues
-        ]
+
+        return self._build_classified_evidence(issues, build_issue)
 
     def _build_doc_evidence(
         self, doc_changes: list[DocumentationChange]
