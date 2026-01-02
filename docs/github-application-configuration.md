@@ -7,7 +7,7 @@ minimal permissions required for Ghillie's read-only operations.
 ## Quick start: required permissions at a glance
 
 For operators who need the minimal configuration without reading the full
-document, the following table summarises the required GitHub App permissions:
+document, the following table summarizes the required GitHub App permissions:
 
 | Category     | Permission    | Access level         |
 | ------------ | ------------- | -------------------- |

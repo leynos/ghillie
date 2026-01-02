@@ -240,6 +240,8 @@ def _classify_by_general_patterns(
     """Classify by general patterns.
 
     Order: bug > feature > refactor > chore
+    (Bug first as it typically requires immediate attention;
+    chore last as it's the least specific category)
     """
     if _title_matches_compiled(title, config.compiled_bug_patterns):
         return WorkType.BUG

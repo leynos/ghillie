@@ -351,13 +351,19 @@ class EvidenceBundleService:
 
     def _parse_status(self, status: typ.Any) -> ReportStatus:  # noqa: ANN401
         """Parse status string into ReportStatus enum."""
-        if status is None:
-            return ReportStatus.UNKNOWN
-        status_str = str(status).lower()
-        try:
-            return ReportStatus(status_str)
-        except ValueError:
-            return ReportStatus.UNKNOWN
+        match status:
+            case None:
+                return ReportStatus.UNKNOWN
+            case str() as s:
+                try:
+                    return ReportStatus(s.lower())
+                except ValueError:
+                    return ReportStatus.UNKNOWN
+            case _:
+                try:
+                    return ReportStatus(str(status).lower())
+                except ValueError:
+                    return ReportStatus.UNKNOWN
 
     async def _fetch_pull_requests(
         self,
@@ -482,14 +488,14 @@ class EvidenceBundleService:
         """Convert DocumentationChange models to DocumentationEvidence structs."""
         return [
             DocumentationEvidence(
-                path=dc.path,
-                change_type=dc.change_type,
-                commit_sha=dc.commit_sha,
-                occurred_at=dc.occurred_at,
-                is_roadmap=dc.is_roadmap,
-                is_adr=dc.is_adr,
+                path=doc.path,
+                change_type=doc.change_type,
+                commit_sha=doc.commit_sha,
+                occurred_at=doc.occurred_at,
+                is_roadmap=doc.is_roadmap,
+                is_adr=doc.is_adr,
             )
-            for dc in doc_changes
+            for doc in doc_changes
         ]
 
     def _populate_entity_bucket(

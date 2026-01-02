@@ -640,13 +640,13 @@ would not destabilize the reporting infrastructure, paving the way for a true
 ## 9. Evidence Bundle Architecture (Phase 2.1)
 
 The evidence bundle provides an in-memory representation of repository activity
-within a reporting window, ready for LLM summarisation. This structure is the
+within a reporting window, ready for LLM summarization. This structure is the
 foundation for Phase 2's repository-level status reports.
 
 ### 9.1 Design Decisions
 
 **msgspec with frozen=True:** Evidence structs use `msgspec.Struct` with
-`frozen=True` for immutability and efficient serialisation. This matches
+`frozen=True` for immutability and efficient serialization. This matches
 catalogue model patterns and enables future JSON export for model prompts. The
 frozen constraint ensures thread safety when bundles are passed between
 processing stages.
@@ -658,7 +658,7 @@ mutation during report generation and provides clear documentation of intent.
 **Work type classification hierarchy:** Labels take precedence over title
 patterns because labels represent explicit author intent, while title patterns
 are heuristic inference. The classification order (bug > feature > refactor >
-documentation > chore) prioritises specificity:
+documentation > chore) prioritizes specificity:
 
 1. Bug labels/patterns are checked first as they typically require immediate
    attention.
@@ -671,7 +671,7 @@ documentation > chore) prioritises specificity:
 **Previous report limit:** Maximum two previous reports are included to provide
 trend context without overwhelming the evidence bundle. This balances LLM
 context window constraints with historical awareness. The reports are ordered
-most-recent-first to prioritise immediate context.
+most-recent-first to prioritize immediate context.
 
 **EventFact ID tracking:** The bundle tracks `event_fact_ids` to enable
 downstream report coverage recording without re-querying the database. This
@@ -817,7 +817,7 @@ classDiagram
 ### 9.3 Classification Configuration
 
 Work type classification is configurable via `ClassificationConfig`. The
-default configuration recognises common label conventions and conventional
+default configuration recognizes common label conventions and conventional
 commit patterns:
 
 **Default label patterns:**
@@ -826,7 +826,7 @@ commit patterns:
 | ------------- | -------------------------------------------------------- |
 | Bug           | bug, bugfix, fix, defect, hotfix                         |
 | Feature       | feature, enhancement, new feature, feat                  |
-| Refactor      | refactor, refactoring, tech debt, technical debt,cleanup |
+| Refactor      | refactor, refactoring, tech debt, technical debt, cleanup |
 | Chore         | chore, maintenance, dependencies, deps, ci, build        |
 | Documentation | documentation, docs, doc                                 |
 
