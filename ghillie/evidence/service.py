@@ -1,4 +1,24 @@
-"""Evidence bundle generation service."""
+"""Evidence bundle generation service.
+
+This module provides the EvidenceBundleService class for constructing evidence
+bundles that aggregate repository activity within a reporting window. Evidence
+bundles are used by the LLM layer to generate human-readable status reports.
+
+The service queries the Silver layer (normalized GitHub events) and transforms
+them into classified evidence items organized by work type, ready for
+summarization.
+
+Example:
+-------
+>>> from ghillie.evidence.service import EvidenceBundleService
+>>> service = EvidenceBundleService(session_factory)
+>>> bundle = await service.build_bundle(
+...     repository=repo,
+...     window_start=start,
+...     window_end=end,
+... )
+
+"""
 
 from __future__ import annotations
 
