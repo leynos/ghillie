@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import dataclasses as dc
-import datetime as dt  # noqa: TC003
 import typing as typ
 
 from sqlalchemy import or_, select
@@ -41,15 +40,15 @@ from .models import (
 )
 
 if typ.TYPE_CHECKING:
+    import datetime as dt
+
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
     from sqlalchemy.sql.elements import SQLColumnExpression
 
     # Alias for SQLColumnExpression accepting datetime or nullable datetime
-    DateTimeColumnExpr = (
+    type DateTimeColumnExpr = (
         SQLColumnExpression[dt.datetime] | SQLColumnExpression[dt.datetime | None]
     )
-
-T = typ.TypeVar("T")
 
 
 @dc.dataclass(slots=True)
@@ -67,10 +66,6 @@ class _ClassifiableEvidence(typ.Protocol):
 
     work_type: WorkType
     title: str
-
-
-# TypeVar for entities that satisfy the ClassifiableEvidence protocol
-_E = typ.TypeVar("_E", bound=_ClassifiableEvidence)
 
 
 @dc.dataclass(frozen=True, slots=True)
@@ -126,7 +121,7 @@ class EvidenceBundleService:
         )
         self._max_previous_reports = max_previous_reports
 
-    async def _fetch_repo_entities_in_window(
+    async def _fetch_repo_entities_in_window[T](
         self,
         session: AsyncSession,
         model: type[T],
@@ -503,11 +498,11 @@ class EvidenceBundleService:
             for doc in doc_changes
         ]
 
-    def _populate_entity_bucket(
+    def _populate_entity_bucket[E: _ClassifiableEvidence](
         self,
         buckets: dict[WorkType, _WorkTypeBucket],
-        entities: list[_E],
-        get_bucket_list: typ.Callable[[_WorkTypeBucket], list[_E]],
+        entities: list[E],
+        get_bucket_list: typ.Callable[[_WorkTypeBucket], list[E]],
     ) -> None:
         """Populate buckets with entities (PRs or issues).
 
