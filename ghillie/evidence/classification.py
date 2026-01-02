@@ -11,7 +11,25 @@ import msgspec
 from .models import WorkType
 
 if typ.TYPE_CHECKING:
-    from ghillie.silver.storage import Commit, Issue, PullRequest
+    from ghillie.silver.storage import Commit
+
+
+@typ.runtime_checkable
+class Classifiable(typ.Protocol):
+    """Protocol for entities that can be classified by labels and title.
+
+    Any entity with labels and title attributes can be classified.
+    """
+
+    @property
+    def labels(self) -> typ.Sequence[str]:
+        """Labels attached to the entity."""
+        ...
+
+    @property
+    def title(self) -> str:
+        """Title of the entity."""
+        ...
 
 
 @functools.lru_cache(maxsize=32)
@@ -145,16 +163,14 @@ def _labels_match(labels: typ.Sequence[str], patterns: tuple[str, ...]) -> bool:
     return any(_normalise_label(label) in normalised_patterns for label in labels)
 
 
-def _title_matches_compiled(
-    title: str, patterns: tuple[re.Pattern[str], ...]
-) -> bool:
+def _title_matches_compiled(title: str, patterns: tuple[re.Pattern[str], ...]) -> bool:
     """Check if title matches any precompiled regex pattern."""
     lowered = title.lower()
     return any(pattern.search(lowered) for pattern in patterns)
 
 
 def _prefix_only_compiled(
-    patterns: tuple[re.Pattern[str], ...]
+    patterns: tuple[re.Pattern[str], ...],
 ) -> tuple[re.Pattern[str], ...]:
     """Filter to keep only patterns that start with ^."""
     return tuple(p for p in patterns if p.pattern.startswith("^"))
@@ -299,18 +315,18 @@ def _classify_by_labels_then_title(
     return WorkType.UNKNOWN
 
 
-def classify_pull_request(
-    pr: PullRequest,
+def classify_entity(
+    entity: Classifiable,
     config: ClassificationConfig = DEFAULT_CLASSIFICATION_CONFIG,
 ) -> WorkType:
-    """Classify a pull request by labels then title.
+    """Classify an entity (PR or issue) by labels then title.
 
     Labels take precedence because they represent explicit author intent.
 
     Parameters
     ----------
-    pr
-        The pull request to classify.
+    entity
+        Any object with labels and title attributes (e.g. PullRequest, Issue).
     config
         Classification configuration.
 
@@ -320,31 +336,7 @@ def classify_pull_request(
         The classified work type.
 
     """
-    return _classify_by_labels_then_title(pr.labels, pr.title, config)
-
-
-def classify_issue(
-    issue: Issue,
-    config: ClassificationConfig = DEFAULT_CLASSIFICATION_CONFIG,
-) -> WorkType:
-    """Classify an issue by labels then title.
-
-    Labels take precedence because they represent explicit author intent.
-
-    Parameters
-    ----------
-    issue
-        The issue to classify.
-    config
-        Classification configuration.
-
-    Returns
-    -------
-    WorkType
-        The classified work type.
-
-    """
-    return _classify_by_labels_then_title(issue.labels, issue.title, config)
+    return _classify_by_labels_then_title(entity.labels, entity.title, config)
 
 
 def classify_commit(

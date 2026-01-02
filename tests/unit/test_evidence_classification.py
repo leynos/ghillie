@@ -12,8 +12,7 @@ from ghillie.evidence import (
     classify_by_labels,
     classify_by_title,
     classify_commit,
-    classify_issue,
-    classify_pull_request,
+    classify_entity,
     is_merge_commit,
 )
 
@@ -133,64 +132,60 @@ class TestClassifyByTitle:
         assert classify_by_title("fix: add error handling") == WorkType.BUG
 
 
-class TestClassifyPullRequest:
-    """Tests for pull request classification."""
+class TestClassifyEntity:
+    """Tests for entity (PR/issue) classification via classify_entity."""
 
-    def test_label_takes_priority_over_title(self) -> None:
+    def test_pr_label_takes_priority_over_title(self) -> None:
         pr = mock.MagicMock()
         pr.labels = ["feature"]
         pr.title = "fix: resolve issue"
 
         # Label says feature, title says bug - label wins
-        assert classify_pull_request(pr) == WorkType.FEATURE
+        assert classify_entity(pr) == WorkType.FEATURE
 
-    def test_falls_back_to_title(self) -> None:
+    def test_pr_falls_back_to_title(self) -> None:
         pr = mock.MagicMock()
         pr.labels = ["priority:high"]  # No work type label
         pr.title = "feat: add new feature"
 
-        assert classify_pull_request(pr) == WorkType.FEATURE
+        assert classify_entity(pr) == WorkType.FEATURE
 
-    def test_returns_unknown_when_no_match(self) -> None:
+    def test_pr_returns_unknown_when_no_match(self) -> None:
         pr = mock.MagicMock()
         pr.labels = []
         pr.title = "Update configuration"
 
-        assert classify_pull_request(pr) == WorkType.UNKNOWN
+        assert classify_entity(pr) == WorkType.UNKNOWN
 
-    def test_custom_config(self) -> None:
+    def test_pr_custom_config(self) -> None:
         config = ClassificationConfig(feature_labels=("new-work",))
 
         pr = mock.MagicMock()
         pr.labels = ["new-work"]
         pr.title = "Some change"
 
-        assert classify_pull_request(pr, config) == WorkType.FEATURE
+        assert classify_entity(pr, config) == WorkType.FEATURE
 
-
-class TestClassifyIssue:
-    """Tests for issue classification."""
-
-    def test_label_takes_priority(self) -> None:
+    def test_issue_label_takes_priority(self) -> None:
         issue = mock.MagicMock()
         issue.labels = ["bug"]
         issue.title = "Feature request: dark mode"
 
-        assert classify_issue(issue) == WorkType.BUG
+        assert classify_entity(issue) == WorkType.BUG
 
-    def test_falls_back_to_title(self) -> None:
+    def test_issue_falls_back_to_title(self) -> None:
         issue = mock.MagicMock()
         issue.labels = []
         issue.title = "Fix the login page"
 
-        assert classify_issue(issue) == WorkType.BUG
+        assert classify_entity(issue) == WorkType.BUG
 
-    def test_returns_unknown_when_no_match(self) -> None:
+    def test_issue_returns_unknown_when_no_match(self) -> None:
         issue = mock.MagicMock()
         issue.labels = []
         issue.title = "Question about API"
 
-        assert classify_issue(issue) == WorkType.UNKNOWN
+        assert classify_entity(issue) == WorkType.UNKNOWN
 
 
 class TestClassifyCommit:

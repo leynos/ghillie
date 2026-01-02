@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from .classification import (
     DEFAULT_CLASSIFICATION_CONFIG,
+    Classifiable,
     ClassificationConfig,
     classify_by_labels,
     classify_by_title,
     classify_commit,
-    classify_issue,
-    classify_pull_request,
+    classify_entity,
     is_merge_commit,
 )
 from .models import (
@@ -28,6 +28,7 @@ from .service import EvidenceBundleService
 
 __all__ = [
     "DEFAULT_CLASSIFICATION_CONFIG",
+    "Classifiable",
     "ClassificationConfig",
     "CommitEvidence",
     "DocumentationEvidence",
@@ -43,7 +44,6 @@ __all__ = [
     "classify_by_labels",
     "classify_by_title",
     "classify_commit",
-    "classify_issue",
-    "classify_pull_request",
+    "classify_entity",
     "is_merge_commit",
 ]

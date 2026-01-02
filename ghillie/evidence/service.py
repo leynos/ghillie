@@ -24,8 +24,7 @@ from .classification import (
     DEFAULT_CLASSIFICATION_CONFIG,
     ClassificationConfig,
     classify_commit,
-    classify_issue,
-    classify_pull_request,
+    classify_entity,
     is_merge_commit,
 )
 from .models import (
@@ -139,6 +138,71 @@ class EvidenceBundleService:
         )
         return list((await session.scalars(stmt)).all())
 
+    async def _fetch_all_events(
+        self,
+        session: AsyncSession,
+        repository_id: str,
+        window_start: dt.datetime,
+        window_end: dt.datetime,
+    ) -> tuple[list[Commit], list[PullRequest], list[Issue], list[DocumentationChange]]:
+        """Fetch all events within the window.
+
+        Returns
+        -------
+        tuple[list[Commit], list[PullRequest], list[Issue], list[DocumentationChange]]
+            A tuple of (commits, prs, issues, doc_changes).
+
+        """
+        commits = await self._fetch_repo_entities_in_window(
+            session,
+            Commit,
+            repository_id,
+            window_start,
+            window_end,
+            Commit.committed_at,
+        )
+        prs = await self._fetch_pull_requests(
+            session, repository_id, window_start, window_end
+        )
+        issues = await self._fetch_issues(
+            session, repository_id, window_start, window_end
+        )
+        doc_changes = await self._fetch_repo_entities_in_window(
+            session,
+            DocumentationChange,
+            repository_id,
+            window_start,
+            window_end,
+            DocumentationChange.occurred_at,
+        )
+        return commits, prs, issues, doc_changes
+
+    def _build_all_evidence(
+        self,
+        commits: list[Commit],
+        prs: list[PullRequest],
+        issues: list[Issue],
+        doc_changes: list[DocumentationChange],
+    ) -> tuple[
+        list[CommitEvidence],
+        list[PullRequestEvidence],
+        list[IssueEvidence],
+        list[DocumentationEvidence],
+    ]:
+        """Build classified evidence from all event types.
+
+        Returns
+        -------
+        tuple
+            A tuple of (commit_evidence, pr_evidence, issue_evidence, doc_evidence).
+
+        """
+        commit_evidence = self._build_commit_evidence(commits)
+        pr_evidence = self._build_pr_evidence(prs)
+        issue_evidence = self._build_issue_evidence(issues)
+        doc_evidence = self._build_doc_evidence(doc_changes)
+        return commit_evidence, pr_evidence, issue_evidence, doc_evidence
+
     async def build_bundle(
         self,
         repository_id: str,
@@ -181,28 +245,9 @@ class EvidenceBundleService:
                 session, repository_id, window_start
             )
 
-            # Fetch events within window - inline the simple fetch calls
-            commits = await self._fetch_repo_entities_in_window(
-                session,
-                Commit,
-                repository_id,
-                window_start,
-                window_end,
-                Commit.committed_at,
-            )
-            prs = await self._fetch_pull_requests(
+            # Fetch all events within window
+            commits, prs, issues, doc_changes = await self._fetch_all_events(
                 session, repository_id, window_start, window_end
-            )
-            issues = await self._fetch_issues(
-                session, repository_id, window_start, window_end
-            )
-            doc_changes = await self._fetch_repo_entities_in_window(
-                session,
-                DocumentationChange,
-                repository_id,
-                window_start,
-                window_end,
-                DocumentationChange.occurred_at,
             )
 
             # Collect event fact IDs for coverage tracking
@@ -210,11 +255,10 @@ class EvidenceBundleService:
                 session, repo.slug, window_start, window_end
             )
 
-            # Build evidence tuples with classification
-            commit_evidence = self._build_commit_evidence(commits)
-            pr_evidence = self._build_pr_evidence(prs)
-            issue_evidence = self._build_issue_evidence(issues)
-            doc_evidence = self._build_doc_evidence(doc_changes)
+            # Build evidence with classification
+            commit_evidence, pr_evidence, issue_evidence, doc_evidence = (
+                self._build_all_evidence(commits, prs, issues, doc_changes)
+            )
 
             # Compute work type groupings
             groupings = self._compute_work_type_groupings(
@@ -397,7 +441,7 @@ class EvidenceBundleService:
                 created_at=pr.created_at,
                 merged_at=pr.merged_at,
                 closed_at=pr.closed_at,
-                work_type=classify_pull_request(pr, self._classification_config),
+                work_type=classify_entity(pr, self._classification_config),
                 is_draft=pr.is_draft,
             )
 
@@ -416,7 +460,7 @@ class EvidenceBundleService:
                 labels=tuple(i.labels),
                 created_at=i.created_at,
                 closed_at=i.closed_at,
-                work_type=classify_issue(i, self._classification_config),
+                work_type=classify_entity(i, self._classification_config),
             )
 
         return [build_issue(i) for i in issues]
