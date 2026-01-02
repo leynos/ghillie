@@ -8,8 +8,8 @@ Each event type has a corresponding spec dataclass (e.g., `PREventSpec`,
 `build()` method to create the raw envelope. For convenience, the
 `commit_envelope` function provides a simpler interface for commit events.
 
-Example:
--------
+Examples
+--------
 Create a pull request event using PREventSpec:
 
 >>> from datetime import datetime, timezone
