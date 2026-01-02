@@ -93,7 +93,7 @@ class EvidenceBundleService:
 
     This service queries the Silver layer to construct evidence bundles
     that aggregate all activity within a reporting window, ready for
-    LLM summarisation.
+    LLM summarization.
 
     """
 

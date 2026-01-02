@@ -7,8 +7,10 @@ unit and behavioural tests for evidence bundle generation.
 from __future__ import annotations
 
 import dataclasses as dc
-import datetime as dt  # noqa: TC003
 import typing as typ
+
+if typ.TYPE_CHECKING:
+    import datetime as dt
 
 from ghillie.bronze import RawEventEnvelope
 from ghillie.common.slug import parse_repo_slug
