@@ -437,6 +437,107 @@ class EvidenceBundleService:
             for dc in doc_changes
         ]
 
+    def _populate_commit_bucket(
+        self,
+        buckets: dict[WorkType, _WorkTypeBucket],
+        commits: list[CommitEvidence],
+    ) -> None:
+        """Populate buckets with non-merge commits.
+
+        Excludes merge commits from work-type groupings to avoid double-counting.
+        Appends the first 100 characters of the commit message as a sample title.
+
+        Parameters
+        ----------
+        buckets
+            Dictionary mapping work types to their buckets.
+        commits
+            List of commit evidence to process.
+
+        """
+        for commit in commits:
+            if commit.is_merge_commit:
+                continue
+            bucket = buckets[commit.work_type]
+            bucket.commits.append(commit)
+            if commit.message:
+                bucket.titles.append(commit.message[:100])
+
+    def _populate_pr_bucket(
+        self,
+        buckets: dict[WorkType, _WorkTypeBucket],
+        prs: list[PullRequestEvidence],
+    ) -> None:
+        """Populate buckets with pull requests.
+
+        Parameters
+        ----------
+        buckets
+            Dictionary mapping work types to their buckets.
+        prs
+            List of pull request evidence to process.
+
+        """
+        for pr in prs:
+            bucket = buckets[pr.work_type]
+            bucket.prs.append(pr)
+            bucket.titles.append(pr.title)
+
+    def _populate_issue_bucket(
+        self,
+        buckets: dict[WorkType, _WorkTypeBucket],
+        issues: list[IssueEvidence],
+    ) -> None:
+        """Populate buckets with issues.
+
+        Parameters
+        ----------
+        buckets
+            Dictionary mapping work types to their buckets.
+        issues
+            List of issue evidence to process.
+
+        """
+        for issue in issues:
+            bucket = buckets[issue.work_type]
+            bucket.issues.append(issue)
+            bucket.titles.append(issue.title)
+
+    def _build_grouping_from_bucket(
+        self,
+        work_type: WorkType,
+        bucket: _WorkTypeBucket,
+    ) -> WorkTypeGrouping | None:
+        """Build a WorkTypeGrouping from a bucket, or None if empty.
+
+        Parameters
+        ----------
+        work_type
+            The work type for this grouping.
+        bucket
+            The bucket containing events for this work type.
+
+        Returns
+        -------
+        WorkTypeGrouping | None
+            The grouping if any events exist, otherwise None.
+
+        """
+        commit_count = len(bucket.commits)
+        pr_count = len(bucket.prs)
+        issue_count = len(bucket.issues)
+
+        if not any((commit_count, pr_count, issue_count)):
+            return None
+
+        return WorkTypeGrouping(
+            work_type=work_type,
+            commit_count=commit_count,
+            pr_count=pr_count,
+            issue_count=issue_count,
+            sample_titles=tuple(bucket.titles[:5]),
+        )
+
     def _compute_work_type_groupings(
         self,
         commits: list[CommitEvidence],
@@ -448,41 +549,14 @@ class EvidenceBundleService:
             wt: _WorkTypeBucket([], [], [], []) for wt in WorkType
         }
 
-        # Exclude merge commits from groupings
-        for c in (c for c in commits if not c.is_merge_commit):
-            bucket = buckets[c.work_type]
-            bucket.commits.append(c)
-            if c.message:
-                bucket.titles.append(c.message[:100])
-
-        for pr in prs:
-            bucket = buckets[pr.work_type]
-            bucket.prs.append(pr)
-            bucket.titles.append(pr.title)
-
-        for issue in issues:
-            bucket = buckets[issue.work_type]
-            bucket.issues.append(issue)
-            bucket.titles.append(issue.title)
+        self._populate_commit_bucket(buckets, commits)
+        self._populate_pr_bucket(buckets, prs)
+        self._populate_issue_bucket(buckets, issues)
 
         results: list[WorkTypeGrouping] = []
-        for work_type, b in buckets.items():
-            commit_count = len(b.commits)
-            pr_count = len(b.prs)
-            issue_count = len(b.issues)
-
-            # Skip empty groupings
-            if not any((commit_count, pr_count, issue_count)):
-                continue
-
-            results.append(
-                WorkTypeGrouping(
-                    work_type=work_type,
-                    commit_count=commit_count,
-                    pr_count=pr_count,
-                    issue_count=issue_count,
-                    sample_titles=tuple(b.titles[:5]),
-                )
-            )
+        for work_type, bucket in buckets.items():
+            grouping = self._build_grouping_from_bucket(work_type, bucket)
+            if grouping is not None:
+                results.append(grouping)
 
         return results

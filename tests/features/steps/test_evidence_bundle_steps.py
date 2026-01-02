@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import dataclasses as dc
 import datetime as dt
 import typing as typ
 
@@ -11,7 +10,6 @@ from pytest_bdd import given, scenario, then, when
 from sqlalchemy import select
 
 from ghillie.bronze import RawEventEnvelope, RawEventWriter
-from ghillie.common.slug import parse_repo_slug
 from ghillie.evidence import (
     EvidenceBundleService,
     ReportStatus,
@@ -20,6 +18,12 @@ from ghillie.evidence import (
 )
 from ghillie.gold import Report, ReportScope
 from ghillie.silver import RawEventTransformer, Repository
+from tests.helpers.event_builders import (
+    DocChangeEventSpec,
+    IssueEventSpec,
+    PREventSpec,
+    commit_envelope,
+)
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -65,164 +69,8 @@ def test_classification_from_title_scenario() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test event builders - using dataclasses to reduce function argument counts
+# Helpers
 # ---------------------------------------------------------------------------
-
-
-@dc.dataclass(frozen=True, slots=True, kw_only=True)
-class PREnvelopeSpec:
-    """Specification for creating a pull request envelope."""
-
-    repo_slug: str
-    pr_id: int
-    pr_number: int
-    created_at: dt.datetime
-    title: str = "Add feature"
-    labels: tuple[str, ...] = ()
-
-    def build(self) -> RawEventEnvelope:
-        """Build a RawEventEnvelope from this specification."""
-        return _BaseEnvelopeSpec(
-            repo_slug=self.repo_slug,
-            source_event_id=f"pr-{self.pr_id}",
-            event_type="github.pull_request",
-            occurred_at=self.created_at,
-            payload={
-                "id": self.pr_id,
-                "number": self.pr_number,
-                "title": self.title,
-                "state": "open",
-                "base_branch": "main",
-                "head_branch": "feature",
-                "created_at": self.created_at.isoformat(),
-                "author_login": "dev",
-                "merged_at": None,
-                "closed_at": None,
-                "labels": list(self.labels),
-                "is_draft": False,
-            },
-        ).build()
-
-
-@dc.dataclass(frozen=True, slots=True, kw_only=True)
-class IssueEnvelopeSpec:
-    """Specification for creating an issue envelope."""
-
-    repo_slug: str
-    issue_id: int
-    issue_number: int
-    created_at: dt.datetime
-    title: str = "Bug report"
-    labels: tuple[str, ...] = ()
-
-    def build(self) -> RawEventEnvelope:
-        """Build a RawEventEnvelope from this specification."""
-        return _BaseEnvelopeSpec(
-            repo_slug=self.repo_slug,
-            source_event_id=f"issue-{self.issue_id}",
-            event_type="github.issue",
-            occurred_at=self.created_at,
-            payload={
-                "id": self.issue_id,
-                "number": self.issue_number,
-                "title": self.title,
-                "state": "open",
-                "created_at": self.created_at.isoformat(),
-                "author_login": "user",
-                "closed_at": None,
-                "labels": list(self.labels),
-            },
-        ).build()
-
-
-@dc.dataclass(frozen=True, slots=True, kw_only=True)
-class DocChangeEnvelopeSpec:
-    """Specification for creating a documentation change envelope."""
-
-    repo_slug: str
-    commit_sha: str
-    path: str
-    occurred_at: dt.datetime
-    is_roadmap: bool = False
-
-    def build(self) -> RawEventEnvelope:
-        """Build a RawEventEnvelope from this specification."""
-        return _BaseEnvelopeSpec(
-            repo_slug=self.repo_slug,
-            source_event_id=f"doc-{self.commit_sha}-{self.path}",
-            event_type="github.doc_change",
-            occurred_at=self.occurred_at,
-            payload={
-                "commit_sha": self.commit_sha,
-                "path": self.path,
-                "change_type": "modified",
-                "occurred_at": self.occurred_at.isoformat(),
-                "is_roadmap": self.is_roadmap,
-                "is_adr": False,
-            },
-        ).build()
-
-
-def _commit_envelope(
-    repo_slug: str,
-    commit_sha: str,
-    occurred_at: dt.datetime,
-    message: str = "add feature",
-) -> RawEventEnvelope:
-    """Construct a commit event envelope."""
-    owner, name = parse_repo_slug(repo_slug)
-    return RawEventEnvelope(
-        source_system="github",
-        source_event_id=f"commit-{commit_sha}",
-        event_type="github.commit",
-        repo_external_id=repo_slug,
-        occurred_at=occurred_at,
-        payload={
-            "sha": commit_sha,
-            "message": message,
-            "author_email": "dev@example.com",
-            "author_name": "Dev",
-            "authored_at": occurred_at.isoformat(),
-            "committed_at": occurred_at.isoformat(),
-            "repo_owner": owner,
-            "repo_name": name,
-            "default_branch": "main",
-            "metadata": {},
-        },
-    )
-
-
-# ---------------------------------------------------------------------------
-# Helpers to reduce code duplication
-# ---------------------------------------------------------------------------
-
-
-@dc.dataclass(frozen=True, slots=True, kw_only=True)
-class _BaseEnvelopeSpec:
-    """Base specification for creating event envelopes with repo metadata."""
-
-    repo_slug: str
-    source_event_id: str
-    event_type: str
-    occurred_at: dt.datetime
-    payload: dict[str, typ.Any]
-
-    def build(self) -> RawEventEnvelope:
-        """Build a RawEventEnvelope with common repo metadata enrichment."""
-        owner, name = parse_repo_slug(self.repo_slug)
-        enriched_payload = dict(self.payload)
-        enriched_payload["repo_owner"] = owner
-        enriched_payload["repo_name"] = name
-        if "metadata" not in enriched_payload:
-            enriched_payload["metadata"] = {}
-        return RawEventEnvelope(
-            source_system="github",
-            source_event_id=self.source_event_id,
-            event_type=self.event_type,
-            repo_external_id=self.repo_slug,
-            occurred_at=self.occurred_at,
-            payload=enriched_payload,
-        )
 
 
 async def _setup_repo_from_events(
@@ -277,23 +125,23 @@ def given_repo_with_events(evidence_context: EvidenceContext) -> None:
     doc_time = dt.datetime(2024, 7, 6, tzinfo=dt.UTC)
 
     events = [
-        _commit_envelope(repo_slug, "abc123", commit_time, "feat: add auth"),
-        PREnvelopeSpec(
+        commit_envelope(repo_slug, "abc123", commit_time, "feat: add auth"),
+        PREventSpec(
             repo_slug=repo_slug,
             pr_id=100,
             pr_number=10,
             created_at=pr_time,
             title="Add login feature",
         ).build(),
-        IssueEnvelopeSpec(
+        IssueEventSpec(
             repo_slug=repo_slug,
             issue_id=200,
             issue_number=20,
             created_at=issue_time,
             title="Bug report",
         ).build(),
-        _commit_envelope(repo_slug, "doc456", doc_time),
-        DocChangeEnvelopeSpec(
+        commit_envelope(repo_slug, "doc456", doc_time),
+        DocChangeEventSpec(
             repo_slug=repo_slug,
             commit_sha="doc456",
             path="docs/roadmap.md",
@@ -312,7 +160,7 @@ def given_repo_with_previous_report(evidence_context: EvidenceContext) -> None:
 
     # Commit to establish repo
     commit_time = dt.datetime(2024, 7, 10, tzinfo=dt.UTC)
-    events = [_commit_envelope(repo_slug, "abc123", commit_time)]
+    events = [commit_envelope(repo_slug, "abc123", commit_time)]
 
     async def _setup_with_report() -> None:
         await _setup_repo_from_events(evidence_context, events)
@@ -348,7 +196,7 @@ def given_repo_with_bug_pr(evidence_context: EvidenceContext) -> None:
     pr_time = dt.datetime(2024, 7, 5, tzinfo=dt.UTC)
 
     events = [
-        PREnvelopeSpec(
+        PREventSpec(
             repo_slug=repo_slug,
             pr_id=100,
             pr_number=10,
@@ -368,7 +216,7 @@ def given_repo_with_fix_commit(evidence_context: EvidenceContext) -> None:
     commit_time = dt.datetime(2024, 7, 5, tzinfo=dt.UTC)
 
     events = [
-        _commit_envelope(repo_slug, "fix123", commit_time, "fix: resolve login issue"),
+        commit_envelope(repo_slug, "fix123", commit_time, "fix: resolve login issue"),
     ]
 
     asyncio.run(_setup_repo_from_events(evidence_context, events))

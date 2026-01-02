@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import re
 import typing as typ
 
@@ -11,6 +12,15 @@ from .models import WorkType
 
 if typ.TYPE_CHECKING:
     from ghillie.silver.storage import Commit, Issue, PullRequest
+
+
+@functools.lru_cache(maxsize=32)
+def _compile_patterns(patterns: tuple[str, ...]) -> tuple[re.Pattern[str], ...]:
+    """Compile a tuple of regex pattern strings into Pattern objects.
+
+    Results are cached by pattern tuple for efficient reuse across calls.
+    """
+    return tuple(re.compile(p, re.IGNORECASE) for p in patterns)
 
 
 class ClassificationConfig(msgspec.Struct, kw_only=True, frozen=True):
@@ -99,6 +109,26 @@ class ClassificationConfig(msgspec.Struct, kw_only=True, frozen=True):
         r"^update\s+.*dependenc",  # "update dependency versions", etc.
     )
 
+    @property
+    def compiled_feature_patterns(self) -> tuple[re.Pattern[str], ...]:
+        """Return compiled feature title patterns (cached via lru_cache)."""
+        return _compile_patterns(self.feature_title_patterns)
+
+    @property
+    def compiled_bug_patterns(self) -> tuple[re.Pattern[str], ...]:
+        """Return compiled bug title patterns (cached via lru_cache)."""
+        return _compile_patterns(self.bug_title_patterns)
+
+    @property
+    def compiled_refactor_patterns(self) -> tuple[re.Pattern[str], ...]:
+        """Return compiled refactor title patterns (cached via lru_cache)."""
+        return _compile_patterns(self.refactor_title_patterns)
+
+    @property
+    def compiled_chore_patterns(self) -> tuple[re.Pattern[str], ...]:
+        """Return compiled chore title patterns (cached via lru_cache)."""
+        return _compile_patterns(self.chore_title_patterns)
+
 
 # Default configuration instance
 DEFAULT_CLASSIFICATION_CONFIG = ClassificationConfig()
@@ -115,15 +145,19 @@ def _labels_match(labels: typ.Sequence[str], patterns: tuple[str, ...]) -> bool:
     return any(_normalise_label(label) in normalised_patterns for label in labels)
 
 
-def _title_matches(title: str, patterns: tuple[str, ...]) -> bool:
-    """Check if title matches any regex pattern."""
+def _title_matches_compiled(
+    title: str, patterns: tuple[re.Pattern[str], ...]
+) -> bool:
+    """Check if title matches any precompiled regex pattern."""
     lowered = title.lower()
-    return any(re.search(pattern, lowered, re.IGNORECASE) for pattern in patterns)
+    return any(pattern.search(lowered) for pattern in patterns)
 
 
-def _prefix_only(patterns: tuple[str, ...]) -> tuple[str, ...]:
+def _prefix_only_compiled(
+    patterns: tuple[re.Pattern[str], ...]
+) -> tuple[re.Pattern[str], ...]:
     """Filter to keep only patterns that start with ^."""
-    return tuple(p for p in patterns if p.startswith("^"))
+    return tuple(p for p in patterns if p.pattern.startswith("^"))
 
 
 def classify_by_labels(
@@ -168,13 +202,17 @@ def _classify_by_prefix_patterns(
     Order: bug > chore > feature > refactor
     (Chore before feature so "ci: fix X" is CHORE not BUG)
     """
-    if _title_matches(title, _prefix_only(config.bug_title_patterns)):
+    bug_prefixes = _prefix_only_compiled(config.compiled_bug_patterns)
+    if _title_matches_compiled(title, bug_prefixes):
         return WorkType.BUG
-    if _title_matches(title, _prefix_only(config.chore_title_patterns)):
+    chore_prefixes = _prefix_only_compiled(config.compiled_chore_patterns)
+    if _title_matches_compiled(title, chore_prefixes):
         return WorkType.CHORE
-    if _title_matches(title, _prefix_only(config.feature_title_patterns)):
+    feature_prefixes = _prefix_only_compiled(config.compiled_feature_patterns)
+    if _title_matches_compiled(title, feature_prefixes):
         return WorkType.FEATURE
-    if _title_matches(title, _prefix_only(config.refactor_title_patterns)):
+    refactor_prefixes = _prefix_only_compiled(config.compiled_refactor_patterns)
+    if _title_matches_compiled(title, refactor_prefixes):
         return WorkType.REFACTOR
     return None
 
@@ -187,13 +225,13 @@ def _classify_by_general_patterns(
 
     Order: bug > feature > refactor > chore
     """
-    if _title_matches(title, config.bug_title_patterns):
+    if _title_matches_compiled(title, config.compiled_bug_patterns):
         return WorkType.BUG
-    if _title_matches(title, config.feature_title_patterns):
+    if _title_matches_compiled(title, config.compiled_feature_patterns):
         return WorkType.FEATURE
-    if _title_matches(title, config.refactor_title_patterns):
+    if _title_matches_compiled(title, config.compiled_refactor_patterns):
         return WorkType.REFACTOR
-    if _title_matches(title, config.chore_title_patterns):
+    if _title_matches_compiled(title, config.compiled_chore_patterns):
         return WorkType.CHORE
     return None
 
