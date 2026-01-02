@@ -482,6 +482,77 @@ class TestEvidenceBundleServiceBuildBundle:
         assert grouping_map[WorkType.BUG].pr_count == 1
 
     @pytest.mark.asyncio
+    async def test_merge_commits_excluded_from_work_type_groupings(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        evidence_service_stack: EvidenceServiceStack,
+    ) -> None:
+        """Merge commits are included in bundle but excluded from groupings."""
+        writer, transformer, service = evidence_service_stack
+
+        repo_slug = "octo/reef"
+        window_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
+        window_end = dt.datetime(2024, 7, 8, tzinfo=dt.UTC)
+
+        # Feature commit (non-merge)
+        await writer.ingest(
+            _commit_event(
+                repo_slug,
+                "feat1",
+                dt.datetime(2024, 7, 2, tzinfo=dt.UTC),
+                "feat: add new feature",
+            )
+        )
+        # Bug fix commit (non-merge)
+        await writer.ingest(
+            _commit_event(
+                repo_slug,
+                "fix1",
+                dt.datetime(2024, 7, 3, tzinfo=dt.UTC),
+                "fix: resolve bug",
+            )
+        )
+        # Merge commit (should be excluded from groupings)
+        await writer.ingest(
+            _commit_event(
+                repo_slug,
+                "merge1",
+                dt.datetime(2024, 7, 4, tzinfo=dt.UTC),
+                "Merge pull request #123 from octo/feature-branch",
+            )
+        )
+        await transformer.process_pending()
+
+        repo_id = await get_repo_id(session_factory)
+        bundle = await service.build_bundle(repo_id, window_start, window_end)
+
+        # All 3 commits should be present in the bundle
+        assert len(bundle.commits) == 3
+
+        # The merge commit should be flagged as a merge commit
+        merge_commits = [c for c in bundle.commits if c.is_merge_commit]
+        assert len(merge_commits) == 1
+        assert merge_commits[0].sha == "merge1"
+        assert "Merge pull request #123" in (merge_commits[0].message or "")
+
+        # Non-merge commits should not be flagged
+        non_merge_commits = [c for c in bundle.commits if not c.is_merge_commit]
+        assert len(non_merge_commits) == 2
+
+        # Work type groupings should only count non-merge commits
+        total_grouped_commit_count = sum(
+            g.commit_count for g in bundle.work_type_groupings
+        )
+        assert total_grouped_commit_count == len(non_merge_commits)
+
+        # Verify the feature and bug groupings each have 1 commit
+        grouping_map = {g.work_type: g for g in bundle.work_type_groupings}
+        assert WorkType.FEATURE in grouping_map
+        assert grouping_map[WorkType.FEATURE].commit_count == 1
+        assert WorkType.BUG in grouping_map
+        assert grouping_map[WorkType.BUG].commit_count == 1
+
+    @pytest.mark.asyncio
     async def test_collects_event_fact_ids(
         self,
         session_factory: async_sessionmaker[AsyncSession],

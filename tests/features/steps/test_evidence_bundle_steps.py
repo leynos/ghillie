@@ -419,6 +419,10 @@ def then_bundle_has_commits(evidence_context: EvidenceContext) -> None:
     """Assert bundle contains commits."""
     bundle = evidence_context["bundle"]
 
+    # Assert that the bundle's reporting window matches the requested window
+    assert bundle.window_start == evidence_context["window_start"]
+    assert bundle.window_end == evidence_context["window_end"]
+
     assert len(bundle.commits) >= 1
     # Check that commits are within window
     for commit in bundle.commits:

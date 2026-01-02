@@ -115,12 +115,15 @@ def _labels_match(labels: typ.Sequence[str], patterns: tuple[str, ...]) -> bool:
     return any(_normalise_label(label) in normalised_patterns for label in labels)
 
 
-def _title_matches(title: str | None, patterns: tuple[str, ...]) -> bool:
+def _title_matches(title: str, patterns: tuple[str, ...]) -> bool:
     """Check if title matches any regex pattern."""
-    if title is None:
-        return False
     lowered = title.lower()
     return any(re.search(pattern, lowered, re.IGNORECASE) for pattern in patterns)
+
+
+def _prefix_only(patterns: tuple[str, ...]) -> tuple[str, ...]:
+    """Filter to keep only patterns that start with ^."""
+    return tuple(p for p in patterns if p.startswith("^"))
 
 
 def classify_by_labels(
@@ -156,28 +159,42 @@ def classify_by_labels(
     return None
 
 
-def _matches_prefix_pattern(title: str, patterns: tuple[str, ...]) -> bool:
-    """Check if title matches any prefix pattern (starting with ^)."""
-    lowered = title.lower()
-    return any(
-        pattern.startswith("^") and re.search(pattern, lowered, re.IGNORECASE)
-        for pattern in patterns
-    )
-
-
-def _classify_title_by_patterns(
+def _classify_by_prefix_patterns(
     title: str,
-    pattern_groups: tuple[tuple[tuple[str, ...], WorkType], ...],
-    *,
-    prefix_only: bool = False,
+    config: ClassificationConfig,
 ) -> WorkType | None:
-    """Classify title by matching against pattern groups in order."""
-    for patterns, work_type in pattern_groups:
-        if prefix_only:
-            if _matches_prefix_pattern(title, patterns):
-                return work_type
-        elif _title_matches(title, patterns):
-            return work_type
+    """Classify by prefix patterns (conventional commits).
+
+    Order: bug > chore > feature > refactor
+    (Chore before feature so "ci: fix X" is CHORE not BUG)
+    """
+    if _title_matches(title, _prefix_only(config.bug_title_patterns)):
+        return WorkType.BUG
+    if _title_matches(title, _prefix_only(config.chore_title_patterns)):
+        return WorkType.CHORE
+    if _title_matches(title, _prefix_only(config.feature_title_patterns)):
+        return WorkType.FEATURE
+    if _title_matches(title, _prefix_only(config.refactor_title_patterns)):
+        return WorkType.REFACTOR
+    return None
+
+
+def _classify_by_general_patterns(
+    title: str,
+    config: ClassificationConfig,
+) -> WorkType | None:
+    """Classify by general patterns.
+
+    Order: bug > feature > refactor > chore
+    """
+    if _title_matches(title, config.bug_title_patterns):
+        return WorkType.BUG
+    if _title_matches(title, config.feature_title_patterns):
+        return WorkType.FEATURE
+    if _title_matches(title, config.refactor_title_patterns):
+        return WorkType.REFACTOR
+    if _title_matches(title, config.chore_title_patterns):
+        return WorkType.CHORE
     return None
 
 
@@ -203,28 +220,45 @@ def classify_by_title(
     if title is None:
         return None
 
-    # Define pattern groups with priority order
-    # Prefix patterns: bug > chore > feature > refactor
-    # (Chore before feature so "ci: fix X" is CHORE not BUG)
-    prefix_order: tuple[tuple[tuple[str, ...], WorkType], ...] = (
-        (config.bug_title_patterns, WorkType.BUG),
-        (config.chore_title_patterns, WorkType.CHORE),
-        (config.feature_title_patterns, WorkType.FEATURE),
-        (config.refactor_title_patterns, WorkType.REFACTOR),
-    )
-
-    # General patterns: bug > feature > refactor > chore
-    general_order: tuple[tuple[tuple[str, ...], WorkType], ...] = (
-        (config.bug_title_patterns, WorkType.BUG),
-        (config.feature_title_patterns, WorkType.FEATURE),
-        (config.refactor_title_patterns, WorkType.REFACTOR),
-        (config.chore_title_patterns, WorkType.CHORE),
-    )
-
     # First check prefix patterns (conventional commits), then general patterns
-    return _classify_title_by_patterns(
-        title, prefix_order, prefix_only=True
-    ) or _classify_title_by_patterns(title, general_order)
+    return _classify_by_prefix_patterns(title, config) or _classify_by_general_patterns(
+        title, config
+    )
+
+
+def _classify_by_labels_then_title(
+    labels: typ.Sequence[str],
+    title: str | None,
+    config: ClassificationConfig = DEFAULT_CLASSIFICATION_CONFIG,
+) -> WorkType:
+    """Classify work type by labels then title, with UNKNOWN as fallback.
+
+    Labels take precedence because they represent explicit author intent.
+
+    Parameters
+    ----------
+    labels
+        Sequence of labels to check.
+    title
+        Title or message to check.
+    config
+        Classification configuration.
+
+    Returns
+    -------
+    WorkType
+        The classified work type.
+
+    """
+    by_labels = classify_by_labels(labels, config)
+    if by_labels is not None:
+        return by_labels
+
+    by_title = classify_by_title(title, config)
+    if by_title is not None:
+        return by_title
+
+    return WorkType.UNKNOWN
 
 
 def classify_pull_request(
@@ -248,17 +282,7 @@ def classify_pull_request(
         The classified work type.
 
     """
-    # Labels take precedence
-    by_labels = classify_by_labels(pr.labels, config)
-    if by_labels is not None:
-        return by_labels
-
-    # Fall back to title heuristics
-    by_title = classify_by_title(pr.title, config)
-    if by_title is not None:
-        return by_title
-
-    return WorkType.UNKNOWN
+    return _classify_by_labels_then_title(pr.labels, pr.title, config)
 
 
 def classify_issue(
@@ -282,15 +306,7 @@ def classify_issue(
         The classified work type.
 
     """
-    by_labels = classify_by_labels(issue.labels, config)
-    if by_labels is not None:
-        return by_labels
-
-    by_title = classify_by_title(issue.title, config)
-    if by_title is not None:
-        return by_title
-
-    return WorkType.UNKNOWN
+    return _classify_by_labels_then_title(issue.labels, issue.title, config)
 
 
 def classify_commit(
