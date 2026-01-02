@@ -285,6 +285,63 @@ class DocChangeEventSpec:
         ).build()
 
 
+@dc.dataclass(frozen=True, slots=True, kw_only=True)
+class CommitEventSpec:
+    """Specification for creating a commit test event.
+
+    Parameters
+    ----------
+    repo_slug : str
+        Repository identifier in "owner/name" format.
+    commit_sha : str
+        SHA of the commit.
+    occurred_at : datetime
+        Timestamp when the commit occurred.
+    message : str, optional
+        Commit message (default: "add feature").
+
+    Examples
+    --------
+    >>> spec = CommitEventSpec(
+    ...     repo_slug="owner/repo",
+    ...     commit_sha="abc123",
+    ...     occurred_at=datetime.now(UTC),
+    ... )
+    >>> envelope = spec.build()
+
+    """
+
+    repo_slug: str
+    commit_sha: str
+    occurred_at: dt.datetime
+    message: str = "add feature"
+
+    def build(self) -> RawEventEnvelope:
+        """Build a RawEventEnvelope from this specification.
+
+        Returns
+        -------
+        RawEventEnvelope
+            A commit event envelope with standard test defaults.
+
+        """
+        return BaseEventSpec(
+            repo_slug=self.repo_slug,
+            source_event_id=f"commit-{self.commit_sha}",
+            event_type="github.commit",
+            occurred_at=self.occurred_at,
+            payload={
+                "sha": self.commit_sha,
+                "message": self.message,
+                "author_email": "dev@example.com",
+                "author_name": "Dev",
+                "authored_at": self.occurred_at.isoformat(),
+                "committed_at": self.occurred_at.isoformat(),
+                "default_branch": "main",
+            },
+        ).build()
+
+
 def commit_envelope(
     repo_slug: str,
     commit_sha: str,
@@ -318,25 +375,17 @@ def commit_envelope(
     ... )
 
     """
-    return BaseEventSpec(
+    return CommitEventSpec(
         repo_slug=repo_slug,
-        source_event_id=f"commit-{commit_sha}",
-        event_type="github.commit",
+        commit_sha=commit_sha,
         occurred_at=occurred_at,
-        payload={
-            "sha": commit_sha,
-            "message": message,
-            "author_email": "dev@example.com",
-            "author_name": "Dev",
-            "authored_at": occurred_at.isoformat(),
-            "committed_at": occurred_at.isoformat(),
-            "default_branch": "main",
-        },
+        message=message,
     ).build()
 
 
 __all__ = [
     "BaseEventSpec",
+    "CommitEventSpec",
     "DocChangeEventSpec",
     "IssueEventSpec",
     "PREventSpec",

@@ -10,12 +10,13 @@ summarization.
 
 Example:
 -------
+>>> from datetime import datetime, timezone
 >>> from ghillie.evidence.service import EvidenceBundleService
 >>> service = EvidenceBundleService(session_factory)
 >>> bundle = await service.build_bundle(
-...     repository=repo,
-...     window_start=start,
-...     window_end=end,
+...     repository_id="550e8400-e29b-41d4-a716-446655440000",
+...     window_start=datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+...     window_end=datetime(2025, 1, 8, 0, 0, 0, tzinfo=timezone.utc),
 ... )
 
 """
@@ -518,29 +519,6 @@ class EvidenceBundleService:
             for doc in doc_changes
         ]
 
-    def _populate_entity_bucket[E: _ClassifiableEvidence](
-        self,
-        buckets: dict[WorkType, _WorkTypeBucket],
-        entities: list[E],
-        get_bucket_list: typ.Callable[[_WorkTypeBucket], list[E]],
-    ) -> None:
-        """Populate buckets with entities (PRs or issues).
-
-        Parameters
-        ----------
-        buckets
-            Dictionary mapping work types to their buckets.
-        entities
-            List of evidence entities to process.
-        get_bucket_list
-            Function that extracts the appropriate list from a bucket.
-
-        """
-        for entity in entities:
-            bucket = buckets[entity.work_type]
-            get_bucket_list(bucket).append(entity)
-            bucket.titles.append(entity.title)
-
     def _populate_commit_bucket(
         self,
         buckets: dict[WorkType, _WorkTypeBucket],
@@ -573,7 +551,10 @@ class EvidenceBundleService:
         prs: list[PullRequestEvidence],
     ) -> None:
         """Populate buckets with pull requests."""
-        self._populate_entity_bucket(buckets, prs, lambda b: b.prs)
+        for pr in prs:
+            bucket = buckets[pr.work_type]
+            bucket.prs.append(pr)
+            bucket.titles.append(pr.title)
 
     def _populate_issue_bucket(
         self,
@@ -581,7 +562,10 @@ class EvidenceBundleService:
         issues: list[IssueEvidence],
     ) -> None:
         """Populate buckets with issues."""
-        self._populate_entity_bucket(buckets, issues, lambda b: b.issues)
+        for issue in issues:
+            bucket = buckets[issue.work_type]
+            bucket.issues.append(issue)
+            bucket.titles.append(issue.title)
 
     def _build_grouping_from_bucket(
         self,
