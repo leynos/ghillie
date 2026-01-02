@@ -52,15 +52,6 @@ if typ.TYPE_CHECKING:
 T = typ.TypeVar("T")
 
 
-@dc.dataclass(slots=True, frozen=True)
-class _QueryContext:
-    """Context for querying repository events within a time window."""
-
-    repository_id: str
-    window_start: dt.datetime
-    window_end: dt.datetime
-
-
 @dc.dataclass(slots=True)
 class _WorkTypeBucket:
     """Bucket for grouping events by work type."""
@@ -80,6 +71,26 @@ class _ClassifiableEvidence(typ.Protocol):
 
 # TypeVar for entities that satisfy the ClassifiableEvidence protocol
 _E = typ.TypeVar("_E", bound=_ClassifiableEvidence)
+
+
+@dc.dataclass(frozen=True, slots=True)
+class _WindowQuery:
+    """Encapsulates a repository and time window for querying events.
+
+    Parameters
+    ----------
+    repository_id
+        The repository identifier.
+    window_start
+        Start of the window (inclusive).
+    window_end
+        End of the window (exclusive).
+
+    """
+
+    repository_id: str
+    window_start: dt.datetime
+    window_end: dt.datetime
 
 
 class EvidenceBundleService:
@@ -119,7 +130,7 @@ class EvidenceBundleService:
         self,
         session: AsyncSession,
         model: type[T],
-        ctx: _QueryContext,
+        window: _WindowQuery,
         time_field: DateTimeColumnExpr,
     ) -> list[T]:
         """Fetch entities within a time window.
@@ -130,8 +141,8 @@ class EvidenceBundleService:
             Database session.
         model
             SQLAlchemy model class to query.
-        ctx
-            Query context with repository ID and time window.
+        window
+            Repository and time window to query.
         time_field
             Column to use for time filtering.
 
@@ -144,9 +155,9 @@ class EvidenceBundleService:
         stmt = (
             select(model)
             .where(
-                model.repo_id == ctx.repository_id,  # type: ignore[attr-defined]
-                time_field >= ctx.window_start,
-                time_field < ctx.window_end,
+                model.repo_id == window.repository_id,  # type: ignore[attr-defined]
+                time_field >= window.window_start,
+                time_field < window.window_end,
             )
             .order_by(time_field.desc())
         )
@@ -155,7 +166,7 @@ class EvidenceBundleService:
     async def _fetch_all_events(
         self,
         session: AsyncSession,
-        ctx: _QueryContext,
+        window: _WindowQuery,
     ) -> tuple[list[Commit], list[PullRequest], list[Issue], list[DocumentationChange]]:
         """Fetch all events within the window.
 
@@ -168,15 +179,15 @@ class EvidenceBundleService:
         commits = await self._fetch_repo_entities_in_window(
             session,
             Commit,
-            ctx,
+            window,
             Commit.committed_at,
         )
-        prs = await self._fetch_pull_requests(session, ctx)
-        issues = await self._fetch_issues(session, ctx)
+        prs = await self._fetch_pull_requests(session, window)
+        issues = await self._fetch_issues(session, window)
         doc_changes = await self._fetch_repo_entities_in_window(
             session,
             DocumentationChange,
-            ctx,
+            window,
             DocumentationChange.occurred_at,
         )
         return commits, prs, issues, doc_changes
@@ -235,7 +246,7 @@ class EvidenceBundleService:
             If the repository is not found.
 
         """
-        ctx = _QueryContext(
+        window = _WindowQuery(
             repository_id=repository_id,
             window_start=window_start,
             window_end=window_end,
@@ -256,11 +267,13 @@ class EvidenceBundleService:
 
             # Fetch all events within window
             commits, prs, issues, doc_changes = await self._fetch_all_events(
-                session, ctx
+                session, window
             )
 
             # Collect event fact IDs for coverage tracking
-            event_fact_ids = await self._fetch_event_fact_ids(session, repo.slug, ctx)
+            event_fact_ids = await self._fetch_event_fact_ids(
+                session, repo.slug, window
+            )
 
             # Build evidence with classification
             commit_evidence, pr_evidence, issue_evidence, doc_evidence = (
@@ -364,21 +377,21 @@ class EvidenceBundleService:
     async def _fetch_pull_requests(
         self,
         session: AsyncSession,
-        ctx: _QueryContext,
+        window: _WindowQuery,
     ) -> list[PullRequest]:
         """Fetch PRs created, merged, or closed within the window."""
         stmt = (
             select(PullRequest)
             .where(
-                PullRequest.repo_id == ctx.repository_id,
+                PullRequest.repo_id == window.repository_id,
                 # Include PRs created, merged, or closed in window
                 or_(
-                    (PullRequest.created_at >= ctx.window_start)
-                    & (PullRequest.created_at < ctx.window_end),
-                    (PullRequest.merged_at >= ctx.window_start)
-                    & (PullRequest.merged_at < ctx.window_end),
-                    (PullRequest.closed_at >= ctx.window_start)
-                    & (PullRequest.closed_at < ctx.window_end),
+                    (PullRequest.created_at >= window.window_start)
+                    & (PullRequest.created_at < window.window_end),
+                    (PullRequest.merged_at >= window.window_start)
+                    & (PullRequest.merged_at < window.window_end),
+                    (PullRequest.closed_at >= window.window_start)
+                    & (PullRequest.closed_at < window.window_end),
                 ),
             )
             .order_by(PullRequest.created_at.desc())
@@ -388,18 +401,18 @@ class EvidenceBundleService:
     async def _fetch_issues(
         self,
         session: AsyncSession,
-        ctx: _QueryContext,
+        window: _WindowQuery,
     ) -> list[Issue]:
         """Fetch issues created or closed within the window."""
         stmt = (
             select(Issue)
             .where(
-                Issue.repo_id == ctx.repository_id,
+                Issue.repo_id == window.repository_id,
                 or_(
-                    (Issue.created_at >= ctx.window_start)
-                    & (Issue.created_at < ctx.window_end),
-                    (Issue.closed_at >= ctx.window_start)
-                    & (Issue.closed_at < ctx.window_end),
+                    (Issue.created_at >= window.window_start)
+                    & (Issue.created_at < window.window_end),
+                    (Issue.closed_at >= window.window_start)
+                    & (Issue.closed_at < window.window_end),
                 ),
             )
             .order_by(Issue.created_at.desc())
@@ -410,13 +423,13 @@ class EvidenceBundleService:
         self,
         session: AsyncSession,
         repo_external_id: str,
-        ctx: _QueryContext,
+        window: _WindowQuery,
     ) -> list[int]:
         """Fetch EventFact IDs for coverage tracking."""
         stmt = select(EventFact.id).where(
             EventFact.repo_external_id == repo_external_id,
-            EventFact.occurred_at >= ctx.window_start,
-            EventFact.occurred_at < ctx.window_end,
+            EventFact.occurred_at >= window.window_start,
+            EventFact.occurred_at < window.window_end,
         )
         return list((await session.scalars(stmt)).all())
 

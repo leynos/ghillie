@@ -822,13 +822,13 @@ commit patterns:
 
 **Default label patterns:**
 
-| Work Type     | Labels                                                   |
-| ------------- | -------------------------------------------------------- |
-| Bug           | bug, bugfix, fix, defect, hotfix                         |
-| Feature       | feature, enhancement, new feature, feat                  |
+| Work Type     | Labels                                                    |
+| ------------- | --------------------------------------------------------- |
+| Bug           | bug, bugfix, fix, defect, hotfix                          |
+| Feature       | feature, enhancement, new feature, feat                   |
 | Refactor      | refactor, refactoring, tech debt, technical debt, cleanup |
-| Chore         | chore, maintenance, dependencies, deps, ci, build        |
-| Documentation | documentation, docs, doc                                 |
+| Chore         | chore, maintenance, dependencies, deps, ci, build         |
+| Documentation | documentation, docs, doc                                  |
 
 **Default title patterns (conventional commits):**
 
