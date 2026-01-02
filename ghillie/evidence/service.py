@@ -10,14 +10,33 @@ summarization.
 
 Example:
 -------
+Create an engine and session factory, then build a bundle for a repository:
+
 >>> from datetime import datetime, timezone
+>>> from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+>>> from ghillie.bronze import init_bronze_storage
+>>> from ghillie.silver import init_silver_storage
 >>> from ghillie.evidence.service import EvidenceBundleService
+>>>
+>>> # Set up database connection
+>>> engine = create_async_engine("sqlite+aiosqlite:///ghillie.db")
+>>> await init_bronze_storage(engine)
+>>> await init_silver_storage(engine)
+>>> session_factory = async_sessionmaker(engine, expire_on_commit=False)
+>>>
+>>> # Build the evidence bundle
 >>> service = EvidenceBundleService(session_factory)
 >>> bundle = await service.build_bundle(
 ...     repository_id="550e8400-e29b-41d4-a716-446655440000",
 ...     window_start=datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
 ...     window_end=datetime(2025, 1, 8, 0, 0, 0, tzinfo=timezone.utc),
 ... )
+>>>
+>>> # Access bundle properties
+>>> print(bundle.repository.slug)  # "owner/repo-name"
+>>> print(bundle.total_event_count)  # Total commits, PRs, issues, doc changes
+>>> print(len(bundle.commits))  # Number of commits in window
+>>> print(len(bundle.work_type_groupings))  # Work types with activity
 
 """
 

@@ -2,6 +2,55 @@
 
 This module provides deterministic RawEventEnvelope constructors used across
 unit and behavioural tests for evidence bundle generation.
+
+Each event type has a corresponding spec dataclass (e.g., `PREventSpec`,
+`CommitEventSpec`) that encapsulates the event parameters and provides a
+`build()` method to create the raw envelope. For convenience, the
+`commit_envelope` function provides a simpler interface for commit events.
+
+Example:
+-------
+Create a pull request event using PREventSpec:
+
+>>> from datetime import datetime, timezone
+>>> from tests.helpers.event_builders import PREventSpec
+>>>
+>>> spec = PREventSpec(
+...     repo_slug="owner/repo",
+...     pr_id=1,
+...     pr_number=42,
+...     created_at=datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc),
+...     title="Add new feature",
+...     labels=("enhancement",),
+... )
+>>> envelope = spec.build()
+>>> envelope.event_type
+'github.pull_request'
+
+Create a commit event using CommitEventSpec:
+
+>>> from tests.helpers.event_builders import CommitEventSpec
+>>>
+>>> spec = CommitEventSpec(
+...     repo_slug="owner/repo",
+...     commit_sha="abc123def456",
+...     occurred_at=datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc),
+...     message="fix: resolve authentication bug",
+... )
+>>> envelope = spec.build()
+>>> envelope.event_type
+'github.commit'
+
+Or use the convenience function for commits:
+
+>>> from tests.helpers.event_builders import commit_envelope
+>>>
+>>> envelope = commit_envelope(
+...     repo_slug="owner/repo",
+...     commit_sha="abc123",
+...     occurred_at=datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc),
+... )
+
 """
 
 from __future__ import annotations
