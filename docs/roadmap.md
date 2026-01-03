@@ -190,7 +190,7 @@ reports represent the first directly consumable output of Ghillie.
 **Goal:** Provide structured, per-repository evidence bundles from Silver-layer
 data, ready for summarisation.
 
-- [ ] **Task 2.1.a – Define repository evidence structure**  
+- [x] **Task 2.1.a – Define repository evidence structure**
   Design an in-memory representation for a repository reporting window that
   includes:
   - basic repository metadata,

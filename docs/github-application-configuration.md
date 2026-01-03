@@ -1,24 +1,24 @@
 # GitHub Application configuration for Ghillie
 
-Ghillie accesses GitHub to ingest repository activity for status reporting. This
-document explains how to create and configure a GitHub App with the minimal
-permissions required for Ghillie's read-only operations.
+Ghillie accesses GitHub to ingest repository activity for status reporting.
+This document explains how to create and configure a GitHub App with the
+minimal permissions required for Ghillie's read-only operations.
 
 ## Quick start: required permissions at a glance
 
 For operators who need the minimal configuration without reading the full
-document, the following table summarises the required GitHub App permissions:
+document, the following table summarizes the required GitHub App permissions:
 
-| Category | Permission | Access level |
-|----------|------------|--------------|
-| Repository | Metadata | Read-only |
-| Repository | Contents | Read-only |
-| Repository | Issues | Read-only |
-| Repository | Pull requests | Read-only |
-| Organisation | Members | Read-only (optional) |
+| Category     | Permission    | Access level         |
+| ------------ | ------------- | -------------------- |
+| Repository   | Metadata      | Read-only            |
+| Repository   | Contents      | Read-only            |
+| Repository   | Issues        | Read-only            |
+| Repository   | Pull requests | Read-only            |
+| Organisation | Members       | Read-only (optional) |
 
-**Installation scope:** Install on all repositories that Ghillie should monitor,
-or use organisation-wide installation with selective repository access.
+**Installation scope:** Install on all repositories that Ghillie should
+monitor, or use organisation-wide installation with selective repository access.
 
 **Environment variable:** Set `GHILLIE_GITHUB_TOKEN` to the installation access
 token (not the private key).
@@ -48,8 +48,8 @@ metadata, pull requests, issues, and documentation paths.
 
 ## Prerequisites
 
-Before creating a GitHub App for Ghillie, ensure the following prerequisites are
-met:
+Before creating a GitHub App for Ghillie, ensure the following prerequisites
+are met:
 
 - **Organisation administrator access** to create and install GitHub Apps, or
   the ability to request installation approval from an administrator.
@@ -73,11 +73,11 @@ met:
 
 Fill in the basic information for the App:
 
-| Field | Recommended value |
-|-------|-------------------|
+| Field           | Recommended value                                                           |
+| --------------- | --------------------------------------------------------------------------- |
 | GitHub App name | `ghillie-status-reporter` (or include the organisation name for uniqueness) |
-| Description | Read-only status reporting for engineering estate monitoring |
-| Homepage URL | The Ghillie deployment URL or internal documentation page |
+| Description     | Read-only status reporting for engineering estate monitoring                |
+| Homepage URL    | The Ghillie deployment URL or internal documentation page                   |
 
 Under **Identifying and authorizing users**, leave the defaults unless
 user-level OAuth flows are required (Ghillie does not use them).
@@ -98,12 +98,12 @@ later without recreating the App.
 Request only the permissions Ghillie requires. All permissions should be
 **Read-only**.
 
-| Permission | Access level | Rationale |
-|------------|--------------|-----------|
-| Metadata | Read-only | Required for basic repository information (name, default branch, visibility) |
-| Contents | Read-only | Required to read documentation paths such as roadmaps and ADRs; Ghillie does not access source code blobs |
-| Issues | Read-only | Required to ingest issue metadata (titles, labels, states, timestamps) |
-| Pull requests | Read-only | Required to ingest pull request metadata (titles, labels, states, branches) |
+| Permission    | Access level | Rationale                                                                                                 |
+| ------------- | ------------ | --------------------------------------------------------------------------------------------------------- |
+| Metadata      | Read-only    | Required for basic repository information (name, default branch, visibility)                              |
+| Contents      | Read-only    | Required to read documentation paths such as roadmaps and ADRs; Ghillie does not access source code blobs |
+| Issues        | Read-only    | Required to ingest issue metadata (titles, labels, states, timestamps)                                    |
+| Pull requests | Read-only    | Required to ingest pull request metadata (titles, labels, states, branches)                               |
 
 Do not request any other repository permissions. In particular, do not request:
 
@@ -121,9 +121,9 @@ Do not request any other repository permissions. In particular, do not request:
 Organisation permissions are not required for basic Ghillie operation. To
 attribute activity to organisation members in reports, request:
 
-| Permission | Access level | Rationale |
-|------------|--------------|-----------|
-| Members | Read-only | Optional: enables author attribution by organisation membership |
+| Permission | Access level | Rationale                                                       |
+| ---------- | ------------ | --------------------------------------------------------------- |
+| Members    | Read-only    | Optional: enables author attribution by organisation membership |
 
 Leave all other organisation permissions unselected.
 
@@ -169,8 +169,8 @@ App ID and the private key are required to generate installation tokens.
 
 ### Per-repository installation
 
-If **Only select repositories** was selected during installation, the repository
-list can be modified at any time:
+If **Only select repositories** was selected during installation, the
+repository list can be modified at any time:
 
 1. Navigate to the organisation settings.
 2. Select **Installed GitHub Apps** in the left sidebar.
@@ -219,8 +219,8 @@ sequenceDiagram
 
 Ghillie reads the GitHub token from an environment variable:
 
-| Variable | Description | Example |
-|----------|-------------|---------|
+| Variable               | Description                              | Example                                    |
+| ---------------------- | ---------------------------------------- | ------------------------------------------ |
 | `GHILLIE_GITHUB_TOKEN` | Installation access token for GitHub API | `ghs_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx` |
 
 The token value should be an installation access token, not the App's private
@@ -319,18 +319,18 @@ failures.
 Ghillie deliberately excludes several permissions to minimise its access
 footprint:
 
-| Permission | Reason excluded |
-|------------|-----------------|
+| Permission      | Reason excluded                                                     |
+| --------------- | ------------------------------------------------------------------- |
 | Contents: Write | Ghillie is strictly read-only; it never modifies repository content |
-| Actions | Ghillie does not interact with GitHub Actions |
-| Administration | Ghillie does not modify repository settings or access controls |
-| Checks | Ghillie does not create or consume check run results |
-| Deployments | Ghillie does not track deployment pipelines |
-| Environments | Ghillie does not access deployment environment secrets |
-| Packages | Ghillie does not interact with GitHub Packages |
-| Pages | Ghillie does not access GitHub Pages configuration |
-| Security events | Ghillie does not consume security advisories or alerts |
-| Webhooks | Ghillie does not configure outgoing webhooks |
+| Actions         | Ghillie does not interact with GitHub Actions                       |
+| Administration  | Ghillie does not modify repository settings or access controls      |
+| Checks          | Ghillie does not create or consume check run results                |
+| Deployments     | Ghillie does not track deployment pipelines                         |
+| Environments    | Ghillie does not access deployment environment secrets              |
+| Packages        | Ghillie does not interact with GitHub Packages                      |
+| Pages           | Ghillie does not access GitHub Pages configuration                  |
+| Security events | Ghillie does not consume security advisories or alerts              |
+| Webhooks        | Ghillie does not configure outgoing webhooks                        |
 
 If future Ghillie features require additional permissions, update the App
 configuration and document the rationale. Always prefer the minimal permission
@@ -464,15 +464,15 @@ options:
 
 ### Polling over webhooks
 
-Ghillie currently uses periodic polling rather than webhooks for ingestion. This
-design:
+Ghillie currently uses periodic polling rather than webhooks for ingestion.
+This design:
 
 - Simplifies deployment (no public endpoint required).
 - Avoids missed events during service downtime.
 - Allows controlled backfill of historical data.
 
-Future versions may add webhook support for lower-latency ingestion. The webhook
-permission is not requested until that feature is implemented.
+Future versions may add webhook support for lower-latency ingestion. The
+webhook permission is not requested until that feature is implemented.
 
 ### GitHub Apps over fine-grained PATs
 
