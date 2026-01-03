@@ -136,6 +136,26 @@ class _WindowQuery:
     window_end: dt.datetime
 
 
+@dc.dataclass(frozen=True, slots=True)
+class _EntityFetchConfig(typ.Generic[EntityT]):  # noqa: UP046
+    """Define entity query configuration for identifier-based fetches.
+
+    Parameters
+    ----------
+    entity_type
+        SQLAlchemy entity model class to query.
+    id_column
+        Column holding the identifier (e.g., Commit.sha).
+    order_column
+        Column used for deterministic ordering.
+
+    """
+
+    entity_type: type[EntityT]
+    id_column: ColumnElement[Any] | InstrumentedAttribute[Any]
+    order_column: ColumnElement[Any] | InstrumentedAttribute[Any]
+
+
 class EvidenceBundleService:
     """Generates evidence bundles for repository status reporting.
 
@@ -256,14 +276,12 @@ class EvidenceBundleService:
         )
         return list((await session.scalars(stmt)).all())
 
-    async def _fetch_entities_by_identifiers(  # noqa: PLR0913
+    async def _fetch_entities_by_identifiers(
         self,
         session: AsyncSession,
-        entity_type: type[EntityT],
         repository_id: str,
         identifiers: set[Any],
-        id_column: ColumnElement[Any] | InstrumentedAttribute[Any],
-        order_column: ColumnElement[Any] | InstrumentedAttribute[Any],
+        config: _EntityFetchConfig[EntityT],
     ) -> list[EntityT]:
         """Fetch entities by identifiers for a repository.
 
@@ -271,16 +289,12 @@ class EvidenceBundleService:
         ----------
         session
             Database session.
-        entity_type
-            SQLAlchemy entity model class to query.
         repository_id
             Repository identifier for filtering.
         identifiers
             Set of identifiers to match against the entity's id column.
-        id_column
-            Column holding the identifier (e.g., Commit.sha).
-        order_column
-            Column used for deterministic ordering.
+        config
+            Entity fetch configuration specifying model and columns.
 
         Returns
         -------
@@ -291,16 +305,20 @@ class EvidenceBundleService:
         if not identifiers:
             return []
         stmt = (
-            select(entity_type)
+            select(config.entity_type)
             .where(
                 # Generic EntityT unconstrained; repo_id not guaranteed by type checker
-                entity_type.repo_id == repository_id,  # type: ignore[attr-defined]
-                id_column.in_(identifiers),
+                config.entity_type.repo_id == repository_id,  # type: ignore[attr-defined]
+                config.id_column.in_(identifiers),
             )
-            .order_by(order_column.desc())
+            .order_by(config.order_column.desc())
         )
         return list((await session.scalars(stmt)).all())
 
+    # Type-safe fetch wrappers: These methods appear similar but provide
+    # distinct type signatures for different entity types. Each delegates to
+    # _fetch_entities_by_identifiers whilst maintaining compile-time type
+    # safety for callers.
     async def _fetch_commits_by_sha(
         self,
         session: AsyncSession,
@@ -309,7 +327,14 @@ class EvidenceBundleService:
     ) -> list[Commit]:
         """Fetch commits by SHA for a repository."""
         return await self._fetch_entities_by_identifiers(
-            session, Commit, repository_id, shas, Commit.sha, Commit.committed_at
+            session,
+            repository_id,
+            shas,
+            _EntityFetchConfig(
+                entity_type=Commit,
+                id_column=Commit.sha,
+                order_column=Commit.committed_at,
+            ),
         )
 
     async def _fetch_pull_requests_by_id(
@@ -321,11 +346,13 @@ class EvidenceBundleService:
         """Fetch pull requests by id for a repository."""
         return await self._fetch_entities_by_identifiers(
             session,
-            PullRequest,
             repository_id,
             ids,
-            PullRequest.id,
-            PullRequest.created_at,
+            _EntityFetchConfig(
+                entity_type=PullRequest,
+                id_column=PullRequest.id,
+                order_column=PullRequest.created_at,
+            ),
         )
 
     async def _fetch_issues_by_id(
@@ -336,7 +363,14 @@ class EvidenceBundleService:
     ) -> list[Issue]:
         """Fetch issues by id for a repository."""
         return await self._fetch_entities_by_identifiers(
-            session, Issue, repository_id, ids, Issue.id, Issue.created_at
+            session,
+            repository_id,
+            ids,
+            _EntityFetchConfig(
+                entity_type=Issue,
+                id_column=Issue.id,
+                order_column=Issue.created_at,
+            ),
         )
 
     async def _fetch_doc_changes_by_key(
@@ -614,6 +648,10 @@ class EvidenceBundleService:
                 except ValueError:
                     return ReportStatus.UNKNOWN
 
+    # Evidence builders: These methods follow a consistent transformation
+    # pattern (ORM → Evidence struct) but handle entity-specific fields and
+    # classification logic. The structural similarity is inherent to the
+    # domain model and aids consistency across evidence types.
     def _build_commit_evidence(self, commits: list[Commit]) -> list[CommitEvidence]:
         """Convert Commit models to CommitEvidence structs."""
 
