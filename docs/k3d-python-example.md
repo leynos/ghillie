@@ -351,7 +351,7 @@ HELM_ARGS="--values ./dev-values.yaml --set image.tag=local" \
 ./dev_up.py
 
 # Turn Valkey auth on (script enables it if VALKEY_PASSWORD is set)
-APP_CHART=./charts/my-http-app VALKEY_PASSWORD=devpass ./dev_up.py
+APP_CHART=./charts/my-http-app VALKEY_PASSWORD=<your-password> ./dev_up.py
 ```
 
 It prints a URL like `http://127.0.0.1:49213/`.
