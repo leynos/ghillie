@@ -241,6 +241,138 @@ The design does not require a specific health endpoint yet, but the entrypoint
 should expose deterministic logs that confirm readiness for local preview
 validation.
 
+## Diagrams
+
+The following sequence diagram illustrates the end-to-end local preview flow,
+from invoking the local script to exposing the preview URL.
+
+```mermaid
+sequenceDiagram
+    actor Developer
+    participant LocalK8sScript as LocalK8sScript
+    participant Docker as DockerEngine
+    participant K3d as K3dCli
+    participant K8s as KubernetesApi
+    participant Helm as HelmCli
+    participant CNPG as CnpgOperator
+    participant ValkeyOp as ValkeyOperator
+    participant Ghillie as GhillieHelmRelease
+    participant Traefik as TraefikIngress
+
+    Developer->>LocalK8sScript: run cmd_up
+    LocalK8sScript->>LocalK8sScript: load Config from env
+    LocalK8sScript->>LocalK8sScript: pick_free_loopback_port
+
+    LocalK8sScript->>Docker: verify docker available
+    LocalK8sScript->>K3d: create cluster with port mapping
+    K3d-->>LocalK8sScript: cluster created
+
+    LocalK8sScript->>K3d: write kubeconfig
+    K3d-->>LocalK8sScript: kubeconfig path
+    LocalK8sScript->>K8s: kubectl cluster-info
+    K8s-->>LocalK8sScript: cluster healthy
+
+    LocalK8sScript->>K8s: kubectl create namespace app_namespace
+
+    LocalK8sScript->>Helm: helm repo add cnpg, bitnami
+    LocalK8sScript->>Helm: helm repo update
+
+    LocalK8sScript->>Helm: helm upgrade --install cnpg operator
+    Helm->>K8s: install CNPG charts
+    K8s->>CNPG: create CNPG controller pods
+    CNPG-->>K8s: CNPG ready
+
+    LocalK8sScript->>K8s: apply CNPG Cluster manifest
+    CNPG->>K8s: create Postgres pods
+    LocalK8sScript->>K8s: wait for Postgres ready
+    K8s-->>LocalK8sScript: Postgres ready
+    LocalK8sScript->>K8s: get pg_app secret
+    K8s-->>LocalK8sScript: secret with uri
+    LocalK8sScript->>LocalK8sScript: decode DATABASE_URL
+
+    LocalK8sScript->>Helm: helm upgrade --install valkey-operator or valkey
+    Helm->>K8s: install Valkey operator
+    K8s->>ValkeyOp: start ValkeyOperator
+    LocalK8sScript->>K8s: create Valkey resource
+    ValkeyOp->>K8s: reconcile Valkey pods and secret
+    K8s-->>LocalK8sScript: Valkey ready, VALKEY_URL secret
+
+    LocalK8sScript->>K8s: create app Secret with DATABASE_URL, VALKEY_URL
+
+    LocalK8sScript->>Docker: build ghillie image
+    LocalK8sScript->>K3d: import image into cluster
+
+    LocalK8sScript->>Helm: helm upgrade --install ghillie chart
+    Helm->>K8s: create Deployment, Service, Ingress
+    K8s->>Ghillie: start pods
+    Ghillie->>CNPG: connect to Postgres
+    Ghillie->>ValkeyOp: connect to Valkey
+    Ghillie->>Traefik: expose HTTP endpoint via Ingress
+
+    LocalK8sScript-->>Developer: print preview URL http://127.0.0.1:port/
+```
+
+The following class diagram outlines the planned CLI and helper structure for
+the local k3d script.
+
+```mermaid
+classDiagram
+    class Config {
+        +str app_chart
+        +str app_release
+        +str app_service
+        +int ingress_port
+        +str cnpg_release
+        +str cnpg_namespace
+        +str valkey_release
+        +bool valkey_auth_enabled
+        +int agents
+    }
+
+    class LocalK8sCli {
+        +int main(argv)
+        +int run_subcommand(argv)
+        +int cmd_up(config)
+        +int cmd_down(config)
+        +int cmd_status(config)
+        +int cmd_logs(config)
+    }
+
+    class K8sHelpers {
+        +void require_exe(name)
+        +str run(cmd, env, input_text, capture)
+        +int pick_free_loopback_port()
+        +str b64decode_k8s_secret_field(b64_text)
+        +void create_k3d_cluster(config)
+        +str write_kubeconfig(cluster_name)
+        +void create_namespace(namespace, env)
+        +void install_cnpg_operator(config, env)
+        +void create_cnpg_cluster(config, env)
+        +str read_pg_app_uri(config, env)
+        +void install_valkey_operator(config, env)
+        +void create_valkey_instance(config, env)
+        +str read_valkey_uri(config, env)
+        +void create_app_secret(config, env, database_url, valkey_url)
+        +void build_and_import_image(config)
+        +void install_ghillie_chart(config, env)
+        +void delete_k3d_cluster(cluster_name)
+        +void print_status(namespace, env)
+        +void tail_logs(namespace, env)
+    }
+
+    LocalK8sCli --> Config : uses
+    LocalK8sCli --> K8sHelpers : delegates
+    K8sHelpers --> Config : reads
+
+    class MakeTargets {
+        +void local_k8s_up()
+        +void local_k8s_down()
+        +void local_k8s_status()
+    }
+
+    MakeTargets --> LocalK8sCli : invokes main
+```
+
 ## Sketches
 
 ### Helm chart layout
