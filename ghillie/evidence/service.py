@@ -45,11 +45,11 @@ from __future__ import annotations
 import dataclasses as dc
 import typing as typ
 
-from sqlalchemy import or_, select
+from sqlalchemy import select, tuple_
 from sqlalchemy.orm import selectinload
 
 from ghillie.common.time import utcnow
-from ghillie.gold.storage import Report, ReportScope
+from ghillie.gold.storage import Report, ReportCoverage, ReportScope
 from ghillie.silver.storage import (
     Commit,
     DocumentationChange,
@@ -83,12 +83,6 @@ if typ.TYPE_CHECKING:
     import datetime as dt
 
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-    from sqlalchemy.sql.elements import SQLColumnExpression
-
-    # Alias for SQLColumnExpression accepting datetime or nullable datetime
-    type DateTimeColumnExpr = (
-        SQLColumnExpression[dt.datetime] | SQLColumnExpression[dt.datetime | None]
-    )
 
 
 @dc.dataclass(slots=True)
@@ -99,6 +93,16 @@ class _WorkTypeBucket:
     prs: list[PullRequestEvidence]
     issues: list[IssueEvidence]
     titles: list[str]
+
+
+@dc.dataclass(slots=True)
+class _EventTargets:
+    """Identifiers extracted from event facts for entity lookup."""
+
+    commit_shas: set[str] = dc.field(default_factory=set)
+    pull_request_ids: set[int] = dc.field(default_factory=set)
+    issue_ids: set[int] = dc.field(default_factory=set)
+    doc_change_keys: set[tuple[str, str]] = dc.field(default_factory=set)
 
 
 class _ClassifiableEvidence(typ.Protocol):
@@ -161,72 +165,161 @@ class EvidenceBundleService:
         )
         self._max_previous_reports = max_previous_reports
 
-    async def _fetch_repo_entities_in_window[T](
+    @staticmethod
+    def _coerce_int(value: typ.Any) -> int | None:  # noqa: ANN401
+        """Coerce a payload value into an integer, if possible."""
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str) and value.isdigit():
+            return int(value)
+        return None
+
+    def _extract_event_targets(self, event_facts: list[EventFact]) -> _EventTargets:
+        """Extract entity identifiers from uncovered event facts."""
+        targets = _EventTargets()
+        handlers = {
+            "github.commit": self._handle_commit_event,
+            "github.pull_request": self._handle_pull_request_event,
+            "github.issue": self._handle_issue_event,
+            "github.doc_change": self._handle_doc_change_event,
+        }
+
+        for fact in event_facts:
+            handler = handlers.get(fact.event_type)
+            if handler is None:
+                continue
+            handler(targets, fact.payload or {})
+
+        return targets
+
+    def _handle_commit_event(
+        self, targets: _EventTargets, payload: dict[str, typ.Any]
+    ) -> None:
+        sha = payload.get("sha")
+        if isinstance(sha, str):
+            targets.commit_shas.add(sha)
+
+    def _handle_pull_request_event(
+        self, targets: _EventTargets, payload: dict[str, typ.Any]
+    ) -> None:
+        pr_id = self._coerce_int(payload.get("id"))
+        if pr_id is not None:
+            targets.pull_request_ids.add(pr_id)
+
+    def _handle_issue_event(
+        self, targets: _EventTargets, payload: dict[str, typ.Any]
+    ) -> None:
+        issue_id = self._coerce_int(payload.get("id"))
+        if issue_id is not None:
+            targets.issue_ids.add(issue_id)
+
+    def _handle_doc_change_event(
+        self, targets: _EventTargets, payload: dict[str, typ.Any]
+    ) -> None:
+        commit_sha = payload.get("commit_sha")
+        path = payload.get("path")
+        if isinstance(commit_sha, str) and isinstance(path, str):
+            targets.doc_change_keys.add((commit_sha, path))
+
+    async def _fetch_uncovered_event_facts(
         self,
         session: AsyncSession,
-        model: type[T],
+        repo_external_id: str,
+        repository_id: str,
         window: _WindowQuery,
-        time_field: DateTimeColumnExpr,
-    ) -> list[T]:
-        """Fetch entities within a time window.
-
-        Parameters
-        ----------
-        session
-            Database session.
-        model
-            SQLAlchemy model class to query.
-        window
-            Repository and time window to query.
-        time_field
-            Column to use for time filtering.
-
-        Returns
-        -------
-        list[T]
-            List of matching entities.
-
-        """
-        stmt = (
-            select(model)
+    ) -> list[EventFact]:
+        """Fetch EventFacts in the window, excluding repository-scope coverage."""
+        coverage_exists = (
+            select(ReportCoverage.id)
+            .join(Report, ReportCoverage.report_id == Report.id)
             .where(
-                # Generic T unconstrained; repo_id not guaranteed by type checker
-                model.repo_id == window.repository_id,  # type: ignore[attr-defined]
-                time_field >= window.window_start,
-                time_field < window.window_end,
+                ReportCoverage.event_fact_id == EventFact.id,
+                Report.scope == ReportScope.REPOSITORY,
+                Report.repository_id == repository_id,
             )
-            .order_by(time_field.desc())
+            .exists()
+        )
+
+        stmt = (
+            select(EventFact)
+            .where(
+                EventFact.repo_external_id == repo_external_id,
+                EventFact.occurred_at >= window.window_start,
+                EventFact.occurred_at < window.window_end,
+                ~coverage_exists,
+            )
+            .order_by(EventFact.occurred_at.desc(), EventFact.id.desc())
         )
         return list((await session.scalars(stmt)).all())
 
-    async def _fetch_all_events(
+    async def _fetch_commits_by_sha(
         self,
         session: AsyncSession,
-        window: _WindowQuery,
-    ) -> tuple[list[Commit], list[PullRequest], list[Issue], list[DocumentationChange]]:
-        """Fetch all events within the window.
-
-        Returns
-        -------
-        tuple[list[Commit], list[PullRequest], list[Issue], list[DocumentationChange]]
-            A tuple of (commits, prs, issues, doc_changes).
-
-        """
-        commits = await self._fetch_repo_entities_in_window(
-            session,
-            Commit,
-            window,
-            Commit.committed_at,
+        repository_id: str,
+        shas: set[str],
+    ) -> list[Commit]:
+        """Fetch commits by SHA for a repository."""
+        if not shas:
+            return []
+        stmt = (
+            select(Commit)
+            .where(Commit.repo_id == repository_id, Commit.sha.in_(shas))
+            .order_by(Commit.committed_at.desc())
         )
-        prs = await self._fetch_pull_requests(session, window)
-        issues = await self._fetch_issues(session, window)
-        doc_changes = await self._fetch_repo_entities_in_window(
-            session,
-            DocumentationChange,
-            window,
-            DocumentationChange.occurred_at,
+        return list((await session.scalars(stmt)).all())
+
+    async def _fetch_pull_requests_by_id(
+        self,
+        session: AsyncSession,
+        repository_id: str,
+        ids: set[int],
+    ) -> list[PullRequest]:
+        """Fetch pull requests by id for a repository."""
+        if not ids:
+            return []
+        stmt = (
+            select(PullRequest)
+            .where(PullRequest.repo_id == repository_id, PullRequest.id.in_(ids))
+            .order_by(PullRequest.created_at.desc())
         )
-        return commits, prs, issues, doc_changes
+        return list((await session.scalars(stmt)).all())
+
+    async def _fetch_issues_by_id(
+        self,
+        session: AsyncSession,
+        repository_id: str,
+        ids: set[int],
+    ) -> list[Issue]:
+        """Fetch issues by id for a repository."""
+        if not ids:
+            return []
+        stmt = (
+            select(Issue)
+            .where(Issue.repo_id == repository_id, Issue.id.in_(ids))
+            .order_by(Issue.created_at.desc())
+        )
+        return list((await session.scalars(stmt)).all())
+
+    async def _fetch_doc_changes_by_key(
+        self,
+        session: AsyncSession,
+        repository_id: str,
+        keys: set[tuple[str, str]],
+    ) -> list[DocumentationChange]:
+        """Fetch documentation changes by commit/path keys."""
+        if not keys:
+            return []
+        stmt = (
+            select(DocumentationChange)
+            .where(
+                DocumentationChange.repo_id == repository_id,
+                tuple_(DocumentationChange.commit_sha, DocumentationChange.path).in_(
+                    keys
+                ),
+            )
+            .order_by(DocumentationChange.occurred_at.desc())
+        )
+        return list((await session.scalars(stmt)).all())
 
     def _build_all_evidence(
         self,
@@ -261,6 +354,10 @@ class EvidenceBundleService:
         window_end: dt.datetime,
     ) -> RepositoryEvidenceBundle:
         """Build an evidence bundle for a repository and time window.
+
+        Coverage exclusion is repository-scope only: events already covered by
+        repository reports are excluded, while project or estate coverage does
+        not affect repository bundles.
 
         Parameters
         ----------
@@ -301,15 +398,25 @@ class EvidenceBundleService:
                 session, repository_id, window_start
             )
 
-            # Fetch all events within window
-            commits, prs, issues, doc_changes = await self._fetch_all_events(
-                session, window
+            # Fetch uncovered event facts within window (repo-scope coverage)
+            event_facts = await self._fetch_uncovered_event_facts(
+                session, repo.slug, repository_id, window
             )
+            targets = self._extract_event_targets(event_facts)
 
-            # Collect event fact IDs for coverage tracking
-            event_fact_ids = await self._fetch_event_fact_ids(
-                session, repo.slug, window
+            commits = await self._fetch_commits_by_sha(
+                session, repository_id, targets.commit_shas
             )
+            prs = await self._fetch_pull_requests_by_id(
+                session, repository_id, targets.pull_request_ids
+            )
+            issues = await self._fetch_issues_by_id(
+                session, repository_id, targets.issue_ids
+            )
+            doc_changes = await self._fetch_doc_changes_by_key(
+                session, repository_id, targets.doc_change_keys
+            )
+            event_fact_ids = [fact.id for fact in event_facts]
 
             # Build evidence with classification
             commit_evidence, pr_evidence, issue_evidence, doc_evidence = (
@@ -409,65 +516,6 @@ class EvidenceBundleService:
                     return ReportStatus(str(status).lower())
                 except ValueError:
                     return ReportStatus.UNKNOWN
-
-    async def _fetch_pull_requests(
-        self,
-        session: AsyncSession,
-        window: _WindowQuery,
-    ) -> list[PullRequest]:
-        """Fetch PRs created, merged, or closed within the window."""
-        stmt = (
-            select(PullRequest)
-            .where(
-                PullRequest.repo_id == window.repository_id,
-                # Include PRs created, merged, or closed in window
-                or_(
-                    (PullRequest.created_at >= window.window_start)
-                    & (PullRequest.created_at < window.window_end),
-                    (PullRequest.merged_at >= window.window_start)
-                    & (PullRequest.merged_at < window.window_end),
-                    (PullRequest.closed_at >= window.window_start)
-                    & (PullRequest.closed_at < window.window_end),
-                ),
-            )
-            .order_by(PullRequest.created_at.desc())
-        )
-        return list((await session.scalars(stmt)).all())
-
-    async def _fetch_issues(
-        self,
-        session: AsyncSession,
-        window: _WindowQuery,
-    ) -> list[Issue]:
-        """Fetch issues created or closed within the window."""
-        stmt = (
-            select(Issue)
-            .where(
-                Issue.repo_id == window.repository_id,
-                or_(
-                    (Issue.created_at >= window.window_start)
-                    & (Issue.created_at < window.window_end),
-                    (Issue.closed_at >= window.window_start)
-                    & (Issue.closed_at < window.window_end),
-                ),
-            )
-            .order_by(Issue.created_at.desc())
-        )
-        return list((await session.scalars(stmt)).all())
-
-    async def _fetch_event_fact_ids(
-        self,
-        session: AsyncSession,
-        repo_external_id: str,
-        window: _WindowQuery,
-    ) -> list[int]:
-        """Fetch EventFact IDs for coverage tracking."""
-        stmt = select(EventFact.id).where(
-            EventFact.repo_external_id == repo_external_id,
-            EventFact.occurred_at >= window.window_start,
-            EventFact.occurred_at < window.window_end,
-        )
-        return list((await session.scalars(stmt)).all())
 
     def _build_commit_evidence(self, commits: list[Commit]) -> list[CommitEvidence]:
         """Convert Commit models to CommitEvidence structs."""

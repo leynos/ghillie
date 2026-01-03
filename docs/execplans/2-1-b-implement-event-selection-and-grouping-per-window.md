@@ -4,32 +4,39 @@ This ExecPlan is a living document. The sections `Progress`,
 `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must
 be kept up to date as work proceeds.
 
-No `PLANS.md` exists in this repo, so this document is the sole execution
-plan and should be maintained accordingly.
+No `PLANS.md` exists in this repo, so this document is the sole execution plan
+and should be maintained accordingly.
 
 ## Purpose / Big Picture
 
-This work makes repository evidence bundles idempotent by excluding events
-that have already been reported. After the change, a reporting run for a
-repository and time window only includes new, uncovered events, and repeating
-that run without new events produces the same bundle. Success is observable by
-running the new unit and behavioural tests and by observing that evidence
-bundles omit covered events while still honouring the window start/end
-boundaries.
+This work makes repository evidence bundles idempotent by excluding events that
+have already been reported. After the change, a reporting run for a repository
+and time window only includes new, uncovered events, and repeating that run
+without new events produces the same bundle. Success is observable by running
+the new unit and behavioural tests and by observing that evidence bundles omit
+covered events while still honouring the window start/end boundaries.
 
 ## Progress
 
 - [x] (2026-01-03 00:00Z) Reviewed roadmap and evidence bundle design sections
   to scope Task 2.1.b and identify affected files.
-- [ ] Add tests that fail without coverage-aware selection.
-- [ ] Implement coverage-aware selection and event grouping logic.
-- [ ] Update design and users' guide documentation.
-- [ ] Mark roadmap Task 2.1.b as done and run full quality gates.
+- [x] (2026-01-03 00:30Z) Added unit and behavioural tests that fail without
+  coverage-aware selection.
+- [x] (2026-01-03 01:05Z) Implemented coverage-aware selection and event
+  grouping logic in `EvidenceBundleService`.
+- [x] (2026-01-03 01:20Z) Updated design and users' guide documentation to
+  reflect scope-specific coverage.
+- [x] (2026-01-03 01:55Z) Marked roadmap Task 2.1.b as done and ran all quality
+  gates (`check-fmt`, `typecheck`, `lint`, `test`, `markdownlint`, `nixie`).
 
 ## Surprises & Discoveries
 
-- Observation: None yet.
-  Evidence: N/A.
+- Observation: `make test` exceeds the default command timeout and needed a
+  longer run window.
+  Evidence: Full run completed in ~8 minutes.
+- Observation: `make markdownlint` required setting `MDLINT` to the bundled
+  `markdownlint-cli2` path.
+  Evidence: `MDLINT=/root/.bun/bin/markdownlint-cli2 make markdownlint`.
 
 ## Decision Log
 
@@ -37,13 +44,16 @@ boundaries.
   Rationale: Repository evidence bundles should be complete for their own
   windows even if project or estate reports have already consumed the same
   events. This keeps reporting order from affecting repository bundles and
-  matches the requirement that dedupe is per-scope.
-  Date/Author: 2026-01-03 (plan author).
+  matches the requirement that dedupe is per-scope. Date/Author: 2026-01-03
+  (plan author).
 
 ## Outcomes & Retrospective
 
-- Outcomes: Not started.
-- Lessons learned: N/A.
+- Outcomes: Evidence bundles now exclude repository-covered events while
+  allowing project/estate coverage to coexist. New tests and documentation
+  confirm scope-specific behaviour.
+- Lessons learned: Plan for long-running `make test` runs when validating full
+  suites.
 
 ## Context and Orientation
 
@@ -51,9 +61,9 @@ The evidence bundle logic lives in `ghillie/evidence/service.py`, which queries
 Silver tables (`ghillie/silver/storage.py`) and builds in-memory evidence
 structs (`ghillie/evidence/models.py`). Report coverage is stored in
 `ghillie/gold/storage.py` via `ReportCoverage`, which links reports to
-`EventFact` IDs. The evidence bundle currently selects all events in the
-window and collects all EventFact IDs in that window; it does not exclude
-covered EventFacts yet.
+`EventFact` IDs. The evidence bundle currently selects all events in the window
+and collects all EventFact IDs in that window; it does not exclude covered
+EventFacts yet.
 
 Relevant tests and fixtures:
 
@@ -80,10 +90,10 @@ that demonstrates coverage-aware behaviour end-to-end. These tests should fail
 with the current implementation because it ignores `report_coverage`.
 
 Then update `EvidenceBundleService` to select only uncovered EventFacts for the
-window, where coverage is filtered to repository-scoped reports only. Use
-those EventFacts as the source of truth for which commits, pull requests,
-issues, and documentation changes should be included. This will likely require
-a helper that:
+window, where coverage is filtered to repository-scoped reports only. Use those
+EventFacts as the source of truth for which commits, pull requests, issues, and
+documentation changes should be included. This will likely require a helper
+that:
 
 - fetches EventFacts for the repo slug within `[window_start, window_end)`;
 - excludes EventFacts already present in `report_coverage` for reports with
@@ -97,8 +107,8 @@ When querying Silver tables, use identifier lists instead of time-only filters
 so that events are not dropped when the EventFact occurred within the window
 but the entity timestamps fall outside the window (for example, a PR created
 before the window but updated within it). Keep ordering stable by sorting using
-the entity timestamps, and define a deterministic ordering for
-`event_fact_ids` (for example, by `occurred_at` then `id`).
+the entity timestamps, and define a deterministic ordering for `event_fact_ids`
+(for example, by `occurred_at` then `id`).
 
 Update documentation to record any decisions about coverage scope and the new
 behaviour of evidence bundles. Reflect the user-visible behaviour in
@@ -188,6 +198,10 @@ Keep a short note in this section about any data-shape assumptions used for
 EventFact payload extraction (for example, which payload keys are required for
 commit, PR, issue, or doc change selection) and any edge cases discovered.
 
+- EventFact payload keys used: `sha` (commit), `id` (PR/issue), and
+  `commit_sha` + `path` (documentation change). Event types outside these keys
+  are ignored for evidence selection but remain in `event_fact_ids`.
+
 ## Interfaces and Dependencies
 
 Evidence bundle selection must expose the following behaviour in
@@ -211,4 +225,5 @@ users' guide.
 
 ## Revision note
 
-Initial ExecPlan drafted for Task 2.1.b. No implementation changes yet.
+Updated progress, discoveries, and artifacts after implementing coverage-aware
+event selection and completing validation. Remaining work: none.

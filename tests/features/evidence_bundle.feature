@@ -33,3 +33,17 @@ Feature: Evidence bundle generation
     And a repository "octo/reef" with a commit message "fix: resolve login issue"
     When I build an evidence bundle for "octo/reef" for the reporting window
     Then the commit is classified as "bug"
+
+  Scenario: Bundle excludes events covered by repository reports
+    Given an empty store for evidence bundles
+    And a repository "octo/reef" with ingested GitHub events
+    And a repository report covers the commit event
+    When I build an evidence bundle for "octo/reef" for the reporting window
+    Then the bundle excludes the covered commit event
+
+  Scenario: Project report coverage does not affect repository bundles
+    Given an empty store for evidence bundles
+    And a repository "octo/reef" with ingested GitHub events
+    And a project report covers the commit event
+    When I build an evidence bundle for "octo/reef" for the reporting window
+    Then the bundle still includes the covered commit event

@@ -13,7 +13,7 @@ from ghillie.evidence import (
     ReportStatus,
     WorkType,
 )
-from ghillie.gold import Report, ReportScope
+from ghillie.gold import Report, ReportCoverage, ReportProject, ReportScope
 from ghillie.silver import EventFact, RawEventTransformer, Repository
 from tests.helpers.event_builders import (
     DocChangeEventSpec,
@@ -427,6 +427,105 @@ class TestEvidenceBundleServiceBuildBundle:
 
         assert len(bundle.event_fact_ids) == 1
         assert bundle.event_fact_ids[0] == facts[0].id
+
+    @pytest.mark.asyncio
+    async def test_excludes_events_covered_by_repository_reports(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        evidence_service_stack: EvidenceServiceStack,
+    ) -> None:
+        """Bundle excludes events already covered by repository reports."""
+        writer, transformer, service = evidence_service_stack
+
+        repo_slug = "octo/reef"
+        window_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
+        window_end = dt.datetime(2024, 7, 8, tzinfo=dt.UTC)
+
+        # Two commits in the window
+        first_time = dt.datetime(2024, 7, 2, tzinfo=dt.UTC)
+        second_time = dt.datetime(2024, 7, 3, tzinfo=dt.UTC)
+        await writer.ingest(commit_envelope(repo_slug, "abc123", first_time))
+        await writer.ingest(commit_envelope(repo_slug, "def456", second_time))
+        await transformer.process_pending()
+
+        repo_id = await get_repo_id(session_factory)
+
+        async with session_factory() as session:
+            from sqlalchemy import select
+
+            facts = (
+                await session.scalars(
+                    select(EventFact).where(EventFact.event_type == "github.commit")
+                )
+            ).all()
+            covered_fact = next(
+                fact for fact in facts if fact.payload.get("sha") == "abc123"
+            )
+
+            report = Report(
+                scope=ReportScope.REPOSITORY,
+                repository_id=repo_id,
+                window_start=dt.datetime(2024, 6, 24, tzinfo=dt.UTC),
+                window_end=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                model="test-model",
+            )
+            report.coverage_records.append(
+                ReportCoverage(event_fact_id=covered_fact.id)
+            )
+            session.add(report)
+            await session.commit()
+
+        bundle = await service.build_bundle(repo_id, window_start, window_end)
+
+        commit_shas = {commit.sha for commit in bundle.commits}
+        assert "abc123" not in commit_shas
+        assert "def456" in commit_shas
+        assert covered_fact.id not in set(bundle.event_fact_ids)
+
+    @pytest.mark.asyncio
+    async def test_includes_events_covered_by_project_reports(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        evidence_service_stack: EvidenceServiceStack,
+    ) -> None:
+        """Bundle ignores coverage from project-scoped reports."""
+        writer, transformer, service = evidence_service_stack
+
+        repo_slug = "octo/reef"
+        window_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
+        window_end = dt.datetime(2024, 7, 8, tzinfo=dt.UTC)
+
+        commit_time = dt.datetime(2024, 7, 2, tzinfo=dt.UTC)
+        await writer.ingest(commit_envelope(repo_slug, "abc123", commit_time))
+        await transformer.process_pending()
+
+        repo_id = await get_repo_id(session_factory)
+
+        async with session_factory() as session:
+            from sqlalchemy import select
+
+            fact = await session.scalar(
+                select(EventFact).where(EventFact.event_type == "github.commit")
+            )
+            assert fact is not None
+
+            project = ReportProject(key="wildside", name="Wildside")
+            report = Report(
+                scope=ReportScope.PROJECT,
+                project=project,
+                window_start=dt.datetime(2024, 6, 24, tzinfo=dt.UTC),
+                window_end=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                model="test-model",
+            )
+            report.coverage_records.append(ReportCoverage(event_fact_id=fact.id))
+            session.add_all([project, report])
+            await session.commit()
+
+        bundle = await service.build_bundle(repo_id, window_start, window_end)
+
+        commit_shas = {commit.sha for commit in bundle.commits}
+        assert "abc123" in commit_shas
+        assert fact.id in set(bundle.event_fact_ids)
 
     @pytest.mark.asyncio
     async def test_raises_for_missing_repository(
