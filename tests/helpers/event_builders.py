@@ -88,11 +88,12 @@ class BaseEventSpec:
 
     Examples
     --------
+    >>> from datetime import datetime, timezone
     >>> spec = BaseEventSpec(
     ...     repo_slug="owner/repo",
     ...     source_event_id="event-123",
     ...     event_type="github.commit",
-    ...     occurred_at=datetime.now(UTC),
+    ...     occurred_at=datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc),
     ...     payload={"sha": "abc123"},
     ... )
     >>> envelope = spec.build()
@@ -156,11 +157,12 @@ class PREventSpec:
 
     Examples
     --------
+    >>> from datetime import datetime, timezone
     >>> spec = PREventSpec(
     ...     repo_slug="owner/repo",
     ...     pr_id=1,
     ...     pr_number=42,
-    ...     created_at=datetime.now(UTC),
+    ...     created_at=datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc),
     ... )
     >>> envelope = spec.build()
 
@@ -229,11 +231,12 @@ class IssueEventSpec:
 
     Examples
     --------
+    >>> from datetime import datetime, timezone
     >>> spec = IssueEventSpec(
     ...     repo_slug="owner/repo",
     ...     issue_id=1,
     ...     issue_number=10,
-    ...     created_at=datetime.now(UTC),
+    ...     created_at=datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc),
     ... )
     >>> envelope = spec.build()
 
@@ -293,11 +296,12 @@ class DocChangeEventSpec:
 
     Examples
     --------
+    >>> from datetime import datetime, timezone
     >>> spec = DocChangeEventSpec(
     ...     repo_slug="owner/repo",
     ...     commit_sha="abc123",
     ...     path="docs/README.md",
-    ...     occurred_at=datetime.now(UTC),
+    ...     occurred_at=datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc),
     ... )
     >>> envelope = spec.build()
 
@@ -351,10 +355,11 @@ class CommitEventSpec:
 
     Examples
     --------
+    >>> from datetime import datetime, timezone
     >>> spec = CommitEventSpec(
     ...     repo_slug="owner/repo",
     ...     commit_sha="abc123",
-    ...     occurred_at=datetime.now(UTC),
+    ...     occurred_at=datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc),
     ... )
     >>> envelope = spec.build()
 
@@ -417,10 +422,11 @@ def commit_envelope(
 
     Examples
     --------
+    >>> from datetime import datetime, timezone
     >>> envelope = commit_envelope(
     ...     repo_slug="owner/repo",
     ...     commit_sha="abc123",
-    ...     occurred_at=datetime.now(UTC),
+    ...     occurred_at=datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc),
     ... )
 
     """

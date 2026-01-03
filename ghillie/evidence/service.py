@@ -542,7 +542,7 @@ class EvidenceBundleService:
         self,
         buckets: dict[WorkType, _WorkTypeBucket],
         entities: typ.Sequence[_ClassifiableEvidence],
-        get_bucket_list: typ.Callable[[_WorkTypeBucket], list],
+        get_bucket_list: typ.Callable[[_WorkTypeBucket], list[_ClassifiableEvidence]],
     ) -> None:
         """Populate buckets with entities (PRs or issues).
 
