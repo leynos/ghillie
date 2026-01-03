@@ -352,6 +352,15 @@ The example records both the report metadata and the event coverage. Because
 coverage references `event_facts`, reprocessing the same raw events does not
 create duplicate coverage rows.
 
+### Coverage scope and evidence bundles
+
+Coverage is scope-specific. Repository evidence bundles exclude events already
+covered by repository-scoped reports only. Coverage from project or estate
+reports does not suppress repository evidence, so repository reporting remains
+complete for its own window even if higher-level reports already include the
+same events. Re-running a repository report without new events returns the same
+bundle.
+
 ## Repository discovery and registration (Phase 1.3)
 
 The repository registry bridges catalogue-defined repositories with the Silver

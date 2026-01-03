@@ -16,8 +16,8 @@ from ghillie.evidence import (
     RepositoryEvidenceBundle,
     WorkType,
 )
-from ghillie.gold import Report, ReportScope
-from ghillie.silver import RawEventTransformer, Repository
+from ghillie.gold import Report, ReportCoverage, ReportProject, ReportScope
+from ghillie.silver import EventFact, RawEventTransformer, Repository
 from tests.helpers.event_builders import (
     DocChangeEventSpec,
     IssueEventSpec,
@@ -41,6 +41,7 @@ class EvidenceContext(typ.TypedDict, total=False):
     window_start: dt.datetime
     window_end: dt.datetime
     bundle: RepositoryEvidenceBundle
+    covered_event_fact_id: int
 
 
 # Scenario wrappers
@@ -68,6 +69,21 @@ def test_classification_from_title_scenario() -> None:
     """Wrapper for pytest-bdd scenario."""
 
 
+@scenario(
+    "../evidence_bundle.feature", "Bundle excludes events covered by repository reports"
+)
+def test_bundle_excludes_repository_coverage_scenario() -> None:
+    """Wrapper for pytest-bdd scenario."""
+
+
+@scenario(
+    "../evidence_bundle.feature",
+    "Project report coverage does not affect repository bundles",
+)
+def test_bundle_ignores_project_coverage_scenario() -> None:
+    """Wrapper for pytest-bdd scenario."""
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -89,6 +105,23 @@ async def _setup_repo_from_events(
         repo = await session.scalar(select(Repository))
         assert repo is not None
         evidence_context["repo_id"] = repo.id
+
+
+async def _fetch_commit_event_fact_id(
+    evidence_context: EvidenceContext,
+    sha: str,
+) -> int:
+    """Return the EventFact id for a commit SHA."""
+    async with evidence_context["session_factory"]() as session:
+        facts = (
+            await session.scalars(
+                select(EventFact).where(EventFact.event_type == "github.commit")
+            )
+        ).all()
+    for fact in facts:
+        if fact.payload.get("sha") == sha:
+            return fact.id
+    raise AssertionError
 
 
 # Given steps
@@ -222,6 +255,53 @@ def given_repo_with_fix_commit(evidence_context: EvidenceContext) -> None:
     asyncio.run(_setup_repo_from_events(evidence_context, events))
 
 
+@given("a repository report covers the commit event")
+def given_repo_report_covers_commit(evidence_context: EvidenceContext) -> None:
+    """Create a repository report that covers the commit event."""
+
+    async def _create_report() -> None:
+        event_fact_id = await _fetch_commit_event_fact_id(evidence_context, "abc123")
+        evidence_context["covered_event_fact_id"] = event_fact_id
+
+        async with evidence_context["session_factory"]() as session:
+            report = Report(
+                scope=ReportScope.REPOSITORY,
+                repository_id=evidence_context["repo_id"],
+                window_start=dt.datetime(2024, 6, 24, tzinfo=dt.UTC),
+                window_end=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                model="test-model",
+            )
+            report.coverage_records.append(ReportCoverage(event_fact_id=event_fact_id))
+            session.add(report)
+            await session.commit()
+
+    asyncio.run(_create_report())
+
+
+@given("a project report covers the commit event")
+def given_project_report_covers_commit(evidence_context: EvidenceContext) -> None:
+    """Create a project report that covers the commit event."""
+
+    async def _create_report() -> None:
+        event_fact_id = await _fetch_commit_event_fact_id(evidence_context, "abc123")
+        evidence_context["covered_event_fact_id"] = event_fact_id
+
+        async with evidence_context["session_factory"]() as session:
+            project = ReportProject(key="wildside", name="Wildside")
+            report = Report(
+                scope=ReportScope.PROJECT,
+                project=project,
+                window_start=dt.datetime(2024, 6, 24, tzinfo=dt.UTC),
+                window_end=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                model="test-model",
+            )
+            report.coverage_records.append(ReportCoverage(event_fact_id=event_fact_id))
+            session.add_all([project, report])
+            await session.commit()
+
+    asyncio.run(_create_report())
+
+
 # When steps
 
 
@@ -353,3 +433,23 @@ def then_commit_classified_as_bug(evidence_context: EvidenceContext) -> None:
 
     assert len(bundle.commits) == 1
     assert bundle.commits[0].work_type == WorkType.BUG
+
+
+@then("the bundle excludes the covered commit event")
+def then_bundle_excludes_commit(evidence_context: EvidenceContext) -> None:
+    """Assert covered commit is excluded from the bundle."""
+    bundle = evidence_context["bundle"]
+    covered_event_fact_id = evidence_context["covered_event_fact_id"]
+
+    assert all(commit.sha != "abc123" for commit in bundle.commits)
+    assert covered_event_fact_id not in bundle.event_fact_ids
+
+
+@then("the bundle still includes the covered commit event")
+def then_bundle_includes_commit(evidence_context: EvidenceContext) -> None:
+    """Assert project coverage does not exclude commit from bundle."""
+    bundle = evidence_context["bundle"]
+    covered_event_fact_id = evidence_context["covered_event_fact_id"]
+
+    assert any(commit.sha == "abc123" for commit in bundle.commits)
+    assert covered_event_fact_id in bundle.event_fact_ids

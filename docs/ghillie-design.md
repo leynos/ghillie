@@ -678,6 +678,11 @@ downstream report coverage recording without re-querying the database. This
 preserves the deterministic Bronze→Silver→Gold linkage required for audit
 trails.
 
+**Scope-specific coverage:** Evidence bundle selection excludes EventFacts
+already covered by repository-scoped reports only. Project and estate reports
+do not suppress repository evidence, keeping repository bundles complete and
+independent of higher-level reporting runs.
+
 **Window semantics:** `window_start` is inclusive and `window_end` is
 exclusive, matching Python range conventions and simplifying consecutive window
 generation. This means events occurring exactly at `window_end` are excluded,
