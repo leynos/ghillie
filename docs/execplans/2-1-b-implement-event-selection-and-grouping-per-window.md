@@ -33,10 +33,11 @@ boundaries.
 
 ## Decision Log
 
-- Decision: Pending choice on whether report coverage should be global across
-  report scopes or limited to repository-scoped reports only.
-  Rationale: Filtering by any report scope keeps event reuse impossible across
-  reports; filtering only by repository scope preserves project/estate reuse.
+- Decision: Coverage exclusion is scope-specific and does not cross scopes.
+  Rationale: Repository evidence bundles should be complete for their own
+  windows even if project or estate reports have already consumed the same
+  events. This keeps reporting order from affecting repository bundles and
+  matches the requirement that dedupe is per-scope.
   Date/Author: 2026-01-03 (plan author).
 
 ## Outcomes & Retrospective
@@ -79,12 +80,14 @@ that demonstrates coverage-aware behaviour end-to-end. These tests should fail
 with the current implementation because it ignores `report_coverage`.
 
 Then update `EvidenceBundleService` to select only uncovered EventFacts for the
-window. Use those EventFacts as the source of truth for which commits, pull
-requests, issues, and documentation changes should be included. This will
-likely require a helper that:
+window, where coverage is filtered to repository-scoped reports only. Use
+those EventFacts as the source of truth for which commits, pull requests,
+issues, and documentation changes should be included. This will likely require
+a helper that:
 
 - fetches EventFacts for the repo slug within `[window_start, window_end)`;
-- excludes EventFacts already present in `report_coverage`;
+- excludes EventFacts already present in `report_coverage` for reports with
+  `scope = repository`;
 - groups uncovered EventFacts by `event_type` and extracts identifiers
   (commit SHA, PR ID, issue ID, doc change commit+path); and
 - returns both the uncovered EventFacts (for `event_fact_ids`) and the
@@ -153,7 +156,9 @@ all quality gates.
 The change is accepted when all of the following are true:
 
 - New unit tests demonstrate that covered EventFacts are excluded from the
-  evidence bundle and that `event_fact_ids` only include uncovered IDs.
+  evidence bundle when coverage comes from repository-scoped reports, and that
+  coverage from project/estate reports does not exclude events.
+- `event_fact_ids` only include uncovered IDs for repository-scoped coverage.
 - New pytest-bdd scenario demonstrates coverage-aware selection end-to-end.
 - Evidence bundle still respects `window_start` inclusive and `window_end`
   exclusive semantics.
@@ -189,7 +194,8 @@ Evidence bundle selection must expose the following behaviour in
 `ghillie/evidence/service.py`:
 
 - A helper that returns uncovered `EventFact` rows for a repo/window by
-  checking `report_coverage` and ordering by `occurred_at` then `id`.
+  checking `report_coverage` for `Report.scope == repository` and ordering by
+  `occurred_at` then `id`.
 - A mapping from uncovered EventFacts to identifier sets:
   - commits: payload `sha` (string)
   - pull requests: payload `id` (int)
@@ -200,7 +206,8 @@ Evidence bundle selection must expose the following behaviour in
 - `RepositoryEvidenceBundle.event_fact_ids` must contain only uncovered
   EventFact IDs.
 
-If scope-specific filtering is adopted, record it here and in the design doc.
+Scope-specific filtering is required. Document it in the design doc and in the
+users' guide.
 
 ## Revision note
 
