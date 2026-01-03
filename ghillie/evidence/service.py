@@ -538,11 +538,11 @@ class EvidenceBundleService:
             for doc in doc_changes
         ]
 
-    def _populate_entity_bucket(
+    def _populate_entity_bucket[E: _ClassifiableEvidence](
         self,
         buckets: dict[WorkType, _WorkTypeBucket],
-        entities: typ.Sequence[_ClassifiableEvidence],
-        get_bucket_list: typ.Callable[[_WorkTypeBucket], list[_ClassifiableEvidence]],
+        entities: typ.Sequence[E],
+        get_bucket_list: typ.Callable[[_WorkTypeBucket], list[E]],
     ) -> None:
         """Populate buckets with entities (PRs or issues).
 
