@@ -32,11 +32,10 @@ covered events while still honouring the window start/end boundaries.
 ## Surprises & Discoveries
 
 - Observation: `make test` exceeds the default command timeout and needed a
-  longer run window.
-  Evidence: Full run completed in ~8 minutes.
+  longer run window. Evidence: Full run completed in ~8 minutes.
 - Observation: `make markdownlint` required setting `MDLINT` to the bundled
-  `markdownlint-cli2` path.
-  Evidence: `MDLINT=/root/.bun/bin/markdownlint-cli2 make markdownlint`.
+  `markdownlint-cli2` path. Evidence:
+  `MDLINT=/root/.bun/bin/markdownlint-cli2 make markdownlint`.
 
 ## Decision Log
 
