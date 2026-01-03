@@ -190,6 +190,7 @@ class EvidenceBundleService:
         stmt = (
             select(model)
             .where(
+                # Generic T unconstrained; repo_id not guaranteed by type checker
                 model.repo_id == window.repository_id,  # type: ignore[attr-defined]
                 time_field >= window.window_start,
                 time_field < window.window_end,
