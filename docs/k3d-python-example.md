@@ -307,7 +307,6 @@ if __name__ == "__main__":
 
 What the script relies on (so the behaviour is easy to reason about, not just
 repeat the incantations):
-incantations):
 
 - It exposes Traefik by mapping **host port → port 80 on the k3d load balancer
   container**, which k3d recommends for ingress.
