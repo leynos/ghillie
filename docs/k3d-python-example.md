@@ -313,10 +313,10 @@ if __name__ == "__main__":
 What the script relies on (so the behaviour is easy to reason about, not just
 repeat the incantations):
 
-- It exposes Traefik by mapping **host port → port 80 on the k3d load balancer
-  container**, which k3d recommends for ingress.
+- It exposes Traefik by mapping **host port to port 80 on the k3d load
+  balancer container**, which k3d recommends for ingress.
   ([K3D](https://k3d.io/v5.3.0/usage/exposing_services/))
-- k3d’s `--port` format supports `127.0.0.1:HOSTPORT:CONTAINERPORT@...`, which
+- k3d’s `--port` format supports `127.0.0.1:HOSTPORT:CONTAINERPORT@…`, which
   keeps the ingress bound to loopback only.
   ([Loculus](https://loculus.org/for-administrators/setup-with-k3d-and-nginx/))
 - The CNPG Helm repo and install command come from CloudNativePG’s chart docs.

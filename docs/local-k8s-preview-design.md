@@ -2,11 +2,11 @@
 
 ## Purpose
 
-Define a local Kubernetes preview environment for Ghillie that uses k3d and
-Helm, aligns with the cloud-native ephemeral previews architecture, and is
-ready for implementation. The design documents the Helm chart shape, container
-build, and a Python-based lifecycle script, plus the roadmap tasks needed to
-ship the implementation.
+Define a local Kubernetes preview environment for Ghillie that uses k3d
+(k3s-in-Docker) and Helm, aligns with the cloud-native ephemeral previews
+architecture, and is ready for implementation. The design documents the Helm
+chart shape, container build, and a Python-based lifecycle script, plus the
+roadmap tasks needed to ship the implementation.
 
 This design is informed by the k3d Python example and the ephemeral previews
 architecture for Wildside, which will also be used for Ghillie.[^k3d]
@@ -96,9 +96,9 @@ avoids `ingressClassName` unless explicitly configured.[^k3d].
 
 The chart should load sensitive configuration via a Kubernetes Secret. In the
 local flow, the lifecycle script will create that Secret using values derived
-from CNPG and Valkey. In ephemeral previews, External Secrets Operator should
-hydrate the Secret from Vault or another backend, controlled via the chart
-values.
+from CNPG and Valkey. In the ephemeral previews environment, External Secrets
+Operator should hydrate the Secret from Vault or another backend, controlled
+via the chart values.
 
 ## Container image design
 
