@@ -204,176 +204,17 @@ for existing clusters, and explain how to recover from failed Helm installs.
 
 ## Artifacts and notes
 
-Sketches below are illustrative and should be refined during implementation.
+The detailed Helm chart, Dockerfile, and local CLI sketches live in
+`docs/local-k8s-preview-design.md` and should be treated as the source of
+truth. This ExecPlan should only summarize the required artifacts so the design
+work stays centralized.
 
-Helm chart layout sketch:
+- Helm chart layout plus template sketches for deployment, ingress, and
+  ExternalSecret integration.
+- Dockerfile stages for building and running the Ghillie container image.
+- Python local-k8s CLI structure, including Config and subcommand flow.
 
-    charts/ghillie/
-      Chart.yaml
-      values.yaml
-      values.schema.json
-      templates/
-        deployment.yaml
-        service.yaml
-        ingress.yaml
-        serviceaccount.yaml
-        configmap.yaml
-        externalsecret.yaml
-        poddisruptionbudget.yaml
-
-Chart.yaml sketch:
-
-    apiVersion: v2
-    name: ghillie
-    description: Ghillie application chart
-    type: application
-    version: 0.1.0
-    appVersion: "0.1.0"
-
-values.yaml sketch (trimmed):
-
-    image:
-      repository: ghillie
-      tag: local
-      pullPolicy: IfNotPresent
-
-    command: []
-    args: []
-
-    service:
-      port: 8080
-
-    ingress:
-      enabled: true
-      className: ""
-      annotations: {}
-      hosts:
-        - host: ""
-          paths:
-            - path: /
-              pathType: Prefix
-      tls: []
-
-    env:
-      normal:
-        GHILLIE_ENV: local
-      secret:
-        DATABASE_URL: ""
-        VALKEY_URL: ""
-
-    secrets:
-      existingSecretName: ""
-      externalSecret:
-        enabled: false
-        secretStoreRef: ""
-        data: []
-
-Deployment template sketch (trimmed):
-
-    spec:
-      template:
-        spec:
-          serviceAccountName: {{ include "ghillie.serviceAccountName" . }}
-          containers:
-            - name: ghillie
-              image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-              imagePullPolicy: {{ .Values.image.pullPolicy }}
-              command: {{ toJson .Values.command }}
-              args: {{ toJson .Values.args }}
-              envFrom:
-                - secretRef:
-                    # Override via secrets.existingSecretName when provided.
-                    name: {{ include "ghillie.fullname" . }}
-
-Note: The design should state that `secrets.existingSecretName` overrides the
-default release name for the Secret reference.
-              env:
-                - name: GHILLIE_ENV
-                  value: {{ .Values.env.normal.GHILLIE_ENV | quote }}
-              ports:
-                - containerPort: {{ .Values.service.port }}
-
-Ingress template sketch (hostless friendly):
-
-    spec:
-      rules:
-        - {{- if .Values.ingress.hosts }}
-          host: {{ (index .Values.ingress.hosts 0).host | quote }}
-          {{- end }}
-          http:
-            paths:
-              - path: /
-                pathType: Prefix
-                backend:
-                  service:
-                    name: {{ include "ghillie.fullname" . }}
-                    port:
-                      number: {{ .Values.service.port }}
-
-ExternalSecret template sketch (optional):
-
-    apiVersion: external-secrets.io/v1beta1
-    kind: ExternalSecret
-    metadata:
-      name: {{ include "ghillie.fullname" . }}
-    spec:
-      refreshInterval: 1h
-      secretStoreRef:
-        name: {{ .Values.secrets.externalSecret.secretStoreRef }}
-        kind: ClusterSecretStore
-      target:
-        name: {{ include "ghillie.fullname" . }}
-      data: {{ toJson .Values.secrets.externalSecret.data }}
-
-Dockerfile sketch:
-
-    FROM python:3.12-slim AS build
-    WORKDIR /build
-    RUN pip install --upgrade pip
-    COPY pyproject.toml README.md /build/
-    COPY ghillie /build/ghillie
-    RUN pip wheel --wheel-dir /wheels .
-
-    FROM python:3.12-slim
-    WORKDIR /app
-    RUN pip install --no-cache-dir /wheels/*.whl
-    COPY docker/entrypoint.sh /usr/local/bin/ghillie-entrypoint
-    ENTRYPOINT ["ghillie-entrypoint"]
-    CMD ["python", "-m", "ghillie.<entrypoint>"]
-
-Local k3d script sketch (single CLI with subcommands):
-
-    @dataclass(frozen=True)
-    class Config:
-        cluster_name: str
-        namespace: str
-        ingress_port: int | None
-        chart_path: str
-        image_repo: str
-        image_tag: str
-        postgres_release: str
-        valkey_release: str
-
-    def cmd_up(cfg: Config) -> None:
-        require_exe("docker")
-        require_exe("k3d")
-        require_exe("kubectl")
-        require_exe("helm")
-        port = cfg.ingress_port or pick_free_loopback_port()
-        create_k3d_cluster(cfg.cluster_name, port)
-        kube_env = kubeconfig_env(cfg.cluster_name)
-        install_cnpg(kube_env)
-        create_pg_cluster(kube_env, cfg.namespace)
-        install_valkey(kube_env, cfg.namespace)
-        ensure_app_secret(kube_env, cfg.namespace)
-        build_and_import_image(cfg.cluster_name, cfg.image_repo, cfg.image_tag)
-        install_ghillie_chart(kube_env, cfg.namespace, cfg.chart_path, cfg)
-
-    def cmd_down(cfg: Config) -> None:
-        delete_k3d_cluster(cfg.cluster_name)
-
-    def cmd_status(cfg: Config) -> None:
-        kubectl_get_all(cfg.namespace)
+Keep the sketches in the design document and reference them here to avoid drift.
 
 ## Interfaces and dependencies
 
@@ -433,3 +274,7 @@ Marked Markdown quality gates as complete after fixing markdownlint issues and
 rerunning `make fmt`, `make markdownlint`, and `make nixie`.
 
 Refreshed the quality-gate timestamp after re-running the documentation checks.
+
+Removed duplicate template sketches from the ExecPlan, referencing the design
+document instead, and aligned ExternalSecret template guidance to use `toYaml`
+for proper YAML rendering.

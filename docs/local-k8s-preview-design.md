@@ -471,7 +471,8 @@ spec:
     kind: ClusterSecretStore
   target:
     name: {{ include "ghillie.fullname" . }}
-  data: {{ toJson .Values.secrets.externalSecret.data }}
+  data:
+    {{- toYaml .Values.secrets.externalSecret.data | nindent 4 }}
 ```
 
 ### Dockerfile sketch

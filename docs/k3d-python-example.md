@@ -11,6 +11,11 @@ exactly what was requested:
 - installs the **existing app Helm chart**
 - creates a plain Kubernetes **Ingress** that Traefik will route
 
+Note: The workflow in this example (`dev_up.py`) is intentionally bespoke. The
+planned local preview tooling is the `scripts/local_k8s.py` CLI described in
+`docs/local-k8s-preview-design.md`. Expect the production implementation to
+follow that design, with this guide serving as a legacy or interim reference.
+
 This leans on k3d’s recommended ingress pattern: expose port **80 on the k3d
 load balancer** to a host port, then use a normal `Ingress` resource.
 ([K3D](https://k3d.io/v5.3.0/usage/exposing_services/)) k3s (which k3d runs)
@@ -28,8 +33,8 @@ These CLIs must be available inside the environment where the script runs:
 - `helm`
 
 k3d’s port mapping format supports binding to a specific IP (like `127.0.0.1`)
-as `IP:HOSTPORT:CONTAINERPORT@nodefilter`, which is used for the
-loopback-only ingress port.
+as `IP:HOSTPORT:CONTAINERPORT@nodefilter`, which is used for the loopback-only
+ingress port.
 ([Loculus](https://loculus.org/for-administrators/setup-with-k3d-and-nginx/))
 
 ## The Python script
@@ -383,6 +388,6 @@ the chart values and let Helm own it.
 That’s the whole machine.
 
 When wiring the app to Postgres + Valkey, the CNPG `*-app` secret provides an
-actual `uri` field that can be injected straight into the Deployment
-(or Helm values) without inventing service names.
+actual `uri` field that can be injected straight into the Deployment (or Helm
+values) without inventing service names.
 ([CloudNativePG](https://cloudnative-pg.io/docs/1.27/applications))
