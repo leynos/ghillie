@@ -63,7 +63,7 @@ Success is observable when:
 ## Decision Log
 
 - Decision: Use a single Helm chart for the Ghillie application with
-  environment-driven values so the same chart works for local k3d and GitOps
+  environment-driven values, so the same chart works for local k3d and GitOps
   ephemeral previews. Rationale: Reduces drift between local and cloud
   workflows while matching the GitOps model that deploys Helm releases with
   overlays. Date/Author: 2026-01-03, Codex
@@ -86,7 +86,7 @@ Success is observable when:
 - Decision: Adopt valkey-operator for local Valkey provisioning to align with
   the ephemeral previews platform approach. Rationale: Reduces drift between
   local preview and GitOps environments while keeping platform services
-  operator-driven. Date/Author: 2026-01-03, Codex
+  operator-driven. Date/Author: 2026-01-03, Codex.
 
 ## Outcomes & Retrospective
 
@@ -426,7 +426,7 @@ document path (`docs/local-k8s-preview-design.md`), and aligned section names
 with the ExecPlan requirements.
 
 Updated progress to reflect completed design and roadmap deliverables, recorded
-the valkey-operator decision, and noted markdownlint blocking issues so the
+the valkey-operator decision, and noted markdownlint blocking issues, so the
 remaining work is limited to resolving documentation lint failures.
 
 Marked Markdown quality gates as complete after fixing markdownlint issues and

@@ -1,26 +1,26 @@
 # k3d Python example
 
 Here’s a pragmatic “one Python script + a couple of knobs” guide that does
-exactly what you described:
+exactly what was requested:
 
 - creates a k3d cluster
 - picks a random free **loopback** port and maps it to Traefik’s HTTP entrypoint
-- creates a **unique namespace** for *your* app
+- creates a **unique namespace** for the application
 - installs **CloudNativePG (CNPG)** via Helm
 - installs **Valkey** via Helm
-- installs **your existing app Helm chart**
+- installs the **existing app Helm chart**
 - creates a plain Kubernetes **Ingress** that Traefik will route
 
 This leans on k3d’s recommended ingress pattern: expose port **80 on the k3d
 load balancer** to a host port, then use a normal `Ingress` resource.
 ([K3D](https://k3d.io/v5.3.0/usage/exposing_services/)) k3s (which k3d runs)
 ships Traefik by default and Traefik listens on 80/443 via a LoadBalancer
-Service, so we don’t install Traefik separately.
+Service, so Traefik is not installed separately.
 ([K3s](https://docs.k3s.io/networking/networking-services))
 
-## Prereqs (WSL2-friendly)
+## Prereqs (Windows Subsystem for Linux 2, WSL2-friendly)
 
-You need these CLIs available inside the environment where you run the script:
+These CLIs must be available inside the environment where the script runs:
 
 - `docker` (usually Docker Desktop with WSL2 integration)
 - `k3d`
@@ -28,7 +28,7 @@ You need these CLIs available inside the environment where you run the script:
 - `helm`
 
 k3d’s port mapping format supports binding to a specific IP (like `127.0.0.1`)
-as `IP:HOSTPORT:CONTAINERPORT@nodefilter`, which is what we use for the
+as `IP:HOSTPORT:CONTAINERPORT@nodefilter`, which is used for the
 loopback-only ingress port.
 ([Loculus](https://loculus.org/for-administrators/setup-with-k3d-and-nginx/))
 
@@ -58,12 +58,12 @@ from typing import Optional
 class Config:
     # Your app chart: either a local path (./charts/myapp) or a repo ref (myrepo/myapp)
     app_chart: str
-    # Release name for your app (Helm release)
+    # Release name for the app (Helm release)
     app_release: str = "app"
-    # Service name backing the HTTP app (defaults to release name; override if your chart differs)
+    # Service name backing the HTTP app (defaults to release name; override if the chart differs)
     app_service: Optional[str] = None
 
-    # Set explicitly if you want a stable port; otherwise we pick a random free one.
+    # Set explicitly for a stable port; otherwise a random free one is used.
     ingress_port: Optional[int] = None
 
     # CNPG bits
@@ -72,7 +72,7 @@ class Config:
 
     # Valkey bits (Bitnami chart in this example)
     valkey_release: str = "valkey"
-    # If you prefer auth, set VALKEY_PASSWORD in env and flip auth_enabled below.
+    # If auth is preferred, set VALKEY_PASSWORD in env and flip auth_enabled below.
     valkey_auth_enabled: bool = False
 
     # Cluster shape
@@ -130,7 +130,7 @@ def main() -> None:
     app_chart = os.environ.get("APP_CHART", "").strip()
     if not app_chart:
         raise SystemExit(
-            "Set APP_CHART to your chart path or ref, e.g.\n"
+            "Set APP_CHART to the chart path or ref, e.g.\n"
             "  APP_CHART=./charts/my-http-app\n"
             "or\n"
             "  APP_CHART=myrepo/my-http-app\n"
@@ -196,7 +196,7 @@ def main() -> None:
         env=kube_env,
     )
 
-    print("\n--- creating a small Postgres cluster via CNPG (in your unique namespace) ---")
+    print("\n--- creating a small Postgres cluster via CNPG (in the unique namespace) ---")
     pg_name = f"pg-{suffix}"
     pg_manifest = textwrap.dedent(f"""\
         apiVersion: postgresql.cnpg.io/v1
@@ -215,7 +215,7 @@ def main() -> None:
     """)
     run(["kubectl", "apply", "-f", "-"], env=kube_env, input_text=pg_manifest)
 
-    # CNPG creates a secret named "<cluster>-app" by default (unless you override it).
+    # CNPG creates a secret named "<cluster>-app" by default (unless overridden).
     # It includes a ready-to-use connection URI.
     print("\n--- waiting for CNPG app secret (connection info) ---")
     run(
@@ -243,13 +243,14 @@ def main() -> None:
         "--namespace", namespace, "--wait", "--timeout", "10m",
     ]
     if cfg.valkey_auth_enabled:
+        # gitleaks:allow - example uses a placeholder env var in docs.
         valkey_args += ["--set", "auth.enabled=true", "--set", f"auth.password={valkey_password}"]
     else:
         valkey_args += ["--set", "auth.enabled=false"]
 
     run(valkey_args, env=kube_env)
 
-    print("\n--- installing your app chart ---")
+    print("\n--- installing the app chart ---")
     # You can pass additional values via HELM_ARGS, e.g.
     #   HELM_ARGS="--values ./dev-values.yaml --set image.tag=local"
     extra = shlex.split(os.environ.get("HELM_ARGS", "").strip()) if os.environ.get("HELM_ARGS") else []
@@ -304,14 +305,15 @@ if __name__ == "__main__":
     main()
 ```
 
-What the script relies on (so you can reason about it, not just chant the
+What the script relies on (so the behaviour is easy to reason about, not just
+repeat the incantations):
 incantations):
 
 - It exposes Traefik by mapping **host port → port 80 on the k3d load balancer
   container**, which k3d recommends for ingress.
   ([K3D](https://k3d.io/v5.3.0/usage/exposing_services/))
 - k3d’s `--port` format supports `127.0.0.1:HOSTPORT:CONTAINERPORT@...`, which
-  lets you keep the ingress bound to loopback only.
+  keeps the ingress bound to loopback only.
   ([Loculus](https://loculus.org/for-administrators/setup-with-k3d-and-nginx/))
 - The CNPG Helm repo and install command come from CloudNativePG’s chart docs.
   ([CloudNativePG](https://cloudnative-pg.io/charts/))
@@ -324,25 +326,25 @@ incantations):
 
 ## Run it
 
-From the same shell where `docker` can see your Docker Desktop engine:
+From the same shell where `docker` can see the Docker Desktop engine:
 
 ```bash
 chmod +x dev_up.py
 
-# Minimum: point at your existing app chart
+# Minimum: point at the existing app chart
 APP_CHART=./charts/my-http-app ./dev_up.py
 ```
 
-Optional knobs you’ll actually use:
+Optional knobs in common use:
 
 ```bash
-# Choose your Helm release name for the app
+# Choose the Helm release name for the app
 APP_CHART=./charts/my-http-app APP_RELEASE=myapp ./dev_up.py
 
-# If your chart’s Service name doesn’t match release name
+# If the chart’s Service name doesn’t match the release name
 APP_CHART=./charts/my-http-app APP_RELEASE=myapp APP_SERVICE=myapp-web ./dev_up.py
 
-# If you want to force a port instead of random
+# Force a port instead of random selection
 APP_CHART=./charts/my-http-app INGRESS_PORT=18080 ./dev_up.py
 
 # Pass extra Helm args into the app install (values file, image tag, etc.)
@@ -351,7 +353,7 @@ HELM_ARGS="--values ./dev-values.yaml --set image.tag=local" \
 ./dev_up.py
 
 # Turn Valkey auth on (script enables it if VALKEY_PASSWORD is set)
-APP_CHART=./charts/my-http-app VALKEY_PASSWORD=<your-password> ./dev_up.py
+APP_CHART=./charts/my-http-app VALKEY_PASSWORD=<valkey-password> ./dev_up.py
 ```
 
 It prints a URL like `http://127.0.0.1:49213/`.
@@ -364,9 +366,9 @@ k3d clusters are disposable; delete the whole universe in one go:
 k3d cluster delete dev-<suffix>
 ```
 
-(If you kept the script output, it prints the exact cluster name.)
+(If the script output is kept, it prints the exact cluster name.)
 
-## A couple of sharp edges to know about (so they don’t bite you later)
+## A couple of sharp edges to know about (so they don’t bite later)
 
 IngressClass name weirdness: k3s historically didn’t always create a default
 `IngressClass` called `traefik`, and different setups handle `ingressClassName`
@@ -375,13 +377,13 @@ differently. The script avoids that by creating an Ingress with no
 documents in its ingress example.
 ([K3D](https://k3d.io/v5.3.0/usage/exposing_services/))
 
-If your chart already creates an Ingress, skip the script’s Ingress step (or
-you’ll end up with two). The clean way: move ingress creation into your chart
-values and let Helm own it.
+If the chart already creates an Ingress, skip the script’s Ingress step to
+avoid creating two Ingresses. The clean way is to move ingress creation into
+the chart values and let Helm own it.
 
 That’s the whole machine.
 
-When you start wiring the app to Postgres + Valkey, the CNPG `*-app` secret
-gives you an actual `uri` field you can inject straight into your Deployment
+When wiring the app to Postgres + Valkey, the CNPG `*-app` secret provides an
+actual `uri` field that can be injected straight into the Deployment
 (or Helm values) without inventing service names.
 ([CloudNativePG](https://cloudnative-pg.io/docs/1.27/applications))

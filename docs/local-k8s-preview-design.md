@@ -49,8 +49,8 @@ The local preview environment is composed of three deliverables:
 
 - A Ghillie Helm chart that deploys the application and reads configuration
   from values or external secrets.
-- A container image build that produces a runnable Ghillie artefact and a
-  stable entrypoint for Kubernetes.
+- A container image that produces a runnable Ghillie artefact and a stable
+  entrypoint for Kubernetes.
 - A Python lifecycle script that provisions a k3d cluster, installs platform
   dependencies via Helm, deploys the chart, and surfaces the preview URL.
 
@@ -68,21 +68,29 @@ repository.
 The chart must support the following values, with defaults tuned for local use
 and overrides for GitOps:
 
-- `image.repository`, `image.tag`, `image.pullPolicy`
-- `command`, `args`
+- `image.repository`
+- `image.tag`
+- `image.pullPolicy`
+- `command`
+- `args`
 - `service.port`
-- `ingress.enabled`, `ingress.className`, `ingress.annotations`,
-  `ingress.hosts`, `ingress.tls`
+- `ingress.enabled`
+- `ingress.className`
+- `ingress.annotations`
+- `ingress.hosts`
+- `ingress.tls`
 - `env.normal` for non-sensitive environment values
 - `secrets.existingSecretName` to bind to a pre-created Secret
 - `secrets.externalSecret.*` for External Secrets Operator support
-- `resources`, `securityContext`, and `podSecurityContext`
+- `resources`
+- `securityContext`
+- `podSecurityContext`
 
 ### Ingress behaviour
 
 The chart should support a hostless ingress for local k3d, relying on Traefik
 as the default ingress controller in k3s. This mirrors the k3d example and
-avoids `ingressClassName` unless explicitly configured.[^k3d]
+avoids `ingressClassName` unless explicitly configured.[^k3d].
 
 ### Secrets and configuration
 
@@ -129,19 +137,19 @@ A single Python script (`scripts/local_k8s.py`) will provide subcommands:
 The script will create a k3d cluster with a unique name and namespace, map a
 free loopback port to the k3d load balancer on port 80, and write a dedicated
 kubeconfig. This mirrors the loopback-only ingress model from the k3d example.
-[^k3d]
+[^k3d].
 
 ### Platform dependencies
 
 The script will install CloudNativePG and Valkey before deploying the Ghillie
 chart. CloudNativePG will create a small Postgres cluster in the app namespace
-and provide a database URL via the generated `*-app` Secret.[^k3d]
+and provide a database URL via the generated `*-app` Secret.[^k3d].
 
 ### Valkey provisioning decision
 
 To align with the ephemeral previews platform, the design adopts
 `valkey-operator` for local Valkey provisioning, installed via Helm in the dev
-cluster.[^valkey-operator]
+cluster.[^valkey-operator].
 
 Rationale:
 
