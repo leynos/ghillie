@@ -61,7 +61,7 @@ from typing import Optional
 
 @dataclass(frozen=True)
 class Config:
-    # Your app chart: either a local path (./charts/myapp) or a repo ref (myrepo/myapp)
+    # App chart reference: either a local path (./charts/myapp) or a repo ref (myrepo/myapp)
     app_chart: str
     # Release name for the app (Helm release)
     app_release: str = "app"
@@ -256,7 +256,7 @@ def main() -> None:
     run(valkey_args, env=kube_env)
 
     print("\n--- installing the app chart ---")
-    # You can pass additional values via HELM_ARGS, e.g.
+    # Pass additional values via HELM_ARGS, e.g.
     #   HELM_ARGS="--values ./dev-values.yaml --set image.tag=local"
     extra = shlex.split(os.environ.get("HELM_ARGS", "").strip()) if os.environ.get("HELM_ARGS") else []
     run(
