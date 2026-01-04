@@ -97,7 +97,8 @@ avoids `ingressClassName` unless explicitly configured.[^k3d].
 The chart should load sensitive configuration via a Kubernetes Secret. In the
 local flow, the lifecycle script will create that Secret using values derived
 from CNPG and Valkey. In ephemeral previews, External Secrets Operator should
-hydrate the Secret from Vault or another backend, controlled via chart values.
+hydrate the Secret from Vault or another backend, controlled via the chart
+values.
 
 ## Container image design
 
