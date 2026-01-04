@@ -177,6 +177,55 @@ operationally manageable.
   ingestion services, and failed authentication is surfaced as a clear
   operational alert.
 
+### Step 1.5: Provide local Kubernetes preview environment
+
+**Goal:** Provide a repeatable local k3d preview workflow that mirrors the
+ephemeral previews platform and supports the Ghillie Helm chart.
+
+- [x] **Task 1.5.a – Document local preview design**  
+  Create a design document that specifies the Helm chart interface, container
+  build, and local k3d lifecycle script, including compatibility with the
+  GitOps ephemeral previews architecture.
+
+  *Completion criteria:* The document `docs/local-k8s-preview-design.md` exists
+  and covers all required design elements, including chart, Dockerfile, and
+  script sketches.
+
+- [ ] **Task 1.5.b – Implement Ghillie Helm chart for previews**  
+  Build the `charts/ghillie` Helm chart with support for local and GitOps
+  environments, including configurable ingress and external secrets.
+
+  *Completion criteria:* `helm lint charts/ghillie` passes, and the chart can
+  be installed with local values or HelmRelease values in the GitOps flow.
+
+- [ ] **Task 1.5.c – Define container image for preview workloads**  
+  Add a multi-stage Dockerfile and runtime entrypoint suitable for Kubernetes,
+  with configuration driven by environment variables and chart values.
+
+  *Completion criteria:* A local build produces an image that starts the
+  runtime entrypoint without errors when deployed.
+
+- [ ] **Task 1.5.d – Implement local k3d lifecycle script**  
+  Provide a Python script and Makefile targets to create a k3d cluster, install
+  platform dependencies, deploy the Ghillie chart, and surface the preview URL.
+
+  *Completion criteria:* `make local-k8s-up` and `make local-k8s-down` succeed
+  end to end, and `make local-k8s-status` reports ready pods.
+
+- [ ] **Task 1.5.e – Provision Valkey via valkey-operator**  
+  Install `valkey-operator` in the local dev cluster and create a minimal
+  Valkey instance for Ghillie to consume, mirroring the platform approach.
+
+  *Completion criteria:* The Valkey operator reconciles a Valkey resource, and
+  the local preview script wires its connection details into the Ghillie Secret.
+
+- [ ] **Task 1.5.f – Document local preview usage**  
+  Update the users' guide with instructions for running the local preview
+  workflow and troubleshooting common issues.
+
+  *Completion criteria:* The users' guide includes a local preview section with
+  validated commands and expected outcomes.
+
 ______________________________________________________________________
 
 ## Phase 2: Deliver repository-level status reporting (MVP)

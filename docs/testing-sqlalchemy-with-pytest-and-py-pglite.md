@@ -211,14 +211,11 @@ behavior can be adjusted:
 - **Truncate or clean tables between tests:** After each test, delete the data
   that was added. Py-pglite provides a utility
   `utils.clean_database_data(engine)` to wipe all tables (with an option to
-  exclude certain
-  tables)([4](https://www.xugj520.cn/archives/py-pglite-postgresql-testing-guide.html)).
-   Call this in a function-scoped fixture that runs after each test when using
-  a shared engine. Likewise, `utils.reset_sequences(engine)` will reset serial
-  primary key counters so IDs start from 1
-  again([4](https://www.xugj520.cn/archives/py-pglite-postgresql-testing-guide.html))
-   – useful for consistency in tests. These utilities help keep a
-  session-scoped database *logically* fresh between tests.
+  exclude certain tables).[^py-pglite-guide] Call this in a function-scoped
+  fixture that runs after each test when using a shared engine. Likewise,
+  `utils.reset_sequences(engine)` will reset serial primary key counters so IDs
+  start from 1 again – useful for consistency in tests. These utilities help
+  keep a session-scoped database *logically* fresh between tests.
 
 - **Use savepoint rollbacks or transactions:** Another approach is to run each
   test inside a transaction and roll it back at the end, so no changes persist.
@@ -228,11 +225,10 @@ behavior can be adjusted:
   expiring the session after rollback prevents stale state.)
 
 - **Use separate schemas per test:** Py-pglite’s utilities can create/drop
-  schemas when isolating data by
-  schema([4](https://www.xugj520.cn/archives/py-pglite-postgresql-testing-guide.html)).
-   For instance, each test could operate in a schema named after the test
-  function, and the schema is dropped afterwards. This avoids altering the
-  entire DB and is useful in multi-tenant style testing.
+  schemas when isolating data by schema.[^py-pglite-guide] For instance, each
+  test could operate in a schema named after the test function, and the schema
+  is dropped afterwards. This avoids altering the entire DB and is useful in
+  multi-tenant style testing.
 
 Choosing the scope often involves a **trade-off between performance and
 isolation**. When test suites are small or deterministic isolation is
@@ -333,12 +329,10 @@ def test_create_user_api(pglite_engine):
 ```
 
 In this snippet, a new Session bound to the `pglite_engine` is injected for
-each
-request([4](https://www.xugj520.cn/archives/py-pglite-postgresql-testing-guide.html)).
- The test client calls the override, using the in-memory Postgres. The API is
-therefore exercised against the ephemeral DB and **no data goes to the real
-database**. After the test, remove the override if needed (FastAPI’s
-`TestClient` typically resets overrides when disposed).
+each request.[^py-pglite-guide] The test client calls the override, using the
+in-memory Postgres. The API is therefore exercised against the ephemeral DB and
+**no data goes to the real database**. After the test, remove the override if
+needed (FastAPI’s `TestClient` typically resets overrides when disposed).
 
 - **Flask or others:** If an application uses a global SQLAlchemy `db` object
   or sessionmaker, configure it for tests. For instance, create a PyTest
@@ -451,14 +445,12 @@ are some parting best-practice tips for this setup:
   database (or resets it), tests are less likely to flicker due to state
   bleed-over. When a shared DB is used for speed, be rigorous in cleaning up
   data between tests. Tools like `verify_database_empty(engine)` from py-pglite
-  can assert that no data
-  remains([4](https://www.xugj520.cn/archives/py-pglite-postgresql-testing-guide.html)).
+  can assert that no data remains.[^py-pglite-guide]
 
 - **Always commit or flush when needed:** SQLAlchemy’s Session will not persist
   changes to the database until a commit (or autoflush) occurs. Tests often
   fail when a query returns no data because a commit was forgotten. Commit in
-  tests or use `session.flush()` before selecting, to be
-  safe([4](https://www.xugj520.cn/archives/py-pglite-postgresql-testing-guide.html)).
+  tests or use `session.flush()` before selecting, to be safe.[^py-pglite-guide]
 
 - **Parallel testing:** When running tests in parallel (e.g., with
   `pytest-xdist`), ensure each process has an isolated database. Py-pglite’s
@@ -489,8 +481,8 @@ testing API endpoints with the DB in play) with minimal friction. In practice,
 teams find that such a setup **“shaves minutes from every build, and hours from
 every week” by ensuring every test run starts from a known good state with no
 manual DB management
-overhead([3](https://hoop.dev/blog/the-simplest-way-to-make-postgresql-pytest-work-like-it-should/))**.
- Happy testing!
+overhead([3](https://hoop.dev/blog/the-simplest-way-to-make-postgresql-pytest-work-like-it-should/))
+ **. Happy testing!
 
 **Sources:**
 
@@ -503,8 +495,7 @@ overhead([3](https://hoop.dev/blog/the-simplest-way-to-make-postgresql-pytest-wo
 
 - High Efficiency Coder Blog –
   *"秒建PostgreSQL内存数据库：Python测试效率翻倍秘籍"* (Chinese) – In-depth
-  guide on py-pglite usage and
-  utilities([4](https://www.xugj520.cn/archives/py-pglite-postgresql-testing-guide.html)).
+  guide on py-pglite usage and utilities.[^py-pglite-guide]
 
 - hoop.dev blog – *"PostgreSQL PyTest work like it should"* – Best practices
   for database test isolation and
@@ -513,3 +504,6 @@ overhead([3](https://hoop.dev/blog/the-simplest-way-to-make-postgresql-pytest-wo
 - Aashish Paudel, *Factory Boy tutorial with SQLAlchemy and Pytest* – Usage of
   Factory Boy with SQLAlchemy (session fixture, `SQLAlchemyModelFactory`)
   ([5](https://medium.com/@aasispaudelthp2/factoryboy-tutorial-with-sqlalchemy-and-pytest-1cda908d783a)).
+
+[^py-pglite-guide]:
+  <https://www.xugj520.cn/archives/py-pglite-postgresql-testing-guide.html>
