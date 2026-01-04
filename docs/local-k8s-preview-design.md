@@ -423,8 +423,10 @@ spec:
         - name: ghillie
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: {{ toJson .Values.command }}
-          args: {{ toJson .Values.args }}
+          command:
+            {{- toYaml .Values.command | nindent 12 }}
+          args:
+            {{- toYaml .Values.args | nindent 12 }}
           envFrom:
             - secretRef:
                 name: {{ include "ghillie.fullname" . }}
