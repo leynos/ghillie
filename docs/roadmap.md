@@ -252,7 +252,7 @@ data, ready for summarisation.
   *Completion criteria:* The evidence structure is fully populated for the
   pilot repositories, and unit tests confirm correct grouping of events.
 
-- [ ] **Task 2.1.b – Implement event selection and grouping per window**  
+- [x] **Task 2.1.b – Implement event selection and grouping per window**  
   Add logic to select events between `window_start` and `window_end`, excluding
   any events already covered by previous reports via the report coverage table.
 

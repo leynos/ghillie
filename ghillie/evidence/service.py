@@ -45,11 +45,11 @@ from __future__ import annotations
 import dataclasses as dc
 import typing as typ
 
-from sqlalchemy import or_, select
+from sqlalchemy import select, tuple_
 from sqlalchemy.orm import selectinload
 
 from ghillie.common.time import utcnow
-from ghillie.gold.storage import Report, ReportScope
+from ghillie.gold.storage import Report, ReportCoverage, ReportScope
 from ghillie.silver.storage import (
     Commit,
     DocumentationChange,
@@ -66,6 +66,7 @@ from .classification import (
     classify_entity,
     is_merge_commit,
 )
+from .event_targets import EventTargetExtractor, EventTargets
 from .models import (
     CommitEvidence,
     DocumentationEvidence,
@@ -83,12 +84,6 @@ if typ.TYPE_CHECKING:
     import datetime as dt
 
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-    from sqlalchemy.sql.elements import SQLColumnExpression
-
-    # Alias for SQLColumnExpression accepting datetime or nullable datetime
-    type DateTimeColumnExpr = (
-        SQLColumnExpression[dt.datetime] | SQLColumnExpression[dt.datetime | None]
-    )
 
 
 @dc.dataclass(slots=True)
@@ -128,6 +123,9 @@ class _WindowQuery:
     window_end: dt.datetime
 
 
+_DOC_CHANGE_KEY_CHUNK_SIZE = 500
+
+
 class EvidenceBundleService:
     """Generates evidence bundles for repository status reporting.
 
@@ -161,72 +159,195 @@ class EvidenceBundleService:
         )
         self._max_previous_reports = max_previous_reports
 
-    async def _fetch_repo_entities_in_window[T](
+    _extractor = EventTargetExtractor()
+
+    async def _fetch_uncovered_event_facts(
         self,
         session: AsyncSession,
-        model: type[T],
+        repo_external_id: str,
+        repository_id: str,
         window: _WindowQuery,
-        time_field: DateTimeColumnExpr,
-    ) -> list[T]:
-        """Fetch entities within a time window.
+    ) -> list[EventFact]:
+        """Fetch EventFacts in the window, excluding repository-scope coverage.
 
-        Parameters
-        ----------
-        session
-            Database session.
-        model
-            SQLAlchemy model class to query.
-        window
-            Repository and time window to query.
-        time_field
-            Column to use for time filtering.
-
-        Returns
-        -------
-        list[T]
-            List of matching entities.
+        Coverage is treated as global per repository scope so that an EventFact
+        is never reused across repository reports, even when backfilled windows
+        overlap.
 
         """
-        stmt = (
-            select(model)
+        coverage_exists = (
+            select(ReportCoverage.id)
+            .join(Report, ReportCoverage.report_id == Report.id)
             .where(
-                # Generic T unconstrained; repo_id not guaranteed by type checker
-                model.repo_id == window.repository_id,  # type: ignore[attr-defined]
-                time_field >= window.window_start,
-                time_field < window.window_end,
+                ReportCoverage.event_fact_id == EventFact.id,
+                Report.scope == ReportScope.REPOSITORY,
+                Report.repository_id == repository_id,
             )
-            .order_by(time_field.desc())
+            .exists()
+        )
+
+        stmt = (
+            select(EventFact)
+            .where(
+                EventFact.repo_external_id == repo_external_id,
+                EventFact.occurred_at >= window.window_start,
+                EventFact.occurred_at < window.window_end,
+                ~coverage_exists,
+            )
+            .order_by(EventFact.occurred_at.desc(), EventFact.id.desc())
         )
         return list((await session.scalars(stmt)).all())
 
-    async def _fetch_all_events(
+    # Type-safe fetch wrappers: These methods appear similar but provide
+    # distinct type signatures for different entity types, keeping call sites
+    # clear and type checking reliable.
+    async def _fetch_commits_by_sha(
         self,
         session: AsyncSession,
-        window: _WindowQuery,
-    ) -> tuple[list[Commit], list[PullRequest], list[Issue], list[DocumentationChange]]:
-        """Fetch all events within the window.
+        repository_id: str,
+        shas: set[str],
+    ) -> list[Commit]:
+        """Fetch commits by SHA for a repository."""
+        if not shas:
+            return []
+        stmt = (
+            select(Commit)
+            .where(
+                Commit.repo_id == repository_id,
+                Commit.sha.in_(shas),
+            )
+            .order_by(Commit.committed_at.desc())
+        )
+        return list((await session.scalars(stmt)).all())
 
-        Returns
-        -------
-        tuple[list[Commit], list[PullRequest], list[Issue], list[DocumentationChange]]
-            A tuple of (commits, prs, issues, doc_changes).
+    async def _fetch_pull_requests_by_id(
+        self,
+        session: AsyncSession,
+        repository_id: str,
+        ids: set[int],
+    ) -> list[PullRequest]:
+        """Fetch pull requests by id for a repository."""
+        if not ids:
+            return []
+        stmt = (
+            select(PullRequest)
+            .where(
+                PullRequest.repo_id == repository_id,
+                PullRequest.id.in_(ids),
+            )
+            .order_by(PullRequest.created_at.desc())
+        )
+        return list((await session.scalars(stmt)).all())
+
+    async def _fetch_issues_by_id(
+        self,
+        session: AsyncSession,
+        repository_id: str,
+        ids: set[int],
+    ) -> list[Issue]:
+        """Fetch issues by id for a repository."""
+        if not ids:
+            return []
+        stmt = (
+            select(Issue)
+            .where(
+                Issue.repo_id == repository_id,
+                Issue.id.in_(ids),
+            )
+            .order_by(Issue.created_at.desc())
+        )
+        return list((await session.scalars(stmt)).all())
+
+    async def _fetch_doc_changes_by_key(
+        self,
+        session: AsyncSession,
+        repository_id: str,
+        keys: set[tuple[str, str]],
+    ) -> list[DocumentationChange]:
+        """Fetch documentation changes by commit/path keys.
+
+        Chunk large key sets to avoid parameter explosion in tuple IN clauses.
 
         """
-        commits = await self._fetch_repo_entities_in_window(
-            session,
-            Commit,
-            window,
-            Commit.committed_at,
+        if not keys:
+            return []
+        key_list = list(keys)
+        if len(key_list) <= _DOC_CHANGE_KEY_CHUNK_SIZE:
+            stmt = (
+                select(DocumentationChange)
+                .where(
+                    DocumentationChange.repo_id == repository_id,
+                    tuple_(
+                        DocumentationChange.commit_sha, DocumentationChange.path
+                    ).in_(key_list),
+                )
+                .order_by(DocumentationChange.occurred_at.desc())
+            )
+            return list((await session.scalars(stmt)).all())
+
+        docs: list[DocumentationChange] = []
+        for offset in range(0, len(key_list), _DOC_CHANGE_KEY_CHUNK_SIZE):
+            chunk = key_list[offset : offset + _DOC_CHANGE_KEY_CHUNK_SIZE]
+            stmt = (
+                select(DocumentationChange)
+                .where(
+                    DocumentationChange.repo_id == repository_id,
+                    tuple_(
+                        DocumentationChange.commit_sha, DocumentationChange.path
+                    ).in_(chunk),
+                )
+                .order_by(DocumentationChange.occurred_at.desc())
+            )
+            docs.extend((await session.scalars(stmt)).all())
+        return sorted(docs, key=lambda doc: doc.occurred_at, reverse=True)
+
+    async def _fetch_repository_context(
+        self,
+        session: AsyncSession,
+        repository_id: str,
+        window_start: dt.datetime,
+    ) -> tuple[Repository, list[PreviousReportSummary]]:
+        """Fetch repository metadata and previous reports for a bundle."""
+        repo = await self._fetch_repository(session, repository_id)
+        if repo is None:
+            raise ValueError(f"Repository not found: {repository_id}")  # noqa: TRY003
+        previous_reports = await self._fetch_previous_reports(
+            session, repository_id, window_start
         )
-        prs = await self._fetch_pull_requests(session, window)
-        issues = await self._fetch_issues(session, window)
-        doc_changes = await self._fetch_repo_entities_in_window(
-            session,
-            DocumentationChange,
-            window,
-            DocumentationChange.occurred_at,
+        return repo, previous_reports
+
+    async def _fetch_bundle_entities(
+        self,
+        session: AsyncSession,
+        repository_id: str,
+        repo_slug: str,
+        window: _WindowQuery,
+    ) -> tuple[
+        list[Commit],
+        list[PullRequest],
+        list[Issue],
+        list[DocumentationChange],
+        list[int],
+    ]:
+        """Fetch entity lists and event fact identifiers for a bundle."""
+        event_facts = await self._fetch_uncovered_event_facts(
+            session, repo_slug, repository_id, window
         )
-        return commits, prs, issues, doc_changes
+        targets: EventTargets = self._extractor.extract(event_facts)
+        commits = await self._fetch_commits_by_sha(
+            session, repository_id, targets.commit_shas
+        )
+        prs = await self._fetch_pull_requests_by_id(
+            session, repository_id, targets.pull_request_ids
+        )
+        issues = await self._fetch_issues_by_id(
+            session, repository_id, targets.issue_ids
+        )
+        doc_changes = await self._fetch_doc_changes_by_key(
+            session, repository_id, targets.doc_change_keys
+        )
+        event_fact_ids = [fact.id for fact in event_facts]
+        return commits, prs, issues, doc_changes, event_fact_ids
 
     def _build_all_evidence(
         self,
@@ -262,6 +383,10 @@ class EvidenceBundleService:
     ) -> RepositoryEvidenceBundle:
         """Build an evidence bundle for a repository and time window.
 
+        Coverage exclusion is repository-scope only: events already covered by
+        repository reports are excluded, while project or estate coverage does
+        not affect repository bundles.
+
         Parameters
         ----------
         repository_id
@@ -288,41 +413,21 @@ class EvidenceBundleService:
             window_end=window_end,
         )
         async with self._session_factory() as session:
-            # Fetch repository metadata
-            repo = await self._fetch_repository(session, repository_id)
-            if repo is None:
-                msg = f"Repository not found: {repository_id}"
-                raise ValueError(msg)
-
-            repo_metadata = self._build_repository_metadata(repo)
-
-            # Fetch previous reports
-            previous_reports = await self._fetch_previous_reports(
+            repo, previous_reports = await self._fetch_repository_context(
                 session, repository_id, window_start
             )
-
-            # Fetch all events within window
-            commits, prs, issues, doc_changes = await self._fetch_all_events(
-                session, window
+            entities = await self._fetch_bundle_entities(
+                session, repository_id, repo.slug, window
             )
-
-            # Collect event fact IDs for coverage tracking
-            event_fact_ids = await self._fetch_event_fact_ids(
-                session, repo.slug, window
-            )
-
-            # Build evidence with classification
+            commits, prs, issues, doc_changes, event_fact_ids = entities
             commit_evidence, pr_evidence, issue_evidence, doc_evidence = (
                 self._build_all_evidence(commits, prs, issues, doc_changes)
             )
-
-            # Compute work type groupings
             groupings = self._compute_work_type_groupings(
                 commit_evidence, pr_evidence, issue_evidence
             )
-
             return RepositoryEvidenceBundle(
-                repository=repo_metadata,
+                repository=self._build_repository_metadata(repo),
                 window_start=window_start,
                 window_end=window_end,
                 previous_reports=tuple(previous_reports),
@@ -410,65 +515,10 @@ class EvidenceBundleService:
                 except ValueError:
                     return ReportStatus.UNKNOWN
 
-    async def _fetch_pull_requests(
-        self,
-        session: AsyncSession,
-        window: _WindowQuery,
-    ) -> list[PullRequest]:
-        """Fetch PRs created, merged, or closed within the window."""
-        stmt = (
-            select(PullRequest)
-            .where(
-                PullRequest.repo_id == window.repository_id,
-                # Include PRs created, merged, or closed in window
-                or_(
-                    (PullRequest.created_at >= window.window_start)
-                    & (PullRequest.created_at < window.window_end),
-                    (PullRequest.merged_at >= window.window_start)
-                    & (PullRequest.merged_at < window.window_end),
-                    (PullRequest.closed_at >= window.window_start)
-                    & (PullRequest.closed_at < window.window_end),
-                ),
-            )
-            .order_by(PullRequest.created_at.desc())
-        )
-        return list((await session.scalars(stmt)).all())
-
-    async def _fetch_issues(
-        self,
-        session: AsyncSession,
-        window: _WindowQuery,
-    ) -> list[Issue]:
-        """Fetch issues created or closed within the window."""
-        stmt = (
-            select(Issue)
-            .where(
-                Issue.repo_id == window.repository_id,
-                or_(
-                    (Issue.created_at >= window.window_start)
-                    & (Issue.created_at < window.window_end),
-                    (Issue.closed_at >= window.window_start)
-                    & (Issue.closed_at < window.window_end),
-                ),
-            )
-            .order_by(Issue.created_at.desc())
-        )
-        return list((await session.scalars(stmt)).all())
-
-    async def _fetch_event_fact_ids(
-        self,
-        session: AsyncSession,
-        repo_external_id: str,
-        window: _WindowQuery,
-    ) -> list[int]:
-        """Fetch EventFact IDs for coverage tracking."""
-        stmt = select(EventFact.id).where(
-            EventFact.repo_external_id == repo_external_id,
-            EventFact.occurred_at >= window.window_start,
-            EventFact.occurred_at < window.window_end,
-        )
-        return list((await session.scalars(stmt)).all())
-
+    # Evidence builders: These methods follow a consistent transformation
+    # pattern (ORM → Evidence struct) but handle entity-specific fields and
+    # classification logic. The structural similarity is inherent to the
+    # domain model and aids consistency across evidence types.
     def _build_commit_evidence(self, commits: list[Commit]) -> list[CommitEvidence]:
         """Convert Commit models to CommitEvidence structs."""
 

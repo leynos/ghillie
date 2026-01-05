@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses as dc
 import datetime as dt
 import typing as typ
 
@@ -13,7 +14,7 @@ from ghillie.evidence import (
     ReportStatus,
     WorkType,
 )
-from ghillie.gold import Report, ReportScope
+from ghillie.gold import Report, ReportCoverage, ReportProject, ReportScope
 from ghillie.silver import EventFact, RawEventTransformer, Repository
 from tests.helpers.event_builders import (
     DocChangeEventSpec,
@@ -27,6 +28,17 @@ if typ.TYPE_CHECKING:
 
 # Type alias for the evidence service stack fixture
 EvidenceServiceStack = tuple[RawEventWriter, RawEventTransformer, EvidenceBundleService]
+
+
+@dc.dataclass(frozen=True, slots=True)
+class _PrIssueEventDetails:
+    """Encapsulate identifiers for PR/issue ingestion."""
+
+    repo_slug: str
+    pr_id: int
+    pr_number: int
+    issue_id: int
+    issue_number: int
 
 
 # ---------------------------------------------------------------------------
@@ -427,6 +439,323 @@ class TestEvidenceBundleServiceBuildBundle:
 
         assert len(bundle.event_fact_ids) == 1
         assert bundle.event_fact_ids[0] == facts[0].id
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("scope", "expect_exclusion"),
+        [
+            pytest.param(ReportScope.REPOSITORY, True, id="repository_scope"),
+            pytest.param(ReportScope.PROJECT, False, id="project_scope"),
+        ],
+    )
+    async def test_coverage_scope_behavior(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        evidence_service_stack: EvidenceServiceStack,
+        scope: ReportScope,
+        *,
+        expect_exclusion: bool,
+    ) -> None:
+        """Bundle applies coverage exclusion by report scope."""
+        writer, transformer, service = evidence_service_stack
+
+        repo_slug = "octo/reef"
+        window_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
+        window_end = dt.datetime(2024, 7, 8, tzinfo=dt.UTC)
+
+        # Two commits in the window
+        first_time = dt.datetime(2024, 7, 2, tzinfo=dt.UTC)
+        second_time = dt.datetime(2024, 7, 3, tzinfo=dt.UTC)
+        await writer.ingest(commit_envelope(repo_slug, "abc123", first_time))
+        await writer.ingest(commit_envelope(repo_slug, "def456", second_time))
+        await transformer.process_pending()
+
+        repo_id = await get_repo_id(session_factory)
+
+        async with session_factory() as session:
+            from sqlalchemy import select
+
+            facts = (
+                await session.scalars(
+                    select(EventFact).where(EventFact.event_type == "github.commit")
+                )
+            ).all()
+            covered_fact = next(
+                fact for fact in facts if fact.payload.get("sha") == "abc123"
+            )
+
+            if scope is ReportScope.REPOSITORY:
+                report = Report(
+                    scope=scope,
+                    repository_id=repo_id,
+                    window_start=dt.datetime(2024, 6, 24, tzinfo=dt.UTC),
+                    window_end=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                    model="test-model",
+                )
+                report.coverage_records.append(
+                    ReportCoverage(event_fact_id=covered_fact.id)
+                )
+                session.add(report)
+            else:
+                project = ReportProject(key="wildside", name="Wildside")
+                report = Report(
+                    scope=scope,
+                    project=project,
+                    window_start=dt.datetime(2024, 6, 24, tzinfo=dt.UTC),
+                    window_end=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                    model="test-model",
+                )
+                report.coverage_records.append(
+                    ReportCoverage(event_fact_id=covered_fact.id)
+                )
+                session.add_all([project, report])
+            await session.commit()
+
+        bundle = await service.build_bundle(repo_id, window_start, window_end)
+
+        commit_shas = {commit.sha for commit in bundle.commits}
+        if expect_exclusion:
+            assert "abc123" not in commit_shas
+            assert "def456" in commit_shas
+            assert covered_fact.id not in set(bundle.event_fact_ids)
+        else:
+            assert "abc123" in commit_shas
+            assert "def456" in commit_shas
+            assert covered_fact.id in set(bundle.event_fact_ids)
+
+    async def _ingest_pr_and_issue_events(
+        self,
+        writer: RawEventWriter,
+        details: _PrIssueEventDetails,
+    ) -> None:
+        """Ingest paired PR and issue events for coverage tests."""
+        repo_slug = details.repo_slug
+        await writer.ingest(
+            PREventSpec(
+                repo_slug=repo_slug,
+                pr_id=details.pr_id,
+                pr_number=details.pr_number,
+                created_at=dt.datetime(2024, 7, 2, tzinfo=dt.UTC),
+                title="fix: resolve bug",
+                labels=("bug",),
+            ).build()
+        )
+        await writer.ingest(
+            PREventSpec(
+                repo_slug=repo_slug,
+                pr_id=details.pr_id,
+                pr_number=details.pr_number,
+                created_at=dt.datetime(2024, 7, 3, tzinfo=dt.UTC),
+                title="fix: resolve bug",
+                labels=("bug",),
+            ).build()
+        )
+        await writer.ingest(
+            IssueEventSpec(
+                repo_slug=repo_slug,
+                issue_id=details.issue_id,
+                issue_number=details.issue_number,
+                created_at=dt.datetime(2024, 7, 4, tzinfo=dt.UTC),
+                title="Feature request",
+                labels=("enhancement",),
+            ).build()
+        )
+        await writer.ingest(
+            IssueEventSpec(
+                repo_slug=repo_slug,
+                issue_id=details.issue_id,
+                issue_number=details.issue_number,
+                created_at=dt.datetime(2024, 7, 5, tzinfo=dt.UTC),
+                title="Feature request",
+                labels=("enhancement",),
+            ).build()
+        )
+
+    async def _setup_coverage_with_identifier_coercion(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        repo_id: str,
+    ) -> tuple[int, int, int, int]:
+        """Create repository coverage and coerce uncovered identifiers."""
+        async with session_factory() as session:
+            from sqlalchemy import select
+
+            facts = (
+                await session.scalars(
+                    select(EventFact).where(
+                        EventFact.event_type.in_(
+                            ["github.pull_request", "github.issue"]
+                        )
+                    )
+                )
+            ).all()
+            pr_facts = sorted(
+                (fact for fact in facts if fact.event_type == "github.pull_request"),
+                key=lambda fact: fact.id,
+            )
+            issue_facts = sorted(
+                (fact for fact in facts if fact.event_type == "github.issue"),
+                key=lambda fact: fact.id,
+            )
+            assert len(pr_facts) == 2
+            assert len(issue_facts) == 2
+
+            uncovered_pr_fact = pr_facts[0]
+            covered_pr_fact = pr_facts[1]
+            uncovered_issue_fact = issue_facts[0]
+            covered_issue_fact = issue_facts[1]
+
+            uncovered_pr_fact.payload = {
+                **uncovered_pr_fact.payload,
+                "id": str(uncovered_pr_fact.payload["id"]),
+            }
+            uncovered_issue_fact.payload = {
+                **uncovered_issue_fact.payload,
+                "id": str(uncovered_issue_fact.payload["id"]),
+            }
+
+            report = Report(
+                scope=ReportScope.REPOSITORY,
+                repository_id=repo_id,
+                window_start=dt.datetime(2024, 6, 24, tzinfo=dt.UTC),
+                window_end=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                model="test-model",
+            )
+            report.coverage_records.append(
+                ReportCoverage(event_fact_id=covered_pr_fact.id)
+            )
+            report.coverage_records.append(
+                ReportCoverage(event_fact_id=covered_issue_fact.id)
+            )
+            session.add(report)
+            await session.commit()
+
+            return (
+                uncovered_pr_fact.id,
+                covered_pr_fact.id,
+                uncovered_issue_fact.id,
+                covered_issue_fact.id,
+            )
+
+    @pytest.mark.asyncio
+    async def test_pr_issue_coverage_uses_identifier_coercion(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        evidence_service_stack: EvidenceServiceStack,
+    ) -> None:
+        """Bundle selects PRs/issues with mixed identifier types and coverage."""
+        writer, transformer, service = evidence_service_stack
+
+        repo_slug = "octo/reef"
+        window_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
+        window_end = dt.datetime(2024, 7, 8, tzinfo=dt.UTC)
+
+        pr_id = 101
+        issue_id = 202
+        pr_number = 12
+        issue_number = 34
+
+        details = _PrIssueEventDetails(
+            repo_slug=repo_slug,
+            pr_id=pr_id,
+            pr_number=pr_number,
+            issue_id=issue_id,
+            issue_number=issue_number,
+        )
+        await self._ingest_pr_and_issue_events(writer, details)
+        await transformer.process_pending()
+
+        repo_id = await get_repo_id(session_factory)
+
+        (
+            uncovered_pr_fact_id,
+            covered_pr_fact_id,
+            uncovered_issue_fact_id,
+            covered_issue_fact_id,
+        ) = await self._setup_coverage_with_identifier_coercion(
+            session_factory, repo_id
+        )
+
+        bundle = await service.build_bundle(repo_id, window_start, window_end)
+
+        assert len(bundle.pull_requests) == 1
+        assert bundle.pull_requests[0].number == pr_number
+        assert len(bundle.issues) == 1
+        assert bundle.issues[0].number == issue_number
+
+        event_fact_ids = set(bundle.event_fact_ids)
+        assert covered_pr_fact_id not in event_fact_ids
+        assert covered_issue_fact_id not in event_fact_ids
+        assert uncovered_pr_fact_id in event_fact_ids
+        assert uncovered_issue_fact_id in event_fact_ids
+
+    @pytest.mark.asyncio
+    async def test_doc_change_coverage_excludes_covered_paths(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        evidence_service_stack: EvidenceServiceStack,
+    ) -> None:
+        """Bundle excludes covered documentation changes by commit/path."""
+        writer, transformer, service = evidence_service_stack
+
+        repo_slug = "octo/reef"
+        window_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
+        window_end = dt.datetime(2024, 7, 8, tzinfo=dt.UTC)
+
+        doc_time = dt.datetime(2024, 7, 5, tzinfo=dt.UTC)
+        await writer.ingest(commit_envelope(repo_slug, "doc123", doc_time))
+        await writer.ingest(
+            DocChangeEventSpec(
+                repo_slug=repo_slug,
+                commit_sha="doc123",
+                path="docs/covered.md",
+                occurred_at=doc_time,
+                is_roadmap=True,
+            ).build()
+        )
+        await writer.ingest(
+            DocChangeEventSpec(
+                repo_slug=repo_slug,
+                commit_sha="doc123",
+                path="docs/uncovered.md",
+                occurred_at=doc_time,
+                is_roadmap=False,
+            ).build()
+        )
+        await transformer.process_pending()
+
+        repo_id = await get_repo_id(session_factory)
+
+        async with session_factory() as session:
+            from sqlalchemy import select
+
+            facts = (
+                await session.scalars(
+                    select(EventFact).where(EventFact.event_type == "github.doc_change")
+                )
+            ).all()
+            covered_fact = next(
+                fact for fact in facts if fact.payload.get("path") == "docs/covered.md"
+            )
+            report = Report(
+                scope=ReportScope.REPOSITORY,
+                repository_id=repo_id,
+                window_start=dt.datetime(2024, 6, 24, tzinfo=dt.UTC),
+                window_end=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                model="test-model",
+            )
+            report.coverage_records.append(
+                ReportCoverage(event_fact_id=covered_fact.id)
+            )
+            session.add(report)
+            await session.commit()
+
+        bundle = await service.build_bundle(repo_id, window_start, window_end)
+
+        doc_paths = {doc.path for doc in bundle.documentation_changes}
+        assert "docs/covered.md" not in doc_paths
+        assert "docs/uncovered.md" in doc_paths
+        assert covered_fact.id not in set(bundle.event_fact_ids)
 
     @pytest.mark.asyncio
     async def test_raises_for_missing_repository(
