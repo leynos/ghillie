@@ -1,6 +1,6 @@
 # Implement coverage-aware event selection for evidence bundles
 
-This ExecPlan is a living document. The sections `Progress`,
+This execution plan (ExecPlan) is a living document. The sections `Progress`,
 `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must
 be kept up to date as work proceeds.
 
@@ -84,9 +84,10 @@ Reference docs for expected behaviour and design constraints:
 
 Start by writing tests that assert evidence bundles exclude already covered
 EventFacts. This includes a unit test that covers at least one event type and
-asserts `event_fact_ids` only include uncovered IDs, plus a pytest-bdd scenario
-that demonstrates coverage-aware behaviour end-to-end. These tests should fail
-with the current implementation because it ignores `report_coverage`.
+asserts `event_fact_ids` only include uncovered IDs, plus a pytest-bdd
+(behaviour-driven development, BDD) scenario that demonstrates coverage-aware
+behaviour end-to-end. These tests should fail with the current implementation
+because it ignores `report_coverage`.
 
 Then update `EvidenceBundleService` to select only uncovered EventFacts for the
 window, where coverage is filtered to repository-scoped reports only. Use those
@@ -97,8 +98,8 @@ that:
 - fetches EventFacts for the repo slug within `[window_start, window_end)`;
 - excludes EventFacts already present in `report_coverage` for reports with
   `scope = repository`;
-- groups uncovered EventFacts by `event_type` and extracts identifiers
-  (commit SHA, PR ID, issue ID, doc change commit+path); and
+- groups uncovered EventFacts by `event_type` and extracts identifiers (commit
+  SHA, pull request (PR) ID, issue ID, doc change commit+path); and
 - returns both the uncovered EventFacts (for `event_fact_ids`) and the
   identifier sets for querying Silver tables.
 
@@ -191,7 +192,7 @@ that test first, then rerun the full quality gates. If documentation changes
 break `make markdownlint` or `make nixie`, run `make fmt` and adjust wrapping
 to 80 columns before re-running the markdown checks.
 
-## Artifacts and Notes
+## Artefacts and Notes
 
 Keep a short note in this section about any data-shape assumptions used for
 EventFact payload extraction (for example, which payload keys are required for

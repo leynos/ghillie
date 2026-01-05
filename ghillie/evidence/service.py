@@ -44,10 +44,9 @@ from __future__ import annotations
 
 import dataclasses as dc
 import typing as typ
-from typing import Any, TypeVar  # noqa: ICN003
 
-from sqlalchemy import ColumnElement, select, tuple_
-from sqlalchemy.orm import InstrumentedAttribute, selectinload
+from sqlalchemy import select, tuple_
+from sqlalchemy.orm import selectinload
 
 from ghillie.common.time import utcnow
 from ghillie.gold.storage import Report, ReportCoverage, ReportScope
@@ -84,9 +83,6 @@ if typ.TYPE_CHECKING:
     import datetime as dt
 
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
-
-EntityT = TypeVar("EntityT")
 
 
 @dc.dataclass(slots=True)
@@ -136,24 +132,7 @@ class _WindowQuery:
     window_end: dt.datetime
 
 
-@dc.dataclass(frozen=True, slots=True)
-class _EntityFetchConfig(typ.Generic[EntityT]):  # noqa: UP046
-    """Define entity query configuration for identifier-based fetches.
-
-    Parameters
-    ----------
-    entity_type
-        SQLAlchemy entity model class to query.
-    id_column
-        Column holding the identifier (e.g., Commit.sha).
-    order_column
-        Column used for deterministic ordering.
-
-    """
-
-    entity_type: type[EntityT]
-    id_column: ColumnElement[Any] | InstrumentedAttribute[Any]
-    order_column: ColumnElement[Any] | InstrumentedAttribute[Any]
+_DOC_CHANGE_KEY_CHUNK_SIZE = 500
 
 
 class EvidenceBundleService:
@@ -201,19 +180,12 @@ class EvidenceBundleService:
     def _extract_event_targets(self, event_facts: list[EventFact]) -> _EventTargets:
         """Extract entity identifiers from uncovered event facts."""
         targets = _EventTargets()
-        handlers = {
-            "github.commit": self._handle_commit_event,
-            "github.pull_request": self._handle_pull_request_event,
-            "github.issue": self._handle_issue_event,
-            "github.doc_change": self._handle_doc_change_event,
-        }
-
+        handlers = self._EVENT_TARGET_HANDLERS
         for fact in event_facts:
             handler = handlers.get(fact.event_type)
             if handler is None:
                 continue
-            handler(targets, fact.payload or {})
-
+            handler(self, targets, fact.payload or {})
         return targets
 
     def _handle_commit_event(
@@ -245,6 +217,20 @@ class EvidenceBundleService:
         if isinstance(commit_sha, str) and isinstance(path, str):
             targets.doc_change_keys.add((commit_sha, path))
 
+    _EVENT_TARGET_HANDLERS: typ.ClassVar[
+        dict[
+            str,
+            typ.Callable[
+                [EvidenceBundleService, _EventTargets, dict[str, typ.Any]], None
+            ],
+        ]
+    ] = {
+        "github.commit": _handle_commit_event,
+        "github.pull_request": _handle_pull_request_event,
+        "github.issue": _handle_issue_event,
+        "github.doc_change": _handle_doc_change_event,
+    }
+
     async def _fetch_uncovered_event_facts(
         self,
         session: AsyncSession,
@@ -252,7 +238,13 @@ class EvidenceBundleService:
         repository_id: str,
         window: _WindowQuery,
     ) -> list[EventFact]:
-        """Fetch EventFacts in the window, excluding repository-scope coverage."""
+        """Fetch EventFacts in the window, excluding repository-scope coverage.
+
+        Coverage is treated as global per repository scope so that an EventFact
+        is never reused across repository reports, even when backfilled windows
+        overlap.
+
+        """
         coverage_exists = (
             select(ReportCoverage.id)
             .join(Report, ReportCoverage.report_id == Report.id)
@@ -276,49 +268,9 @@ class EvidenceBundleService:
         )
         return list((await session.scalars(stmt)).all())
 
-    async def _fetch_entities_by_identifiers(
-        self,
-        session: AsyncSession,
-        repository_id: str,
-        identifiers: set[Any],
-        config: _EntityFetchConfig[EntityT],
-    ) -> list[EntityT]:
-        """Fetch entities by identifiers for a repository.
-
-        Parameters
-        ----------
-        session
-            Database session.
-        repository_id
-            Repository identifier for filtering.
-        identifiers
-            Set of identifiers to match against the entity's id column.
-        config
-            Entity fetch configuration specifying model and columns.
-
-        Returns
-        -------
-        list[EntityT]
-            List of matching entities ordered by the order column descending.
-
-        """
-        if not identifiers:
-            return []
-        stmt = (
-            select(config.entity_type)
-            .where(
-                # Generic EntityT unconstrained; repo_id not guaranteed by type checker
-                config.entity_type.repo_id == repository_id,  # type: ignore[attr-defined]
-                config.id_column.in_(identifiers),
-            )
-            .order_by(config.order_column.desc())
-        )
-        return list((await session.scalars(stmt)).all())
-
     # Type-safe fetch wrappers: These methods appear similar but provide
-    # distinct type signatures for different entity types. Each delegates to
-    # _fetch_entities_by_identifiers whilst maintaining compile-time type
-    # safety for callers.
+    # distinct type signatures for different entity types, keeping call sites
+    # clear and type checking reliable.
     async def _fetch_commits_by_sha(
         self,
         session: AsyncSession,
@@ -326,16 +278,17 @@ class EvidenceBundleService:
         shas: set[str],
     ) -> list[Commit]:
         """Fetch commits by SHA for a repository."""
-        return await self._fetch_entities_by_identifiers(
-            session,
-            repository_id,
-            shas,
-            _EntityFetchConfig(
-                entity_type=Commit,
-                id_column=Commit.sha,
-                order_column=Commit.committed_at,
-            ),
+        if not shas:
+            return []
+        stmt = (
+            select(Commit)
+            .where(
+                Commit.repo_id == repository_id,
+                Commit.sha.in_(shas),
+            )
+            .order_by(Commit.committed_at.desc())
         )
+        return list((await session.scalars(stmt)).all())
 
     async def _fetch_pull_requests_by_id(
         self,
@@ -344,16 +297,17 @@ class EvidenceBundleService:
         ids: set[int],
     ) -> list[PullRequest]:
         """Fetch pull requests by id for a repository."""
-        return await self._fetch_entities_by_identifiers(
-            session,
-            repository_id,
-            ids,
-            _EntityFetchConfig(
-                entity_type=PullRequest,
-                id_column=PullRequest.id,
-                order_column=PullRequest.created_at,
-            ),
+        if not ids:
+            return []
+        stmt = (
+            select(PullRequest)
+            .where(
+                PullRequest.repo_id == repository_id,
+                PullRequest.id.in_(ids),
+            )
+            .order_by(PullRequest.created_at.desc())
         )
+        return list((await session.scalars(stmt)).all())
 
     async def _fetch_issues_by_id(
         self,
@@ -362,16 +316,17 @@ class EvidenceBundleService:
         ids: set[int],
     ) -> list[Issue]:
         """Fetch issues by id for a repository."""
-        return await self._fetch_entities_by_identifiers(
-            session,
-            repository_id,
-            ids,
-            _EntityFetchConfig(
-                entity_type=Issue,
-                id_column=Issue.id,
-                order_column=Issue.created_at,
-            ),
+        if not ids:
+            return []
+        stmt = (
+            select(Issue)
+            .where(
+                Issue.repo_id == repository_id,
+                Issue.id.in_(ids),
+            )
+            .order_by(Issue.created_at.desc())
         )
+        return list((await session.scalars(stmt)).all())
 
     async def _fetch_doc_changes_by_key(
         self,
@@ -379,49 +334,42 @@ class EvidenceBundleService:
         repository_id: str,
         keys: set[tuple[str, str]],
     ) -> list[DocumentationChange]:
-        """Fetch documentation changes by commit/path keys."""
+        """Fetch documentation changes by commit/path keys.
+
+        Chunk large key sets to avoid parameter explosion in tuple IN clauses.
+
+        """
         if not keys:
             return []
-        stmt = (
-            select(DocumentationChange)
-            .where(
-                DocumentationChange.repo_id == repository_id,
-                tuple_(DocumentationChange.commit_sha, DocumentationChange.path).in_(
-                    keys
-                ),
+        key_list = list(keys)
+        if len(key_list) <= _DOC_CHANGE_KEY_CHUNK_SIZE:
+            stmt = (
+                select(DocumentationChange)
+                .where(
+                    DocumentationChange.repo_id == repository_id,
+                    tuple_(
+                        DocumentationChange.commit_sha, DocumentationChange.path
+                    ).in_(key_list),
+                )
+                .order_by(DocumentationChange.occurred_at.desc())
             )
-            .order_by(DocumentationChange.occurred_at.desc())
-        )
-        return list((await session.scalars(stmt)).all())
+            return list((await session.scalars(stmt)).all())
 
-    async def _fetch_entities(
-        self,
-        session: AsyncSession,
-        repository_id: str,
-        targets: _EventTargets,
-        event_facts: list[EventFact],
-    ) -> tuple[
-        list[Commit],
-        list[PullRequest],
-        list[Issue],
-        list[DocumentationChange],
-        list[int],
-    ]:
-        """Fetch entity rows and event fact identifiers for uncovered events."""
-        commits = await self._fetch_commits_by_sha(
-            session, repository_id, targets.commit_shas
-        )
-        prs = await self._fetch_pull_requests_by_id(
-            session, repository_id, targets.pull_request_ids
-        )
-        issues = await self._fetch_issues_by_id(
-            session, repository_id, targets.issue_ids
-        )
-        doc_changes = await self._fetch_doc_changes_by_key(
-            session, repository_id, targets.doc_change_keys
-        )
-        event_fact_ids = [fact.id for fact in event_facts]
-        return commits, prs, issues, doc_changes, event_fact_ids
+        docs: list[DocumentationChange] = []
+        for offset in range(0, len(key_list), _DOC_CHANGE_KEY_CHUNK_SIZE):
+            chunk = key_list[offset : offset + _DOC_CHANGE_KEY_CHUNK_SIZE]
+            stmt = (
+                select(DocumentationChange)
+                .where(
+                    DocumentationChange.repo_id == repository_id,
+                    tuple_(
+                        DocumentationChange.commit_sha, DocumentationChange.path
+                    ).in_(chunk),
+                )
+                .order_by(DocumentationChange.occurred_at.desc())
+            )
+            docs.extend((await session.scalars(stmt)).all())
+        return sorted(docs, key=lambda doc: doc.occurred_at, reverse=True)
 
     async def _fetch_repository_context(
         self,
@@ -456,7 +404,20 @@ class EvidenceBundleService:
             session, repo_slug, repository_id, window
         )
         targets = self._extract_event_targets(event_facts)
-        return await self._fetch_entities(session, repository_id, targets, event_facts)
+        commits = await self._fetch_commits_by_sha(
+            session, repository_id, targets.commit_shas
+        )
+        prs = await self._fetch_pull_requests_by_id(
+            session, repository_id, targets.pull_request_ids
+        )
+        issues = await self._fetch_issues_by_id(
+            session, repository_id, targets.issue_ids
+        )
+        doc_changes = await self._fetch_doc_changes_by_key(
+            session, repository_id, targets.doc_change_keys
+        )
+        event_fact_ids = [fact.id for fact in event_facts]
+        return commits, prs, issues, doc_changes, event_fact_ids
 
     def _build_all_evidence(
         self,
@@ -483,28 +444,6 @@ class EvidenceBundleService:
         issue_evidence = self._build_issue_evidence(issues)
         doc_evidence = self._build_doc_evidence(doc_changes)
         return commit_evidence, pr_evidence, issue_evidence, doc_evidence
-
-    def _build_evidence_groupings(
-        self,
-        commits: list[Commit],
-        prs: list[PullRequest],
-        issues: list[Issue],
-        doc_changes: list[DocumentationChange],
-    ) -> tuple[
-        list[CommitEvidence],
-        list[PullRequestEvidence],
-        list[IssueEvidence],
-        list[DocumentationEvidence],
-        list[WorkTypeGrouping],
-    ]:
-        """Build evidence and compute work type groupings."""
-        commit_evidence, pr_evidence, issue_evidence, doc_evidence = (
-            self._build_all_evidence(commits, prs, issues, doc_changes)
-        )
-        groupings = self._compute_work_type_groupings(
-            commit_evidence, pr_evidence, issue_evidence
-        )
-        return commit_evidence, pr_evidence, issue_evidence, doc_evidence, groupings
 
     async def build_bundle(
         self,
@@ -551,14 +490,12 @@ class EvidenceBundleService:
                 session, repository_id, repo.slug, window
             )
             commits, prs, issues, doc_changes, event_fact_ids = entities
-            evidence = self._build_evidence_groupings(commits, prs, issues, doc_changes)
-            (
-                commit_evidence,
-                pr_evidence,
-                issue_evidence,
-                doc_evidence,
-                groupings,
-            ) = evidence
+            commit_evidence, pr_evidence, issue_evidence, doc_evidence = (
+                self._build_all_evidence(commits, prs, issues, doc_changes)
+            )
+            groupings = self._compute_work_type_groupings(
+                commit_evidence, pr_evidence, issue_evidence
+            )
             return RepositoryEvidenceBundle(
                 repository=self._build_repository_metadata(repo),
                 window_start=window_start,

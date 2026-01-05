@@ -681,7 +681,9 @@ trails.
 **Scope-specific coverage:** Evidence bundle selection excludes EventFacts
 already covered by repository-scoped reports only. Project and estate reports
 do not suppress repository evidence, keeping repository bundles complete and
-independent of higher-level reporting runs.
+independent of higher-level reporting runs. Coverage is global per repository
+scope, so once an EventFact is covered by a repository report it is not reused,
+even if later runs backfill overlapping windows.
 
 **Window semantics:** `window_start` is inclusive and `window_end` is
 exclusive, matching Python range conventions and simplifying consecutive window

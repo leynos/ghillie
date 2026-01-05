@@ -6,6 +6,7 @@ import asyncio
 import datetime as dt
 import typing as typ
 
+import pytest
 from pytest_bdd import given, scenario, then, when
 from sqlalchemy import select
 
@@ -37,6 +38,7 @@ class EvidenceContext(typ.TypedDict, total=False):
     transformer: RawEventTransformer
     service: EvidenceBundleService
     repo_slug: str
+    repo_external_id: str
     repo_id: str
     window_start: dt.datetime
     window_end: dt.datetime
@@ -111,17 +113,28 @@ async def _fetch_commit_event_fact_id(
     evidence_context: EvidenceContext,
     sha: str,
 ) -> int:
-    """Return the EventFact id for a commit SHA."""
+    """Return the EventFact id for a commit SHA.
+
+    Scope the lookup to the current repository to avoid cross-test collisions.
+
+    """
+    repo_external_id = evidence_context["repo_external_id"]
     async with evidence_context["session_factory"]() as session:
         facts = (
             await session.scalars(
-                select(EventFact).where(EventFact.event_type == "github.commit")
+                select(EventFact).where(
+                    EventFact.event_type == "github.commit",
+                    EventFact.repo_external_id == repo_external_id,
+                )
             )
         ).all()
     for fact in facts:
         if fact.payload.get("sha") == sha:
             return fact.id
-    raise AssertionError
+    pytest.fail(
+        "No github.commit EventFact found for sha="
+        f"{sha!r} in repo_external_id={repo_external_id!r}"
+    )
 
 
 # Given steps
@@ -138,6 +151,7 @@ def given_empty_store(
         "transformer": RawEventTransformer(session_factory),
         "service": EvidenceBundleService(session_factory),
         "repo_slug": "octo/reef",
+        "repo_external_id": "octo/reef",
         "window_start": dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
         "window_end": dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
     }
@@ -148,8 +162,9 @@ def given_repo_with_events(evidence_context: EvidenceContext) -> None:
     """Ingest a variety of GitHub events for the repository."""
     repo_slug = evidence_context["repo_slug"]
 
-    # Commit
+    # Commits
     commit_time = dt.datetime(2024, 7, 3, 10, 0, tzinfo=dt.UTC)
+    second_commit_time = dt.datetime(2024, 7, 4, 9, 0, tzinfo=dt.UTC)
     # Pull request
     pr_time = dt.datetime(2024, 7, 4, tzinfo=dt.UTC)
     # Issue
@@ -159,6 +174,7 @@ def given_repo_with_events(evidence_context: EvidenceContext) -> None:
 
     events = [
         commit_envelope(repo_slug, "abc123", commit_time, "feat: add auth"),
+        commit_envelope(repo_slug, "def456", second_commit_time, "fix: adjust login"),
         PREventSpec(
             repo_slug=repo_slug,
             pr_id=100,
@@ -443,6 +459,7 @@ def then_bundle_excludes_commit(evidence_context: EvidenceContext) -> None:
 
     assert all(commit.sha != "abc123" for commit in bundle.commits)
     assert covered_event_fact_id not in bundle.event_fact_ids
+    assert any(commit.sha == "def456" for commit in bundle.commits)
 
 
 @then("the bundle still includes the covered commit event")
