@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses as dc
 import datetime as dt
 import typing as typ
 
@@ -27,6 +28,17 @@ if typ.TYPE_CHECKING:
 
 # Type alias for the evidence service stack fixture
 EvidenceServiceStack = tuple[RawEventWriter, RawEventTransformer, EvidenceBundleService]
+
+
+@dc.dataclass(frozen=True, slots=True)
+class _PrIssueEventDetails:
+    """Encapsulate identifiers for PR/issue ingestion."""
+
+    repo_slug: str
+    pr_id: int
+    pr_number: int
+    issue_id: int
+    issue_number: int
 
 
 # ---------------------------------------------------------------------------
@@ -511,29 +523,18 @@ class TestEvidenceBundleServiceBuildBundle:
             assert "def456" in commit_shas
             assert covered_fact.id in set(bundle.event_fact_ids)
 
-    @pytest.mark.asyncio
-    async def test_pr_issue_coverage_uses_identifier_coercion(
+    async def _ingest_pr_and_issue_events(
         self,
-        session_factory: async_sessionmaker[AsyncSession],
-        evidence_service_stack: EvidenceServiceStack,
+        writer: RawEventWriter,
+        details: _PrIssueEventDetails,
     ) -> None:
-        """Bundle selects PRs/issues with mixed identifier types and coverage."""
-        writer, transformer, service = evidence_service_stack
-
-        repo_slug = "octo/reef"
-        window_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
-        window_end = dt.datetime(2024, 7, 8, tzinfo=dt.UTC)
-
-        pr_id = 101
-        issue_id = 202
-        pr_number = 12
-        issue_number = 34
-
+        """Ingest paired PR and issue events for coverage tests."""
+        repo_slug = details.repo_slug
         await writer.ingest(
             PREventSpec(
                 repo_slug=repo_slug,
-                pr_id=pr_id,
-                pr_number=pr_number,
+                pr_id=details.pr_id,
+                pr_number=details.pr_number,
                 created_at=dt.datetime(2024, 7, 2, tzinfo=dt.UTC),
                 title="fix: resolve bug",
                 labels=("bug",),
@@ -542,8 +543,8 @@ class TestEvidenceBundleServiceBuildBundle:
         await writer.ingest(
             PREventSpec(
                 repo_slug=repo_slug,
-                pr_id=pr_id,
-                pr_number=pr_number,
+                pr_id=details.pr_id,
+                pr_number=details.pr_number,
                 created_at=dt.datetime(2024, 7, 3, tzinfo=dt.UTC),
                 title="fix: resolve bug",
                 labels=("bug",),
@@ -552,8 +553,8 @@ class TestEvidenceBundleServiceBuildBundle:
         await writer.ingest(
             IssueEventSpec(
                 repo_slug=repo_slug,
-                issue_id=issue_id,
-                issue_number=issue_number,
+                issue_id=details.issue_id,
+                issue_number=details.issue_number,
                 created_at=dt.datetime(2024, 7, 4, tzinfo=dt.UTC),
                 title="Feature request",
                 labels=("enhancement",),
@@ -562,17 +563,20 @@ class TestEvidenceBundleServiceBuildBundle:
         await writer.ingest(
             IssueEventSpec(
                 repo_slug=repo_slug,
-                issue_id=issue_id,
-                issue_number=issue_number,
+                issue_id=details.issue_id,
+                issue_number=details.issue_number,
                 created_at=dt.datetime(2024, 7, 5, tzinfo=dt.UTC),
                 title="Feature request",
                 labels=("enhancement",),
             ).build()
         )
-        await transformer.process_pending()
 
-        repo_id = await get_repo_id(session_factory)
-
+    async def _setup_coverage_with_identifier_coercion(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        repo_id: str,
+    ) -> tuple[int, int, int, int]:
+        """Create repository coverage and coerce uncovered identifiers."""
         async with session_factory() as session:
             from sqlalchemy import select
 
@@ -626,6 +630,52 @@ class TestEvidenceBundleServiceBuildBundle:
             session.add(report)
             await session.commit()
 
+            return (
+                uncovered_pr_fact.id,
+                covered_pr_fact.id,
+                uncovered_issue_fact.id,
+                covered_issue_fact.id,
+            )
+
+    @pytest.mark.asyncio
+    async def test_pr_issue_coverage_uses_identifier_coercion(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        evidence_service_stack: EvidenceServiceStack,
+    ) -> None:
+        """Bundle selects PRs/issues with mixed identifier types and coverage."""
+        writer, transformer, service = evidence_service_stack
+
+        repo_slug = "octo/reef"
+        window_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
+        window_end = dt.datetime(2024, 7, 8, tzinfo=dt.UTC)
+
+        pr_id = 101
+        issue_id = 202
+        pr_number = 12
+        issue_number = 34
+
+        details = _PrIssueEventDetails(
+            repo_slug=repo_slug,
+            pr_id=pr_id,
+            pr_number=pr_number,
+            issue_id=issue_id,
+            issue_number=issue_number,
+        )
+        await self._ingest_pr_and_issue_events(writer, details)
+        await transformer.process_pending()
+
+        repo_id = await get_repo_id(session_factory)
+
+        (
+            uncovered_pr_fact_id,
+            covered_pr_fact_id,
+            uncovered_issue_fact_id,
+            covered_issue_fact_id,
+        ) = await self._setup_coverage_with_identifier_coercion(
+            session_factory, repo_id
+        )
+
         bundle = await service.build_bundle(repo_id, window_start, window_end)
 
         assert len(bundle.pull_requests) == 1
@@ -634,10 +684,10 @@ class TestEvidenceBundleServiceBuildBundle:
         assert bundle.issues[0].number == issue_number
 
         event_fact_ids = set(bundle.event_fact_ids)
-        assert covered_pr_fact.id not in event_fact_ids
-        assert covered_issue_fact.id not in event_fact_ids
-        assert uncovered_pr_fact.id in event_fact_ids
-        assert uncovered_issue_fact.id in event_fact_ids
+        assert covered_pr_fact_id not in event_fact_ids
+        assert covered_issue_fact_id not in event_fact_ids
+        assert uncovered_pr_fact_id in event_fact_ids
+        assert uncovered_issue_fact_id in event_fact_ids
 
     @pytest.mark.asyncio
     async def test_doc_change_coverage_excludes_covered_paths(
