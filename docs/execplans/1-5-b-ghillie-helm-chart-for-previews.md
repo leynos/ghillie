@@ -64,11 +64,15 @@ value configurations.
 
 ## Progress
 
-- [x] (2026-01-05) Stage A: Create chart foundation (Chart.yaml, values.yaml, _helpers.tpl)
-- [x] (2026-01-05) Stage B: Create core templates (deployment, service, serviceaccount)
-- [x] (2026-01-05) Stage C: Create optional templates (ingress, externalsecret, configmap, NOTES.txt)
+- [x] (2026-01-05) Stage A: Create chart foundation (Chart.yaml, values.yaml,
+      _helpers.tpl)
+- [x] (2026-01-05) Stage B: Create core templates (deployment, service,
+      serviceaccount)
+- [x] (2026-01-05) Stage C: Create optional templates (ingress, externalsecret,
+      configmap, NOTES.txt)
 - [x] (2026-01-05) Stage D: Create values.schema.json for validation
-- [x] (2026-01-05) Stage E: Create unit tests (tests/helm/test_template_render.py)
+- [x] (2026-01-05) Stage E: Create unit tests
+      (tests/helm/test_template_render.py)
 - [x] (2026-01-05) Stage F: Create BDD tests (tests/helm/features/)
 - [x] (2026-01-05) Stage G: Add Makefile targets (helm-lint, helm-test)
 - [x] (2026-01-05) Stage H: Update docs/roadmap.md to mark task complete
@@ -77,14 +81,14 @@ value configurations.
 ## Surprises & Discoveries
 
 - Observation: ruamel.yaml required instead of PyYAML
-  Evidence: PyYAML not in project dependencies; ruamel.yaml>=0.18.6 is
-  Impact: Updated test code to use `ruamel.yaml.YAML()` instead of
+  Evidence: PyYAML not in project dependencies; ruamel.yaml>=0.18.6 is Impact:
+  Updated test code to use `ruamel.yaml.YAML()` instead of
   `yaml.safe_load_all()`
 
 - Observation: JSON Schema validation enforces paths when setting hosts
   Evidence: Test `test_ingress_with_explicit_host` failed with "missing
-  property 'paths'" when using --set
-  Impact: Used values fixture file instead of --set for explicit host test
+  property 'paths'" when using --set Impact: Used values fixture file instead
+  of --set for explicit host test
 
 ## Decision Log
 
@@ -113,6 +117,7 @@ value configurations.
 ## Outcomes & Retrospective
 
 **Outcomes:**
+
 - Chart created at `charts/ghillie/` with all required templates
 - `helm lint charts/ghillie` passes without errors
 - 20 unit tests and 4 BDD tests all pass
@@ -120,8 +125,10 @@ value configurations.
 - Task 1.5.b marked complete in roadmap
 
 **Lessons learned:**
+
 - Using ruamel.yaml for YAML parsing aligns with project dependencies
-- Schema validation with helm requires complete value structures, not partial --set
+- Schema validation with helm requires complete value structures, not partial
+  --set
 - Hostless ingress (empty host) works well for k3d local development
 
 ## Context and Orientation
