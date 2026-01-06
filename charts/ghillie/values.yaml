@@ -1,0 +1,90 @@
+# Ghillie Helm chart values
+# See docs/local-k8s-preview-design.md for full documentation
+
+# Image configuration
+image:
+  repository: ghillie
+  tag: local
+  pullPolicy: IfNotPresent
+
+# Entrypoint overrides (optional)
+# These allow running different Ghillie modes (worker, API, etc.)
+command: []
+args: []
+
+# Replica count
+replicaCount: 1
+
+# Service configuration
+service:
+  port: 8080
+  type: ClusterIP
+
+# Ingress configuration
+# For local k3d, use empty host ("") to rely on Traefik default routing
+# For GitOps, set explicit hostname (e.g., pr-123.preview.example.com)
+ingress:
+  enabled: true
+  className: ""
+  annotations: {}
+  hosts:
+    - host: ""
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Non-sensitive environment variables
+# These are injected directly into the container and stored in a ConfigMap
+env:
+  normal:
+    GHILLIE_ENV: development
+
+# Secrets configuration
+# Sensitive values (DATABASE_URL, VALKEY_URL) are loaded via Kubernetes Secret
+secrets:
+  # Use a pre-created Secret (takes precedence over externalSecret)
+  existingSecretName: ""
+
+  # External Secrets Operator configuration for GitOps environments
+  externalSecret:
+    enabled: false
+    secretStoreRef: ""
+    refreshInterval: 1h
+    data: []
+    # Example data configuration:
+    # - secretKey: DATABASE_URL
+    #   remoteRef:
+    #     key: ghillie/database
+    #     property: url
+
+# Resource limits and requests
+resources: {}
+  # limits:
+  #   cpu: 500m
+  #   memory: 512Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+# Container security context
+securityContext: {}
+  # runAsNonRoot: true
+  # readOnlyRootFilesystem: true
+  # allowPrivilegeEscalation: false
+
+# Pod security context
+podSecurityContext: {}
+  # fsGroup: 1000
+  # runAsUser: 1000
+  # runAsGroup: 1000
+
+# Service account configuration
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# Override chart name
+nameOverride: ""
+fullnameOverride: ""

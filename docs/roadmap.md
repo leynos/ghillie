@@ -191,7 +191,7 @@ ephemeral previews platform and supports the Ghillie Helm chart.
   and covers all required design elements, including chart, Dockerfile, and
   script sketches.
 
-- [ ] **Task 1.5.b – Implement Ghillie Helm chart for previews**  
+- [x] **Task 1.5.b – Implement Ghillie Helm chart for previews**
   Build the `charts/ghillie` Helm chart with support for local and GitOps
   environments, including configurable ingress and external secrets.
 
