@@ -1,4 +1,4 @@
-{{- if .Values.env.normal -}}
+{{- if and .Values.env.normal (gt (len .Values.env.normal) 0) -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
