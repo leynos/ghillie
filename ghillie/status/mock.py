@@ -6,6 +6,7 @@ from ghillie.evidence.models import (
     ReportStatus,
     RepositoryEvidenceBundle,
     WorkType,
+    WorkTypeGrouping,
 )
 from ghillie.status.models import RepositoryStatusResult
 
@@ -87,15 +88,56 @@ class MockStatusModel:
             return ReportStatus.UNKNOWN
 
         # Previous risks carried forward → AT_RISK
-        if evidence.previous_reports:
-            latest = evidence.previous_reports[0]
-            if latest.risks and latest.status in (
-                ReportStatus.AT_RISK,
-                ReportStatus.BLOCKED,
-            ):
-                return ReportStatus.AT_RISK
+        if self._has_previous_risks(evidence):
+            return ReportStatus.AT_RISK
 
         # Bug activity > feature activity → AT_RISK
+        bug_count, feature_count = self._count_work_by_type(evidence)
+        if bug_count > feature_count and bug_count > 0:
+            return ReportStatus.AT_RISK
+
+        return ReportStatus.ON_TRACK
+
+    def _has_previous_risks(self, evidence: RepositoryEvidenceBundle) -> bool:
+        """Check if previous reports indicate ongoing risks.
+
+        Parameters
+        ----------
+        evidence
+            Evidence bundle to check for previous risks.
+
+        Returns
+        -------
+        bool
+            True if the latest previous report has risks and AT_RISK/BLOCKED status.
+
+        """
+        if not evidence.previous_reports:
+            return False
+        latest = evidence.previous_reports[0]
+        return bool(
+            latest.risks
+            and latest.status in (ReportStatus.AT_RISK, ReportStatus.BLOCKED)
+        )
+
+    def _count_work_by_type(
+        self,
+        evidence: RepositoryEvidenceBundle,
+    ) -> tuple[int, int]:
+        """Count work activity by bug and feature types.
+
+        Parameters
+        ----------
+        evidence
+            Evidence bundle to analyze.
+
+        Returns
+        -------
+        tuple[int, int]
+            A tuple of (bug_count, feature_count) representing combined
+            commit and PR counts for each work type.
+
+        """
         bug_count = 0
         feature_count = 0
         for grouping in evidence.work_type_groupings:
@@ -103,11 +145,7 @@ class MockStatusModel:
                 bug_count = grouping.commit_count + grouping.pr_count
             elif grouping.work_type == WorkType.FEATURE:
                 feature_count = grouping.commit_count + grouping.pr_count
-
-        if bug_count > feature_count and bug_count > 0:
-            return ReportStatus.AT_RISK
-
-        return ReportStatus.ON_TRACK
+        return bug_count, feature_count
 
     def _generate_summary(
         self,
@@ -178,20 +216,51 @@ class MockStatusModel:
         highlights: list[str] = []
 
         for grouping in evidence.work_type_groupings:
-            if grouping.work_type == WorkType.FEATURE and grouping.pr_count > 0:
-                pr_word = "PR" if grouping.pr_count == 1 else "PRs"
-                highlights.append(f"Delivered {grouping.pr_count} feature {pr_word}")
-            if grouping.work_type == WorkType.DOCUMENTATION:
-                total = grouping.commit_count + grouping.pr_count
-                if total > 0:
-                    highlights.append("Updated documentation")
-
-        # Include sample titles from feature work
-        for grouping in evidence.work_type_groupings:
             if grouping.work_type == WorkType.FEATURE:
-                highlights.extend(grouping.sample_titles[:2])
+                self._add_feature_highlights(grouping, highlights)
+            elif grouping.work_type == WorkType.DOCUMENTATION:
+                self._add_documentation_highlights(grouping, highlights)
 
         return tuple(highlights[:5])
+
+    def _add_feature_highlights(
+        self,
+        grouping: WorkTypeGrouping,
+        highlights: list[str],
+    ) -> None:
+        """Add highlights from a FEATURE work type grouping.
+
+        Parameters
+        ----------
+        grouping
+            Feature work type grouping to extract highlights from.
+        highlights
+            List to append highlights to (modified in place).
+
+        """
+        if grouping.pr_count > 0:
+            pr_word = "PR" if grouping.pr_count == 1 else "PRs"
+            highlights.append(f"Delivered {grouping.pr_count} feature {pr_word}")
+        highlights.extend(grouping.sample_titles[:2])
+
+    def _add_documentation_highlights(
+        self,
+        grouping: WorkTypeGrouping,
+        highlights: list[str],
+    ) -> None:
+        """Add highlights from a DOCUMENTATION work type grouping.
+
+        Parameters
+        ----------
+        grouping
+            Documentation work type grouping to extract highlights from.
+        highlights
+            List to append highlights to (modified in place).
+
+        """
+        total = grouping.commit_count + grouping.pr_count
+        if total > 0:
+            highlights.append("Updated documentation")
 
     def _extract_risks(
         self,
@@ -256,16 +325,49 @@ class MockStatusModel:
         if status == ReportStatus.UNKNOWN:
             steps.append("Investigate lack of activity")
 
-        # Check for open PRs
-        open_prs = [pr for pr in evidence.pull_requests if pr.state == "open"]
-        if open_prs:
-            pr_word = "PR" if len(open_prs) == 1 else "PRs"
-            steps.append(f"Review {len(open_prs)} open {pr_word}")
-
-        # Check for open issues
-        open_issues = [i for i in evidence.issues if i.state == "open"]
-        if open_issues:
-            issue_word = "issue" if len(open_issues) == 1 else "issues"
-            steps.append(f"Triage {len(open_issues)} open {issue_word}")
+        self._add_pr_review_step(evidence, steps)
+        self._add_issue_triage_step(evidence, steps)
 
         return tuple(steps[:5])
+
+    def _add_pr_review_step(
+        self,
+        evidence: RepositoryEvidenceBundle,
+        steps: list[str],
+    ) -> None:
+        """Add PR review step if there are open pull requests.
+
+        Parameters
+        ----------
+        evidence
+            Evidence bundle to check for open PRs.
+        steps
+            List to append step to (modified in place).
+
+        """
+        open_prs = [pr for pr in evidence.pull_requests if pr.state == "open"]
+        if not open_prs:
+            return
+        pr_word = "PR" if len(open_prs) == 1 else "PRs"
+        steps.append(f"Review {len(open_prs)} open {pr_word}")
+
+    def _add_issue_triage_step(
+        self,
+        evidence: RepositoryEvidenceBundle,
+        steps: list[str],
+    ) -> None:
+        """Add issue triage step if there are open issues.
+
+        Parameters
+        ----------
+        evidence
+            Evidence bundle to check for open issues.
+        steps
+            List to append step to (modified in place).
+
+        """
+        open_issues = [i for i in evidence.issues if i.state == "open"]
+        if not open_issues:
+            return
+        issue_word = "issue" if len(open_issues) == 1 else "issues"
+        steps.append(f"Triage {len(open_issues)} open {issue_word}")

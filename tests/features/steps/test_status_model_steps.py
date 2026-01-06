@@ -53,6 +53,20 @@ def status_model_context() -> StatusModelContext:
 # ---------------------------------------------------------------------------
 
 
+# Helper functions
+
+
+def _create_octo_reef_metadata() -> RepositoryMetadata:
+    """Create standard repository metadata for octo/reef test repository."""
+    return RepositoryMetadata(
+        id="repo-123",
+        owner="octo",
+        name="reef",
+        default_branch="main",
+        estate_id="wildside",
+    )
+
+
 @given(
     'a repository "octo/reef" with feature activity',
     target_fixture="status_model_context",
@@ -61,13 +75,7 @@ def given_repository_with_feature_activity(
     status_model_context: StatusModelContext,
 ) -> StatusModelContext:
     """Set up repository metadata with feature activity context."""
-    status_model_context["repository_metadata"] = RepositoryMetadata(
-        id="repo-123",
-        owner="octo",
-        name="reef",
-        default_branch="main",
-        estate_id="wildside",
-    )
+    status_model_context["repository_metadata"] = _create_octo_reef_metadata()
     return status_model_context
 
 
@@ -79,13 +87,7 @@ def given_repository_with_previous_at_risk(
     status_model_context: StatusModelContext,
 ) -> StatusModelContext:
     """Set up repository with previous at-risk report."""
-    status_model_context["repository_metadata"] = RepositoryMetadata(
-        id="repo-123",
-        owner="octo",
-        name="reef",
-        default_branch="main",
-        estate_id="wildside",
-    )
+    status_model_context["repository_metadata"] = _create_octo_reef_metadata()
     return status_model_context
 
 
@@ -97,13 +99,7 @@ def given_repository_with_no_activity(
     status_model_context: StatusModelContext,
 ) -> StatusModelContext:
     """Set up repository with no activity."""
-    status_model_context["repository_metadata"] = RepositoryMetadata(
-        id="repo-123",
-        owner="octo",
-        name="reef",
-        default_branch="main",
-        estate_id="wildside",
-    )
+    status_model_context["repository_metadata"] = _create_octo_reef_metadata()
     return status_model_context
 
 
