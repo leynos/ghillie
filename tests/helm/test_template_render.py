@@ -59,6 +59,42 @@ def _run_helm_template(
     return [d for d in docs if d is not None]
 
 
+def _get_resources_by_kind(docs: list[dict], kind: str) -> list[dict]:
+    """Filter documents by Kubernetes resource kind.
+
+    Args:
+        docs: List of parsed Kubernetes manifest dictionaries.
+        kind: The Kubernetes resource kind to filter by (e.g., "Deployment").
+
+    Returns:
+        List of documents matching the specified kind.
+
+    """
+    return [d for d in docs if d["kind"] == kind]
+
+
+def _assert_resource_count(
+    docs: list[dict], kind: str, expected_count: int
+) -> list[dict]:
+    """Assert the count of resources by kind and return the filtered list.
+
+    Args:
+        docs: List of parsed Kubernetes manifest dictionaries.
+        kind: The Kubernetes resource kind to filter by.
+        expected_count: Expected number of resources of this kind.
+
+    Returns:
+        List of documents matching the specified kind.
+
+    Raises:
+        AssertionError: If the count doesn't match expected_count.
+
+    """
+    resources = _get_resources_by_kind(docs, kind)
+    assert len(resources) == expected_count
+    return resources
+
+
 class TestDeploymentRendering:
     """Tests for Deployment template rendering."""
 
@@ -74,8 +110,7 @@ class TestDeploymentRendering:
             },
         )
 
-        deployments = [d for d in docs if d["kind"] == "Deployment"]
-        assert len(deployments) == 1
+        deployments = _assert_resource_count(docs, "Deployment", 1)
 
         container = deployments[0]["spec"]["template"]["spec"]["containers"][0]
         assert container["image"] == "ghcr.io/test/ghillie:v1.0.0"
@@ -86,7 +121,7 @@ class TestDeploymentRendering:
         """Deployment should use default image values."""
         docs = _run_helm_template(chart_path)
 
-        deployments = [d for d in docs if d["kind"] == "Deployment"]
+        deployments = _get_resources_by_kind(docs, "Deployment")
         container = deployments[0]["spec"]["template"]["spec"]["containers"][0]
         assert container["image"] == "ghillie:local"
 
@@ -103,7 +138,7 @@ class TestDeploymentRendering:
             },
         )
 
-        deployments = [d for d in docs if d["kind"] == "Deployment"]
+        deployments = _get_resources_by_kind(docs, "Deployment")
         container = deployments[0]["spec"]["template"]["spec"]["containers"][0]
         assert container.get("command") == ["python", "-m", "ghillie.worker"]
 
@@ -113,7 +148,7 @@ class TestDeploymentRendering:
         """Deployment should load env from secret."""
         docs = _run_helm_template(chart_path)
 
-        deployments = [d for d in docs if d["kind"] == "Deployment"]
+        deployments = _get_resources_by_kind(docs, "Deployment")
         container = deployments[0]["spec"]["template"]["spec"]["containers"][0]
 
         env_from = container.get("envFrom", [])
@@ -129,7 +164,7 @@ class TestDeploymentRendering:
             set_values={"secrets.existingSecretName": "my-custom-secret"},
         )
 
-        deployments = [d for d in docs if d["kind"] == "Deployment"]
+        deployments = _get_resources_by_kind(docs, "Deployment")
         container = deployments[0]["spec"]["template"]["spec"]["containers"][0]
 
         env_from = container.get("envFrom", [])
@@ -142,7 +177,7 @@ class TestDeploymentRendering:
         """Deployment should inject env.normal values."""
         docs = _run_helm_template(chart_path)
 
-        deployments = [d for d in docs if d["kind"] == "Deployment"]
+        deployments = _get_resources_by_kind(docs, "Deployment")
         container = deployments[0]["spec"]["template"]["spec"]["containers"][0]
 
         env_vars = {e["name"]: e["value"] for e in container.get("env", [])}
@@ -162,8 +197,7 @@ class TestServiceRendering:
             set_values={"service.port": "9090"},
         )
 
-        services = [d for d in docs if d["kind"] == "Service"]
-        assert len(services) == 1
+        services = _assert_resource_count(docs, "Service", 1)
         assert services[0]["spec"]["ports"][0]["port"] == 9090
 
     def test_service_default_type_is_clusterip(
@@ -172,7 +206,7 @@ class TestServiceRendering:
         """Service type should default to ClusterIP."""
         docs = _run_helm_template(chart_path)
 
-        services = [d for d in docs if d["kind"] == "Service"]
+        services = _get_resources_by_kind(docs, "Service")
         assert services[0]["spec"]["type"] == "ClusterIP"
 
 
@@ -186,8 +220,7 @@ class TestIngressRendering:
             set_values={"ingress.enabled": "false"},
         )
 
-        ingresses = [d for d in docs if d["kind"] == "Ingress"]
-        assert len(ingresses) == 0
+        _assert_resource_count(docs, "Ingress", 0)
 
     def test_ingress_enabled_by_default(
         self, chart_path: Path, require_helm: None
@@ -195,8 +228,7 @@ class TestIngressRendering:
         """Ingress should render when enabled (default)."""
         docs = _run_helm_template(chart_path)
 
-        ingresses = [d for d in docs if d["kind"] == "Ingress"]
-        assert len(ingresses) == 1
+        _assert_resource_count(docs, "Ingress", 1)
 
     def test_ingress_hostless_for_local(
         self, chart_path: Path, require_helm: None
@@ -204,8 +236,7 @@ class TestIngressRendering:
         """Ingress should support empty host for local k3d."""
         docs = _run_helm_template(chart_path)
 
-        ingresses = [d for d in docs if d["kind"] == "Ingress"]
-        assert len(ingresses) == 1
+        ingresses = _assert_resource_count(docs, "Ingress", 1)
 
         rules = ingresses[0]["spec"]["rules"]
         assert len(rules) == 1
@@ -221,7 +252,7 @@ class TestIngressRendering:
             values_file=fixtures_path / "values_gitops.yaml",
         )
 
-        ingresses = [d for d in docs if d["kind"] == "Ingress"]
+        ingresses = _get_resources_by_kind(docs, "Ingress")
         rules = ingresses[0]["spec"]["rules"]
         assert rules[0]["host"] == "pr-123.preview.example.com"
 
@@ -232,7 +263,7 @@ class TestIngressRendering:
             set_values={"ingress.className": "nginx"},
         )
 
-        ingresses = [d for d in docs if d["kind"] == "Ingress"]
+        ingresses = _get_resources_by_kind(docs, "Ingress")
         assert ingresses[0]["spec"]["ingressClassName"] == "nginx"
 
 
@@ -245,8 +276,7 @@ class TestExternalSecretRendering:
         """ExternalSecret should not render when disabled."""
         docs = _run_helm_template(chart_path)
 
-        external_secrets = [d for d in docs if d["kind"] == "ExternalSecret"]
-        assert len(external_secrets) == 0
+        _assert_resource_count(docs, "ExternalSecret", 0)
 
     def test_externalsecret_renders_when_enabled(
         self, chart_path: Path, require_helm: None
@@ -260,8 +290,7 @@ class TestExternalSecretRendering:
             },
         )
 
-        external_secrets = [d for d in docs if d["kind"] == "ExternalSecret"]
-        assert len(external_secrets) == 1
+        external_secrets = _assert_resource_count(docs, "ExternalSecret", 1)
         assert external_secrets[0]["spec"]["secretStoreRef"]["name"] == "platform-vault"
 
     def test_externalsecret_target_name(
@@ -276,7 +305,7 @@ class TestExternalSecretRendering:
             },
         )
 
-        external_secrets = [d for d in docs if d["kind"] == "ExternalSecret"]
+        external_secrets = _get_resources_by_kind(docs, "ExternalSecret")
         target_name = external_secrets[0]["spec"]["target"]["name"]
         assert target_name == "test-release-ghillie"
 
@@ -290,8 +319,7 @@ class TestServiceAccountRendering:
         """ServiceAccount should be created by default."""
         docs = _run_helm_template(chart_path)
 
-        service_accounts = [d for d in docs if d["kind"] == "ServiceAccount"]
-        assert len(service_accounts) == 1
+        _assert_resource_count(docs, "ServiceAccount", 1)
 
     def test_serviceaccount_not_created_when_disabled(
         self, chart_path: Path, require_helm: None
@@ -302,8 +330,7 @@ class TestServiceAccountRendering:
             set_values={"serviceAccount.create": "false"},
         )
 
-        service_accounts = [d for d in docs if d["kind"] == "ServiceAccount"]
-        assert len(service_accounts) == 0
+        _assert_resource_count(docs, "ServiceAccount", 0)
 
 
 class TestConfigMapRendering:
@@ -315,8 +342,7 @@ class TestConfigMapRendering:
         """ConfigMap should be created when env.normal has values."""
         docs = _run_helm_template(chart_path)
 
-        configmaps = [d for d in docs if d["kind"] == "ConfigMap"]
-        assert len(configmaps) == 1
+        configmaps = _assert_resource_count(docs, "ConfigMap", 1)
         assert "GHILLIE_ENV" in configmaps[0]["data"]
 
 
