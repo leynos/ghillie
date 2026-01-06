@@ -11,10 +11,10 @@ No `PLANS.md` file exists in this repository.
 ## Purpose / Big Picture
 
 Build the `charts/ghillie` Helm chart that deploys the Ghillie application to
-Kubernetes clusters for both local k3d development and GitOps ephemeral
-previews. After completion, developers can run `helm install` with local values
-to deploy Ghillie to a k3d cluster, and the same chart works with FluxCD
-HelmRelease for GitOps environments.
+Kubernetes clusters for both local k3d development and GitOps (Git-driven
+operations) ephemeral previews. After completion, developers can run
+`helm install` with local values to deploy Ghillie to a k3d cluster, and the
+same chart works with FluxCD HelmRelease for GitOps environments.
 
 Observable success: `helm lint charts/ghillie` passes without errors, and
 `helm template` renders valid Kubernetes manifests for both local and GitOps
@@ -99,9 +99,9 @@ value configurations.
 
 - Decision: Place Helm tests under `tests/helm/` as new directory
   Rationale: Keeps chart tests separate from Python unit tests; matches
-  feature-based organisation principle Date/Author: 2026-01-05 / Claude
+  feature-based organization principle Date/Author: 2026-01-05 / Claude
 
-- Decision: ConfigMap created but env values also injected directly
+- Decision: ConfigMap created, but env values also injected directly
   Rationale: ConfigMap provides visibility via kubectl; direct injection
   ensures values are available without mounting Date/Author: 2026-01-05 / Claude
 
@@ -109,9 +109,9 @@ value configurations.
   Rationale: User requested post-install notes showing how to access the
   deployed service Date/Author: 2026-01-05 / User
 
-- Decision: Skip Helm tests if helm binary is not available
-  Rationale: Use pytest.skip() when helm is unavailable; allows tests to pass
-  in environments without helm while still providing coverage when available
+- Decision: Skip Helm tests if Helm binary is not available
+  Rationale: Use pytest.skip() when Helm is unavailable; allows tests to pass
+  in environments without Helm while still providing coverage when available
   Date/Author: 2026-01-05 / User
 
 ## Outcomes & Retrospective
@@ -141,7 +141,7 @@ specified in `docs/local-k8s-preview-design.md`, which defines:
 - Template sketches for deployment, service, ingress, externalsecret
 - Local vs GitOps value patterns
 
-No `charts/` directory currently exists; this is greenfield implementation.
+No `charts/` directory currently exists; this is a greenfield implementation.
 
 Key files to reference:
 
@@ -270,7 +270,7 @@ Validation: `helm lint --strict charts/ghillie` passes with schema validation.
 
 Validation: `uv run pytest tests/helm -v` passes.
 
-### Stage F: BDD Tests
+### Stage F: Behaviour-Driven Development (BDD) Tests
 
 1. Create `tests/helm/features/helm_chart.feature`:
     - Scenario: Chart renders valid manifests with default values

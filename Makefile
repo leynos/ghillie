@@ -80,10 +80,15 @@ test: build uv $(VENV_TOOLS) ## Run tests
 	$(UV_ENV) uv run pytest -v -n auto
 
 helm-lint: ## Lint the Helm chart
-	@command -v helm >/dev/null 2>&1 || { \
-	  printf "Warning: 'helm' is not installed, skipping helm-lint\n" >&2; \
-	  exit 0; \
-	}
+	@if ! command -v helm >/dev/null 2>&1; then \
+	  if [ "$${HELM_LINT_SKIP_MISSING:-}" = "1" ]; then \
+	    printf "Warning: 'helm' is not installed, skipping helm-lint (HELM_LINT_SKIP_MISSING=1)\n" >&2; \
+	    exit 0; \
+	  else \
+	    printf "Error: 'helm' is not installed. Install helm or set HELM_LINT_SKIP_MISSING=1 to skip.\n" >&2; \
+	    exit 1; \
+	  fi; \
+	fi
 	helm lint charts/ghillie
 
 helm-test: build $(VENV_TOOLS) ## Run Helm chart tests

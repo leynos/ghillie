@@ -30,9 +30,9 @@ def chart_path(repo_root: Path) -> Path:
 
 
 @pytest.fixture(scope="session")
-def fixtures_path() -> Path:
+def fixtures_path(repo_root: Path) -> Path:
     """Return the path to test fixtures."""
-    return Path(__file__).resolve().parent / "fixtures"
+    return repo_root / "tests" / "helm" / "fixtures"
 
 
 @pytest.fixture(scope="session")

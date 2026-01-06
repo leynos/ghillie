@@ -332,6 +332,29 @@ class TestServiceAccountRendering:
 
         _assert_resource_count(docs, "ServiceAccount", 0)
 
+    def test_deployment_uses_default_serviceaccount(
+        self, chart_path: Path, require_helm: None
+    ) -> None:
+        """Deployment should reference the created ServiceAccount by default."""
+        docs = _run_helm_template(chart_path)
+
+        deployments = _get_resources_by_kind(docs, "Deployment")
+        pod_spec = deployments[0]["spec"]["template"]["spec"]
+        assert pod_spec["serviceAccountName"] == "test-release-ghillie"
+
+    def test_deployment_serviceaccount_with_custom_name(
+        self, chart_path: Path, require_helm: None
+    ) -> None:
+        """Deployment should use custom serviceAccount.name when provided."""
+        docs = _run_helm_template(
+            chart_path,
+            set_values={"serviceAccount.name": "my-custom-sa"},
+        )
+
+        deployments = _get_resources_by_kind(docs, "Deployment")
+        pod_spec = deployments[0]["spec"]["template"]["spec"]
+        assert pod_spec["serviceAccountName"] == "my-custom-sa"
+
 
 class TestConfigMapRendering:
     """Tests for ConfigMap template rendering."""
@@ -344,6 +367,17 @@ class TestConfigMapRendering:
 
         configmaps = _assert_resource_count(docs, "ConfigMap", 1)
         assert "GHILLIE_ENV" in configmaps[0]["data"]
+
+    def test_configmap_not_created_with_empty_env_normal(
+        self, chart_path: Path, fixtures_path: Path, require_helm: None
+    ) -> None:
+        """ConfigMap should not be created when env.normal is empty."""
+        docs = _run_helm_template(
+            chart_path,
+            values_file=fixtures_path / "values_empty_env.yaml",
+        )
+
+        _assert_resource_count(docs, "ConfigMap", 0)
 
 
 class TestHelmLint:

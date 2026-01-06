@@ -1,0 +1,7 @@
+# Test fixture for empty env.normal - ConfigMap should not be created
+image:
+  repository: ghillie
+  tag: local
+
+env:
+  normal: {}

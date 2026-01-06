@@ -2,6 +2,8 @@
 # See docs/local-k8s-preview-design.md for full documentation
 
 # Image configuration
+# Note: tag "local" is for local development only.
+# Override with a specific version or SHA for GitOps/production deployments.
 image:
   repository: ghillie
   tag: local
@@ -50,6 +52,8 @@ secrets:
   externalSecret:
     enabled: false
     secretStoreRef: ""
+    # Kind of SecretStore: ClusterSecretStore (cluster-scoped) or SecretStore (namespace-scoped)
+    secretStoreKind: ClusterSecretStore
     refreshInterval: 1h
     data: []
     # Example data configuration:
@@ -82,8 +86,12 @@ podSecurityContext: {}
 # Service account configuration
 serviceAccount:
   create: true
+  # name: "" means the chart generates a name using the fullname template.
+  # Set explicitly to use a pre-existing service account.
   name: ""
   annotations: {}
+  # Set to false to disable token mounting (recommended if no K8s API access needed)
+  automountServiceAccountToken: true
 
 # Override chart name
 nameOverride: ""

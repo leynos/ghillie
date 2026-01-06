@@ -163,7 +163,12 @@
             },
             "secretStoreRef": {
               "type": "string",
-              "description": "ClusterSecretStore name"
+              "description": "SecretStore or ClusterSecretStore name"
+            },
+            "secretStoreKind": {
+              "type": "string",
+              "description": "Kind of SecretStore reference",
+              "enum": ["SecretStore", "ClusterSecretStore"]
             },
             "refreshInterval": {
               "type": "string",
@@ -251,6 +256,10 @@
           "additionalProperties": {
             "type": "string"
           }
+        },
+        "automountServiceAccountToken": {
+          "type": "boolean",
+          "description": "Automount service account token"
         }
       }
     },

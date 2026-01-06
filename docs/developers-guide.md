@@ -21,7 +21,7 @@ cd ghillie
 make build
 ```
 
-Run the quality gate chain to verify your environment:
+Run the quality gate chain to verify the development environment:
 
 ```bash
 make all
@@ -38,7 +38,7 @@ The project enforces these quality gates before commits:
 | `make fmt`       | Format Python and Markdown sources |
 | `make lint`      | Run ruff linter                    |
 | `make check-fmt` | Verify formatting without changes  |
-| `make typecheck` | Run ty type checker                |
+| `make typecheck` | Run the type checker               |
 | `make test`      | Run pytest with parallel execution |
 | `make helm-lint` | Lint the Ghillie Helm chart        |
 | `make helm-test` | Run Helm chart tests               |
@@ -49,7 +49,7 @@ Run all gates before committing:
 make check-fmt && make lint && make typecheck && make test && make helm-lint
 ```
 
-## Helm chart for local and GitOps previews
+## Helm chart for local and GitOps (Git-driven operations) previews
 
 The `charts/ghillie` Helm chart deploys Ghillie to Kubernetes clusters for both
 local k3d development and GitOps ephemeral preview environments. The chart

@@ -7,11 +7,13 @@ Namespace: {{ .Release.Namespace }}
 
 Access the application:
 {{- range .Values.ingress.hosts }}
+{{- if and .paths (gt (len .paths) 0) }}
 {{- if .host }}
   http://{{ .host }}{{ (index .paths 0).path }}
 {{- else }}
   http://<cluster-ip>{{ (index .paths 0).path }}
   (Using hostless ingress - access via cluster load balancer)
+{{- end }}
 {{- end }}
 {{- end }}
 {{- else }}
