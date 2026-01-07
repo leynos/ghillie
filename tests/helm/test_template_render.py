@@ -142,11 +142,14 @@ class TestDeploymentRendering:
         container = deployments[0]["spec"]["template"]["spec"]["containers"][0]
         assert container.get("command") == ["python", "-m", "ghillie.worker"]
 
-    def test_deployment_env_from_secret(
+    def test_deployment_references_secret_when_configured(
         self, chart_path: Path, require_helm: None
     ) -> None:
-        """Deployment should load env from secret."""
-        docs = _run_helm_template(chart_path)
+        """Deployment should load env from secret when existingSecretName is set."""
+        docs = _run_helm_template(
+            chart_path,
+            set_values={"secrets.existingSecretName": "my-app-secret"},
+        )
 
         deployments = _get_resources_by_kind(docs, "Deployment")
         container = deployments[0]["spec"]["template"]["spec"]["containers"][0]
@@ -154,6 +157,18 @@ class TestDeploymentRendering:
         env_from = container.get("envFrom", [])
         secret_refs = [e for e in env_from if "secretRef" in e]
         assert len(secret_refs) == 1
+        assert secret_refs[0]["secretRef"]["name"] == "my-app-secret"
+
+    def test_deployment_omits_secret_when_unconfigured(
+        self, chart_path: Path, require_helm: None
+    ) -> None:
+        """Deployment should not have envFrom when no secret is configured."""
+        docs = _run_helm_template(chart_path)
+
+        deployments = _get_resources_by_kind(docs, "Deployment")
+        container = deployments[0]["spec"]["template"]["spec"]["containers"][0]
+
+        assert "envFrom" not in container
 
     def test_deployment_uses_existing_secret_name(
         self, chart_path: Path, require_helm: None

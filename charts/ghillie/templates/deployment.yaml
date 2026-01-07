@@ -39,9 +39,11 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+          {{- if or .Values.secrets.existingSecretName .Values.secrets.externalSecret.enabled }}
           envFrom:
             - secretRef:
                 name: {{ include "ghillie.secretName" . }}
+          {{- end }}
           env:
             {{- range $key, $value := .Values.env.normal }}
             - name: {{ $key }}
