@@ -894,7 +894,7 @@ commit patterns:
 Custom configurations can be provided to `EvidenceBundleService` to match
 project-specific conventions.
 
-### 9.4 Status Model Interface (Phase 2.2)
+### 9.4 Status model interface (Phase 2.2)
 
 The status model interface abstracts LLM-backed summarization behind a
 `StatusModel` protocol. This enables:
@@ -951,7 +951,293 @@ model:
 This satisfies the Phase 2.2.a completion criteria: at least one implementation
 of the interface is available with tests that mock model responses.
 
-## 10. Conclusion
+## 10. Integration testing strategy for LLM backends
+
+The Intelligence Engine's reliance on external LLM providers introduces testing
+challenges distinct from conventional service integration. This section
+describes the strategy for verifying LLM interactions during development and
+continuous integration, without incurring API costs or depending on external
+service availability.
+
+### 10.1 Testing pyramid for LLM integration
+
+Ghillie's LLM testing follows a layered approach that balances coverage,
+execution speed, and fidelity:
+
+For screen readers: The following diagram shows a testing pyramid with unit
+tests at the base, integration tests in the middle, and end-to-end tests at the
+top.
+
+```mermaid
+flowchart TB
+    subgraph Pyramid["Testing Pyramid"]
+        direction TB
+        E2E["End-to-end<br/>(Production canaries)"]
+        INT["Integration<br/>(VidaiMock subprocess)"]
+        UNIT["Unit<br/>(In-process mocks)"]
+    end
+
+    E2E --> INT
+    INT --> UNIT
+
+    style UNIT fill:#90EE90,stroke:#228B22
+    style INT fill:#FFD700,stroke:#DAA520
+    style E2E fill:#FFB6C1,stroke:#DC143C
+```
+
+**Unit tests** use in-process mock implementations of the `StatusModel`
+protocol. These tests verify:
+
+- Evidence bundle serialization and prompt construction
+- Response parsing and schema validation
+- Error classification and exception handling
+- Retry policy configuration
+
+**Integration tests** use VidaiMock[^vidaimock] as a subprocess, simulating
+real HTTP interactions. These tests verify:
+
+- HTTP client configuration (timeouts, connection pooling, TLS)
+- Streaming response handling (Server-Sent Events)
+- Provider-specific request/response shapes
+- Failure mode recovery (retries, circuit breakers)
+
+**End-to-end tests** run against production APIs with controlled inputs,
+validating that real provider behaviour matches expectations. These tests
+execute infrequently (for example, nightly or pre-release) and monitor for API
+drift.
+
+### 10.2 VidaiMock test fixture lifecycle
+
+Integration tests manage VidaiMock as a session-scoped pytest fixture,
+minimizing subprocess overhead across test modules.
+
+For screen readers: The following sequence diagram shows the lifecycle of the
+VidaiMock test fixture, from session setup through test execution to teardown.
+
+```mermaid
+sequenceDiagram
+    participant pytest
+    participant Fixture as vidaimock_server fixture
+    participant VidaiMock as VidaiMock process
+    participant Test as Integration test
+    participant StatusModel as StatusModel implementation
+
+    pytest->>Fixture: Session setup
+    Fixture->>Fixture: Find free TCP port
+    Fixture->>Fixture: Write YAML config to temp dir
+    Fixture->>VidaiMock: Start subprocess on port
+    VidaiMock-->>Fixture: Process started
+    Fixture->>VidaiMock: Poll /health endpoint
+    VidaiMock-->>Fixture: 200 OK (ready)
+    Fixture-->>pytest: Yield base URL
+
+    loop Each integration test
+        pytest->>Test: Execute test
+        Test->>StatusModel: Call summarize_repo(evidence)
+        StatusModel->>VidaiMock: POST /v1/chat/completions
+        VidaiMock-->>StatusModel: Configured response
+        StatusModel-->>Test: Parsed result
+        Test-->>pytest: Assert expectations
+    end
+
+    pytest->>Fixture: Session teardown
+    Fixture->>VidaiMock: SIGTERM
+    VidaiMock-->>Fixture: Process terminated
+```
+
+The fixture performs the following steps:
+
+1. **Port allocation:** Binds to an ephemeral port to avoid conflicts with
+   parallel test runs.
+2. **Configuration generation:** Writes provider-specific YAML to a temporary
+   directory, including response templates and chaos settings.
+3. **Process startup:** Launches VidaiMock as a subprocess with stdout/stderr
+   capture for debugging.
+4. **Health check:** Polls the `/health` endpoint until the server is ready,
+   with a configurable timeout.
+5. **URL injection:** Yields the base URL for test use, typically injecting it
+   into the `StatusModel` via environment variable or constructor parameter.
+6. **Graceful shutdown:** Sends SIGTERM and waits for clean termination,
+   escalating to SIGKILL if necessary.
+
+### 10.3 Response configuration and templating
+
+VidaiMock configurations define canned responses using YAML with Tera
+templating for dynamic content:
+
+```yaml
+# tests/fixtures/vidaimock/openai-happy-path.yaml
+provider: openai
+endpoints:
+  - path: /v1/chat/completions
+    method: POST
+    responses:
+      - match:
+          body:
+            messages:
+              - role: user
+                content: { contains: "evidence bundle" }
+        response:
+          status: 200
+          headers:
+            Content-Type: application/json
+          body: |
+            {
+              "id": "chatcmpl-{{ uuid() }}",
+              "object": "chat.completion",
+              "created": {{ timestamp() }},
+              "model": "gpt-5.1-thinking",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "## Status Summary\n\nThe repository shows..."
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 1250,
+                "completion_tokens": 350,
+                "total_tokens": 1600
+              }
+            }
+```
+
+Response templates support:
+
+- **Dynamic values:** `{{ uuid() }}`, `{{ timestamp() }}`, `{{ random_int() }}`
+- **Request interpolation:** `{{ request.body.messages[0].content }}`
+- **Conditional logic:** `{% if streaming %}...{% endif %}`
+- **External files:** `{% include "responses/repo-summary.json" %}`
+
+### 10.4 Chaos testing patterns
+
+VidaiMock's chaos capabilities enable systematic verification of resilience
+behaviour:
+
+#### Timeout handling
+
+```yaml
+chaos:
+  latency:
+    enabled: true
+    min_ms: 35000
+    max_ms: 40000
+```
+
+Tests verify that the `StatusModel` implementation:
+
+- Raises a timeout exception after the configured client timeout
+- Logs the timeout with request context
+- Does not leave orphaned connections
+
+#### Intermittent failures
+
+```yaml
+chaos:
+  failure_rate: 0.3
+  failure_modes:
+    - type: http_error
+      status: 503
+      body: '{"error": {"message": "Service temporarily unavailable"}}'
+      probability: 0.5
+    - type: connection_reset
+      probability: 0.3
+    - type: malformed_json
+      probability: 0.2
+```
+
+Tests verify that the `StatusModel` implementation:
+
+- Retries transient failures (503, connection reset) with exponential backoff
+- Fails fast on non-retryable errors (400, 401, 422)
+- Parses and logs provider error messages
+- Respects maximum retry limits
+
+#### Rate limiting
+
+```yaml
+chaos:
+  rate_limit:
+    enabled: true
+    requests_per_minute: 5
+    response:
+      status: 429
+      headers:
+        Retry-After: "60"
+      body: '{"error": {"message": "Rate limit exceeded"}}'
+```
+
+Tests verify that the `StatusModel` implementation:
+
+- Respects `Retry-After` headers
+- Implements backoff when no header is present
+- Surfaces rate limit errors to callers when limits persist
+
+### 10.5 Provider parity testing
+
+The `StatusModel` interface abstracts provider differences, but integration
+tests must verify that each provider implementation handles its specific
+response shape correctly. VidaiMock configurations exist per provider:
+
+| Provider | Configuration file | Key differences |
+| -------- | ------------------ | --------------- |
+| OpenAI | `openai.yaml` | Standard chat completions API |
+| Anthropic | `anthropic.yaml` | Messages API with `content` blocks |
+| Gemini | `gemini.yaml` | `generateContent` with `candidates` |
+| Azure OpenAI | `azure-openai.yaml` | Deployment-based URLs |
+| Bedrock | `bedrock.yaml` | AWS Signature V4, model-specific payloads |
+
+Tests parameterized by provider run the same evidence bundle through each
+implementation, verifying that:
+
+- Request payloads conform to provider specifications
+- Response parsing extracts summary, status, highlights, and risks
+- Token usage metrics are captured where available
+- Provider-specific errors are classified correctly
+
+### 10.6 Test organization
+
+Integration tests live in `tests/integration/` with the following structure:
+
+```plaintext
+tests/
+├── integration/
+│   ├── conftest.py              # VidaiMock fixture definitions
+│   ├── fixtures/
+│   │   └── vidaimock/
+│   │       ├── openai.yaml
+│   │       ├── anthropic.yaml
+│   │       └── chaos/
+│   │           ├── timeout.yaml
+│   │           ├── intermittent.yaml
+│   │           └── rate-limit.yaml
+│   ├── test_status_model_openai.py
+│   ├── test_status_model_anthropic.py
+│   └── test_status_model_resilience.py
+```
+
+Tests are marked with `@pytest.mark.integration` and excluded from the default
+test run. CI pipelines execute them in a dedicated stage after unit tests pass.
+
+### 10.7 CI pipeline integration
+
+The integration test stage in CI performs the following:
+
+1. Downloads or caches the VidaiMock binary (from release artefacts or builds
+   from source)
+2. Runs `pytest -m integration` with VidaiMock configurations
+3. Captures VidaiMock stdout/stderr on failure for debugging
+4. Reports coverage for integration-tested code paths
+
+VidaiMock binaries are cached between runs to avoid repeated downloads. The
+cache key includes the VidaiMock version to ensure updates propagate.
+
+[^vidaimock]: VidaiMock repository: <https://github.com/vidaiUK/VidaiMock/>
+
+## 11. Conclusion
 
 Ghillie represents a paradigm shift in how engineering organizations perceive
 and manage their digital assets. By moving beyond static spreadsheets and
