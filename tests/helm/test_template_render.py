@@ -95,6 +95,27 @@ def _assert_resource_count(
     return resources
 
 
+def _get_container_secret_refs(docs: list[dict]) -> list[str]:
+    """Extract secret reference names from deployment container envFrom.
+
+    Args:
+        docs: List of parsed Kubernetes manifest dictionaries.
+
+    Returns:
+        List of secret reference names found in the first deployment's
+        first container's envFrom array.
+
+    """
+    deployments = _get_resources_by_kind(docs, "Deployment")
+    if not deployments:
+        return []
+
+    container = deployments[0]["spec"]["template"]["spec"]["containers"][0]
+    env_from = container.get("envFrom", [])
+
+    return [e["secretRef"]["name"] for e in env_from if "secretRef" in e]
+
+
 class TestDeploymentRendering:
     """Tests for Deployment template rendering."""
 
@@ -151,13 +172,9 @@ class TestDeploymentRendering:
             set_values={"secrets.existingSecretName": "my-app-secret"},
         )
 
-        deployments = _get_resources_by_kind(docs, "Deployment")
-        container = deployments[0]["spec"]["template"]["spec"]["containers"][0]
-
-        env_from = container.get("envFrom", [])
-        secret_refs = [e for e in env_from if "secretRef" in e]
+        secret_refs = _get_container_secret_refs(docs)
         assert len(secret_refs) == 1
-        assert secret_refs[0]["secretRef"]["name"] == "my-app-secret"
+        assert secret_refs[0] == "my-app-secret"
 
     def test_deployment_omits_secret_when_unconfigured(
         self, chart_path: Path, require_helm: None
@@ -179,12 +196,8 @@ class TestDeploymentRendering:
             set_values={"secrets.existingSecretName": "my-custom-secret"},
         )
 
-        deployments = _get_resources_by_kind(docs, "Deployment")
-        container = deployments[0]["spec"]["template"]["spec"]["containers"][0]
-
-        env_from = container.get("envFrom", [])
-        secret_ref = env_from[0]["secretRef"]["name"]
-        assert secret_ref == "my-custom-secret"  # noqa: S105 - test fixture value
+        secret_refs = _get_container_secret_refs(docs)
+        assert secret_refs[0] == "my-custom-secret"
 
     def test_deployment_injects_env_normal(
         self, chart_path: Path, require_helm: None
@@ -293,10 +306,10 @@ class TestExternalSecretRendering:
 
         _assert_resource_count(docs, "ExternalSecret", 0)
 
-    def test_externalsecret_renders_when_enabled(
+    def test_externalsecret_configuration(
         self, chart_path: Path, require_helm: None
     ) -> None:
-        """ExternalSecret should render when enabled."""
+        """ExternalSecret should render with correct secretStoreRef and target name."""
         docs = _run_helm_template(
             chart_path,
             set_values={
@@ -307,22 +320,7 @@ class TestExternalSecretRendering:
 
         external_secrets = _assert_resource_count(docs, "ExternalSecret", 1)
         assert external_secrets[0]["spec"]["secretStoreRef"]["name"] == "platform-vault"
-
-    def test_externalsecret_target_name(
-        self, chart_path: Path, require_helm: None
-    ) -> None:
-        """ExternalSecret target name should match fullname."""
-        docs = _run_helm_template(
-            chart_path,
-            set_values={
-                "secrets.externalSecret.enabled": "true",
-                "secrets.externalSecret.secretStoreRef": "platform-vault",
-            },
-        )
-
-        external_secrets = _get_resources_by_kind(docs, "ExternalSecret")
-        target_name = external_secrets[0]["spec"]["target"]["name"]
-        assert target_name == "test-release-ghillie"
+        assert external_secrets[0]["spec"]["target"]["name"] == "test-release-ghillie"
 
 
 class TestServiceAccountRendering:
