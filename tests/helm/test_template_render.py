@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 import typing as typ
 
@@ -20,6 +19,8 @@ def _run_helm_template(
 ) -> list[dict]:
     """Run helm template and return parsed YAML documents.
 
+    Callers must use the require_helm fixture to ensure helm is available.
+
     Args:
         chart: Path to the Helm chart directory.
         values_file: Optional path to a values file.
@@ -32,9 +33,6 @@ def _run_helm_template(
         pytest.Failed: If helm template command fails.
 
     """
-    if shutil.which("helm") is None:
-        pytest.skip("helm is not installed")
-
     cmd = ["helm", "template", "test-release", str(chart)]
 
     if values_file:
@@ -91,7 +89,9 @@ def _assert_resource_count(
 
     """
     resources = _get_resources_by_kind(docs, kind)
-    assert len(resources) == expected_count
+    assert len(resources) == expected_count, (
+        f"Expected {expected_count} {kind} resource(s), found {len(resources)}"
+    )
     return resources
 
 
