@@ -1,0 +1,283 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "image": {
+      "type": "object",
+      "description": "Container image configuration",
+      "properties": {
+        "repository": {
+          "type": "string",
+          "description": "Image repository"
+        },
+        "tag": {
+          "type": "string",
+          "description": "Image tag"
+        },
+        "pullPolicy": {
+          "type": "string",
+          "description": "Image pull policy",
+          "enum": ["Always", "IfNotPresent", "Never"]
+        }
+      },
+      "required": ["repository", "tag"]
+    },
+    "command": {
+      "type": "array",
+      "description": "Container command override",
+      "items": {
+        "type": "string"
+      }
+    },
+    "args": {
+      "type": "array",
+      "description": "Container arguments override",
+      "items": {
+        "type": "string"
+      }
+    },
+    "replicaCount": {
+      "type": "integer",
+      "description": "Number of replicas",
+      "minimum": 0
+    },
+    "service": {
+      "type": "object",
+      "description": "Service configuration",
+      "properties": {
+        "port": {
+          "type": "integer",
+          "description": "Service port",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "type": {
+          "type": "string",
+          "description": "Service type",
+          "enum": ["ClusterIP", "NodePort", "LoadBalancer"]
+        }
+      },
+      "required": ["port"]
+    },
+    "ingress": {
+      "type": "object",
+      "description": "Ingress configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable ingress"
+        },
+        "className": {
+          "type": "string",
+          "description": "Ingress class name"
+        },
+        "annotations": {
+          "type": "object",
+          "description": "Ingress annotations",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "hosts": {
+          "type": "array",
+          "description": "Ingress hosts",
+          "items": {
+            "type": "object",
+            "properties": {
+              "host": {
+                "type": "string",
+                "description": "Hostname (empty for hostless ingress)"
+              },
+              "paths": {
+                "type": "array",
+                "description": "Ingress paths",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "description": "Path pattern"
+                    },
+                    "pathType": {
+                      "type": "string",
+                      "description": "Path type",
+                      "enum": ["Prefix", "Exact", "ImplementationSpecific"]
+                    }
+                  },
+                  "required": ["path", "pathType"]
+                }
+              }
+            },
+            "required": ["paths"]
+          }
+        },
+        "tls": {
+          "type": "array",
+          "description": "TLS configuration",
+          "items": {
+            "type": "object",
+            "properties": {
+              "hosts": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "secretName": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "required": ["enabled"]
+    },
+    "env": {
+      "type": "object",
+      "description": "Environment variable configuration",
+      "properties": {
+        "normal": {
+          "type": "object",
+          "description": "Non-sensitive environment variables",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "description": "Secrets configuration",
+      "properties": {
+        "existingSecretName": {
+          "type": "string",
+          "description": "Name of existing secret to use"
+        },
+        "externalSecret": {
+          "type": "object",
+          "description": "External Secrets Operator configuration",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable ExternalSecret creation"
+            },
+            "secretStoreRef": {
+              "type": "string",
+              "description": "SecretStore or ClusterSecretStore name"
+            },
+            "secretStoreKind": {
+              "type": "string",
+              "description": "Kind of SecretStore reference",
+              "enum": ["SecretStore", "ClusterSecretStore"]
+            },
+            "refreshInterval": {
+              "type": "string",
+              "description": "Secret refresh interval",
+              "pattern": "^[0-9]+[smh]$"
+            },
+            "data": {
+              "type": "array",
+              "description": "Secret data mappings",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "secretKey": {
+                    "type": "string"
+                  },
+                  "remoteRef": {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "property": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "livenessProbe": {
+      "type": "object",
+      "description": "Liveness probe configuration for the container"
+    },
+    "readinessProbe": {
+      "type": "object",
+      "description": "Readiness probe configuration for the container"
+    },
+    "resources": {
+      "type": "object",
+      "description": "Resource limits and requests",
+      "properties": {
+        "limits": {
+          "type": "object",
+          "properties": {
+            "cpu": {
+              "type": "string"
+            },
+            "memory": {
+              "type": "string"
+            }
+          }
+        },
+        "requests": {
+          "type": "object",
+          "properties": {
+            "cpu": {
+              "type": "string"
+            },
+            "memory": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "securityContext": {
+      "type": "object",
+      "description": "Container security context"
+    },
+    "podSecurityContext": {
+      "type": "object",
+      "description": "Pod security context"
+    },
+    "serviceAccount": {
+      "type": "object",
+      "description": "Service account configuration",
+      "properties": {
+        "create": {
+          "type": "boolean",
+          "description": "Create service account"
+        },
+        "name": {
+          "type": "string",
+          "description": "Service account name override"
+        },
+        "annotations": {
+          "type": "object",
+          "description": "Service account annotations",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "automountServiceAccountToken": {
+          "type": "boolean",
+          "description": "Automount service account token"
+        }
+      }
+    },
+    "nameOverride": {
+      "type": "string",
+      "description": "Override chart name"
+    },
+    "fullnameOverride": {
+      "type": "string",
+      "description": "Override full release name"
+    }
+  }
+}

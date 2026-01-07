@@ -1,0 +1,8 @@
+# Test fixture for empty env.normal - ConfigMap should not be created
+# Setting env.normal to null overrides the default values completely
+image:
+  repository: ghillie
+  tag: local
+
+env:
+  normal: null

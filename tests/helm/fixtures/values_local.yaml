@@ -1,0 +1,20 @@
+# Local k3d values for Ghillie Helm chart
+# Used for testing local preview workflow
+
+image:
+  repository: ghillie
+  tag: local
+  pullPolicy: IfNotPresent
+
+ingress:
+  enabled: true
+  hosts:
+    - host: ""
+      paths:
+        - path: /
+          pathType: Prefix
+
+secrets:
+  existingSecretName: ghillie
+  externalSecret:
+    enabled: false

@@ -1,0 +1,12 @@
+{{- if and .Values.env.normal (gt (len .Values.env.normal) 0) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ghillie.fullname" . }}-config
+  labels:
+    {{- include "ghillie.labels" . | nindent 4 }}
+data:
+  {{- range $key, $value := .Values.env.normal }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+{{- end }}

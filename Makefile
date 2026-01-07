@@ -6,7 +6,7 @@ VENV_TOOLS = pytest
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
 
 .PHONY: help all clean build build-release lint fmt check-fmt \
-        markdownlint nixie test typecheck $(TOOLS) $(VENV_TOOLS)
+        markdownlint nixie test typecheck helm-lint helm-test $(TOOLS) $(VENV_TOOLS)
 
 .DEFAULT_GOAL := all
 
@@ -78,6 +78,21 @@ nixie: ## Validate Mermaid diagrams
 
 test: build uv $(VENV_TOOLS) ## Run tests
 	$(UV_ENV) uv run pytest -v -n auto
+
+helm-lint: ## Lint the Helm chart
+	@if ! command -v helm >/dev/null 2>&1; then \
+	  if [ "$${HELM_LINT_SKIP_MISSING:-}" = "1" ]; then \
+	    printf "Warning: 'helm' is not installed, skipping helm-lint (HELM_LINT_SKIP_MISSING=1)\n" >&2; \
+	    exit 0; \
+	  else \
+	    printf "Error: 'helm' is not installed. Install helm or set HELM_LINT_SKIP_MISSING=1 to skip.\n" >&2; \
+	    exit 1; \
+	  fi; \
+	fi
+	helm lint charts/ghillie
+
+helm-test: build $(VENV_TOOLS) ## Run Helm chart tests
+	$(UV_ENV) uv run pytest tests/helm -v
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \

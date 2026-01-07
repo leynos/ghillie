@@ -1,0 +1,29 @@
+# GitOps preview values for Ghillie Helm chart
+# Used for testing ephemeral preview workflow
+
+image:
+  repository: ghcr.io/leynos/ghillie
+  tag: sha-abc123
+
+ingress:
+  enabled: true
+  hosts:
+    - host: pr-123.preview.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+
+secrets:
+  externalSecret:
+    enabled: true
+    secretStoreRef: platform-vault
+    refreshInterval: 1h
+    data:
+      - secretKey: DATABASE_URL
+        remoteRef:
+          key: ghillie/database
+          property: url
+      - secretKey: VALKEY_URL
+        remoteRef:
+          key: ghillie/valkey
+          property: url
