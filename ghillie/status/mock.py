@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import typing as typ
+
 from ghillie.evidence.models import (
     ReportStatus,
     RepositoryEvidenceBundle,
@@ -330,6 +332,34 @@ class MockStatusModel:
 
         return tuple(steps[:5])
 
+    def _add_open_items_step(
+        self,
+        items: list[typ.Any],
+        names: tuple[str, str],
+        action: str,
+        steps: list[str],
+    ) -> None:
+        """Add a step for open items if any exist.
+
+        Parameters
+        ----------
+        items
+            List of items with a 'state' attribute.
+        names
+            Tuple of (singular, plural) forms (e.g., ("PR", "PRs")).
+        action
+            Action verb for the step (e.g., "Review").
+        steps
+            List to append step to (modified in place).
+
+        """
+        open_items = [item for item in items if item.state == "open"]
+        if not open_items:
+            return
+        singular, plural = names
+        item_word = singular if len(open_items) == 1 else plural
+        steps.append(f"{action} {len(open_items)} open {item_word}")
+
     def _add_pr_review_step(
         self,
         evidence: RepositoryEvidenceBundle,
@@ -345,11 +375,12 @@ class MockStatusModel:
             List to append step to (modified in place).
 
         """
-        open_prs = [pr for pr in evidence.pull_requests if pr.state == "open"]
-        if not open_prs:
-            return
-        pr_word = "PR" if len(open_prs) == 1 else "PRs"
-        steps.append(f"Review {len(open_prs)} open {pr_word}")
+        self._add_open_items_step(
+            items=list(evidence.pull_requests),
+            names=("PR", "PRs"),
+            action="Review",
+            steps=steps,
+        )
 
     def _add_issue_triage_step(
         self,
@@ -366,8 +397,9 @@ class MockStatusModel:
             List to append step to (modified in place).
 
         """
-        open_issues = [i for i in evidence.issues if i.state == "open"]
-        if not open_issues:
-            return
-        issue_word = "issue" if len(open_issues) == 1 else "issues"
-        steps.append(f"Triage {len(open_issues)} open {issue_word}")
+        self._add_open_items_step(
+            items=list(evidence.issues),
+            names=("issue", "issues"),
+            action="Triage",
+            steps=steps,
+        )
