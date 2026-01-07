@@ -198,7 +198,7 @@ ephemeral previews platform and supports the Ghillie Helm chart.
   *Completion criteria:* `helm lint charts/ghillie` passes, and the chart can
   be installed with local values or HelmRelease values in the GitOps flow.
 
-- [ ] **Task 1.5.c – Define container image for preview workloads**  
+- [x] **Task 1.5.c – Define container image for preview workloads**
   Add a multi-stage Dockerfile and runtime entrypoint suitable for Kubernetes,
   with configuration driven by environment variables and chart values.
 

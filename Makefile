@@ -6,7 +6,8 @@ VENV_TOOLS = pytest
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
 
 .PHONY: help all clean build build-release lint fmt check-fmt \
-        markdownlint nixie test typecheck helm-lint helm-test $(TOOLS) $(VENV_TOOLS)
+        markdownlint nixie test typecheck helm-lint helm-test \
+        docker-build docker-run $(TOOLS) $(VENV_TOOLS)
 
 .DEFAULT_GOAL := all
 
@@ -93,6 +94,12 @@ helm-lint: ## Lint the Helm chart
 
 helm-test: build $(VENV_TOOLS) ## Run Helm chart tests
 	$(UV_ENV) uv run pytest tests/helm -v
+
+docker-build: ## Build Docker image
+	docker build -t ghillie:local .
+
+docker-run: docker-build ## Run Docker container locally
+	docker run --rm -p 8080:8080 ghillie:local
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \
