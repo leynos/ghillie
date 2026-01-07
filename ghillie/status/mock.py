@@ -327,8 +327,20 @@ class MockStatusModel:
         if status == ReportStatus.UNKNOWN:
             steps.append("Investigate lack of activity")
 
-        self._add_pr_review_step(evidence, steps)
-        self._add_issue_triage_step(evidence, steps)
+        # Add PR review step if open PRs exist
+        self._add_open_items_step(
+            items=list(evidence.pull_requests),
+            names=("PR", "PRs"),
+            action="Review",
+            steps=steps,
+        )
+        # Add issue triage step if open issues exist
+        self._add_open_items_step(
+            items=list(evidence.issues),
+            names=("issue", "issues"),
+            action="Triage",
+            steps=steps,
+        )
 
         return tuple(steps[:5])
 
@@ -359,47 +371,3 @@ class MockStatusModel:
         singular, plural = names
         item_word = singular if len(open_items) == 1 else plural
         steps.append(f"{action} {len(open_items)} open {item_word}")
-
-    def _add_pr_review_step(
-        self,
-        evidence: RepositoryEvidenceBundle,
-        steps: list[str],
-    ) -> None:
-        """Add PR review step if there are open pull requests.
-
-        Parameters
-        ----------
-        evidence
-            Evidence bundle to check for open PRs.
-        steps
-            List to append step to (modified in place).
-
-        """
-        self._add_open_items_step(
-            items=list(evidence.pull_requests),
-            names=("PR", "PRs"),
-            action="Review",
-            steps=steps,
-        )
-
-    def _add_issue_triage_step(
-        self,
-        evidence: RepositoryEvidenceBundle,
-        steps: list[str],
-    ) -> None:
-        """Add issue triage step if there are open issues.
-
-        Parameters
-        ----------
-        evidence
-            Evidence bundle to check for open issues.
-        steps
-            List to append step to (modified in place).
-
-        """
-        self._add_open_items_step(
-            items=list(evidence.issues),
-            names=("issue", "issues"),
-            action="Triage",
-            steps=steps,
-        )
