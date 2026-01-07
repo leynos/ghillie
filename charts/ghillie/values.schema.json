@@ -202,6 +202,14 @@
         }
       }
     },
+    "livenessProbe": {
+      "type": "object",
+      "description": "Liveness probe configuration for the container"
+    },
+    "readinessProbe": {
+      "type": "object",
+      "description": "Readiness probe configuration for the container"
+    },
     "resources": {
       "type": "object",
       "description": "Resource limits and requests",

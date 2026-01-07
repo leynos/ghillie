@@ -13,6 +13,7 @@ spec:
   {{- if .Values.ingress.className }}
   ingressClassName: {{ .Values.ingress.className }}
   {{- end }}
+  {{- /* TLS hosts must match ingress hosts; see values.yaml for details */ -}}
   {{- if .Values.ingress.tls }}
   tls:
     {{- range .Values.ingress.tls }}
