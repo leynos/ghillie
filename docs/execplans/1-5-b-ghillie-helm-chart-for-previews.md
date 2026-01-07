@@ -29,8 +29,8 @@ value configurations.
 - Ingress must support hostless mode for local k3d (empty `host: ""`).
 - ExternalSecret must be optional and only render when
   `secrets.externalSecret.enabled` is true.
-- All Python test code must pass `make check-fmt`, `make lint`, `make
-  typecheck`, and `make test`.
+- All Python test code must pass `make check-fmt`, `make lint`, `make typecheck`,
+  and `make test`.
 - No modifications to existing application code; this task is chart-only plus
   tests.
 
@@ -393,15 +393,12 @@ Expected: all pass.
 
 **Acceptance behaviour:**
 
-- Running `helm lint charts/ghillie` produces no errors.
-- Running `helm template test charts/ghillie` produces valid YAML.
-- Running
-  `helm template test charts/ghillie -f tests/helm/fixtures/values_local.yaml`
-  produces an Ingress without a host field.
-- Running
-  `helm template test charts/ghillie -f tests/helm/fixtures/values_gitops.yaml`
-  produces an Ingress with host `pr-123.preview.example.com` and an
-  ExternalSecret resource.
+- `helm lint charts/ghillie` reports no errors.
+- `helm template test charts/ghillie` renders valid YAML.
+- With `-f tests/helm/fixtures/values_local.yaml`, templating yields an Ingress
+  without a host field; with `-f tests/helm/fixtures/values_gitops.yaml`, an
+  Ingress with host `pr-123.preview.example.com` and an ExternalSecret resource
+  are produced.
 
 ## Idempotence and Recovery
 
