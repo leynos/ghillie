@@ -85,10 +85,12 @@ Running the image logs a startup message and responds to HTTP requests on port
 
 ## Surprises & Discoveries
 
-- Observation: Docstring formatting requires specific NumPy style without colons on
-  section headers. The ruff D406 rule enforces this.
-  Evidence: Initial implementation had "Parameters:" which caused lint failures.
-  Impact: Simplified docstrings to avoid formal NumPy sections for method-level docs.
+- Observation: Docstring formatting requires specific NumPy style without
+  colons on section headers. The ruff D406 rule enforces this.
+  Evidence: Initial implementation had "Parameters:" which caused lint
+  failures.
+  Impact: Simplified docstrings to avoid formal NumPy sections for
+  method-level docs.
 
 - Observation: Type checker warning for `falcon.asgi.App` submodule access.
   Evidence: ty warning "possibly-missing-attribute" for falcon.asgi.App.
@@ -129,6 +131,7 @@ the runtime entrypoint without errors. All quality gates pass (329 tests, lint,
 typecheck).
 
 Lessons learned:
+
 - Start with simplified docstrings to avoid NumPy section formatting issues.
 - Import submodules explicitly to satisfy type checkers.
 
