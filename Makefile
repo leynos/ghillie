@@ -101,6 +101,24 @@ docker-build: ## Build Docker image
 docker-run: docker-build ## Run Docker container locally
 	docker run --rm -p 8080:8080 ghillie:local
 
+# =============================================================================
+# Local k3d preview environment
+# =============================================================================
+
+.PHONY: local-k8s-up local-k8s-down local-k8s-status local-k8s-logs
+
+local-k8s-up: ## Create local k3d preview environment
+	$(UV_ENV) uv run scripts/local_k8s.py up
+
+local-k8s-down: ## Delete local k3d preview environment
+	$(UV_ENV) uv run scripts/local_k8s.py down
+
+local-k8s-status: ## Show local preview environment status
+	$(UV_ENV) uv run scripts/local_k8s.py status
+
+local-k8s-logs: ## Tail logs from local preview environment
+	$(UV_ENV) uv run scripts/local_k8s.py logs --follow
+
 help: ## Show available targets
-	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \
+	@grep -E '^[a-zA-Z0-9_-]+:.*##' $(MAKEFILE_LIST) | \
 	awk 'BEGIN {FS=":"; printf "Available targets:\n"} {printf "  %-20s %s\n", $$1, $$2}'
