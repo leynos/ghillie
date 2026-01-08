@@ -607,6 +607,109 @@ def read_valkey_uri(cfg: Config, env: dict[str, str]) -> str:
 
 
 # =============================================================================
+# Application secret and image helpers
+# =============================================================================
+
+
+def create_app_secret(
+    cfg: Config,
+    env: dict[str, str],
+    database_url: str,
+    valkey_url: str,
+) -> None:
+    """Create the Ghillie application Kubernetes Secret.
+
+    Creates a generic secret containing DATABASE_URL and VALKEY_URL for
+    the application to connect to Postgres and Valkey. Uses dry-run + apply
+    pattern for idempotent upsert behavior.
+
+    Args:
+        cfg: Configuration with namespace and secret name.
+        env: Environment dict with KUBECONFIG set.
+        database_url: PostgreSQL connection URL from CNPG.
+        valkey_url: Valkey connection URL.
+
+    """
+    # Generate secret YAML using dry-run
+    result = subprocess.run(  # noqa: S603
+        [  # noqa: S607
+            "kubectl",
+            "create",
+            "secret",
+            "generic",
+            cfg.app_secret_name,
+            f"--namespace={cfg.namespace}",
+            f"--from-literal=DATABASE_URL={database_url}",
+            f"--from-literal=VALKEY_URL={valkey_url}",
+            "--dry-run=client",
+            "-o",
+            "yaml",
+        ],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    # Apply for idempotent upsert
+    subprocess.run(
+        ["kubectl", "apply", "-f", "-"],  # noqa: S607
+        input=result.stdout,
+        text=True,
+        check=True,
+        env=env,
+    )
+
+
+def build_docker_image(image_repo: str, image_tag: str) -> None:
+    """Build the Docker image locally.
+
+    Builds the Ghillie Docker image from the Dockerfile in the repository root.
+
+    Args:
+        image_repo: Repository name for the image.
+        image_tag: Tag for the image.
+
+    """
+    image_name = f"{image_repo}:{image_tag}"
+    subprocess.run(  # noqa: S603
+        [  # noqa: S607
+            "docker",
+            "build",
+            "-t",
+            image_name,
+            ".",
+        ],
+        check=True,
+    )
+
+
+def import_image_to_k3d(cluster_name: str, image_repo: str, image_tag: str) -> None:
+    """Import a Docker image into the k3d cluster.
+
+    Uses k3d's image import command to make a locally built image
+    available to pods running in the cluster.
+
+    Args:
+        cluster_name: Name of the k3d cluster.
+        image_repo: Repository name of the image.
+        image_tag: Tag of the image.
+
+    """
+    image_name = f"{image_repo}:{image_tag}"
+    subprocess.run(  # noqa: S603
+        [  # noqa: S607
+            "k3d",
+            "image",
+            "import",
+            image_name,
+            "--cluster",
+            cluster_name,
+        ],
+        check=True,
+    )
+
+
+# =============================================================================
 # CLI commands
 # =============================================================================
 

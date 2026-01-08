@@ -13,12 +13,15 @@ from local_k8s import (
     _valkey_manifest,
     app,
     b64decode_k8s_secret_field,
+    build_docker_image,
     cluster_exists,
+    create_app_secret,
     create_cnpg_cluster,
     create_k3d_cluster,
     create_namespace,
     create_valkey_instance,
     delete_k3d_cluster,
+    import_image_to_k3d,
     install_cnpg_operator,
     install_valkey_operator,
     kubeconfig_env,
@@ -611,3 +614,116 @@ class TestReadValkeyUri:
         result = read_valkey_uri(cfg, _test_env())
 
         assert result == "valkey://valkey-ghillie:6379"
+
+
+class TestCreateAppSecret:
+    """Tests for create_app_secret helper.
+
+    Uses monkeypatch to mock subprocess.run since the function makes
+    multiple subprocess calls that need to be verified together.
+    """
+
+    def test_creates_secret_with_urls(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should create secret with DATABASE_URL and VALKEY_URL."""
+        cfg = Config()
+        calls: list[tuple[str, ...]] = []
+
+        def mock_run(args: list[str], **_kwargs) -> None:  # noqa: ANN003
+            calls.append(tuple(args))
+            return type("Result", (), {"stdout": "secret-yaml", "returncode": 0})()
+
+        monkeypatch.setattr("subprocess.run", mock_run)
+
+        create_app_secret(
+            cfg,
+            _test_env(),
+            database_url="postgresql://user:pass@host:5432/db",
+            valkey_url="valkey://valkey:6379",
+        )
+
+        # First call: generate secret YAML with dry-run
+        assert len(calls) == 2
+        assert calls[0][0] == "kubectl"
+        assert "create" in calls[0]
+        assert "secret" in calls[0]
+        assert "generic" in calls[0]
+        assert "ghillie" in calls[0]  # secret name
+        assert "--dry-run=client" in calls[0]
+        assert (
+            "--from-literal=DATABASE_URL=postgresql://user:pass@host:5432/db"
+            in calls[0]
+        )
+        assert "--from-literal=VALKEY_URL=valkey://valkey:6379" in calls[0]
+
+        # Second call: apply the generated YAML
+        assert calls[1] == ("kubectl", "apply", "-f", "-")
+
+    def test_uses_config_secret_name(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should use app_secret_name from config."""
+        cfg = Config()
+        calls: list[tuple[str, ...]] = []
+
+        def mock_run(args: list[str], **_kwargs) -> None:  # noqa: ANN003
+            calls.append(tuple(args))
+            return type("Result", (), {"stdout": "yaml", "returncode": 0})()
+
+        monkeypatch.setattr("subprocess.run", mock_run)
+
+        create_app_secret(cfg, _test_env(), "db_url", "valkey_url")
+
+        # Verify secret name from config is used
+        assert cfg.app_secret_name in calls[0]
+
+
+class TestBuildDockerImage:
+    """Tests for build_docker_image helper using cmd-mox."""
+
+    def test_invokes_docker_build(self, cmd_mox) -> None:  # noqa: ANN001
+        """Should invoke docker build with correct tag."""
+        cmd_mox.mock("docker").with_args(
+            "build",
+            "-t",
+            "ghillie:local",
+            ".",
+        ).returns(exit_code=0)
+
+        build_docker_image("ghillie", "local")
+
+    def test_uses_custom_repo_and_tag(self, cmd_mox) -> None:  # noqa: ANN001
+        """Should use custom repository and tag."""
+        cmd_mox.mock("docker").with_args(
+            "build",
+            "-t",
+            "custom-repo:v1.0.0",
+            ".",
+        ).returns(exit_code=0)
+
+        build_docker_image("custom-repo", "v1.0.0")
+
+
+class TestImportImageToK3d:
+    """Tests for import_image_to_k3d helper using cmd-mox."""
+
+    def test_invokes_k3d_import(self, cmd_mox) -> None:  # noqa: ANN001
+        """Should invoke k3d image import with correct args."""
+        cmd_mox.mock("k3d").with_args(
+            "image",
+            "import",
+            "ghillie:local",
+            "--cluster",
+            "ghillie-local",
+        ).returns(exit_code=0)
+
+        import_image_to_k3d("ghillie-local", "ghillie", "local")
+
+    def test_uses_custom_cluster_name(self, cmd_mox) -> None:  # noqa: ANN001
+        """Should use custom cluster name."""
+        cmd_mox.mock("k3d").with_args(
+            "image",
+            "import",
+            "myimage:v2",
+            "--cluster",
+            "custom-cluster",
+        ).returns(exit_code=0)
+
+        import_image_to_k3d("custom-cluster", "myimage", "v2")
