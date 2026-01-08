@@ -64,7 +64,7 @@ def _parse_port(port_str: str) -> int:
 class HealthResource:
     """Resource for the /health endpoint returning JSON ``{"status": "ok"}``."""
 
-    async def on_get(self, req: Request, resp: Response) -> None:
+    async def on_get(self, _req: Request, resp: Response) -> None:
         """Handle GET /health requests."""
         resp.media = {"status": "ok"}
         resp.status = falcon.HTTP_200
@@ -73,7 +73,7 @@ class HealthResource:
 class ReadyResource:
     """Resource for the /ready endpoint returning JSON ``{"status": "ready"}``."""
 
-    async def on_get(self, req: Request, resp: Response) -> None:
+    async def on_get(self, _req: Request, resp: Response) -> None:
         """Handle GET /ready requests."""
         resp.media = {"status": "ready"}
         resp.status = falcon.HTTP_200
