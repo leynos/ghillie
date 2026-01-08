@@ -94,7 +94,7 @@ Running the image logs a startup message and responds to HTTP requests on port
   method-level docs.
 
 - Observation: Type checker warning for `falcon.asgi.App` submodule access.
-  Evidence: ty warning "possibly-missing-attribute" for falcon.asgi.App.
+  Evidence: type-checker warning "possibly-missing-attribute" for falcon.asgi.App.
   Impact: Added explicit `import falcon.asgi` to test file to satisfy type checker.
 
 ## Decision Log
