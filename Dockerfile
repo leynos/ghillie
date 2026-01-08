@@ -40,9 +40,8 @@ RUN useradd --create-home --shell /bin/bash --uid 1000 ghillie
 COPY --from=build /wheels /wheels
 RUN pip install --no-cache-dir /wheels/*.whl && rm -rf /wheels
 
-# Copy entrypoint script
-COPY docker/entrypoint.sh /usr/local/bin/ghillie-entrypoint
-RUN chmod +x /usr/local/bin/ghillie-entrypoint
+# Copy entrypoint script with execute permissions
+COPY --chmod=755 docker/entrypoint.sh /usr/local/bin/ghillie-entrypoint
 
 # Switch to non-root user
 USER ghillie
