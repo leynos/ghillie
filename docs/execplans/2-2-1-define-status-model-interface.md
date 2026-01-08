@@ -6,19 +6,20 @@ be kept up to date as work proceeds.
 
 ## Purpose / Big Picture
 
-This task introduces the abstraction layer for LLM-backed summarization in
-Ghillie. The `StatusModel` protocol defines how evidence bundles are
-transformed into structured status reports with summary text, status codes,
-highlights, risks, and next steps. Success is observable when at least one
-implementation (a mock that returns deterministic responses) is available with
-tests that mock model responses. The design aligns with the proposal in
-`docs/ghillie-proposal.md` Section 9 and extends the evidence bundle
-architecture documented in `docs/ghillie-design.md` Section 9.
+This task introduces the abstraction layer for large language model
+(LLM)-backed summarization in Ghillie. The `StatusModel` protocol defines how
+evidence bundles are transformed into structured status reports with summary
+text, status codes, highlights, risks, and next steps. Success is observable
+when at least one implementation (a mock that returns deterministic responses)
+is available with tests that mock model responses. The design aligns with the
+proposal in `docs/ghillie-proposal.md` Section 9 and extends the evidence
+bundle architecture documented in `docs/ghillie-design.md` Section 9.
 
 ## Progress
 
 - [x] Created unit tests for status model (14 tests)
-- [x] Created BDD tests for status model (3 scenarios)
+- [x] Created Behaviour-Driven Development (BDD) tests for status model (3
+      scenarios)
 - [x] Implemented `ghillie/status/models.py` with `RepositoryStatusResult`
 - [x] Implemented `ghillie/status/protocol.py` with `StatusModel` protocol
 - [x] Implemented `ghillie/status/mock.py` with `MockStatusModel`
@@ -30,7 +31,7 @@ architecture documented in `docs/ghillie-design.md` Section 9.
 ## Surprises & Discoveries
 
 1. **ReportStatus enum reuse:** The `ReportStatus` enum was already defined in
-   `ghillie/evidence/models.py`, so we reused it rather than duplicating.
+   `ghillie/evidence/models.py`, so it was reused rather than duplicated.
 
 2. **Lint rules:** The codebase uses strict linting with `ruff` that requires:
    - `dt.UTC` instead of `dt.timezone.utc`
@@ -70,7 +71,7 @@ architecture documented in `docs/ghillie-design.md` Section 9.
 - Consider adding more edge case tests for the mock heuristics
 - Future work could add project/estate summarization methods
 
-**Artifacts created:**
+**Artefacts created:**
 
 - `ghillie/status/__init__.py`, `models.py`, `protocol.py`, `mock.py`
 - `tests/unit/test_status_model.py` (14 tests)
@@ -84,9 +85,9 @@ architecture documented in `docs/ghillie-design.md` Section 9.
 The evidence bundle architecture is complete:
 
 - **Evidence models** (`ghillie/evidence/models.py`):
-  `RepositoryEvidenceBundle`,
-  `ReportStatus` enum (ON_TRACK, AT_RISK, BLOCKED, UNKNOWN), `WorkType` enum,
-  and all evidence structs use `msgspec.Struct` with `kw_only=True, frozen=True`
+  `RepositoryEvidenceBundle`, `ReportStatus` enum (ON_TRACK, AT_RISK, BLOCKED,
+  UNKNOWN), `WorkType` enum, and all evidence structs use `msgspec.Struct` with
+  `kw_only=True, frozen=True`
 - **Gold layer** (`ghillie/gold/storage.py`): `Report` SQLAlchemy model with
   `machine_summary` JSON column ready to store structured output
 - **Proposal pattern** (`docs/ghillie-proposal.md` Section 9): Specifies
@@ -127,8 +128,8 @@ Create unit tests and BDD scenarios before implementation:
 ### Phase 2: Define output structures
 
 Create `RepositoryStatusResult` msgspec.Struct in `ghillie/status/models.py`
-with fields: summary (str), status (ReportStatus), highlights (tuple[str,
-…]), risks (tuple[str, …]), next_steps (tuple[str, …]). Include a
+with fields: summary (str), status (ReportStatus), highlights (tuple[str, …]),
+risks (tuple[str, …]), next_steps (tuple[str, …]). Include a
 `to_machine_summary()` helper for JSON conversion.
 
 ### Phase 3: Define the protocol

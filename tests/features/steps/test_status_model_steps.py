@@ -11,6 +11,7 @@ from pytest_bdd import given, scenarios, then, when
 
 from ghillie.evidence.models import (
     CommitEvidence,
+    IssueEvidence,
     PreviousReportSummary,
     PullRequestEvidence,
     ReportStatus,
@@ -207,6 +208,180 @@ def given_empty_evidence_bundle(
     )
 
 
+@given(
+    'a repository "octo/reef" with more bugs than features',
+    target_fixture="status_model_context",
+)
+def given_repository_with_bug_heavy_activity(
+    status_model_context: StatusModelContext,
+) -> StatusModelContext:
+    """Set up repository metadata for bug-heavy activity scenario."""
+    status_model_context["repository_metadata"] = _create_octo_reef_metadata()
+    return status_model_context
+
+
+@given("an evidence bundle with bug-heavy activity")
+def given_evidence_with_bug_heavy_activity(
+    status_model_context: StatusModelContext,
+) -> None:
+    """Create evidence bundle with more bugs than features."""
+    metadata = status_model_context["repository_metadata"]
+    status_model_context["evidence_bundle"] = RepositoryEvidenceBundle(
+        repository=metadata,
+        window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+        window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+        commits=(
+            CommitEvidence(
+                sha="fix123",
+                message="fix: resolve crash on startup",
+                work_type=WorkType.BUG,
+            ),
+            CommitEvidence(
+                sha="fix456",
+                message="fix: correct memory leak",
+                work_type=WorkType.BUG,
+            ),
+        ),
+        pull_requests=(
+            PullRequestEvidence(
+                id=102,
+                number=43,
+                title="Fix startup crash",
+                state="merged",
+                labels=("bug",),
+                work_type=WorkType.BUG,
+            ),
+        ),
+        work_type_groupings=(
+            WorkTypeGrouping(
+                work_type=WorkType.BUG,
+                commit_count=2,
+                pr_count=1,
+                issue_count=0,
+                sample_titles=("Fix startup crash",),
+            ),
+        ),
+        event_fact_ids=(5, 6, 7),
+        generated_at=dt.datetime.now(dt.UTC),
+    )
+
+
+@given(
+    'a repository "octo/reef" with open pull requests',
+    target_fixture="status_model_context",
+)
+def given_repository_with_open_prs(
+    status_model_context: StatusModelContext,
+) -> StatusModelContext:
+    """Set up repository metadata for open PRs scenario."""
+    status_model_context["repository_metadata"] = _create_octo_reef_metadata()
+    return status_model_context
+
+
+@given("an evidence bundle with open PRs")
+def given_evidence_with_open_prs(
+    status_model_context: StatusModelContext,
+) -> None:
+    """Create evidence bundle with open pull requests."""
+    metadata = status_model_context["repository_metadata"]
+    status_model_context["evidence_bundle"] = RepositoryEvidenceBundle(
+        repository=metadata,
+        window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+        window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+        commits=(
+            CommitEvidence(
+                sha="abc123",
+                message="feat: add feature X",
+                work_type=WorkType.FEATURE,
+            ),
+        ),
+        pull_requests=(
+            PullRequestEvidence(
+                id=100,
+                number=50,
+                title="Add feature X",
+                state="open",
+                work_type=WorkType.FEATURE,
+            ),
+            PullRequestEvidence(
+                id=101,
+                number=51,
+                title="Add feature Y",
+                state="open",
+                work_type=WorkType.FEATURE,
+            ),
+        ),
+        work_type_groupings=(
+            WorkTypeGrouping(
+                work_type=WorkType.FEATURE,
+                commit_count=1,
+                pr_count=2,
+                issue_count=0,
+            ),
+        ),
+        event_fact_ids=(1, 2, 3),
+        generated_at=dt.datetime.now(dt.UTC),
+    )
+
+
+@given(
+    'a repository "octo/reef" with open issues',
+    target_fixture="status_model_context",
+)
+def given_repository_with_open_issues(
+    status_model_context: StatusModelContext,
+) -> StatusModelContext:
+    """Set up repository metadata for open issues scenario."""
+    status_model_context["repository_metadata"] = _create_octo_reef_metadata()
+    return status_model_context
+
+
+@given("an evidence bundle with open issues")
+def given_evidence_with_open_issues(
+    status_model_context: StatusModelContext,
+) -> None:
+    """Create evidence bundle with open issues."""
+    metadata = status_model_context["repository_metadata"]
+    status_model_context["evidence_bundle"] = RepositoryEvidenceBundle(
+        repository=metadata,
+        window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+        window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+        commits=(
+            CommitEvidence(
+                sha="abc123",
+                message="feat: add feature",
+                work_type=WorkType.FEATURE,
+            ),
+        ),
+        issues=(
+            IssueEvidence(
+                id=200,
+                number=10,
+                title="Bug in login",
+                state="open",
+                work_type=WorkType.BUG,
+            ),
+            IssueEvidence(
+                id=201,
+                number=11,
+                title="Bug in logout",
+                state="open",
+                work_type=WorkType.BUG,
+            ),
+        ),
+        work_type_groupings=(
+            WorkTypeGrouping(
+                work_type=WorkType.FEATURE,
+                commit_count=1,
+                pr_count=0,
+                issue_count=0,
+            ),
+        ),
+        event_fact_ids=(1, 2, 3),
+        generated_at=dt.datetime.now(dt.UTC),
+    )
+
+
 # ---------------------------------------------------------------------------
 # When steps
 # ---------------------------------------------------------------------------
@@ -276,3 +451,53 @@ def then_summary_indicates_no_activity(
     """Verify summary indicates no activity."""
     result = status_model_context["status_result"]
     assert "no recorded activity" in result.summary.lower()
+
+
+@then("the next steps include addressing risks")
+def then_next_steps_include_addressing_risks(
+    status_model_context: StatusModelContext,
+) -> None:
+    """Verify next steps include a step about addressing risks."""
+    result = status_model_context["status_result"]
+    assert result.next_steps, "Expected at least one next step"
+    assert any("risk" in step.lower() for step in result.next_steps), (
+        f"Expected a risk-focused next step, got: {result.next_steps}"
+    )
+
+
+@then("the next steps include investigating activity")
+def then_next_steps_include_investigating(
+    status_model_context: StatusModelContext,
+) -> None:
+    """Verify next steps include an investigation step."""
+    result = status_model_context["status_result"]
+    assert result.next_steps, "Expected at least one next step"
+    assert any("investigat" in step.lower() for step in result.next_steps), (
+        f"Expected an investigation-focused next step, got: {result.next_steps}"
+    )
+
+
+@then("the next steps include reviewing open PRs")
+def then_next_steps_include_review_prs(
+    status_model_context: StatusModelContext,
+) -> None:
+    """Verify next steps include reviewing open PRs."""
+    result = status_model_context["status_result"]
+    assert result.next_steps, "Expected at least one next step"
+    assert any(
+        "review" in step.lower() and "open" in step.lower() and "pr" in step.lower()
+        for step in result.next_steps
+    ), f"Expected a PR review step, got: {result.next_steps}"
+
+
+@then("the next steps include triaging open issues")
+def then_next_steps_include_triage_issues(
+    status_model_context: StatusModelContext,
+) -> None:
+    """Verify next steps include triaging open issues."""
+    result = status_model_context["status_result"]
+    assert result.next_steps, "Expected at least one next step"
+    assert any(
+        "triage" in step.lower() and "open" in step.lower() and "issue" in step.lower()
+        for step in result.next_steps
+    ), f"Expected an issue triage step, got: {result.next_steps}"

@@ -113,6 +113,11 @@ class MockStatusModel:
         bool
             True if the latest previous report has risks and AT_RISK/BLOCKED status.
 
+        Notes
+        -----
+        This method assumes ``evidence.previous_reports`` is ordered most-recent
+        first, as specified by the ``RepositoryEvidenceBundle`` contract.
+
         """
         if not evidence.previous_reports:
             return False
@@ -137,16 +142,20 @@ class MockStatusModel:
         -------
         tuple[int, int]
             A tuple of (bug_count, feature_count) representing combined
-            commit and PR counts for each work type.
+            commit, PR, and issue counts for each work type.
 
         """
         bug_count = 0
         feature_count = 0
         for grouping in evidence.work_type_groupings:
             if grouping.work_type == WorkType.BUG:
-                bug_count = grouping.commit_count + grouping.pr_count
+                bug_count += (
+                    grouping.commit_count + grouping.pr_count + grouping.issue_count
+                )
             elif grouping.work_type == WorkType.FEATURE:
-                feature_count = grouping.commit_count + grouping.pr_count
+                feature_count += (
+                    grouping.commit_count + grouping.pr_count + grouping.issue_count
+                )
         return bug_count, feature_count
 
     def _generate_summary(

@@ -6,7 +6,7 @@ import typing as typ
 
 import msgspec
 
-from ghillie.evidence.models import ReportStatus  # noqa: TC001
+from ghillie.evidence.models import ReportStatus  # noqa: TC001 - used in frozen Struct
 
 
 class RepositoryStatusResult(msgspec.Struct, kw_only=True, frozen=True):
