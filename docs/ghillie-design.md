@@ -637,6 +637,49 @@ Engine from the core data pipeline ensures that adding such active capabilities
 would not destabilize the reporting infrastructure, paving the way for a true
 **Self-Healing Estate**.43
 
+### 8.4 HTTP API Layer Architecture
+
+The Ghillie HTTP API follows a hexagonal (ports and adapters) architecture,
+placing the Falcon Asynchronous Server Gateway Interface (ASGI) application at
+the adapter boundary between external HTTP consumers and the core Medallion
+data layers.
+
+**Current implementation (Phase 1.5.c):** The runtime module (`ghillie.runtime`)
+provides minimal Kubernetes health probe endpoints (`/health`, `/ready`) using
+Falcon ASGI with Granian as the application server. These endpoints are
+stateless and do not require database access or session management.
+
+**Planned evolution:** As domain-connected endpoints are added (Concordat
+CloudEvents ingestion, status query APIs), the API layer should evolve from the
+current monolithic `runtime.py` to a modular structure:
+
+```text
+ghillie/api/
+  app.py              # Application factory (create_app)
+  middleware.py       # SQLAlchemy session manager per async-sqlalchemy guide
+  error_handlers.py   # Domain exception to HTTP response mapping
+  health/
+    resources.py      # HealthResource, ReadyResource
+  bronze/
+    resources.py      # ConcordatEventResource (CloudEvents ingestion)
+  gold/
+    resources.py      # ReportResource (status query endpoints)
+```
+
+This structure maintains clear separation between:
+
+- **Infrastructure adapters** (health probes): No domain logic, stateless
+- **Inbound adapters** (CloudEvents ingestion): Write path to Bronze layer
+- **Outbound adapters** (status queries): Read path from Gold layer
+
+The session middleware pattern documented in `async-sqlalchemy-with-pg-and-falcon.md`
+should be implemented before adding database-dependent endpoints. This provides
+request-scoped `AsyncSession` instances with automatic transaction demarcation.
+
+**Design decision:** Health probe endpoints remain in a separate resource module
+from domain endpoints. This allows Kubernetes operators to understand which
+endpoints serve operational purposes versus functional purposes.
+
 ## 9. Evidence Bundle Architecture (Phase 2.1)
 
 The evidence bundle provides an in-memory representation of repository activity

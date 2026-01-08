@@ -631,3 +631,97 @@ Configure alerts based on structured log queries:
 5. **Backlog accumulation:** Alert when `ingestion.stream.truncated` events
    occur repeatedly for the same repository (indicates sustained high activity
    or processing issues).
+
+## Container image (Phase 1.5.c)
+
+Ghillie provides a container image for Kubernetes deployments. The image runs a
+Falcon Asynchronous Server Gateway Interface (ASGI) application served by
+Granian, with health endpoints for Kubernetes probes.
+
+### Building the image
+
+Build the image locally using the provided Makefile target:
+
+```bash
+make docker-build
+```
+
+This produces an image tagged `ghillie:local` using a multi-stage build. The
+build stage creates a wheel from the source, and the runtime stage installs it
+into a minimal Python 3.12 slim image with a non-root user.
+
+Alternatively, build directly with Docker:
+
+```bash
+docker build -t ghillie:local .
+```
+
+### Running the container
+
+Run the container locally to verify the build:
+
+```bash
+docker run --rm -p 8080:8080 ghillie:local
+```
+
+The container starts the Granian server and logs a startup message. Verify the
+health endpoints:
+
+```bash
+curl http://localhost:8080/health
+# Returns: {"status": "ok"}
+
+curl http://localhost:8080/ready
+# Returns: {"status": "ready"}
+```
+
+### Environment variables
+
+The runtime reads configuration from environment variables:
+
+| Variable            | Default   | Description                    |
+| ------------------- | --------- | ------------------------------ |
+| `GHILLIE_HOST`      | `0.0.0.0` | Bind address for the server    |
+| `GHILLIE_PORT`      | `8080`    | Listen port for HTTP traffic   |
+| `GHILLIE_LOG_LEVEL` | `INFO`    | Log level (DEBUG, INFO, etc.)  |
+
+Additional environment variables for database and cache connectivity should be
+injected via Kubernetes Secrets when deploying with the Helm chart.
+
+### Health endpoints
+
+The runtime exposes two health endpoints for Kubernetes probes:
+
+- `/health`: Liveness probe endpoint. Returns `{"status": "ok"}` when the
+  process is alive.
+- `/ready`: Readiness probe endpoint. Returns `{"status": "ready"}` when the
+  service is ready to accept traffic.
+
+Both endpoints return HTTP 200 with JSON content type.
+
+### Kubernetes deployment
+
+For Kubernetes deployment, use the Ghillie Helm chart in `charts/ghillie/`.
+Configure liveness and readiness probes in the chart values:
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 15
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 5
+```
+
+For local k3d previews, import the image into the cluster:
+
+```bash
+k3d image import ghillie:local -c <cluster-name>
+```

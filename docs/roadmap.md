@@ -198,7 +198,7 @@ ephemeral previews platform and supports the Ghillie Helm chart.
   *Completion criteria:* `helm lint charts/ghillie` passes, and the chart can
   be installed with local values or HelmRelease values in the GitOps flow.
 
-- [ ] **Task 1.5.c – Define container image for preview workloads**  
+- [x] **Task 1.5.c – Define container image for preview workloads**
   Add a multi-stage Dockerfile and runtime entrypoint suitable for Kubernetes,
   with configuration driven by environment variables and chart values.
 
@@ -439,7 +439,24 @@ enrolment to drive estate membership.
 **Goal:** Capture Concordat events in the Medallion pipeline, alongside GitHub
 events.
 
-- [ ] **Task 4.1.a – Implement CloudEvents-compatible ingestion endpoint**  
+- [ ] **Task 4.1.a – Refactor API layer for domain endpoints**
+  Evolve the runtime module from monolithic `ghillie/runtime.py` to a modular
+  `ghillie/api/` structure with:
+
+  - application factory in `app.py`,
+  - SQLAlchemy session middleware per `async-sqlalchemy-with-pg-and-falcon.md`,
+  - domain exception handlers for HTTP error mapping,
+  - health resources separated from domain resources.
+
+  This prepares the API layer for database-connected endpoints (CloudEvents
+  ingestion, status queries) while preserving the existing health probe
+  functionality.
+
+  *Completion criteria:* Health endpoints continue to work unchanged.
+  `ghillie/api/app.py` provides `create_app()` with session middleware
+  configured. Tests verify request-scoped session lifecycle.
+
+- [ ] **Task 4.1.b – Implement CloudEvents-compatible ingestion endpoint**
   Add an ingestion gateway that accepts CloudEvents-formatted events from
   Concordat, verifies their authenticity, and writes them into the Bronze
   `raw_events` store.
@@ -448,7 +465,7 @@ events.
   appear in `raw_events` with preserved metadata, including source, subject,
   and event time.
 
-- [ ] **Task 4.1.b – Map CloudEvents to Silver-layer governance entities**  
+- [ ] **Task 4.1.c – Map CloudEvents to Silver-layer governance entities**
   Transform Concordat events into structured Silver-layer records for
   enrolments and compliance violations, using JSON-capable columns for flexible
   rule payloads.
