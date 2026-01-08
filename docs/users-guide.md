@@ -725,3 +725,114 @@ For local k3d previews, import the image into the cluster:
 ```bash
 k3d image import ghillie:local -c <cluster-name>
 ```
+
+## Local k3d preview environment (Phase 1.5.d)
+
+Ghillie provides a local preview environment using k3d (k3s-in-Docker). This
+enables developers to validate the full Kubernetes deployment locally before
+pushing to CI/CD, mirroring the ephemeral preview architecture on a developer
+workstation.
+
+### Prerequisites
+
+The local preview requires the following tools installed and available on
+`PATH`:
+
+- `docker` - Container runtime
+- `k3d` - Lightweight Kubernetes distribution wrapper
+- `kubectl` - Kubernetes CLI
+- `helm` - Kubernetes package manager
+
+The script verifies these tools are available before proceeding.
+
+### Creating the preview environment
+
+Create a local k3d preview environment with:
+
+```bash
+make local-k8s-up
+```
+
+This command:
+
+1. Creates a k3d cluster with loopback-only ingress on an ephemeral port
+2. Installs the CloudNativePG operator and creates a Postgres instance
+3. Installs the Valkey operator and creates a Valkey instance
+4. Builds the Ghillie Docker image and imports it into the cluster
+5. Creates application secrets with database and cache connection strings
+6. Deploys the Ghillie Helm chart using local values
+
+On completion, the script prints a preview URL:
+
+```text
+Preview environment ready!
+  URL: http://127.0.0.1:49213/
+```
+
+Verify the deployment by accessing the health endpoint:
+
+```bash
+curl http://127.0.0.1:49213/health
+# Returns: {"status": "ok"}
+```
+
+### Managing the preview environment
+
+Check the status of running pods:
+
+```bash
+make local-k8s-status
+```
+
+Tail logs from the Ghillie deployment:
+
+```bash
+make local-k8s-logs
+```
+
+Tear down the preview environment:
+
+```bash
+make local-k8s-down
+```
+
+### Configuration options
+
+The local preview script accepts environment variables for customization:
+
+| Variable                | Default         | Description                               |
+| ----------------------- | --------------- | ----------------------------------------- |
+| `GHILLIE_K3D_CLUSTER`   | `ghillie-local` | Name of the k3d cluster                   |
+| `GHILLIE_K3D_NAMESPACE` | `ghillie`       | Kubernetes namespace for deployment       |
+| `GHILLIE_K3D_PORT`      | (auto)          | Ingress port (picks free port if not set) |
+
+Example with custom cluster name:
+
+```bash
+GHILLIE_K3D_CLUSTER=my-preview make local-k8s-up
+```
+
+### Skipping image build
+
+To skip building the Docker image (useful when iterating on configuration), use
+the `--skip-build` flag directly:
+
+```bash
+uv run scripts/local_k8s.py up --skip-build
+```
+
+### Architecture
+
+The local preview environment installs the following components:
+
+- **k3d cluster**: Single-node k3s cluster running in Docker with traefik
+  disabled and a custom ingress port mapping.
+- **CloudNativePG**: Postgres operator providing a single-instance Postgres
+  cluster (`pg-ghillie`) with credentials in a Kubernetes secret.
+- **Valkey**: Redis-compatible in-memory cache via the hyperspike Valkey
+  operator, providing a standalone Valkey instance.
+- **Ghillie deployment**: The Ghillie Helm chart deployed with local values,
+  using the locally-built container image.
+
+Connection strings for the database and cache are automatically extracted from
+operator-managed secrets and injected into the application secret.
