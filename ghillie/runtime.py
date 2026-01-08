@@ -101,12 +101,23 @@ def main() -> None:
     port = _parse_port(port_str)
     log_level_str = os.environ.get("GHILLIE_LOG_LEVEL", "INFO")
 
-    # Configure logging
-    log_level = getattr(logging, log_level_str.upper(), logging.INFO)
-    logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
+    # Configure logging - validate log level and warn on invalid values
+    log_level = getattr(logging, log_level_str.upper(), None)
+    if log_level is None:
+        log_level = logging.INFO
+        logging.basicConfig(
+            level=log_level,
+            format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        )
+        logger.warning(
+            "Invalid GHILLIE_LOG_LEVEL %r, falling back to INFO",
+            log_level_str,
+        )
+    else:
+        logging.basicConfig(
+            level=log_level,
+            format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        )
 
     logger.info(
         "Starting Ghillie runtime on %s:%d (log_level=%s)",
