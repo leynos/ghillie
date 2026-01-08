@@ -679,11 +679,11 @@ curl http://localhost:8080/ready
 
 The runtime reads configuration from environment variables:
 
-| Variable            | Default   | Description                    |
-| ------------------- | --------- | ------------------------------ |
-| `GHILLIE_HOST`      | `0.0.0.0` | Bind address for the server    |
-| `GHILLIE_PORT`      | `8080`    | Listen port for HTTP traffic   |
-| `GHILLIE_LOG_LEVEL` | `INFO`    | Log level (DEBUG, INFO, etc.)  |
+| Variable            | Default   | Description                   |
+| ------------------- | --------- | ----------------------------- |
+| `GHILLIE_HOST`      | `0.0.0.0` | Bind address for the server   |
+| `GHILLIE_PORT`      | `8080`    | Listen port for HTTP traffic  |
+| `GHILLIE_LOG_LEVEL` | `INFO`    | Log level (DEBUG, INFO, etc.) |
 
 Additional environment variables for database and cache connectivity should be
 injected via Kubernetes Secrets when deploying with the Helm chart.

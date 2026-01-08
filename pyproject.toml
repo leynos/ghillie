@@ -28,6 +28,10 @@ dev = [
     "pyright",
     "ty>=0.0.1a21",
     "pytest-timeout",
+    # Script dependencies for type checking and testing
+    "cyclopts>=2.9",
+    "plumbum",
+    "cmd-mox",
 ]
 
 [tool.ruff]
