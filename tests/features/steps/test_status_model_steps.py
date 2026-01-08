@@ -105,6 +105,25 @@ class EvidenceBundleBuilder:
         self._previous_reports: tuple[PreviousReportSummary, ...] = ()
         self._event_fact_ids: tuple[int, ...] = ()
 
+    def _set_field(self, field_name: str, value: tuple) -> EvidenceBundleBuilder:
+        """Set a field value and return self for method chaining.
+
+        Parameters
+        ----------
+        field_name
+            Name of the instance attribute to set.
+        value
+            Tuple value to assign to the field.
+
+        Returns
+        -------
+        EvidenceBundleBuilder
+            Self for method chaining.
+
+        """
+        setattr(self, field_name, value)
+        return self
+
     def with_window(
         self, start: dt.datetime, end: dt.datetime
     ) -> EvidenceBundleBuilder:
@@ -143,8 +162,7 @@ class EvidenceBundleBuilder:
             Self for method chaining.
 
         """
-        self._commits = commits
-        return self
+        return self._set_field("_commits", commits)
 
     def with_pull_requests(
         self, pull_requests: tuple[PullRequestEvidence, ...]
@@ -162,8 +180,7 @@ class EvidenceBundleBuilder:
             Self for method chaining.
 
         """
-        self._pull_requests = pull_requests
-        return self
+        return self._set_field("_pull_requests", pull_requests)
 
     def with_issues(self, issues: tuple[IssueEvidence, ...]) -> EvidenceBundleBuilder:
         """Set issue evidence records.
@@ -179,8 +196,7 @@ class EvidenceBundleBuilder:
             Self for method chaining.
 
         """
-        self._issues = issues
-        return self
+        return self._set_field("_issues", issues)
 
     def with_work_type_groupings(
         self, groupings: tuple[WorkTypeGrouping, ...]
@@ -198,8 +214,7 @@ class EvidenceBundleBuilder:
             Self for method chaining.
 
         """
-        self._work_type_groupings = groupings
-        return self
+        return self._set_field("_work_type_groupings", groupings)
 
     def with_previous_reports(
         self, reports: tuple[PreviousReportSummary, ...]
@@ -217,8 +232,7 @@ class EvidenceBundleBuilder:
             Self for method chaining.
 
         """
-        self._previous_reports = reports
-        return self
+        return self._set_field("_previous_reports", reports)
 
     def with_event_fact_ids(self, ids: tuple[int, ...]) -> EvidenceBundleBuilder:
         """Set event fact IDs covered by this bundle.
@@ -234,8 +248,7 @@ class EvidenceBundleBuilder:
             Self for method chaining.
 
         """
-        self._event_fact_ids = ids
-        return self
+        return self._set_field("_event_fact_ids", ids)
 
     def build(self) -> RepositoryEvidenceBundle:
         """Construct the RepositoryEvidenceBundle.
