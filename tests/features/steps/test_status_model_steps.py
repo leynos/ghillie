@@ -273,6 +273,60 @@ class EvidenceBundleBuilder:
         )
 
 
+def _create_open_prs() -> tuple[PullRequestEvidence, ...]:
+    """Create a tuple of open pull requests for testing.
+
+    Returns
+    -------
+    tuple[PullRequestEvidence, ...]
+        Tuple of 2 open pull requests with feature work type.
+
+    """
+    return (
+        PullRequestEvidence(
+            id=100,
+            number=50,
+            title="Add feature X",
+            state="open",
+            work_type=WorkType.FEATURE,
+        ),
+        PullRequestEvidence(
+            id=101,
+            number=51,
+            title="Add feature Y",
+            state="open",
+            work_type=WorkType.FEATURE,
+        ),
+    )
+
+
+def _create_open_issues() -> tuple[IssueEvidence, ...]:
+    """Create a tuple of open issues for testing.
+
+    Returns
+    -------
+    tuple[IssueEvidence, ...]
+        Tuple of 2 open issues with bug work type.
+
+    """
+    return (
+        IssueEvidence(
+            id=200,
+            number=10,
+            title="Bug in login",
+            state="open",
+            work_type=WorkType.BUG,
+        ),
+        IssueEvidence(
+            id=201,
+            number=11,
+            title="Bug in logout",
+            state="open",
+            work_type=WorkType.BUG,
+        ),
+    )
+
+
 def _create_evidence_with_open_items(
     metadata: RepositoryMetadata,
     *,
@@ -293,85 +347,29 @@ def _create_evidence_with_open_items(
         Evidence bundle with specified open items.
 
     """
+    commits = (
+        CommitEvidence(
+            sha="abc123",
+            message="feat: add feature",
+            work_type=WorkType.FEATURE,
+        ),
+    )
+    builder = EvidenceBundleBuilder(metadata).with_commits(commits)
+
     if item_type == "pr":
-        return (
-            EvidenceBundleBuilder(metadata)
-            .with_commits(
-                (
-                    CommitEvidence(
-                        sha="abc123",
-                        message="feat: add feature",
-                        work_type=WorkType.FEATURE,
-                    ),
-                )
-            )
-            .with_pull_requests(
-                (
-                    PullRequestEvidence(
-                        id=100,
-                        number=50,
-                        title="Add feature X",
-                        state="open",
-                        work_type=WorkType.FEATURE,
-                    ),
-                    PullRequestEvidence(
-                        id=101,
-                        number=51,
-                        title="Add feature Y",
-                        state="open",
-                        work_type=WorkType.FEATURE,
-                    ),
-                )
-            )
-            .with_work_type_groupings(
-                (
-                    WorkTypeGrouping(
-                        work_type=WorkType.FEATURE,
-                        commit_count=1,
-                        pr_count=2,
-                        issue_count=0,
-                    ),
-                )
-            )
-            .with_event_fact_ids((1, 2, 3))
-            .build()
-        )
-    # item_type == "issue"
+        builder = builder.with_pull_requests(_create_open_prs())
+        pr_count = 2
+    else:
+        builder = builder.with_issues(_create_open_issues())
+        pr_count = 0
+
     return (
-        EvidenceBundleBuilder(metadata)
-        .with_commits(
-            (
-                CommitEvidence(
-                    sha="abc123",
-                    message="feat: add feature",
-                    work_type=WorkType.FEATURE,
-                ),
-            )
-        )
-        .with_issues(
-            (
-                IssueEvidence(
-                    id=200,
-                    number=10,
-                    title="Bug in login",
-                    state="open",
-                    work_type=WorkType.BUG,
-                ),
-                IssueEvidence(
-                    id=201,
-                    number=11,
-                    title="Bug in logout",
-                    state="open",
-                    work_type=WorkType.BUG,
-                ),
-            )
-        )
-        .with_work_type_groupings(
+        builder.with_work_type_groupings(
             (
                 WorkTypeGrouping(
                     work_type=WorkType.FEATURE,
                     commit_count=1,
-                    pr_count=0,
+                    pr_count=pr_count,
                     issue_count=0,
                 ),
             )
