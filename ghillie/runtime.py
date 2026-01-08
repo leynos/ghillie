@@ -103,20 +103,17 @@ def main() -> None:
 
     # Configure logging - validate log level and warn on invalid values
     log_level = getattr(logging, log_level_str.upper(), None)
-    if log_level is None:
+    invalid_level = log_level is None
+    if invalid_level:
         log_level = logging.INFO
-        logging.basicConfig(
-            level=log_level,
-            format="%(asctime)s %(levelname)s %(name)s %(message)s",
-        )
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+    if invalid_level:
         logger.warning(
             "Invalid GHILLIE_LOG_LEVEL %r, falling back to INFO",
             log_level_str,
-        )
-    else:
-        logging.basicConfig(
-            level=log_level,
-            format="%(asctime)s %(levelname)s %(name)s %(message)s",
         )
 
     logger.info(
