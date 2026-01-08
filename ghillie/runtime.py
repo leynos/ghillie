@@ -43,19 +43,21 @@ def _parse_port(port_str: str) -> int:
         If port_str is not a valid integer in range 1-65535.
 
     """
-    if not port_str.lstrip("-").isdigit():
-        logger.error("Invalid GHILLIE_PORT value: %r (not an integer)", port_str)
-        raise SystemExit(1)
-    port = int(port_str)
-    if not (_MIN_PORT <= port <= _MAX_PORT):
-        logger.error(
-            "Invalid GHILLIE_PORT value: %r (port %d outside valid range %d-%d)",
+    try:
+        port = int(port_str)
+        if not (_MIN_PORT <= port <= _MAX_PORT):
+            msg = f"port {port} outside valid range {_MIN_PORT}-{_MAX_PORT}"
+            raise ValueError(msg)  # noqa: TRY301 - intentional re-raise for unified error handling
+    except ValueError as exc:
+        # Use error() not exception() - validation failures need no traceback
+        logger.error(  # noqa: TRY400 - no traceback for config validation
+            "Invalid GHILLIE_PORT value: %r (must be %d-%d): %s",
             port_str,
-            port,
             _MIN_PORT,
             _MAX_PORT,
+            exc,
         )
-        raise SystemExit(1)
+        raise SystemExit(1) from exc
     return port
 
 
