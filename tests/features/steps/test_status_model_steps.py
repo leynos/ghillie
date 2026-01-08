@@ -68,6 +68,66 @@ def _create_octo_reef_metadata() -> RepositoryMetadata:
     )
 
 
+def _create_evidence_bundle(  # noqa: PLR0913
+    metadata: RepositoryMetadata,
+    *,
+    commits: tuple[CommitEvidence, ...] = (),
+    pull_requests: tuple[PullRequestEvidence, ...] = (),
+    issues: tuple[IssueEvidence, ...] = (),
+    work_type_groupings: tuple[WorkTypeGrouping, ...] = (),
+    previous_reports: tuple[PreviousReportSummary, ...] = (),
+    event_fact_ids: tuple[int, ...] = (),
+    window_start: dt.datetime | None = None,
+    window_end: dt.datetime | None = None,
+) -> RepositoryEvidenceBundle:
+    """Create evidence bundle with configurable fields.
+
+    Parameters
+    ----------
+    metadata
+        Repository metadata for the bundle.
+    commits
+        Tuple of commit evidence records. Defaults to empty tuple.
+    pull_requests
+        Tuple of pull request evidence records. Defaults to empty tuple.
+    issues
+        Tuple of issue evidence records. Defaults to empty tuple.
+    work_type_groupings
+        Tuple of work type groupings. Defaults to empty tuple.
+    previous_reports
+        Tuple of previous report summaries. Defaults to empty tuple.
+    event_fact_ids
+        Tuple of event fact IDs covered by this bundle. Defaults to empty tuple.
+    window_start
+        Start of the reporting window. Defaults to 2024-07-01 UTC.
+    window_end
+        End of the reporting window. Defaults to 2024-07-08 UTC.
+
+    Returns
+    -------
+    RepositoryEvidenceBundle
+        Configured evidence bundle with generated_at set to current UTC time.
+
+    """
+    if window_start is None:
+        window_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
+    if window_end is None:
+        window_end = dt.datetime(2024, 7, 8, tzinfo=dt.UTC)
+
+    return RepositoryEvidenceBundle(
+        repository=metadata,
+        window_start=window_start,
+        window_end=window_end,
+        commits=commits,
+        pull_requests=pull_requests,
+        issues=issues,
+        work_type_groupings=work_type_groupings,
+        previous_reports=previous_reports,
+        event_fact_ids=event_fact_ids,
+        generated_at=dt.datetime.now(dt.UTC),
+    )
+
+
 @given(
     'a repository "octo/reef" with feature activity',
     target_fixture="status_model_context",
@@ -110,10 +170,8 @@ def given_evidence_bundle_with_activity(
 ) -> None:
     """Create evidence bundle with feature activity."""
     metadata = status_model_context["repository_metadata"]
-    status_model_context["evidence_bundle"] = RepositoryEvidenceBundle(
-        repository=metadata,
-        window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
-        window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+    status_model_context["evidence_bundle"] = _create_evidence_bundle(
+        metadata=metadata,
         commits=(
             CommitEvidence(
                 sha="abc123",
@@ -146,7 +204,6 @@ def given_evidence_bundle_with_activity(
             ),
         ),
         event_fact_ids=(1, 2),
-        generated_at=dt.datetime.now(dt.UTC),
     )
 
 
@@ -156,8 +213,8 @@ def given_evidence_with_previous_report(
 ) -> None:
     """Create evidence bundle with previous at-risk report."""
     metadata = status_model_context["repository_metadata"]
-    status_model_context["evidence_bundle"] = RepositoryEvidenceBundle(
-        repository=metadata,
+    status_model_context["evidence_bundle"] = _create_evidence_bundle(
+        metadata=metadata,
         window_start=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
         window_end=dt.datetime(2024, 7, 15, tzinfo=dt.UTC),
         previous_reports=(
@@ -190,7 +247,6 @@ def given_evidence_with_previous_report(
             ),
         ),
         event_fact_ids=(10,),
-        generated_at=dt.datetime.now(dt.UTC),
     )
 
 
@@ -200,12 +256,7 @@ def given_empty_evidence_bundle(
 ) -> None:
     """Create evidence bundle with no events."""
     metadata = status_model_context["repository_metadata"]
-    status_model_context["evidence_bundle"] = RepositoryEvidenceBundle(
-        repository=metadata,
-        window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
-        window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
-        generated_at=dt.datetime.now(dt.UTC),
-    )
+    status_model_context["evidence_bundle"] = _create_evidence_bundle(metadata=metadata)
 
 
 @given(
@@ -226,10 +277,8 @@ def given_evidence_with_bug_heavy_activity(
 ) -> None:
     """Create evidence bundle with more bugs than features."""
     metadata = status_model_context["repository_metadata"]
-    status_model_context["evidence_bundle"] = RepositoryEvidenceBundle(
-        repository=metadata,
-        window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
-        window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+    status_model_context["evidence_bundle"] = _create_evidence_bundle(
+        metadata=metadata,
         commits=(
             CommitEvidence(
                 sha="fix123",
@@ -262,7 +311,6 @@ def given_evidence_with_bug_heavy_activity(
             ),
         ),
         event_fact_ids=(5, 6, 7),
-        generated_at=dt.datetime.now(dt.UTC),
     )
 
 
@@ -284,10 +332,8 @@ def given_evidence_with_open_prs(
 ) -> None:
     """Create evidence bundle with open pull requests."""
     metadata = status_model_context["repository_metadata"]
-    status_model_context["evidence_bundle"] = RepositoryEvidenceBundle(
-        repository=metadata,
-        window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
-        window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+    status_model_context["evidence_bundle"] = _create_evidence_bundle(
+        metadata=metadata,
         commits=(
             CommitEvidence(
                 sha="abc123",
@@ -320,7 +366,6 @@ def given_evidence_with_open_prs(
             ),
         ),
         event_fact_ids=(1, 2, 3),
-        generated_at=dt.datetime.now(dt.UTC),
     )
 
 
@@ -342,10 +387,8 @@ def given_evidence_with_open_issues(
 ) -> None:
     """Create evidence bundle with open issues."""
     metadata = status_model_context["repository_metadata"]
-    status_model_context["evidence_bundle"] = RepositoryEvidenceBundle(
-        repository=metadata,
-        window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
-        window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+    status_model_context["evidence_bundle"] = _create_evidence_bundle(
+        metadata=metadata,
         commits=(
             CommitEvidence(
                 sha="abc123",
@@ -378,7 +421,6 @@ def given_evidence_with_open_issues(
             ),
         ),
         event_fact_ids=(1, 2, 3),
-        generated_at=dt.datetime.now(dt.UTC),
     )
 
 
