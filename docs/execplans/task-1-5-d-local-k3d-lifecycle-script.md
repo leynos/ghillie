@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 This document must be maintained in accordance with `docs/execplans/PLANS.md`
 (if it exists) and the execplans skill guidance.
@@ -75,22 +75,31 @@ Thresholds that trigger escalation when breached:
 
 ## Progress
 
-- [ ] Stage 1: Scaffold CLI structure and Config dataclass
-- [ ] Stage 2: Implement port selection and executable verification helpers
-- [ ] Stage 3: Implement k3d cluster lifecycle helpers
-- [ ] Stage 4: Implement namespace and CNPG helpers
-- [ ] Stage 5: Implement Valkey helpers
-- [ ] Stage 6: Implement application secret and image helpers
-- [ ] Stage 7: Implement Helm chart installation helpers
-- [ ] Stage 8: Wire up `up`, `down`, `status`, `logs` commands
-- [ ] Stage 9: Add Makefile targets
-- [ ] Stage 10: Add BDD behavioral tests
-- [ ] Stage 11: Update users' guide documentation
-- [ ] Stage 12: Update roadmap to mark task complete
+- [x] (2026-01-08) Stage 1: Scaffold CLI structure and Config dataclass
+- [x] (2026-01-08) Stage 2: Implement port selection and executable verification
+  helpers
+- [x] (2026-01-08) Stage 3: Implement k3d cluster lifecycle helpers
+- [x] (2026-01-08) Stage 4: Implement namespace and CNPG helpers
+- [x] (2026-01-08) Stage 5: Implement Valkey helpers
+- [x] (2026-01-08) Stage 6: Implement application secret and image helpers
+- [x] (2026-01-08) Stage 7: Implement Helm chart installation helpers
+- [x] (2026-01-08) Stage 8: Wire up `up`, `down`, `status`, `logs` commands
+- [x] (2026-01-08) Stage 9: Add Makefile targets
+- [x] (2026-01-08) Stage 10: Add BDD behavioral tests
+- [x] (2026-01-08) Stage 11: Update users' guide documentation
+- [x] (2026-01-08) Stage 12: Update roadmap to mark task complete
 
 ## Surprises & Discoveries
 
-(To be updated during implementation)
+- **Observation:** cmd-mox works well for single-call scenarios but monkeypatch
+  is more suitable for functions that make multiple subprocess calls with
+  different expected results. Impact: Used monkeypatch with a mock factory
+  pattern for complex helpers like `install_cnpg_operator`.
+
+- **Observation:** The `k3d cluster list` command uses `-o json` flag to return
+  JSON output, which the script parses to check cluster existence. BDD tests
+  needed to return valid JSON instead of tabular output. Impact: Updated
+  SubprocessMock to return JSON arrays for `k3d cluster list -o json`.
 
 ## Decision Log
 
@@ -104,13 +113,36 @@ Thresholds that trigger escalation when breached:
   `docs/scripting-standards.md` where tests mirror script locations. Date:
   2026-01-08
 
-- **Decision:** Use `cmd-mox` for all external command mocking in tests.
-  Rationale: Specified in `docs/scripting-standards.md`; enables testing
-  without requiring Docker or k3d on CI runners. Date: 2026-01-08
+- **Decision:** Use `cmd-mox` for single-call mocking and monkeypatch for
+  multi-call scenarios. Rationale: cmd-mox had verification issues when
+  functions called subprocess.run multiple times with different arguments.
+  Monkeypatch with a mock factory pattern provides more control. Date:
+  2026-01-08
+
+- **Decision:** Install Valkey via Helm (hyperspike chart) instead of plain
+  kubectl apply. Rationale: Matches the approach used for CNPG operator and
+  provides consistent operator lifecycle management. Date: 2026-01-08
 
 ## Outcomes & Retrospective
 
-(To be completed after implementation)
+**What was achieved:**
+
+- `scripts/local_k8s.py` (~1040 lines) implementing all lifecycle commands
+- 381+ unit tests with full coverage of helper functions
+- 4 BDD scenarios covering the main user workflows
+- Makefile targets: `local-k8s-up`, `local-k8s-down`, `local-k8s-status`,
+  `local-k8s-logs`
+- Users' guide documentation with prerequisites, usage, and configuration
+- Roadmap tasks 1.5.d, 1.5.e, and 1.5.f marked complete
+
+**Lessons learned:**
+
+1. Mocking external commands requires careful consideration of output formats
+   (JSON vs tabular) and multi-call scenarios.
+2. BDD tests complement unit tests well by verifying end-to-end command
+   behavior without requiring actual infrastructure.
+3. The Cyclopts framework's environment variable support simplifies CI
+   integration without adding custom argument handling code.
 
 ## Context and Orientation
 
