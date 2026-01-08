@@ -635,7 +635,8 @@ Configure alerts based on structured log queries:
 ## Container image (Phase 1.5.c)
 
 Ghillie provides a container image for Kubernetes deployments. The image runs a
-Falcon ASGI server with health endpoints for Kubernetes probes.
+Falcon Asynchronous Server Gateway Interface (ASGI) application served by
+Granian, with health endpoints for Kubernetes probes.
 
 ### Building the image
 
@@ -663,8 +664,8 @@ Run the container locally to verify the build:
 docker run --rm -p 8080:8080 ghillie:local
 ```
 
-The container starts a Granian ASGI server and logs a startup message. Verify
-the health endpoints:
+The container starts the Granian server and logs a startup message. Verify the
+health endpoints:
 
 ```bash
 curl http://localhost:8080/health

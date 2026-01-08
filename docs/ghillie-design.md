@@ -640,8 +640,9 @@ would not destabilize the reporting infrastructure, paving the way for a true
 ### 8.4 HTTP API Layer Architecture
 
 The Ghillie HTTP API follows a hexagonal (ports and adapters) architecture,
-placing the Falcon ASGI application at the adapter boundary between external
-HTTP consumers and the core Medallion data layers.
+placing the Falcon Asynchronous Server Gateway Interface (ASGI) application at
+the adapter boundary between external HTTP consumers and the core Medallion
+data layers.
 
 **Current implementation (Phase 1.5.c):** The runtime module (`ghillie.runtime`)
 provides minimal Kubernetes health probe endpoints (`/health`, `/ready`) using

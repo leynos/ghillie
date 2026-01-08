@@ -32,7 +32,8 @@ Running the image logs a startup message and responds to HTTP requests on port
 - Configuration must be environment-variable driven (no hardcoded values).
 - All quality gates must pass: `make check-fmt`, `make lint`, `make typecheck`,
   `make test`.
-- Tests must include both unit tests (pytest) and behavioural tests (pytest-bdd).
+- Tests must include both unit tests (pytest) and behaviour-driven development
+  (BDD) tests (pytest-bdd).
 
 ## Tolerances (Exception Triggers)
 
@@ -75,7 +76,7 @@ Running the image logs a startup message and responds to HTTP requests on port
   - [x] Create docker/entrypoint.sh
   - [x] Create Dockerfile with multi-stage build
   - [x] Add Makefile targets for docker-build and docker-run
-  - [ ] Verify image builds and runs locally (manual verification pending)
+  - [x] Verify image builds and runs locally
 - [x] (2026-01-07) Stage D: Documentation and cleanup
   - [x] Update users-guide.md with container usage
   - [x] No deviations from local-k8s-preview-design.md
@@ -167,7 +168,8 @@ align with the architecture documents.
 Create the docker/ directory to hold the entrypoint script, following the
 design sketch convention.
 
-Write failing tests first (TDD approach per AGENTS.md guidelines):
+Write failing tests first (test-driven development (TDD) approach per AGENTS.md
+guidelines):
 
 - Unit tests in `tests/unit/test_runtime.py` for health resources
 - BDD feature in `tests/features/runtime.feature` for container startup behaviour

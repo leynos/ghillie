@@ -29,6 +29,10 @@ __all__ = ["HealthResource", "ReadyResource", "create_app", "main"]
 
 logger = logging.getLogger(__name__)
 
+# TCP port number range limits
+_MIN_PORT = 1
+_MAX_PORT = 65535
+
 
 class HealthResource:
     """Resource for the /health endpoint returning JSON ``{"status": "ok"}``."""
@@ -66,7 +70,19 @@ def main() -> None:
     from granian.constants import Interfaces
 
     host = os.environ.get("GHILLIE_HOST", "0.0.0.0")  # noqa: S104 - bind all interfaces for container
-    port = int(os.environ.get("GHILLIE_PORT", "8080"))
+    port_str = os.environ.get("GHILLIE_PORT", "8080")
+    try:
+        port = int(port_str)
+        if not (_MIN_PORT <= port <= _MAX_PORT):
+            raise ValueError  # noqa: TRY301
+    except ValueError:
+        logger.exception(
+            "Invalid GHILLIE_PORT value: %r (must be %d-%d)",
+            port_str,
+            _MIN_PORT,
+            _MAX_PORT,
+        )
+        raise SystemExit(1) from None
     log_level_str = os.environ.get("GHILLIE_LOG_LEVEL", "INFO")
 
     # Configure logging

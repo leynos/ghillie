@@ -14,8 +14,8 @@ set -e
 # Forward SIGTERM and SIGINT to the child process for graceful shutdown
 trap 'kill -TERM $child_pid 2>/dev/null' TERM INT
 
-# Execute the command passed as arguments
-exec "$@" &
+# Execute the command passed as arguments (without exec, to allow trap to work)
+"$@" &
 child_pid=$!
 
 # Wait for the child process to complete

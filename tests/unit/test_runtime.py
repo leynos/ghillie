@@ -35,7 +35,8 @@ class TestHealthEndpoint:
     ) -> None:
         """GET /health has application/json content type."""
         result = client.simulate_get("/health")
-        assert result.headers.get("content-type") == "application/json"
+        content_type = result.headers.get("content-type", "")
+        assert content_type.startswith("application/json")
 
 
 class TestReadyEndpoint:
@@ -58,7 +59,8 @@ class TestReadyEndpoint:
     ) -> None:
         """GET /ready has application/json content type."""
         result = client.simulate_get("/ready")
-        assert result.headers.get("content-type") == "application/json"
+        content_type = result.headers.get("content-type", "")
+        assert content_type.startswith("application/json")
 
 
 class TestCreateApp:

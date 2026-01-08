@@ -1,7 +1,8 @@
 Feature: Ghillie runtime service
 
   The Ghillie runtime provides HTTP endpoints for Kubernetes health probes.
-  The service exposes /health and /ready endpoints on port 8080.
+  The service exposes /health and /ready endpoints on a configurable port
+  (default 8080, set via GHILLIE_PORT environment variable).
 
   Scenario: Health endpoint returns ok status
     Given a running Ghillie runtime app
