@@ -678,8 +678,8 @@ Integration validation (optional, not run in CI):
 
 ### Helm repositories
 
-- `cnpg` - https://cloudnative-pg.github.io/charts (for cloudnative-pg)
-- `valkey-operator` - https://hyperspike.github.io/valkey-operator (for
+- `cnpg` - <https://cloudnative-pg.github.io/charts> (for cloudnative-pg)
+- `valkey-operator` - <https://hyperspike.github.io/valkey-operator> (for
   valkey-operator)
 
 ### Key function signatures

@@ -2,29 +2,25 @@
 
 from __future__ import annotations
 
-# Register cmd-mox plugin for mocking external executables in script tests.
-# This must be defined before other imports per pytest plugin loading rules.
-pytest_plugins = ("cmd_mox.pytest_plugin",)
+import asyncio
+import contextlib
+import logging
+import os
+import socket
+import typing as typ
 
-import asyncio  # noqa: E402
-import contextlib  # noqa: E402
-import logging  # noqa: E402
-import os  # noqa: E402
-import socket  # noqa: E402
-import typing as typ  # noqa: E402
-
-import pytest_asyncio  # noqa: E402
-from sqlalchemy.ext.asyncio import (  # noqa: E402
+import pytest_asyncio
+from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
 
-from ghillie.bronze import init_bronze_storage  # noqa: E402
-from ghillie.catalogue import init_catalogue_storage  # noqa: E402
-from ghillie.gold import init_gold_storage  # noqa: E402
-from ghillie.silver import init_silver_storage  # noqa: E402
+from ghillie.bronze import init_bronze_storage
+from ghillie.catalogue import init_catalogue_storage
+from ghillie.gold import init_gold_storage
+from ghillie.silver import init_silver_storage
 
 if typ.TYPE_CHECKING:
     from pathlib import Path

@@ -118,6 +118,8 @@ max-args = 4
 [tool.pytest.ini_options]
 # Tests automatically killed after seconds elapsed
 timeout = 30
+# Register cmd-mox plugin for external command mocking
+addopts = "-p cmd_mox.pytest_plugin"
 
 [tool.uv]
 package = true

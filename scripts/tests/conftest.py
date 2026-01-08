@@ -1,9 +1,7 @@
 """Pytest configuration for scripts tests.
 
 Adds the scripts directory to the Python path for imports.
-
-Note: The cmd-mox plugin is registered in the main tests/conftest.py file
-to avoid conflicts when running all tests from the repository root.
+The cmd-mox plugin is registered globally via pyproject.toml.
 """
 
 from __future__ import annotations
