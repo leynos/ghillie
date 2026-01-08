@@ -710,6 +710,97 @@ def import_image_to_k3d(cluster_name: str, image_repo: str, image_tag: str) -> N
 
 
 # =============================================================================
+# Helm chart installation helpers
+# =============================================================================
+
+
+def install_ghillie_chart(cfg: Config, env: dict[str, str]) -> None:
+    """Install the Ghillie Helm chart.
+
+    Uses helm upgrade --install for idempotent installation. The chart is
+    installed from the local charts/ghillie directory using the local
+    values file.
+
+    Args:
+        cfg: Configuration with chart path, namespace, and values file.
+        env: Environment dict with KUBECONFIG set.
+
+    """
+    subprocess.run(  # noqa: S603
+        [  # noqa: S607
+            "helm",
+            "upgrade",
+            "--install",
+            "ghillie",
+            str(cfg.chart_path),
+            "--namespace",
+            cfg.namespace,
+            "--values",
+            str(cfg.values_file),
+            "--set",
+            f"image.repository={cfg.image_repo}",
+            "--set",
+            f"image.tag={cfg.image_tag}",
+            "--wait",
+        ],
+        check=True,
+        env=env,
+    )
+
+
+def print_status(cfg: Config, env: dict[str, str]) -> None:
+    """Print pod status for the preview environment.
+
+    Displays the status of all pods in the configured namespace using
+    kubectl get pods.
+
+    Args:
+        cfg: Configuration with namespace.
+        env: Environment dict with KUBECONFIG set.
+
+    """
+    subprocess.run(  # noqa: S603
+        [  # noqa: S607
+            "kubectl",
+            "get",
+            "pods",
+            f"--namespace={cfg.namespace}",
+            "-o",
+            "wide",
+        ],
+        check=True,
+        env=env,
+    )
+
+
+def tail_logs(cfg: Config, env: dict[str, str], *, follow: bool = False) -> None:
+    """Stream logs from Ghillie pods.
+
+    Uses kubectl logs to display logs from pods with the app=ghillie label.
+
+    Args:
+        cfg: Configuration with namespace.
+        env: Environment dict with KUBECONFIG set.
+        follow: If True, continuously stream logs (like tail -f).
+
+    """
+    cmd = [
+        "kubectl",
+        "logs",
+        "--selector=app.kubernetes.io/name=ghillie",
+        f"--namespace={cfg.namespace}",
+    ]
+    if follow:
+        cmd.append("--follow")
+
+    subprocess.run(  # noqa: S603
+        cmd,
+        check=True,
+        env=env,
+    )
+
+
+# =============================================================================
 # CLI commands
 # =============================================================================
 

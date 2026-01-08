@@ -23,13 +23,16 @@ from local_k8s import (
     delete_k3d_cluster,
     import_image_to_k3d,
     install_cnpg_operator,
+    install_ghillie_chart,
     install_valkey_operator,
     kubeconfig_env,
     namespace_exists,
     pick_free_loopback_port,
+    print_status,
     read_pg_app_uri,
     read_valkey_uri,
     require_exe,
+    tail_logs,
     wait_for_cnpg_ready,
     wait_for_valkey_ready,
     write_kubeconfig,
@@ -727,3 +730,128 @@ class TestImportImageToK3d:
         ).returns(exit_code=0)
 
         import_image_to_k3d("custom-cluster", "myimage", "v2")
+
+
+class TestInstallGhillieChart:
+    """Tests for install_ghillie_chart helper using cmd-mox."""
+
+    def test_invokes_helm_upgrade(self, cmd_mox) -> None:  # noqa: ANN001
+        """Should invoke helm upgrade --install with correct args."""
+        cfg = Config()
+
+        cmd_mox.mock("helm").with_args(
+            "upgrade",
+            "--install",
+            "ghillie",
+            "charts/ghillie",
+            "--namespace",
+            "ghillie",
+            "--values",
+            "tests/helm/fixtures/values_local.yaml",
+            "--set",
+            "image.repository=ghillie",
+            "--set",
+            "image.tag=local",
+            "--wait",
+        ).returns(exit_code=0)
+
+        install_ghillie_chart(cfg, _test_env())
+
+    def test_uses_config_values(self, cmd_mox) -> None:  # noqa: ANN001
+        """Should use values from config."""
+        cfg = Config(
+            namespace="custom-ns",
+            image_repo="custom-repo",
+            image_tag="v1.0.0",
+        )
+
+        cmd_mox.mock("helm").with_args(
+            "upgrade",
+            "--install",
+            "ghillie",
+            "charts/ghillie",
+            "--namespace",
+            "custom-ns",
+            "--values",
+            "tests/helm/fixtures/values_local.yaml",
+            "--set",
+            "image.repository=custom-repo",
+            "--set",
+            "image.tag=v1.0.0",
+            "--wait",
+        ).returns(exit_code=0)
+
+        install_ghillie_chart(cfg, _test_env())
+
+
+class TestPrintStatus:
+    """Tests for print_status helper using cmd-mox."""
+
+    def test_invokes_kubectl_get_pods(self, cmd_mox) -> None:  # noqa: ANN001
+        """Should invoke kubectl get pods with namespace."""
+        cfg = Config()
+
+        cmd_mox.mock("kubectl").with_args(
+            "get",
+            "pods",
+            "--namespace=ghillie",
+            "-o",
+            "wide",
+        ).returns(exit_code=0)
+
+        print_status(cfg, _test_env())
+
+    def test_uses_config_namespace(self, cmd_mox) -> None:  # noqa: ANN001
+        """Should use namespace from config."""
+        cfg = Config(namespace="custom-ns")
+
+        cmd_mox.mock("kubectl").with_args(
+            "get",
+            "pods",
+            "--namespace=custom-ns",
+            "-o",
+            "wide",
+        ).returns(exit_code=0)
+
+        print_status(cfg, _test_env())
+
+
+class TestTailLogs:
+    """Tests for tail_logs helper using cmd-mox."""
+
+    def test_invokes_kubectl_logs(self, cmd_mox) -> None:  # noqa: ANN001
+        """Should invoke kubectl logs with selector."""
+        cfg = Config()
+
+        cmd_mox.mock("kubectl").with_args(
+            "logs",
+            "--selector=app.kubernetes.io/name=ghillie",
+            "--namespace=ghillie",
+        ).returns(exit_code=0)
+
+        tail_logs(cfg, _test_env())
+
+    def test_adds_follow_flag(self, cmd_mox) -> None:  # noqa: ANN001
+        """Should add --follow flag when requested."""
+        cfg = Config()
+
+        cmd_mox.mock("kubectl").with_args(
+            "logs",
+            "--selector=app.kubernetes.io/name=ghillie",
+            "--namespace=ghillie",
+            "--follow",
+        ).returns(exit_code=0)
+
+        tail_logs(cfg, _test_env(), follow=True)
+
+    def test_uses_config_namespace(self, cmd_mox) -> None:  # noqa: ANN001
+        """Should use namespace from config."""
+        cfg = Config(namespace="custom-ns")
+
+        cmd_mox.mock("kubectl").with_args(
+            "logs",
+            "--selector=app.kubernetes.io/name=ghillie",
+            "--namespace=custom-ns",
+        ).returns(exit_code=0)
+
+        tail_logs(cfg, _test_env())
