@@ -38,7 +38,7 @@ def empty_evidence(repository_metadata: RepositoryMetadata) -> RepositoryEvidenc
         repository=repository_metadata,
         window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
         window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
-        generated_at=dt.datetime.now(dt.UTC),
+        generated_at=dt.datetime(2024, 7, 8, 0, 0, 1, tzinfo=dt.UTC),
     )
 
 
@@ -110,7 +110,7 @@ def feature_evidence(
             ),
         ),
         event_fact_ids=(1, 2, 3, 4),
-        generated_at=dt.datetime.now(dt.UTC),
+        generated_at=dt.datetime(2024, 7, 8, 0, 0, 1, tzinfo=dt.UTC),
     )
 
 
@@ -127,11 +127,17 @@ def bug_heavy_evidence(
             CommitEvidence(
                 sha="fix123",
                 message="fix: resolve crash on startup",
+                author_name="Dave",
+                author_email="dave@example.com",
+                committed_at=dt.datetime(2024, 7, 2, tzinfo=dt.UTC),
                 work_type=WorkType.BUG,
             ),
             CommitEvidence(
                 sha="fix456",
                 message="fix: correct memory leak",
+                author_name="Eve",
+                author_email="eve@example.com",
+                committed_at=dt.datetime(2024, 7, 3, tzinfo=dt.UTC),
                 work_type=WorkType.BUG,
             ),
         ),
@@ -140,8 +146,11 @@ def bug_heavy_evidence(
                 id=102,
                 number=43,
                 title="Fix startup crash",
+                author_login="dave",
                 state="merged",
                 labels=("bug",),
+                created_at=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                merged_at=dt.datetime(2024, 7, 2, tzinfo=dt.UTC),
                 work_type=WorkType.BUG,
             ),
         ),
@@ -150,8 +159,10 @@ def bug_heavy_evidence(
                 id=202,
                 number=11,
                 title="Application crashes on startup",
+                author_login="frank",
                 state="open",
                 labels=("bug",),
+                created_at=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
                 work_type=WorkType.BUG,
             ),
         ),
@@ -165,7 +176,7 @@ def bug_heavy_evidence(
             ),
         ),
         event_fact_ids=(5, 6, 7, 8),
-        generated_at=dt.datetime.now(dt.UTC),
+        generated_at=dt.datetime(2024, 7, 8, 0, 0, 1, tzinfo=dt.UTC),
     )
 
 
@@ -196,6 +207,9 @@ def evidence_with_previous_risks(
             CommitEvidence(
                 sha="new123",
                 message="feat: add search improvements",
+                author_name="Grace",
+                author_email="grace@example.com",
+                committed_at=dt.datetime(2024, 7, 9, tzinfo=dt.UTC),
                 work_type=WorkType.FEATURE,
             ),
         ),
@@ -208,5 +222,5 @@ def evidence_with_previous_risks(
             ),
         ),
         event_fact_ids=(10,),
-        generated_at=dt.datetime.now(dt.UTC),
+        generated_at=dt.datetime(2024, 7, 15, 0, 0, 1, tzinfo=dt.UTC),
     )

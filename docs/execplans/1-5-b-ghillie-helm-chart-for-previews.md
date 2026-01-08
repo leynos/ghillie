@@ -29,8 +29,7 @@ value configurations.
 - Ingress must support hostless mode for local k3d (empty `host: ""`).
 - ExternalSecret must be optional and only render when
   `secrets.externalSecret.enabled` is true.
-- All Python test code must pass `make check-fmt`, `make lint`,
-  `make typecheck`,
+- All Python test code must pass `make check-fmt`, `make lint`, `make typecheck`,
   and `make test`.
 - No modifications to existing application code; this task is chart-only plus
   tests.

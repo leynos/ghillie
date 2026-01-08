@@ -21,13 +21,29 @@ from ghillie.status import MockStatusModel, RepositoryStatusResult
 class TestMockStatusModelHeuristics:
     """Tests for MockStatusModel deterministic heuristics."""
 
+    def _summarize(self, evidence: RepositoryEvidenceBundle) -> RepositoryStatusResult:
+        """Run MockStatusModel on evidence and return the result.
+
+        Parameters
+        ----------
+        evidence
+            The repository evidence bundle to summarize.
+
+        Returns
+        -------
+        RepositoryStatusResult
+            The status result from the mock model.
+
+        """
+        model = MockStatusModel()
+        return asyncio.run(model.summarize_repository(evidence))
+
     def test_returns_unknown_for_empty_evidence(
         self,
         empty_evidence: RepositoryEvidenceBundle,
     ) -> None:
         """Mock returns UNKNOWN when evidence bundle has no events."""
-        model = MockStatusModel()
-        result = asyncio.run(model.summarize_repository(empty_evidence))
+        result = self._summarize(empty_evidence)
 
         assert result.status == ReportStatus.UNKNOWN
 
@@ -36,8 +52,7 @@ class TestMockStatusModelHeuristics:
         feature_evidence: RepositoryEvidenceBundle,
     ) -> None:
         """Mock returns ON_TRACK for normal feature activity."""
-        model = MockStatusModel()
-        result = asyncio.run(model.summarize_repository(feature_evidence))
+        result = self._summarize(feature_evidence)
 
         assert result.status == ReportStatus.ON_TRACK
 
@@ -46,8 +61,7 @@ class TestMockStatusModelHeuristics:
         bug_heavy_evidence: RepositoryEvidenceBundle,
     ) -> None:
         """Mock returns AT_RISK when bug activity exceeds features."""
-        model = MockStatusModel()
-        result = asyncio.run(model.summarize_repository(bug_heavy_evidence))
+        result = self._summarize(bug_heavy_evidence)
 
         assert result.status == ReportStatus.AT_RISK
 
@@ -56,8 +70,7 @@ class TestMockStatusModelHeuristics:
         evidence_with_previous_risks: RepositoryEvidenceBundle,
     ) -> None:
         """Mock returns AT_RISK when previous report had risks and AT_RISK status."""
-        model = MockStatusModel()
-        result = asyncio.run(model.summarize_repository(evidence_with_previous_risks))
+        result = self._summarize(evidence_with_previous_risks)
 
         assert result.status == ReportStatus.AT_RISK
 
@@ -65,13 +78,29 @@ class TestMockStatusModelHeuristics:
 class TestMockStatusModelOutput:
     """Tests for MockStatusModel output content quality."""
 
+    def _summarize(self, evidence: RepositoryEvidenceBundle) -> RepositoryStatusResult:
+        """Run MockStatusModel on evidence and return the result.
+
+        Parameters
+        ----------
+        evidence
+            The repository evidence bundle to summarize.
+
+        Returns
+        -------
+        RepositoryStatusResult
+            The status result from the mock model.
+
+        """
+        model = MockStatusModel()
+        return asyncio.run(model.summarize_repository(evidence))
+
     def test_summary_mentions_repository(
         self,
         feature_evidence: RepositoryEvidenceBundle,
     ) -> None:
         """Mock generates summary mentioning repository slug."""
-        model = MockStatusModel()
-        result = asyncio.run(model.summarize_repository(feature_evidence))
+        result = self._summarize(feature_evidence)
 
         assert "octo/reef" in result.summary
 
@@ -80,8 +109,7 @@ class TestMockStatusModelOutput:
         feature_evidence: RepositoryEvidenceBundle,
     ) -> None:
         """Mock generates summary with event counts."""
-        model = MockStatusModel()
-        result = asyncio.run(model.summarize_repository(feature_evidence))
+        result = self._summarize(feature_evidence)
 
         # Evidence has 2 commits, 1 PR, 1 issue
         assert "2 commits" in result.summary
@@ -93,8 +121,7 @@ class TestMockStatusModelOutput:
         empty_evidence: RepositoryEvidenceBundle,
     ) -> None:
         """Mock generates appropriate summary for empty evidence."""
-        model = MockStatusModel()
-        result = asyncio.run(model.summarize_repository(empty_evidence))
+        result = self._summarize(empty_evidence)
 
         assert "no recorded activity" in result.summary.lower()
 
@@ -103,8 +130,7 @@ class TestMockStatusModelOutput:
         feature_evidence: RepositoryEvidenceBundle,
     ) -> None:
         """Mock extracts highlights from feature work."""
-        model = MockStatusModel()
-        result = asyncio.run(model.summarize_repository(feature_evidence))
+        result = self._summarize(feature_evidence)
 
         # Should have highlight about delivered PRs
         assert len(result.highlights) > 0
@@ -114,8 +140,7 @@ class TestMockStatusModelOutput:
         evidence_with_previous_risks: RepositoryEvidenceBundle,
     ) -> None:
         """Mock carries forward risks from previous reports."""
-        model = MockStatusModel()
-        result = asyncio.run(model.summarize_repository(evidence_with_previous_risks))
+        result = self._summarize(evidence_with_previous_risks)
 
         # Should reference ongoing risks
         assert len(result.risks) > 0

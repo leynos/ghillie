@@ -68,63 +68,303 @@ def _create_octo_reef_metadata() -> RepositoryMetadata:
     )
 
 
-def _create_evidence_bundle(  # noqa: PLR0913
+class EvidenceBundleBuilder:
+    """Fluent builder for creating RepositoryEvidenceBundle instances.
+
+    Provides a readable, chainable interface for constructing evidence bundles
+    with sensible defaults. Each `with_*` method returns self for chaining.
+
+    Examples
+    --------
+    >>> metadata = _create_octo_reef_metadata()
+    >>> bundle = (
+    ...     EvidenceBundleBuilder(metadata)
+    ...     .with_commits((CommitEvidence(...),))
+    ...     .with_event_fact_ids((1, 2, 3))
+    ...     .build()
+    ... )
+
+    """
+
+    def __init__(self, metadata: RepositoryMetadata) -> None:
+        """Initialize builder with required repository metadata.
+
+        Parameters
+        ----------
+        metadata
+            Repository metadata for the bundle.
+
+        """
+        self._metadata = metadata
+        self._window_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
+        self._window_end = dt.datetime(2024, 7, 8, tzinfo=dt.UTC)
+        self._commits: tuple[CommitEvidence, ...] = ()
+        self._pull_requests: tuple[PullRequestEvidence, ...] = ()
+        self._issues: tuple[IssueEvidence, ...] = ()
+        self._work_type_groupings: tuple[WorkTypeGrouping, ...] = ()
+        self._previous_reports: tuple[PreviousReportSummary, ...] = ()
+        self._event_fact_ids: tuple[int, ...] = ()
+
+    def with_window(
+        self, start: dt.datetime, end: dt.datetime
+    ) -> EvidenceBundleBuilder:
+        """Set the reporting window dates.
+
+        Parameters
+        ----------
+        start
+            Start of the reporting window.
+        end
+            End of the reporting window.
+
+        Returns
+        -------
+        EvidenceBundleBuilder
+            Self for method chaining.
+
+        """
+        self._window_start = start
+        self._window_end = end
+        return self
+
+    def with_commits(
+        self, commits: tuple[CommitEvidence, ...]
+    ) -> EvidenceBundleBuilder:
+        """Set commit evidence records.
+
+        Parameters
+        ----------
+        commits
+            Tuple of commit evidence records.
+
+        Returns
+        -------
+        EvidenceBundleBuilder
+            Self for method chaining.
+
+        """
+        self._commits = commits
+        return self
+
+    def with_pull_requests(
+        self, pull_requests: tuple[PullRequestEvidence, ...]
+    ) -> EvidenceBundleBuilder:
+        """Set pull request evidence records.
+
+        Parameters
+        ----------
+        pull_requests
+            Tuple of pull request evidence records.
+
+        Returns
+        -------
+        EvidenceBundleBuilder
+            Self for method chaining.
+
+        """
+        self._pull_requests = pull_requests
+        return self
+
+    def with_issues(self, issues: tuple[IssueEvidence, ...]) -> EvidenceBundleBuilder:
+        """Set issue evidence records.
+
+        Parameters
+        ----------
+        issues
+            Tuple of issue evidence records.
+
+        Returns
+        -------
+        EvidenceBundleBuilder
+            Self for method chaining.
+
+        """
+        self._issues = issues
+        return self
+
+    def with_work_type_groupings(
+        self, groupings: tuple[WorkTypeGrouping, ...]
+    ) -> EvidenceBundleBuilder:
+        """Set work type groupings.
+
+        Parameters
+        ----------
+        groupings
+            Tuple of work type groupings.
+
+        Returns
+        -------
+        EvidenceBundleBuilder
+            Self for method chaining.
+
+        """
+        self._work_type_groupings = groupings
+        return self
+
+    def with_previous_reports(
+        self, reports: tuple[PreviousReportSummary, ...]
+    ) -> EvidenceBundleBuilder:
+        """Set previous report summaries.
+
+        Parameters
+        ----------
+        reports
+            Tuple of previous report summaries.
+
+        Returns
+        -------
+        EvidenceBundleBuilder
+            Self for method chaining.
+
+        """
+        self._previous_reports = reports
+        return self
+
+    def with_event_fact_ids(self, ids: tuple[int, ...]) -> EvidenceBundleBuilder:
+        """Set event fact IDs covered by this bundle.
+
+        Parameters
+        ----------
+        ids
+            Tuple of event fact IDs.
+
+        Returns
+        -------
+        EvidenceBundleBuilder
+            Self for method chaining.
+
+        """
+        self._event_fact_ids = ids
+        return self
+
+    def build(self) -> RepositoryEvidenceBundle:
+        """Construct the RepositoryEvidenceBundle.
+
+        Returns
+        -------
+        RepositoryEvidenceBundle
+            Configured evidence bundle with generated_at set to a fixed timestamp.
+
+        """
+        return RepositoryEvidenceBundle(
+            repository=self._metadata,
+            window_start=self._window_start,
+            window_end=self._window_end,
+            commits=self._commits,
+            pull_requests=self._pull_requests,
+            issues=self._issues,
+            work_type_groupings=self._work_type_groupings,
+            previous_reports=self._previous_reports,
+            event_fact_ids=self._event_fact_ids,
+            generated_at=dt.datetime(2024, 7, 8, 0, 0, 1, tzinfo=dt.UTC),
+        )
+
+
+def _create_evidence_with_open_items(
     metadata: RepositoryMetadata,
     *,
-    commits: tuple[CommitEvidence, ...] = (),
-    pull_requests: tuple[PullRequestEvidence, ...] = (),
-    issues: tuple[IssueEvidence, ...] = (),
-    work_type_groupings: tuple[WorkTypeGrouping, ...] = (),
-    previous_reports: tuple[PreviousReportSummary, ...] = (),
-    event_fact_ids: tuple[int, ...] = (),
-    window_start: dt.datetime | None = None,
-    window_end: dt.datetime | None = None,
+    item_type: typ.Literal["pr", "issue"],
 ) -> RepositoryEvidenceBundle:
-    """Create evidence bundle with configurable fields.
+    """Create evidence bundle with open PRs or issues for testing.
 
     Parameters
     ----------
     metadata
         Repository metadata for the bundle.
-    commits
-        Tuple of commit evidence records. Defaults to empty tuple.
-    pull_requests
-        Tuple of pull request evidence records. Defaults to empty tuple.
-    issues
-        Tuple of issue evidence records. Defaults to empty tuple.
-    work_type_groupings
-        Tuple of work type groupings. Defaults to empty tuple.
-    previous_reports
-        Tuple of previous report summaries. Defaults to empty tuple.
-    event_fact_ids
-        Tuple of event fact IDs covered by this bundle. Defaults to empty tuple.
-    window_start
-        Start of the reporting window. Defaults to 2024-07-01 UTC.
-    window_end
-        End of the reporting window. Defaults to 2024-07-08 UTC.
+    item_type
+        Type of open items to include: "pr" for pull requests, "issue" for issues.
 
     Returns
     -------
     RepositoryEvidenceBundle
-        Configured evidence bundle with generated_at set to current UTC time.
+        Evidence bundle with specified open items.
 
     """
-    if window_start is None:
-        window_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
-    if window_end is None:
-        window_end = dt.datetime(2024, 7, 8, tzinfo=dt.UTC)
-
-    return RepositoryEvidenceBundle(
-        repository=metadata,
-        window_start=window_start,
-        window_end=window_end,
-        commits=commits,
-        pull_requests=pull_requests,
-        issues=issues,
-        work_type_groupings=work_type_groupings,
-        previous_reports=previous_reports,
-        event_fact_ids=event_fact_ids,
-        generated_at=dt.datetime.now(dt.UTC),
+    if item_type == "pr":
+        return (
+            EvidenceBundleBuilder(metadata)
+            .with_commits(
+                (
+                    CommitEvidence(
+                        sha="abc123",
+                        message="feat: add feature",
+                        work_type=WorkType.FEATURE,
+                    ),
+                )
+            )
+            .with_pull_requests(
+                (
+                    PullRequestEvidence(
+                        id=100,
+                        number=50,
+                        title="Add feature X",
+                        state="open",
+                        work_type=WorkType.FEATURE,
+                    ),
+                    PullRequestEvidence(
+                        id=101,
+                        number=51,
+                        title="Add feature Y",
+                        state="open",
+                        work_type=WorkType.FEATURE,
+                    ),
+                )
+            )
+            .with_work_type_groupings(
+                (
+                    WorkTypeGrouping(
+                        work_type=WorkType.FEATURE,
+                        commit_count=1,
+                        pr_count=2,
+                        issue_count=0,
+                    ),
+                )
+            )
+            .with_event_fact_ids((1, 2, 3))
+            .build()
+        )
+    # item_type == "issue"
+    return (
+        EvidenceBundleBuilder(metadata)
+        .with_commits(
+            (
+                CommitEvidence(
+                    sha="abc123",
+                    message="feat: add feature",
+                    work_type=WorkType.FEATURE,
+                ),
+            )
+        )
+        .with_issues(
+            (
+                IssueEvidence(
+                    id=200,
+                    number=10,
+                    title="Bug in login",
+                    state="open",
+                    work_type=WorkType.BUG,
+                ),
+                IssueEvidence(
+                    id=201,
+                    number=11,
+                    title="Bug in logout",
+                    state="open",
+                    work_type=WorkType.BUG,
+                ),
+            )
+        )
+        .with_work_type_groupings(
+            (
+                WorkTypeGrouping(
+                    work_type=WorkType.FEATURE,
+                    commit_count=1,
+                    pr_count=0,
+                    issue_count=0,
+                ),
+            )
+        )
+        .with_event_fact_ids((1, 2, 3))
+        .build()
     )
 
 
@@ -170,40 +410,47 @@ def given_evidence_bundle_with_activity(
 ) -> None:
     """Create evidence bundle with feature activity."""
     metadata = status_model_context["repository_metadata"]
-    status_model_context["evidence_bundle"] = _create_evidence_bundle(
-        metadata=metadata,
-        commits=(
-            CommitEvidence(
-                sha="abc123",
-                message="feat: add new dashboard",
-                author_name="Alice",
-                committed_at=dt.datetime(2024, 7, 2, tzinfo=dt.UTC),
-                work_type=WorkType.FEATURE,
-            ),
-        ),
-        pull_requests=(
-            PullRequestEvidence(
-                id=101,
-                number=42,
-                title="Add new dashboard feature",
-                author_login="alice",
-                state="merged",
-                labels=("feature",),
-                created_at=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
-                merged_at=dt.datetime(2024, 7, 2, tzinfo=dt.UTC),
-                work_type=WorkType.FEATURE,
-            ),
-        ),
-        work_type_groupings=(
-            WorkTypeGrouping(
-                work_type=WorkType.FEATURE,
-                commit_count=1,
-                pr_count=1,
-                issue_count=0,
-                sample_titles=("Add new dashboard feature",),
-            ),
-        ),
-        event_fact_ids=(1, 2),
+    status_model_context["evidence_bundle"] = (
+        EvidenceBundleBuilder(metadata)
+        .with_commits(
+            (
+                CommitEvidence(
+                    sha="abc123",
+                    message="feat: add new dashboard",
+                    author_name="Alice",
+                    committed_at=dt.datetime(2024, 7, 2, tzinfo=dt.UTC),
+                    work_type=WorkType.FEATURE,
+                ),
+            )
+        )
+        .with_pull_requests(
+            (
+                PullRequestEvidence(
+                    id=101,
+                    number=42,
+                    title="Add new dashboard feature",
+                    author_login="alice",
+                    state="merged",
+                    labels=("feature",),
+                    created_at=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                    merged_at=dt.datetime(2024, 7, 2, tzinfo=dt.UTC),
+                    work_type=WorkType.FEATURE,
+                ),
+            )
+        )
+        .with_work_type_groupings(
+            (
+                WorkTypeGrouping(
+                    work_type=WorkType.FEATURE,
+                    commit_count=1,
+                    pr_count=1,
+                    issue_count=0,
+                    sample_titles=("Add new dashboard feature",),
+                ),
+            )
+        )
+        .with_event_fact_ids((1, 2))
+        .build()
     )
 
 
@@ -213,40 +460,49 @@ def given_evidence_with_previous_report(
 ) -> None:
     """Create evidence bundle with previous at-risk report."""
     metadata = status_model_context["repository_metadata"]
-    status_model_context["evidence_bundle"] = _create_evidence_bundle(
-        metadata=metadata,
-        window_start=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
-        window_end=dt.datetime(2024, 7, 15, tzinfo=dt.UTC),
-        previous_reports=(
-            PreviousReportSummary(
-                report_id="prev-report-1",
-                window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
-                window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
-                status=ReportStatus.AT_RISK,
-                highlights=("Delivered API v2",),
-                risks=(
-                    "Database migration incomplete",
-                    "Performance regression in search",
+    status_model_context["evidence_bundle"] = (
+        EvidenceBundleBuilder(metadata)
+        .with_window(
+            dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+            dt.datetime(2024, 7, 15, tzinfo=dt.UTC),
+        )
+        .with_previous_reports(
+            (
+                PreviousReportSummary(
+                    report_id="prev-report-1",
+                    window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                    window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+                    status=ReportStatus.AT_RISK,
+                    highlights=("Delivered API v2",),
+                    risks=(
+                        "Database migration incomplete",
+                        "Performance regression in search",
+                    ),
+                    event_count=15,
                 ),
-                event_count=15,
-            ),
-        ),
-        commits=(
-            CommitEvidence(
-                sha="new123",
-                message="feat: add search improvements",
-                work_type=WorkType.FEATURE,
-            ),
-        ),
-        work_type_groupings=(
-            WorkTypeGrouping(
-                work_type=WorkType.FEATURE,
-                commit_count=1,
-                pr_count=0,
-                issue_count=0,
-            ),
-        ),
-        event_fact_ids=(10,),
+            )
+        )
+        .with_commits(
+            (
+                CommitEvidence(
+                    sha="new123",
+                    message="feat: add search improvements",
+                    work_type=WorkType.FEATURE,
+                ),
+            )
+        )
+        .with_work_type_groupings(
+            (
+                WorkTypeGrouping(
+                    work_type=WorkType.FEATURE,
+                    commit_count=1,
+                    pr_count=0,
+                    issue_count=0,
+                ),
+            )
+        )
+        .with_event_fact_ids((10,))
+        .build()
     )
 
 
@@ -256,7 +512,7 @@ def given_empty_evidence_bundle(
 ) -> None:
     """Create evidence bundle with no events."""
     metadata = status_model_context["repository_metadata"]
-    status_model_context["evidence_bundle"] = _create_evidence_bundle(metadata=metadata)
+    status_model_context["evidence_bundle"] = EvidenceBundleBuilder(metadata).build()
 
 
 @given(
@@ -277,40 +533,47 @@ def given_evidence_with_bug_heavy_activity(
 ) -> None:
     """Create evidence bundle with more bugs than features."""
     metadata = status_model_context["repository_metadata"]
-    status_model_context["evidence_bundle"] = _create_evidence_bundle(
-        metadata=metadata,
-        commits=(
-            CommitEvidence(
-                sha="fix123",
-                message="fix: resolve crash on startup",
-                work_type=WorkType.BUG,
-            ),
-            CommitEvidence(
-                sha="fix456",
-                message="fix: correct memory leak",
-                work_type=WorkType.BUG,
-            ),
-        ),
-        pull_requests=(
-            PullRequestEvidence(
-                id=102,
-                number=43,
-                title="Fix startup crash",
-                state="merged",
-                labels=("bug",),
-                work_type=WorkType.BUG,
-            ),
-        ),
-        work_type_groupings=(
-            WorkTypeGrouping(
-                work_type=WorkType.BUG,
-                commit_count=2,
-                pr_count=1,
-                issue_count=0,
-                sample_titles=("Fix startup crash",),
-            ),
-        ),
-        event_fact_ids=(5, 6, 7),
+    status_model_context["evidence_bundle"] = (
+        EvidenceBundleBuilder(metadata)
+        .with_commits(
+            (
+                CommitEvidence(
+                    sha="fix123",
+                    message="fix: resolve crash on startup",
+                    work_type=WorkType.BUG,
+                ),
+                CommitEvidence(
+                    sha="fix456",
+                    message="fix: correct memory leak",
+                    work_type=WorkType.BUG,
+                ),
+            )
+        )
+        .with_pull_requests(
+            (
+                PullRequestEvidence(
+                    id=102,
+                    number=43,
+                    title="Fix startup crash",
+                    state="merged",
+                    labels=("bug",),
+                    work_type=WorkType.BUG,
+                ),
+            )
+        )
+        .with_work_type_groupings(
+            (
+                WorkTypeGrouping(
+                    work_type=WorkType.BUG,
+                    commit_count=2,
+                    pr_count=1,
+                    issue_count=0,
+                    sample_titles=("Fix startup crash",),
+                ),
+            )
+        )
+        .with_event_fact_ids((5, 6, 7))
+        .build()
     )
 
 
@@ -332,40 +595,8 @@ def given_evidence_with_open_prs(
 ) -> None:
     """Create evidence bundle with open pull requests."""
     metadata = status_model_context["repository_metadata"]
-    status_model_context["evidence_bundle"] = _create_evidence_bundle(
-        metadata=metadata,
-        commits=(
-            CommitEvidence(
-                sha="abc123",
-                message="feat: add feature X",
-                work_type=WorkType.FEATURE,
-            ),
-        ),
-        pull_requests=(
-            PullRequestEvidence(
-                id=100,
-                number=50,
-                title="Add feature X",
-                state="open",
-                work_type=WorkType.FEATURE,
-            ),
-            PullRequestEvidence(
-                id=101,
-                number=51,
-                title="Add feature Y",
-                state="open",
-                work_type=WorkType.FEATURE,
-            ),
-        ),
-        work_type_groupings=(
-            WorkTypeGrouping(
-                work_type=WorkType.FEATURE,
-                commit_count=1,
-                pr_count=2,
-                issue_count=0,
-            ),
-        ),
-        event_fact_ids=(1, 2, 3),
+    status_model_context["evidence_bundle"] = _create_evidence_with_open_items(
+        metadata, item_type="pr"
     )
 
 
@@ -387,40 +618,8 @@ def given_evidence_with_open_issues(
 ) -> None:
     """Create evidence bundle with open issues."""
     metadata = status_model_context["repository_metadata"]
-    status_model_context["evidence_bundle"] = _create_evidence_bundle(
-        metadata=metadata,
-        commits=(
-            CommitEvidence(
-                sha="abc123",
-                message="feat: add feature",
-                work_type=WorkType.FEATURE,
-            ),
-        ),
-        issues=(
-            IssueEvidence(
-                id=200,
-                number=10,
-                title="Bug in login",
-                state="open",
-                work_type=WorkType.BUG,
-            ),
-            IssueEvidence(
-                id=201,
-                number=11,
-                title="Bug in logout",
-                state="open",
-                work_type=WorkType.BUG,
-            ),
-        ),
-        work_type_groupings=(
-            WorkTypeGrouping(
-                work_type=WorkType.FEATURE,
-                commit_count=1,
-                pr_count=0,
-                issue_count=0,
-            ),
-        ),
-        event_fact_ids=(1, 2, 3),
+    status_model_context["evidence_bundle"] = _create_evidence_with_open_items(
+        metadata, item_type="issue"
     )
 
 
@@ -519,17 +718,41 @@ def then_next_steps_include_investigating(
     )
 
 
+def _assert_next_step_keywords(
+    result: RepositoryStatusResult,
+    keywords: tuple[str, ...],
+    item_description: str,
+) -> None:
+    """Assert that at least one next step contains all specified keywords.
+
+    Parameters
+    ----------
+    result
+        The repository status result to check.
+    keywords
+        Tuple of keywords that must all appear in a single next step.
+    item_description
+        Human-readable description for error messages.
+
+    Raises
+    ------
+    AssertionError
+        If no next steps exist or no step contains all keywords.
+
+    """
+    assert result.next_steps, "Expected at least one next step"
+    assert any(
+        all(kw in step.lower() for kw in keywords) for step in result.next_steps
+    ), f"Expected a {item_description} step, got: {result.next_steps}"
+
+
 @then("the next steps include reviewing open PRs")
 def then_next_steps_include_review_prs(
     status_model_context: StatusModelContext,
 ) -> None:
     """Verify next steps include reviewing open PRs."""
     result = status_model_context["status_result"]
-    assert result.next_steps, "Expected at least one next step"
-    assert any(
-        "review" in step.lower() and "open" in step.lower() and "pr" in step.lower()
-        for step in result.next_steps
-    ), f"Expected a PR review step, got: {result.next_steps}"
+    _assert_next_step_keywords(result, ("review", "open", "pr"), "PR review")
 
 
 @then("the next steps include triaging open issues")
@@ -538,8 +761,4 @@ def then_next_steps_include_triage_issues(
 ) -> None:
     """Verify next steps include triaging open issues."""
     result = status_model_context["status_result"]
-    assert result.next_steps, "Expected at least one next step"
-    assert any(
-        "triage" in step.lower() and "open" in step.lower() and "issue" in step.lower()
-        for step in result.next_steps
-    ), f"Expected an issue triage step, got: {result.next_steps}"
+    _assert_next_step_keywords(result, ("triage", "open", "issue"), "issue triage")

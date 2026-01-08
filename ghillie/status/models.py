@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import typing as typ
-
 import msgspec
 
 from ghillie.evidence.models import ReportStatus  # noqa: TC001 - used in frozen Struct
@@ -38,7 +36,7 @@ class RepositoryStatusResult(msgspec.Struct, kw_only=True, frozen=True):
     next_steps: tuple[str, ...] = ()
 
 
-def to_machine_summary(result: RepositoryStatusResult) -> dict[str, typ.Any]:
+def to_machine_summary(result: RepositoryStatusResult) -> dict[str, str | list[str]]:
     """Convert a RepositoryStatusResult to dict for Report.machine_summary.
 
     Parameters
@@ -48,7 +46,7 @@ def to_machine_summary(result: RepositoryStatusResult) -> dict[str, typ.Any]:
 
     Returns
     -------
-    dict[str, Any]
+    dict[str, str | list[str]]
         Dict with summary, status (as string value), highlights, risks,
         and next_steps as lists (for JSON compatibility).
 
