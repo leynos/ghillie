@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import typing as typ
+
+import pytest
 
 from ghillie.evidence.models import (
     CommitEvidence,
@@ -38,93 +41,70 @@ def _summarize(evidence: RepositoryEvidenceBundle) -> RepositoryStatusResult:
     return asyncio.run(model.summarize_repository(evidence))
 
 
-def _create_evidence_with_open_prs(
+def _create_evidence_with_open_items(
     metadata: RepositoryMetadata,
+    *,
+    item_type: typ.Literal["pr", "issue"],
     count: int,
 ) -> RepositoryEvidenceBundle:
-    """Create an evidence bundle with the specified number of open PRs.
+    """Create an evidence bundle with the specified number of open PRs or issues.
 
     Parameters
     ----------
     metadata
         Repository metadata to use for the bundle.
+    item_type
+        Type of item to create: "pr" for pull requests, "issue" for issues.
     count
-        Number of open PRs to include in the bundle.
+        Number of open items to include in the bundle.
 
     Returns
     -------
     RepositoryEvidenceBundle
-        Evidence bundle with the specified number of open PRs.
+        Evidence bundle with the specified number of open PRs or issues.
+
+    Notes
+    -----
+    When ``item_type`` is "pr", generates PRs with IDs starting at 100,
+    numbers starting at 50, and titles "Add feature X", "Add feature Y", etc.
+
+    When ``item_type`` is "issue", generates issues with IDs starting at 200,
+    numbers starting at 10, and titles from a predefined list of bug descriptions.
 
     """
-    prs = tuple(
-        PullRequestEvidence(
-            id=100 + i,
-            number=50 + i,
-            title=f"Add feature {chr(88 + i)}",
-            state="open",
-            work_type=WorkType.FEATURE,
+    if item_type == "pr":
+        prs = tuple(
+            PullRequestEvidence(
+                id=100 + i,
+                number=50 + i,
+                title=f"Add feature {chr(88 + i)}",
+                state="open",
+                work_type=WorkType.FEATURE,
+            )
+            for i in range(count)
         )
-        for i in range(count)
-    )
+        issues: tuple[IssueEvidence, ...] = ()
+        pr_count = count
+    else:
+        issue_titles = ["Bug in login", "Bug in logout", "Bug in signup"]
+        issues = tuple(
+            IssueEvidence(
+                id=200 + i,
+                number=10 + i,
+                title=issue_titles[i] if i < len(issue_titles) else f"Bug {i + 1}",
+                state="open",
+                work_type=WorkType.BUG,
+            )
+            for i in range(count)
+        )
+        prs: tuple[PullRequestEvidence, ...] = ()
+        pr_count = 0
+
     return RepositoryEvidenceBundle(
         repository=metadata,
         window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
         window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
         pull_requests=prs,
-        commits=(
-            CommitEvidence(
-                sha="abc123",
-                message="feat: add feature",
-                work_type=WorkType.FEATURE,
-            ),
-        ),
-        work_type_groupings=(
-            WorkTypeGrouping(
-                work_type=WorkType.FEATURE,
-                commit_count=1,
-                pr_count=count,
-                issue_count=0,
-            ),
-        ),
-        generated_at=dt.datetime(2024, 7, 8, 0, 0, 1, tzinfo=dt.UTC),
-    )
-
-
-def _create_evidence_with_open_issues(
-    metadata: RepositoryMetadata,
-    count: int,
-) -> RepositoryEvidenceBundle:
-    """Create an evidence bundle with the specified number of open issues.
-
-    Parameters
-    ----------
-    metadata
-        Repository metadata to use for the bundle.
-    count
-        Number of open issues to include in the bundle.
-
-    Returns
-    -------
-    RepositoryEvidenceBundle
-        Evidence bundle with the specified number of open issues.
-
-    """
-    issue_titles = ["Bug in login", "Bug in logout", "Bug in signup"]
-    issues = tuple(
-        IssueEvidence(
-            id=200 + i,
-            number=10 + i,
-            title=issue_titles[i] if i < len(issue_titles) else f"Bug {i + 1}",
-            state="open",
-            work_type=WorkType.BUG,
-        )
-        for i in range(count)
-    )
-    return RepositoryEvidenceBundle(
-        repository=metadata,
-        window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
-        window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
         issues=issues,
         commits=(
             CommitEvidence(
@@ -137,7 +117,7 @@ def _create_evidence_with_open_issues(
             WorkTypeGrouping(
                 work_type=WorkType.FEATURE,
                 commit_count=1,
-                pr_count=0,
+                pr_count=pr_count,
                 issue_count=0,
             ),
         ),
@@ -294,56 +274,31 @@ class TestMockStatusModelNextSteps:
             f"Expected an investigation-focused next step, got: {result.next_steps}"
         )
 
-    def test_open_prs_produce_review_step_singular(
+    @pytest.mark.parametrize(
+        ("item_type", "count", "expected_step"),
+        [
+            pytest.param("pr", 1, "Review 1 open PR", id="prs_singular"),
+            pytest.param("pr", 2, "Review 2 open PRs", id="prs_plural"),
+            pytest.param("issue", 1, "Triage 1 open issue", id="issues_singular"),
+            pytest.param("issue", 3, "Triage 3 open issues", id="issues_plural"),
+        ],
+    )
+    def test_open_items_produce_expected_next_step(
         self,
         repository_metadata: RepositoryMetadata,
+        item_type: typ.Literal["pr", "issue"],
+        count: int,
+        expected_step: str,
     ) -> None:
-        """Evidence with one open PR produces 'Review 1 open PR' step."""
-        evidence = _create_evidence_with_open_prs(repository_metadata, count=1)
-
-        result = _summarize(evidence)
-
-        assert any("Review 1 open PR" in step for step in result.next_steps), (
-            f"Expected 'Review 1 open PR' step, got: {result.next_steps}"
+        """Open PRs/issues produce appropriate review/triage next steps."""
+        evidence = _create_evidence_with_open_items(
+            repository_metadata, item_type=item_type, count=count
         )
 
-    def test_open_prs_produce_review_step_plural(
-        self,
-        repository_metadata: RepositoryMetadata,
-    ) -> None:
-        """Evidence with multiple open PRs produces 'Review N open PRs' step."""
-        evidence = _create_evidence_with_open_prs(repository_metadata, count=2)
-
         result = _summarize(evidence)
 
-        assert any("Review 2 open PRs" in step for step in result.next_steps), (
-            f"Expected 'Review 2 open PRs' step, got: {result.next_steps}"
-        )
-
-    def test_open_issues_produce_triage_step_singular(
-        self,
-        repository_metadata: RepositoryMetadata,
-    ) -> None:
-        """Evidence with one open issue produces 'Triage 1 open issue' step."""
-        evidence = _create_evidence_with_open_issues(repository_metadata, count=1)
-
-        result = _summarize(evidence)
-
-        assert any("Triage 1 open issue" in step for step in result.next_steps), (
-            f"Expected 'Triage 1 open issue' step, got: {result.next_steps}"
-        )
-
-    def test_open_issues_produce_triage_step_plural(
-        self,
-        repository_metadata: RepositoryMetadata,
-    ) -> None:
-        """Evidence with multiple open issues produces 'Triage N open issues' step."""
-        evidence = _create_evidence_with_open_issues(repository_metadata, count=3)
-
-        result = _summarize(evidence)
-
-        assert any("Triage 3 open issues" in step for step in result.next_steps), (
-            f"Expected 'Triage 3 open issues' step, got: {result.next_steps}"
+        assert any(expected_step in step for step in result.next_steps), (
+            f"Expected '{expected_step}' step, got: {result.next_steps}"
         )
 
     def test_closed_prs_do_not_produce_review_step(
@@ -353,7 +308,7 @@ class TestMockStatusModelNextSteps:
         """Evidence with only closed/merged PRs does not produce review step."""
         result = _summarize(feature_evidence)
 
-        _assert_no_next_steps_containing(result, "Review", "Review")
+        _assert_no_next_steps_containing(result, "Review", "PR review")
 
     def test_closed_issues_do_not_produce_triage_step(
         self,
@@ -362,4 +317,4 @@ class TestMockStatusModelNextSteps:
         """Evidence with only closed issues does not produce triage step."""
         result = _summarize(feature_evidence)
 
-        _assert_no_next_steps_containing(result, "Triage", "Triage")
+        _assert_no_next_steps_containing(result, "Triage", "issue triage")
