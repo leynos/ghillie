@@ -801,6 +801,77 @@ def tail_logs(cfg: Config, env: dict[str, str], *, follow: bool = False) -> None
 
 
 # =============================================================================
+# CLI orchestration helpers
+# =============================================================================
+
+
+def _setup_cnpg(cfg: Config, env: dict[str, str]) -> None:
+    """Install CNPG operator and create Postgres cluster."""
+    print("Installing CloudNativePG operator...")
+    install_cnpg_operator(cfg, env)
+
+    print("Ensuring application namespace exists...")
+    ensure_namespace(cfg.namespace, env)
+
+    print("Creating CNPG Postgres cluster...")
+    create_cnpg_cluster(cfg, env)
+
+    print("Waiting for Postgres to be ready...")
+    wait_for_cnpg_ready(cfg, env)
+
+
+def _setup_valkey(cfg: Config, env: dict[str, str]) -> None:
+    """Install Valkey operator and create instance."""
+    print("Installing Valkey operator...")
+    install_valkey_operator(cfg, env)
+
+    print("Creating Valkey instance...")
+    create_valkey_instance(cfg, env)
+
+    print("Waiting for Valkey to be ready...")
+    wait_for_valkey_ready(cfg, env)
+
+
+def _create_secrets_and_deploy(
+    cfg: Config, env: dict[str, str], *, skip_build: bool
+) -> None:
+    """Read connection URLs, create secrets, and deploy the application."""
+    print("Reading connection URLs from secrets...")
+    database_url = read_pg_app_uri(cfg, env)
+    valkey_url = read_valkey_uri(cfg, env)
+
+    print("Creating application secret...")
+    create_app_secret(cfg, env, database_url, valkey_url)
+
+    if not skip_build:
+        print(f"Building Docker image {cfg.image_repo}:{cfg.image_tag}...")
+        build_docker_image(cfg.image_repo, cfg.image_tag)
+
+        print("Importing image into k3d cluster...")
+        import_image_to_k3d(cfg.cluster_name, cfg.image_repo, cfg.image_tag)
+    else:
+        print("Skipping Docker build (--skip-build)")
+
+    print("Installing Ghillie Helm chart...")
+    install_ghillie_chart(cfg, env)
+
+
+def _print_success_banner(port: int) -> None:
+    """Print the success banner with preview URLs and commands."""
+    print()
+    print("=" * 60)
+    print("Preview environment ready!")
+    print(f"  URL: http://127.0.0.1:{port}/")
+    print(f"  Health check: http://127.0.0.1:{port}/health")
+    print()
+    print("Commands:")
+    print("  Status: uv run scripts/local_k8s.py status")
+    print("  Logs:   uv run scripts/local_k8s.py logs --follow")
+    print("  Down:   uv run scripts/local_k8s.py down")
+    print("=" * 60)
+
+
+# =============================================================================
 # CLI commands
 # =============================================================================
 
@@ -835,90 +906,31 @@ def up(
         Exit code (0 for success, non-zero for failure).
 
     """
-    # Step 1: Verify required executables
+    # Verify required executables
     print("Checking required tools...")
     for exe in ("docker", "k3d", "kubectl", "helm"):
         require_exe(exe)
 
-    # Determine ingress port
+    # Determine ingress port and build config
     port = ingress_port or pick_free_loopback_port()
+    cfg = Config(cluster_name=cluster_name, namespace=namespace, ingress_port=port)
 
-    # Build config
-    cfg = Config(
-        cluster_name=cluster_name,
-        namespace=namespace,
-        ingress_port=port,
-    )
-
-    # Step 2: Create k3d cluster if needed
+    # Create k3d cluster if needed
     if cluster_exists(cluster_name):
         print(f"Cluster '{cluster_name}' already exists, reusing...")
     else:
         print(f"Creating k3d cluster '{cluster_name}' on port {port}...")
         create_k3d_cluster(cluster_name, port)
 
-    # Get kubeconfig environment
+    # Set up the Kubernetes environment
     env = kubeconfig_env(cluster_name)
 
-    # Step 3: Install CNPG operator and create Postgres cluster
-    print("Installing CloudNativePG operator...")
-    install_cnpg_operator(cfg, env)
+    # Configure infrastructure and deploy
+    _setup_cnpg(cfg, env)
+    _setup_valkey(cfg, env)
+    _create_secrets_and_deploy(cfg, env, skip_build=skip_build)
 
-    print("Ensuring application namespace exists...")
-    ensure_namespace(namespace, env)
-
-    print("Creating CNPG Postgres cluster...")
-    create_cnpg_cluster(cfg, env)
-
-    print("Waiting for Postgres to be ready...")
-    wait_for_cnpg_ready(cfg, env)
-
-    # Step 4: Install Valkey operator and create instance
-    print("Installing Valkey operator...")
-    install_valkey_operator(cfg, env)
-
-    print("Creating Valkey instance...")
-    create_valkey_instance(cfg, env)
-
-    print("Waiting for Valkey to be ready...")
-    wait_for_valkey_ready(cfg, env)
-
-    # Step 5: Read connection URLs from secrets
-    print("Reading connection URLs from secrets...")
-    database_url = read_pg_app_uri(cfg, env)
-    valkey_url = read_valkey_uri(cfg, env)
-
-    # Step 6: Create application secret
-    print("Creating application secret...")
-    create_app_secret(cfg, env, database_url, valkey_url)
-
-    # Step 7: Build and import Docker image
-    if not skip_build:
-        print(f"Building Docker image {cfg.image_repo}:{cfg.image_tag}...")
-        build_docker_image(cfg.image_repo, cfg.image_tag)
-
-        print("Importing image into k3d cluster...")
-        import_image_to_k3d(cluster_name, cfg.image_repo, cfg.image_tag)
-    else:
-        print("Skipping Docker build (--skip-build)")
-
-    # Step 8: Install Helm chart
-    print("Installing Ghillie Helm chart...")
-    install_ghillie_chart(cfg, env)
-
-    # Step 9: Print preview URL
-    print()
-    print("=" * 60)
-    print("Preview environment ready!")
-    print(f"  URL: http://127.0.0.1:{port}/")
-    print(f"  Health check: http://127.0.0.1:{port}/health")
-    print()
-    print("Commands:")
-    print("  Status: uv run scripts/local_k8s.py status")
-    print("  Logs:   uv run scripts/local_k8s.py logs --follow")
-    print("  Down:   uv run scripts/local_k8s.py down")
-    print("=" * 60)
-
+    _print_success_banner(port)
     return 0
 
 
