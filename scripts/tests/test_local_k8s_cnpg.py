@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import os
-import typing as typ
 
-if typ.TYPE_CHECKING:
-    import pytest
-
+import pytest
 from local_k8s import (
     Config,
     _cnpg_cluster_manifest,
@@ -113,8 +110,12 @@ class TestCreateCnpgCluster:
 class TestWaitForCnpgReady:
     """Tests for wait_for_cnpg_ready helper using cmd-mox."""
 
-    def test_waits_for_pod_ready(self, cmd_mox) -> None:  # noqa: ANN001
-        """Should invoke kubectl wait with correct selector."""
+    @pytest.mark.parametrize(
+        "timeout",
+        [600, 120],  # default timeout, custom timeout
+    )
+    def test_waits_for_pod_ready(self, cmd_mox, timeout: int) -> None:  # noqa: ANN001
+        """Should invoke kubectl wait with specified timeout."""
         cfg = Config()
 
         cmd_mox.mock("kubectl").with_args(
@@ -123,25 +124,13 @@ class TestWaitForCnpgReady:
             "pod",
             "--selector=cnpg.io/cluster=pg-ghillie",
             "--namespace=ghillie",
-            "--timeout=600s",
+            f"--timeout={timeout}s",
         ).returns(exit_code=0)
 
-        wait_for_cnpg_ready(cfg, _test_env())
-
-    def test_uses_custom_timeout(self, cmd_mox) -> None:  # noqa: ANN001
-        """Should use custom timeout value."""
-        cfg = Config()
-
-        cmd_mox.mock("kubectl").with_args(
-            "wait",
-            "--for=condition=Ready",
-            "pod",
-            "--selector=cnpg.io/cluster=pg-ghillie",
-            "--namespace=ghillie",
-            "--timeout=120s",
-        ).returns(exit_code=0)
-
-        wait_for_cnpg_ready(cfg, _test_env(), timeout=120)
+        if timeout == 600:
+            wait_for_cnpg_ready(cfg, _test_env())
+        else:
+            wait_for_cnpg_ready(cfg, _test_env(), timeout=timeout)
 
 
 class TestReadPgAppUri:

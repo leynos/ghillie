@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from local_k8s import (
     cluster_exists,
     create_k3d_cluster,
@@ -54,33 +55,32 @@ class TestClusterExists:
 class TestCreateK3dCluster:
     """Tests for create_k3d_cluster helper using cmd-mox."""
 
-    def test_invokes_correct_command(self, cmd_mox) -> None:  # noqa: ANN001
+    @pytest.mark.parametrize(
+        ("cluster_name", "port", "agents"),
+        [
+            ("ghillie-local", 8080, 1),  # default agents
+            ("test-cluster", 9090, 3),  # custom agents
+        ],
+    )
+    def test_invokes_correct_command(
+        self,
+        cmd_mox,  # noqa: ANN001
+        cluster_name: str,
+        port: int,
+        agents: int,
+    ) -> None:
         """Should invoke k3d cluster create with correct args."""
         cmd_mox.mock("k3d").with_args(
             "cluster",
             "create",
-            "ghillie-local",
+            cluster_name,
             "--agents",
-            "1",
+            str(agents),
             "--port",
-            "127.0.0.1:8080:80@loadbalancer",
+            f"127.0.0.1:{port}:80@loadbalancer",
         ).returns(exit_code=0)
 
-        create_k3d_cluster("ghillie-local", port=8080)
-
-    def test_uses_custom_agent_count(self, cmd_mox) -> None:  # noqa: ANN001
-        """Should pass custom agent count to k3d."""
-        cmd_mox.mock("k3d").with_args(
-            "cluster",
-            "create",
-            "test-cluster",
-            "--agents",
-            "3",
-            "--port",
-            "127.0.0.1:9090:80@loadbalancer",
-        ).returns(exit_code=0)
-
-        create_k3d_cluster("test-cluster", port=9090, agents=3)
+        create_k3d_cluster(cluster_name, port=port, agents=agents)
 
 
 class TestDeleteK3dCluster:

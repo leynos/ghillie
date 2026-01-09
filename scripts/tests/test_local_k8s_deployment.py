@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import os
-import typing as typ
 
-if typ.TYPE_CHECKING:
-    import pytest
-
+import pytest
 from local_k8s import (
     Config,
     build_docker_image,
@@ -115,34 +112,25 @@ class TestBuildDockerImage:
 class TestInstallGhillieChart:
     """Tests for install_ghillie_chart helper using cmd-mox."""
 
-    def test_invokes_helm_upgrade(self, cmd_mox) -> None:  # noqa: ANN001
+    @pytest.mark.parametrize(
+        ("namespace", "image_repo", "image_tag"),
+        [
+            ("ghillie", "ghillie", "local"),  # default values
+            ("custom-ns", "custom-repo", "v1.0.0"),  # custom values
+        ],
+    )
+    def test_invokes_helm_upgrade(
+        self,
+        cmd_mox,  # noqa: ANN001
+        namespace: str,
+        image_repo: str,
+        image_tag: str,
+    ) -> None:
         """Should invoke helm upgrade --install with correct args."""
-        cfg = Config()
-
-        cmd_mox.mock("helm").with_args(
-            "upgrade",
-            "--install",
-            "ghillie",
-            "charts/ghillie",
-            "--namespace",
-            "ghillie",
-            "--values",
-            "tests/helm/fixtures/values_local.yaml",
-            "--set",
-            "image.repository=ghillie",
-            "--set",
-            "image.tag=local",
-            "--wait",
-        ).returns(exit_code=0)
-
-        install_ghillie_chart(cfg, _test_env())
-
-    def test_uses_config_values(self, cmd_mox) -> None:  # noqa: ANN001
-        """Should use values from config."""
         cfg = Config(
-            namespace="custom-ns",
-            image_repo="custom-repo",
-            image_tag="v1.0.0",
+            namespace=namespace,
+            image_repo=image_repo,
+            image_tag=image_tag,
         )
 
         cmd_mox.mock("helm").with_args(
@@ -151,13 +139,13 @@ class TestInstallGhillieChart:
             "ghillie",
             "charts/ghillie",
             "--namespace",
-            "custom-ns",
+            namespace,
             "--values",
             "tests/helm/fixtures/values_local.yaml",
             "--set",
-            "image.repository=custom-repo",
+            f"image.repository={image_repo}",
             "--set",
-            "image.tag=v1.0.0",
+            f"image.tag={image_tag}",
             "--wait",
         ).returns(exit_code=0)
 

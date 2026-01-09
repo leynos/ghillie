@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 
+import pytest
 from local_k8s import (
     Config,
     print_status,
@@ -25,28 +26,18 @@ def _test_env() -> dict[str, str]:
 class TestPrintStatus:
     """Tests for print_status helper using cmd-mox."""
 
-    def test_invokes_kubectl_get_pods(self, cmd_mox) -> None:  # noqa: ANN001
-        """Should invoke kubectl get pods with namespace."""
-        cfg = Config()
+    @pytest.mark.parametrize(
+        "namespace",
+        ["ghillie", "custom-ns"],
+    )
+    def test_invokes_kubectl_get_pods(self, cmd_mox, namespace: str) -> None:  # noqa: ANN001
+        """Should invoke kubectl get pods with correct namespace."""
+        cfg = Config(namespace=namespace)
 
         cmd_mox.mock("kubectl").with_args(
             "get",
             "pods",
-            "--namespace=ghillie",
-            "-o",
-            "wide",
-        ).returns(exit_code=0)
-
-        print_status(cfg, _test_env())
-
-    def test_uses_config_namespace(self, cmd_mox) -> None:  # noqa: ANN001
-        """Should use namespace from config."""
-        cfg = Config(namespace="custom-ns")
-
-        cmd_mox.mock("kubectl").with_args(
-            "get",
-            "pods",
-            "--namespace=custom-ns",
+            f"--namespace={namespace}",
             "-o",
             "wide",
         ).returns(exit_code=0)
@@ -57,39 +48,31 @@ class TestPrintStatus:
 class TestTailLogs:
     """Tests for tail_logs helper using cmd-mox."""
 
-    def test_invokes_kubectl_logs(self, cmd_mox) -> None:  # noqa: ANN001
-        """Should invoke kubectl logs with selector."""
-        cfg = Config()
+    @pytest.mark.parametrize(
+        ("namespace", "follow"),
+        [
+            ("ghillie", False),
+            ("custom-ns", False),
+            ("ghillie", True),
+        ],
+    )
+    def test_invokes_kubectl_logs(
+        self,
+        cmd_mox,  # noqa: ANN001
+        namespace: str,
+        follow: bool,  # noqa: FBT001
+    ) -> None:
+        """Should invoke kubectl logs with correct arguments."""
+        cfg = Config(namespace=namespace)
 
-        cmd_mox.mock("kubectl").with_args(
+        expected_args = [
             "logs",
             "--selector=app.kubernetes.io/name=ghillie",
-            "--namespace=ghillie",
-        ).returns(exit_code=0)
+            f"--namespace={namespace}",
+        ]
+        if follow:
+            expected_args.append("--follow")
 
-        tail_logs(cfg, _test_env())
+        cmd_mox.mock("kubectl").with_args(*expected_args).returns(exit_code=0)
 
-    def test_adds_follow_flag(self, cmd_mox) -> None:  # noqa: ANN001
-        """Should add --follow flag when requested."""
-        cfg = Config()
-
-        cmd_mox.mock("kubectl").with_args(
-            "logs",
-            "--selector=app.kubernetes.io/name=ghillie",
-            "--namespace=ghillie",
-            "--follow",
-        ).returns(exit_code=0)
-
-        tail_logs(cfg, _test_env(), follow=True)
-
-    def test_uses_config_namespace(self, cmd_mox) -> None:  # noqa: ANN001
-        """Should use namespace from config."""
-        cfg = Config(namespace="custom-ns")
-
-        cmd_mox.mock("kubectl").with_args(
-            "logs",
-            "--selector=app.kubernetes.io/name=ghillie",
-            "--namespace=custom-ns",
-        ).returns(exit_code=0)
-
-        tail_logs(cfg, _test_env())
+        tail_logs(cfg, _test_env(), follow=follow)

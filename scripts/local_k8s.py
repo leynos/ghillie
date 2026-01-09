@@ -282,6 +282,59 @@ def ensure_namespace(namespace: str, env: dict[str, str]) -> None:
 
 
 # =============================================================================
+# Generic Helm operator installer
+# =============================================================================
+
+
+def install_helm_operator(  # noqa: PLR0913
+    repo_name: str,
+    repo_url: str,
+    release_name: str,
+    chart_name: str,
+    namespace: str,
+    env: dict[str, str],
+) -> None:
+    """Install a Helm operator with standard workflow.
+
+    Adds repository, updates, ensures namespace, and installs chart.
+
+    Args:
+        repo_name: Helm repository alias.
+        repo_url: Helm repository URL.
+        release_name: Helm release name.
+        chart_name: Fully qualified chart name (repo/chart).
+        namespace: Target namespace for the operator.
+        env: Environment dict with KUBECONFIG set.
+
+    """
+    subprocess.run(  # noqa: S603
+        ["helm", "repo", "add", repo_name, repo_url],  # noqa: S607
+        check=True,
+        env=env,
+    )
+    subprocess.run(
+        ["helm", "repo", "update"],  # noqa: S607
+        check=True,
+        env=env,
+    )
+    ensure_namespace(namespace, env)
+    subprocess.run(  # noqa: S603
+        [  # noqa: S607
+            "helm",
+            "upgrade",
+            "--install",
+            release_name,
+            chart_name,
+            "--namespace",
+            namespace,
+            "--wait",
+        ],
+        check=True,
+        env=env,
+    )
+
+
+# =============================================================================
 # CloudNativePG (CNPG) helpers
 # =============================================================================
 
@@ -325,43 +378,13 @@ def install_cnpg_operator(cfg: Config, env: dict[str, str]) -> None:
         env: Environment dict with KUBECONFIG set.
 
     """
-    # Add CNPG Helm repository
-    subprocess.run(
-        [  # noqa: S607
-            "helm",
-            "repo",
-            "add",
-            "cnpg",
-            "https://cloudnative-pg.github.io/charts",
-        ],
-        check=True,
-        env=env,
-    )
-
-    # Update repos
-    subprocess.run(
-        ["helm", "repo", "update"],  # noqa: S607
-        check=True,
-        env=env,
-    )
-
-    # Create namespace for operator
-    ensure_namespace(cfg.cnpg_namespace, env)
-
-    # Install operator
-    subprocess.run(  # noqa: S603
-        [  # noqa: S607
-            "helm",
-            "upgrade",
-            "--install",
-            cfg.cnpg_release,
-            "cnpg/cloudnative-pg",
-            "--namespace",
-            cfg.cnpg_namespace,
-            "--wait",
-        ],
-        check=True,
-        env=env,
+    install_helm_operator(
+        "cnpg",
+        "https://cloudnative-pg.github.io/charts",
+        cfg.cnpg_release,
+        "cnpg/cloudnative-pg",
+        cfg.cnpg_namespace,
+        env,
     )
 
 
@@ -487,43 +510,13 @@ def install_valkey_operator(cfg: Config, env: dict[str, str]) -> None:
         env: Environment dict with KUBECONFIG set.
 
     """
-    # Add Valkey operator Helm repository
-    subprocess.run(
-        [  # noqa: S607
-            "helm",
-            "repo",
-            "add",
-            "valkey-operator",
-            "https://hyperspike.github.io/valkey-operator",
-        ],
-        check=True,
-        env=env,
-    )
-
-    # Update repos
-    subprocess.run(
-        ["helm", "repo", "update"],  # noqa: S607
-        check=True,
-        env=env,
-    )
-
-    # Create namespace for operator
-    ensure_namespace(cfg.valkey_namespace, env)
-
-    # Install operator
-    subprocess.run(  # noqa: S603
-        [  # noqa: S607
-            "helm",
-            "upgrade",
-            "--install",
-            cfg.valkey_release,
-            "valkey-operator/valkey-operator",
-            "--namespace",
-            cfg.valkey_namespace,
-            "--wait",
-        ],
-        check=True,
-        env=env,
+    install_helm_operator(
+        "valkey-operator",
+        "https://hyperspike.github.io/valkey-operator",
+        cfg.valkey_release,
+        "valkey-operator/valkey-operator",
+        cfg.valkey_namespace,
+        env,
     )
 
 
