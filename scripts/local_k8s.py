@@ -67,6 +67,26 @@ class Config:
     app_secret_name: str = "ghillie"  # noqa: S105
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class HelmOperatorSpec:
+    """Specification for Helm operator installation.
+
+    Attributes:
+        repo_name: Helm repository alias.
+        repo_url: Helm repository URL.
+        release_name: Helm release name.
+        chart_name: Fully qualified chart name (repo/chart).
+        namespace: Target namespace for the operator.
+
+    """
+
+    repo_name: str
+    repo_url: str
+    release_name: str
+    chart_name: str
+    namespace: str
+
+
 # =============================================================================
 # Helper functions
 # =============================================================================
@@ -286,12 +306,8 @@ def ensure_namespace(namespace: str, env: dict[str, str]) -> None:
 # =============================================================================
 
 
-def install_helm_operator(  # noqa: PLR0913
-    repo_name: str,
-    repo_url: str,
-    release_name: str,
-    chart_name: str,
-    namespace: str,
+def install_helm_operator(
+    spec: HelmOperatorSpec,
     env: dict[str, str],
 ) -> None:
     """Install a Helm operator with standard workflow.
@@ -299,16 +315,12 @@ def install_helm_operator(  # noqa: PLR0913
     Adds repository, updates, ensures namespace, and installs chart.
 
     Args:
-        repo_name: Helm repository alias.
-        repo_url: Helm repository URL.
-        release_name: Helm release name.
-        chart_name: Fully qualified chart name (repo/chart).
-        namespace: Target namespace for the operator.
+        spec: Helm operator installation specification.
         env: Environment dict with KUBECONFIG set.
 
     """
     subprocess.run(  # noqa: S603
-        ["helm", "repo", "add", repo_name, repo_url],  # noqa: S607
+        ["helm", "repo", "add", spec.repo_name, spec.repo_url],  # noqa: S607
         check=True,
         env=env,
     )
@@ -317,16 +329,16 @@ def install_helm_operator(  # noqa: PLR0913
         check=True,
         env=env,
     )
-    ensure_namespace(namespace, env)
+    ensure_namespace(spec.namespace, env)
     subprocess.run(  # noqa: S603
         [  # noqa: S607
             "helm",
             "upgrade",
             "--install",
-            release_name,
-            chart_name,
+            spec.release_name,
+            spec.chart_name,
             "--namespace",
-            namespace,
+            spec.namespace,
             "--wait",
         ],
         check=True,
@@ -378,14 +390,14 @@ def install_cnpg_operator(cfg: Config, env: dict[str, str]) -> None:
         env: Environment dict with KUBECONFIG set.
 
     """
-    install_helm_operator(
-        "cnpg",
-        "https://cloudnative-pg.github.io/charts",
-        cfg.cnpg_release,
-        "cnpg/cloudnative-pg",
-        cfg.cnpg_namespace,
-        env,
+    spec = HelmOperatorSpec(
+        repo_name="cnpg",
+        repo_url="https://cloudnative-pg.github.io/charts",
+        release_name=cfg.cnpg_release,
+        chart_name="cnpg/cloudnative-pg",
+        namespace=cfg.cnpg_namespace,
     )
+    install_helm_operator(spec, env)
 
 
 def create_cnpg_cluster(cfg: Config, env: dict[str, str]) -> None:
@@ -510,14 +522,14 @@ def install_valkey_operator(cfg: Config, env: dict[str, str]) -> None:
         env: Environment dict with KUBECONFIG set.
 
     """
-    install_helm_operator(
-        "valkey-operator",
-        "https://hyperspike.github.io/valkey-operator",
-        cfg.valkey_release,
-        "valkey-operator/valkey-operator",
-        cfg.valkey_namespace,
-        env,
+    spec = HelmOperatorSpec(
+        repo_name="valkey-operator",
+        repo_url="https://hyperspike.github.io/valkey-operator",
+        release_name=cfg.valkey_release,
+        chart_name="valkey-operator/valkey-operator",
+        namespace=cfg.valkey_namespace,
     )
+    install_helm_operator(spec, env)
 
 
 def create_valkey_instance(cfg: Config, env: dict[str, str]) -> None:
