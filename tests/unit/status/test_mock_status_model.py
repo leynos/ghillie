@@ -291,47 +291,58 @@ class TestMockStatusModelOutput:
         assert len(ongoing_risks) > 0
 
 
+class StatusNextStepTestCase(typ.NamedTuple):
+    """Test case parameters for status next step validation."""
+
+    evidence_fixture: str
+    expected_status: ReportStatus
+    keyword: str
+    description: str
+
+
 class TestMockStatusModelNextSteps:
     """Tests for MockStatusModel next_steps suggestions."""
 
     @pytest.mark.parametrize(
-        ("evidence_fixture", "expected_status", "keyword", "description"),
+        "test_case",
         [
             pytest.param(
-                "evidence_with_previous_risks",
-                ReportStatus.AT_RISK,
-                "risk",
-                "risk-focused",
+                StatusNextStepTestCase(
+                    evidence_fixture="evidence_with_previous_risks",
+                    expected_status=ReportStatus.AT_RISK,
+                    keyword="risk",
+                    description="risk-focused",
+                ),
                 id="at_risk_includes_mitigation_step",
             ),
             pytest.param(
-                "empty_evidence",
-                ReportStatus.UNKNOWN,
-                "investigat",
-                "investigation-focused",
+                StatusNextStepTestCase(
+                    evidence_fixture="empty_evidence",
+                    expected_status=ReportStatus.UNKNOWN,
+                    keyword="investigat",
+                    description="investigation-focused",
+                ),
                 id="unknown_includes_investigation_step",
             ),
         ],
     )
-    def test_status_includes_appropriate_next_step(  # noqa: PLR0913
+    def test_status_includes_appropriate_next_step(
         self,
         request: pytest.FixtureRequest,
-        evidence_fixture: str,
-        expected_status: ReportStatus,
-        keyword: str,
-        description: str,
+        test_case: StatusNextStepTestCase,
     ) -> None:
         """Specific status codes include appropriate next step guidance."""
-        evidence = request.getfixturevalue(evidence_fixture)
+        evidence = request.getfixturevalue(test_case.evidence_fixture)
 
         result = _summarize(evidence)
 
-        assert result.status == expected_status
+        assert result.status == test_case.expected_status
         assert result.next_steps, (
-            f"Expected at least one next step for {expected_status.value} status"
+            f"Expected at least one next step for "
+            f"{test_case.expected_status.value} status"
         )
-        assert any(keyword in step.lower() for step in result.next_steps), (
-            f"Expected a {description} next step, got: {result.next_steps}"
+        assert any(test_case.keyword in step.lower() for step in result.next_steps), (
+            f"Expected a {test_case.description} next step, got: {result.next_steps}"
         )
 
     @pytest.mark.parametrize(
