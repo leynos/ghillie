@@ -78,13 +78,14 @@ class SubprocessMock:
     def __call__(
         self,
         args: list[str],
-        *,
-        check: bool = False,
-        capture_output: bool = False,
-        text: bool = False,
-        **_kwargs: object,
+        **kwargs: object,
     ) -> subprocess.CompletedProcess[str]:
         """Handle a subprocess.run call."""
+        # Extract parameters from kwargs with defaults
+        check = kwargs.get("check", False)
+        capture_output = kwargs.get("capture_output", False)
+        text = kwargs.get("text", False)
+
         self.context["captured_calls"].append(tuple(args))
 
         handler = self._handlers.get(args[0], lambda _: ("", 0))
