@@ -3,14 +3,35 @@
 from __future__ import annotations
 
 import base64
+import importlib.util
 import io
 import subprocess
 import typing as typ
 from contextlib import redirect_stdout
+from pathlib import Path
 
 import pytest
-from local_k8s import app
 from pytest_bdd import given, parsers, scenario, then, when
+
+if typ.TYPE_CHECKING:
+    from cyclopts import App
+
+
+def _load_script_app() -> App:
+    """Load the app object from the local_k8s.py script.
+
+    Since we have both a local_k8s/ package and a local_k8s.py script,
+    Python's import system would prefer the package. This function loads
+    the script directly using importlib.
+    """
+    script_path = Path(__file__).parent.parent.parent.parent / "local_k8s.py"
+    spec = importlib.util.spec_from_file_location("local_k8s_script", script_path)
+    if spec is None or spec.loader is None:
+        msg = f"Could not load script from {script_path}"
+        raise ImportError(msg)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.app
 
 
 class LocalK8sContext(typ.TypedDict, total=False):
@@ -164,6 +185,7 @@ def _run_command(
     # Mock shutil.which to return a path for all required tools
     monkeypatch.setattr("shutil.which", lambda name: f"/usr/bin/{name}")
 
+    app = _load_script_app()
     captured = io.StringIO()
     with redirect_stdout(captured):
         try:
