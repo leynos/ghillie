@@ -99,6 +99,31 @@ def _print_success_banner(port: int) -> None:
     print("=" * 60)
 
 
+def _validate_and_setup_environment(
+    cluster_name: str, namespace: str
+) -> tuple[Config, dict[str, str]] | None:
+    """Validate cluster exists and return config and environment.
+
+    Args:
+        cluster_name: Name of the k3d cluster.
+        namespace: Kubernetes namespace.
+
+    Returns:
+        Tuple of (Config, environment dict) if cluster exists, None otherwise.
+
+    """
+    for exe in ("k3d", "kubectl"):
+        require_exe(exe)
+
+    if not cluster_exists(cluster_name):
+        print(f"Cluster '{cluster_name}' does not exist.")
+        return None
+
+    cfg = Config(cluster_name=cluster_name, namespace=namespace)
+    env = kubeconfig_env(cluster_name)
+    return cfg, env
+
+
 def setup_environment(
     cluster_name: str,
     namespace: str,
@@ -179,15 +204,11 @@ def show_environment_status(cluster_name: str, namespace: str) -> int:
         Exit code (0 for success, 1 if cluster doesn't exist).
 
     """
-    for exe in ("k3d", "kubectl"):
-        require_exe(exe)
-
-    if not cluster_exists(cluster_name):
-        print(f"Cluster '{cluster_name}' does not exist.")
+    result = _validate_and_setup_environment(cluster_name, namespace)
+    if result is None:
         return 1
 
-    cfg = Config(cluster_name=cluster_name, namespace=namespace)
-    env = kubeconfig_env(cluster_name)
+    cfg, env = result
 
     print(f"Status for cluster: {cluster_name}")
     print(f"Namespace: {namespace}")
@@ -208,15 +229,11 @@ def stream_environment_logs(cluster_name: str, namespace: str, *, follow: bool) 
         Exit code (0 for success, 1 if cluster doesn't exist).
 
     """
-    for exe in ("k3d", "kubectl"):
-        require_exe(exe)
-
-    if not cluster_exists(cluster_name):
-        print(f"Cluster '{cluster_name}' does not exist.")
+    result = _validate_and_setup_environment(cluster_name, namespace)
+    if result is None:
         return 1
 
-    cfg = Config(cluster_name=cluster_name, namespace=namespace)
-    env = kubeconfig_env(cluster_name)
+    cfg, env = result
 
     tail_logs(cfg, env, follow=follow)
     return 0
