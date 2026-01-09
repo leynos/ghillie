@@ -139,10 +139,12 @@ def _create_evidence_with_open_items(
         prs = _create_open_prs_tuple(count)
         issues: tuple[IssueEvidence, ...] = ()
         pr_count = count
+        issue_count = 0
     else:
         issues = _create_open_issues_tuple(count)
         prs: tuple[PullRequestEvidence, ...] = ()
         pr_count = 0
+        issue_count = count
 
     return RepositoryEvidenceBundle(
         repository=metadata,
@@ -162,7 +164,7 @@ def _create_evidence_with_open_items(
                 work_type=WorkType.FEATURE,
                 commit_count=1,
                 pr_count=pr_count,
-                issue_count=0,
+                issue_count=issue_count,
             ),
         ),
         generated_at=dt.datetime(2024, 7, 8, 0, 0, 1, tzinfo=dt.UTC),
