@@ -3,35 +3,14 @@
 from __future__ import annotations
 
 import base64
-import importlib.util
 import io
 import subprocess
 import typing as typ
 from contextlib import redirect_stdout
-from pathlib import Path
 
 import pytest
+from conftest import load_script_app
 from pytest_bdd import given, parsers, scenario, then, when
-
-if typ.TYPE_CHECKING:
-    from cyclopts import App
-
-
-def _load_script_app() -> App:
-    """Load the app object from the local_k8s.py script.
-
-    Since we have both a local_k8s/ package and a local_k8s.py script,
-    Python's import system would prefer the package. This function loads
-    the script directly using importlib.
-    """
-    script_path = Path(__file__).parent.parent.parent.parent / "local_k8s.py"
-    spec = importlib.util.spec_from_file_location("local_k8s_script", script_path)
-    if spec is None or spec.loader is None:
-        msg = f"Could not load script from {script_path}"
-        raise ImportError(msg)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.app
 
 
 class LocalK8sContext(typ.TypedDict, total=False):
@@ -63,11 +42,20 @@ class SubprocessMock:
 
     def _handle_k3d(self, args: list[str]) -> tuple[str, int]:
         if args[1:3] == ["cluster", "list"]:
-            # k3d cluster list -o json returns JSON array
+            # k3d cluster list -o json returns JSON array with port mappings
             if self.cluster_exists:
-                return '[{"name": "ghillie-local"}]', 0
+                cluster_json = """[{
+                    "name": "ghillie-local",
+                    "nodes": [{
+                        "name": "k3d-ghillie-local-serverlb",
+                        "portMappings": {
+                            "80/tcp": [{"HostPort": "12345"}]
+                        }
+                    }]
+                }]"""
+                return cluster_json, 0
             return "[]", 0
-        if args[1:3] == ["kubeconfig", "get"]:
+        if args[1:3] == ["kubeconfig", "write"]:
             return "/mock/kubeconfig", 0
         return "", 0  # create, delete, image import
 
@@ -144,6 +132,16 @@ def test_status_shows_pod_information() -> None:
     """Wrap the pytest-bdd scenario for status command."""
 
 
+@scenario("../local_k8s.feature", "Status for missing cluster")
+def test_status_for_missing_cluster() -> None:
+    """Wrap the pytest-bdd scenario for status when cluster is missing."""
+
+
+@scenario("../local_k8s.feature", "Up with skip-build does not build or import image")
+def test_up_with_skip_build() -> None:
+    """Wrap the pytest-bdd scenario for up with skip-build."""
+
+
 @pytest.fixture
 def local_k8s_context() -> LocalK8sContext:
     """Provide shared context for the BDD steps."""
@@ -185,7 +183,7 @@ def _run_command(
     # Mock shutil.which to return a path for all required tools
     monkeypatch.setattr("shutil.which", lambda name: f"/usr/bin/{name}")
 
-    app = _load_script_app()
+    app = load_script_app()
     captured = io.StringIO()
     with redirect_stdout(captured):
         try:
@@ -220,6 +218,16 @@ def when_run_status(
 ) -> None:
     """Execute the status command with mocked subprocess."""
     _run_command(local_k8s_context, monkeypatch, ["status"])
+
+
+@when("I run local_k8s up with skip-build")
+def when_run_up_with_skip_build(
+    local_k8s_context: LocalK8sContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Execute the up command with --skip-build and mocked subprocess."""
+    _run_command(
+        local_k8s_context, monkeypatch, ["up", "--skip-build", "--ingress-port=12345"]
+    )
 
 
 # Then steps - assertions on captured calls
@@ -341,4 +349,23 @@ def then_pod_status_printed(local_k8s_context: LocalK8sContext) -> None:
     """Verify pod status was queried."""
     assert _has_call(local_k8s_context, ("kubectl", "get", "pods")), (
         "Expected kubectl get pods"
+    )
+
+
+@then(parsers.parse('the output contains "{text}"'))
+def then_output_contains(local_k8s_context: LocalK8sContext, text: str) -> None:
+    """Verify the output contains the expected text."""
+    assert text in local_k8s_context["stdout"], (
+        f"Expected '{text}' in output, got: {local_k8s_context['stdout']}"
+    )
+
+
+@then("Docker image is not built or imported")
+def then_docker_image_not_built_or_imported(local_k8s_context: LocalK8sContext) -> None:
+    """Assert that no Docker build or k3d image import commands were invoked."""
+    assert not _has_call(local_k8s_context, ("docker", "build")), (
+        "Expected no docker build call"
+    )
+    assert not _has_call(local_k8s_context, ("k3d", "image", "import")), (
+        "Expected no k3d image import call"
     )

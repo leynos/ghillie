@@ -55,7 +55,8 @@ Thresholds that trigger escalation when breached:
 - Dependencies: if external dependencies beyond `cyclopts`, `plumbum`, and
   `cmd-mox` are required in the script, stop and escalate.
 - Iterations: if tests still fail after 3 attempts to fix, stop and escalate.
-- Ambiguity: if the Valkey operator CRD differs materially from the documented
+- Ambiguity: if the Valkey operator CustomResourceDefinition (CRD) differs
+  materially from the documented
   API, stop and present options.
 
 ## Risks
@@ -65,7 +66,7 @@ Thresholds that trigger escalation when breached:
   current CRD schema before implementing; make manifest generation a separate
   function for easy updates.
 
-- **Risk:** CNPG secret naming convention changes.
+- **Risk:** CloudNativePG (CNPG) secret naming convention changes.
   Severity: low. Likelihood: low. Mitigation: Use consistent naming
   (`pg-ghillie`) and verify secret name pattern in unit tests.
 
@@ -442,7 +443,7 @@ Create `scripts/tests/features/local_k8s.feature`:
 
       Scenario: Create preview environment from scratch
         Given no k3d cluster named ghillie-local exists
-        When I run local_k8s up
+        When the user runs local_k8s up
         Then a k3d cluster named ghillie-local is created
         And the CNPG operator is installed
         And a CNPG Postgres cluster is created
@@ -456,20 +457,20 @@ Create `scripts/tests/features/local_k8s.feature`:
 
       Scenario: Idempotent up reuses existing cluster
         Given a k3d cluster named ghillie-local exists
-        When I run local_k8s up
+        When the user runs local_k8s up
         Then the existing cluster is not deleted
         And the Helm release is upgraded
         And the exit code is 0
 
       Scenario: Delete preview environment
         Given a k3d cluster named ghillie-local exists
-        When I run local_k8s down
+        When the user runs local_k8s down
         Then the k3d cluster is deleted
         And the exit code is 0
 
       Scenario: Status shows pod information
         Given a k3d cluster named ghillie-local exists
-        When I run local_k8s status
+        When the user runs local_k8s status
         Then pod status is printed
         And the exit code is 0
 
@@ -485,8 +486,8 @@ Add section to `docs/users-guide.md` after container image section:
     ## Local k3d preview
 
     Ghillie provides a local preview environment using k3d (k3s-in-Docker).
-    This mirrors the ephemeral previews architecture while running on your
-    workstation.
+    This mirrors the ephemeral previews architecture while running on a
+    developer workstation.
 
     ### Prerequisites
 

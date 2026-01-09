@@ -32,6 +32,7 @@ from local_k8s.orchestration import (
     stream_environment_logs,
     teardown_environment,
 )
+from local_k8s.validation import ExecutableNotFoundError
 
 app = App(
     name="local_k8s",
@@ -70,9 +71,13 @@ def up(
         Exit code (0 for success, non-zero for failure).
 
     """
-    return setup_environment(
-        cluster_name, namespace, ingress_port, skip_build=skip_build
-    )
+    try:
+        return setup_environment(
+            cluster_name, namespace, ingress_port, skip_build=skip_build
+        )
+    except ExecutableNotFoundError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
 
 
 @app.command
@@ -94,7 +99,11 @@ def down(
         Exit code (0 for success, non-zero for failure).
 
     """
-    return teardown_environment(cluster_name)
+    try:
+        return teardown_environment(cluster_name)
+    except ExecutableNotFoundError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
 
 
 @app.command
@@ -120,7 +129,11 @@ def status(
         Exit code (0 for success, non-zero for failure).
 
     """
-    return show_environment_status(cluster_name, namespace)
+    try:
+        return show_environment_status(cluster_name, namespace)
+    except ExecutableNotFoundError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
 
 
 @app.command
@@ -147,7 +160,11 @@ def logs(
         Exit code (0 for success, non-zero for failure).
 
     """
-    return stream_environment_logs(cluster_name, namespace, follow=follow)
+    try:
+        return stream_environment_logs(cluster_name, namespace, follow=follow)
+    except ExecutableNotFoundError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
 
 
 def main() -> int:

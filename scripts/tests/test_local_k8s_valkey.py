@@ -7,12 +7,12 @@ import os
 import pytest
 from local_k8s import (
     Config,
-    _valkey_manifest,
     create_valkey_instance,
     install_valkey_operator,
     read_valkey_uri,
     wait_for_valkey_ready,
 )
+from local_k8s.valkey import _valkey_manifest
 
 
 def _test_env() -> dict[str, str]:
@@ -76,6 +76,7 @@ class TestInstallValkeyOperator:
             "helm",
             "repo",
             "add",
+            "--force-update",
             "valkey-operator",
             "https://hyperspike.github.io/valkey-operator",
         )

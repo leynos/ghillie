@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from local_k8s.cnpg import (
-    _cnpg_cluster_manifest,
     create_cnpg_cluster,
     install_cnpg_operator,
     read_pg_app_uri,
@@ -21,6 +20,7 @@ from local_k8s.k3d import (
     cluster_exists,
     create_k3d_cluster,
     delete_k3d_cluster,
+    get_cluster_ingress_port,
     import_image_to_k3d,
     kubeconfig_env,
     write_kubeconfig,
@@ -44,7 +44,6 @@ from local_k8s.validation import (
     require_exe,
 )
 from local_k8s.valkey import (
-    _valkey_manifest,
     create_valkey_instance,
     install_valkey_operator,
     read_valkey_uri,
@@ -55,8 +54,6 @@ __all__ = [
     "Config",
     "ExecutableNotFoundError",
     "HelmOperatorSpec",
-    "_cnpg_cluster_manifest",
-    "_valkey_manifest",
     "b64decode_k8s_secret_field",
     "build_docker_image",
     "cluster_exists",
@@ -67,6 +64,7 @@ __all__ = [
     "create_valkey_instance",
     "delete_k3d_cluster",
     "ensure_namespace",
+    "get_cluster_ingress_port",
     "import_image_to_k3d",
     "install_cnpg_operator",
     "install_ghillie_chart",

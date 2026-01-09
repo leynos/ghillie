@@ -7,12 +7,12 @@ import os
 import pytest
 from local_k8s import (
     Config,
-    _cnpg_cluster_manifest,
     create_cnpg_cluster,
     install_cnpg_operator,
     read_pg_app_uri,
     wait_for_cnpg_ready,
 )
+from local_k8s.cnpg import _cnpg_cluster_manifest
 
 
 def _test_env() -> dict[str, str]:
@@ -77,6 +77,7 @@ class TestInstallCnpgOperator:
             "helm",
             "repo",
             "add",
+            "--force-update",
             "cnpg",
             "https://cloudnative-pg.github.io/charts",
         )

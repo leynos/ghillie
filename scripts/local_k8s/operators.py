@@ -25,7 +25,14 @@ def install_helm_operator(
 
     """
     subprocess.run(  # noqa: S603
-        ["helm", "repo", "add", spec.repo_name, spec.repo_url],  # noqa: S607
+        [  # noqa: S607
+            "helm",
+            "repo",
+            "add",
+            "--force-update",
+            spec.repo_name,
+            spec.repo_url,
+        ],
         check=True,
         env=env,
     )

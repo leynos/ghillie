@@ -41,11 +41,14 @@ class TestPickFreeLoopbackPort:
     def test_returns_different_ports(self) -> None:
         """Consecutive calls should typically return different ports."""
         # While not guaranteed, the kernel should give different ports
+        # This is probabilistic - if this fails on a healthy system, investigate
         ports = {pick_free_loopback_port() for _ in range(5)}
 
-        # At minimum, we should get more than one unique port
-        # (unless the system is very constrained)
-        assert len(ports) >= 1
+        # Expect at least 2 unique ports from 5 calls
+        assert len(ports) > 1, (
+            "Expected multiple unique ports from consecutive calls; "
+            f"got only {len(ports)}: {ports}"
+        )
 
 
 class TestB64DecodeK8sSecretField:

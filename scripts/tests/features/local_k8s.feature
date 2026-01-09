@@ -39,3 +39,16 @@ Feature: Local k3d preview environment lifecycle
     When I run local_k8s status
     Then pod status is printed
     And the exit code is 0
+
+  Scenario: Status for missing cluster
+    Given no k3d cluster named ghillie-local exists
+    When I run local_k8s status
+    Then the output contains "does not exist"
+    And the exit code is 1
+
+  Scenario: Up with skip-build does not build or import image
+    Given no k3d cluster named ghillie-local exists
+    When I run local_k8s up with skip-build
+    Then Docker image is not built or imported
+    And the output contains "Skipping Docker build"
+    And the exit code is 0

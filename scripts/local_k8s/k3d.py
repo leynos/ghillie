@@ -8,6 +8,67 @@ import subprocess
 from pathlib import Path
 
 
+def _extract_http_host_port(cluster: dict) -> int | None:
+    """Extract HTTP host port from cluster node port mappings.
+
+    Args:
+        cluster: k3d cluster dict from JSON output.
+
+    Returns:
+        Host port mapped to container port 80, or None if not found.
+
+    """
+    for node in cluster.get("nodes") or []:
+        port_mappings = node.get("portMappings") or {}
+        # portMappings is a dict like {"80/tcp": [{"HostPort": "8080", ...}]}
+        for container_port, mappings in port_mappings.items():
+            if not container_port.startswith("80/"):
+                continue
+            for mapping in mappings or []:
+                host_port_str = mapping.get("HostPort")
+                if host_port_str:
+                    try:
+                        return int(host_port_str)
+                    except ValueError:
+                        continue
+    return None
+
+
+def get_cluster_ingress_port(cluster_name: str) -> int | None:
+    """Get the ingress port for an existing k3d cluster.
+
+    Inspects the k3d cluster's port mappings to find the host port that maps
+    to port 80 (HTTP ingress) inside the cluster.
+
+    Args:
+        cluster_name: Name of the cluster to inspect.
+
+    Returns:
+        The host port as an int if found, None otherwise.
+
+    """
+    try:
+        result = subprocess.run(
+            ["k3d", "cluster", "list", "-o", "json"],  # noqa: S607
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+    try:
+        clusters = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+
+    for cluster in clusters:
+        if cluster.get("name") == cluster_name:
+            return _extract_http_host_port(cluster)
+
+    return None
+
+
 def cluster_exists(cluster_name: str) -> bool:
     """Check if a k3d cluster already exists.
 
