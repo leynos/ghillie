@@ -41,6 +41,69 @@ def _summarize(evidence: RepositoryEvidenceBundle) -> RepositoryStatusResult:
     return asyncio.run(model.summarize_repository(evidence))
 
 
+def _create_open_prs_tuple(count: int) -> tuple[PullRequestEvidence, ...]:
+    """Create a tuple of open pull request evidence items.
+
+    Parameters
+    ----------
+    count
+        Number of open PRs to create.
+
+    Returns
+    -------
+    tuple[PullRequestEvidence, ...]
+        Tuple containing the specified number of open PRs.
+
+    Notes
+    -----
+    Generates PRs with IDs starting at 100, numbers starting at 50,
+    and titles "Add feature X", "Add feature Y", etc.
+
+    """
+    return tuple(
+        PullRequestEvidence(
+            id=100 + i,
+            number=50 + i,
+            title=f"Add feature {chr(88 + i)}",
+            state="open",
+            work_type=WorkType.FEATURE,
+        )
+        for i in range(count)
+    )
+
+
+def _create_open_issues_tuple(count: int) -> tuple[IssueEvidence, ...]:
+    """Create a tuple of open issue evidence items.
+
+    Parameters
+    ----------
+    count
+        Number of open issues to create.
+
+    Returns
+    -------
+    tuple[IssueEvidence, ...]
+        Tuple containing the specified number of open issues.
+
+    Notes
+    -----
+    Generates issues with IDs starting at 200, numbers starting at 10,
+    and titles from a predefined list of bug descriptions.
+
+    """
+    issue_titles = ["Bug in login", "Bug in logout", "Bug in signup"]
+    return tuple(
+        IssueEvidence(
+            id=200 + i,
+            number=10 + i,
+            title=issue_titles[i] if i < len(issue_titles) else f"Bug {i + 1}",
+            state="open",
+            work_type=WorkType.BUG,
+        )
+        for i in range(count)
+    )
+
+
 def _create_evidence_with_open_items(
     metadata: RepositoryMetadata,
     *,
@@ -73,30 +136,11 @@ def _create_evidence_with_open_items(
 
     """
     if item_type == "pr":
-        prs = tuple(
-            PullRequestEvidence(
-                id=100 + i,
-                number=50 + i,
-                title=f"Add feature {chr(88 + i)}",
-                state="open",
-                work_type=WorkType.FEATURE,
-            )
-            for i in range(count)
-        )
+        prs = _create_open_prs_tuple(count)
         issues: tuple[IssueEvidence, ...] = ()
         pr_count = count
     else:
-        issue_titles = ["Bug in login", "Bug in logout", "Bug in signup"]
-        issues = tuple(
-            IssueEvidence(
-                id=200 + i,
-                number=10 + i,
-                title=issue_titles[i] if i < len(issue_titles) else f"Bug {i + 1}",
-                state="open",
-                work_type=WorkType.BUG,
-            )
-            for i in range(count)
-        )
+        issues = _create_open_issues_tuple(count)
         prs: tuple[PullRequestEvidence, ...] = ()
         pr_count = 0
 
@@ -248,30 +292,44 @@ class TestMockStatusModelOutput:
 class TestMockStatusModelNextSteps:
     """Tests for MockStatusModel next_steps suggestions."""
 
-    def test_at_risk_includes_mitigation_step(
+    @pytest.mark.parametrize(
+        ("evidence_fixture", "expected_status", "keyword", "description"),
+        [
+            pytest.param(
+                "evidence_with_previous_risks",
+                ReportStatus.AT_RISK,
+                "risk",
+                "risk-focused",
+                id="at_risk_includes_mitigation_step",
+            ),
+            pytest.param(
+                "empty_evidence",
+                ReportStatus.UNKNOWN,
+                "investigat",
+                "investigation-focused",
+                id="unknown_includes_investigation_step",
+            ),
+        ],
+    )
+    def test_status_includes_appropriate_next_step(  # noqa: PLR0913
         self,
-        evidence_with_previous_risks: RepositoryEvidenceBundle,
+        request: pytest.FixtureRequest,
+        evidence_fixture: str,
+        expected_status: ReportStatus,
+        keyword: str,
+        description: str,
     ) -> None:
-        """AT_RISK status includes a step to address identified risks."""
-        result = _summarize(evidence_with_previous_risks)
+        """Specific status codes include appropriate next step guidance."""
+        evidence = request.getfixturevalue(evidence_fixture)
 
-        assert result.status == ReportStatus.AT_RISK
-        assert result.next_steps, "Expected at least one next step for AT_RISK status"
-        assert any("risk" in step.lower() for step in result.next_steps), (
-            f"Expected a risk-focused next step, got: {result.next_steps}"
+        result = _summarize(evidence)
+
+        assert result.status == expected_status
+        assert result.next_steps, (
+            f"Expected at least one next step for {expected_status.value} status"
         )
-
-    def test_unknown_includes_investigation_step(
-        self,
-        empty_evidence: RepositoryEvidenceBundle,
-    ) -> None:
-        """UNKNOWN status with no activity includes an investigation step."""
-        result = _summarize(empty_evidence)
-
-        assert result.status == ReportStatus.UNKNOWN
-        assert result.next_steps, "Expected at least one next step for UNKNOWN status"
-        assert any("investigat" in step.lower() for step in result.next_steps), (
-            f"Expected an investigation-focused next step, got: {result.next_steps}"
+        assert any(keyword in step.lower() for step in result.next_steps), (
+            f"Expected a {description} next step, got: {result.next_steps}"
         )
 
     @pytest.mark.parametrize(
