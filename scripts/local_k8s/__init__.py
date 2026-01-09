@@ -50,6 +50,17 @@ from local_k8s.valkey import (
     wait_for_valkey_ready,
 )
 
+# Mark the recommended public surface for consumers
+PUBLIC_API = [
+    "Config",
+    "HelmOperatorSpec",
+    "setup_environment",
+    "teardown_environment",
+    "show_environment_status",
+    "stream_environment_logs",
+]
+# Keep __all__ as-is for now; PUBLIC_API helps guide future slimming.
+
 __all__ = [
     "Config",
     "ExecutableNotFoundError",

@@ -8,6 +8,46 @@ import subprocess
 from pathlib import Path
 
 
+def _parse_int(s: str) -> int | None:
+    """Parse a string as an integer, returning None on failure.
+
+    Args:
+        s: String to parse.
+
+    Returns:
+        The parsed integer, or None if parsing fails.
+
+    """
+    try:
+        return int(s)
+    except ValueError:
+        return None
+
+
+def _iter_http_host_ports(cluster: dict) -> list[int]:
+    """Collect all HTTP host ports from cluster node port mappings.
+
+    Args:
+        cluster: k3d cluster dict from JSON output.
+
+    Returns:
+        List of host ports mapped to container port 80.
+
+    """
+    # portMappings is a dict like {"80/tcp": [{"HostPort": "8080", ...}]}
+    ports: list[int] = []
+    for node in cluster.get("nodes") or []:
+        port_mappings = node.get("portMappings") or {}
+        for container_port, mappings in port_mappings.items():
+            if not container_port.startswith("80/"):
+                continue
+            for mapping in mappings or []:
+                host_port_str = mapping.get("HostPort")
+                if host_port_str and (port := _parse_int(host_port_str)) is not None:
+                    ports.append(port)
+    return ports
+
+
 def _extract_http_host_port(cluster: dict) -> int | None:
     """Extract HTTP host port from cluster node port mappings.
 
@@ -18,20 +58,8 @@ def _extract_http_host_port(cluster: dict) -> int | None:
         Host port mapped to container port 80, or None if not found.
 
     """
-    for node in cluster.get("nodes") or []:
-        port_mappings = node.get("portMappings") or {}
-        # portMappings is a dict like {"80/tcp": [{"HostPort": "8080", ...}]}
-        for container_port, mappings in port_mappings.items():
-            if not container_port.startswith("80/"):
-                continue
-            for mapping in mappings or []:
-                host_port_str = mapping.get("HostPort")
-                if host_port_str:
-                    try:
-                        return int(host_port_str)
-                    except ValueError:
-                        continue
-    return None
+    ports = _iter_http_host_ports(cluster)
+    return ports[0] if ports else None
 
 
 def get_cluster_ingress_port(cluster_name: str) -> int | None:
