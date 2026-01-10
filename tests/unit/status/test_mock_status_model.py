@@ -57,14 +57,14 @@ def _create_open_prs_tuple(count: int) -> tuple[PullRequestEvidence, ...]:
     Notes
     -----
     Generates PRs with IDs starting at 100, numbers starting at 50,
-    and titles "Add feature X", "Add feature Y", etc.
+    and titles "Add feature 1", "Add feature 2", etc.
 
     """
     return tuple(
         PullRequestEvidence(
             id=100 + i,
             number=50 + i,
-            title=f"Add feature {chr(88 + i)}",
+            title=f"Add feature {i + 1}",
             state="open",
             work_type=WorkType.FEATURE,
         )
@@ -129,7 +129,7 @@ def _create_evidence_with_open_items(
     Notes
     -----
     When ``item_type`` is "pr", generates PRs with IDs starting at 100,
-    numbers starting at 50, and titles "Add feature X", "Add feature Y", etc.
+    numbers starting at 50, and titles "Add feature 1", "Add feature 2", etc.
 
     When ``item_type`` is "issue", generates issues with IDs starting at 200,
     numbers starting at 10, and titles from a predefined list of bug descriptions.
@@ -188,7 +188,10 @@ def _assert_no_next_steps_containing(
         Description of the item type for the error message.
 
     """
-    matching_steps = [step for step in result.next_steps if keyword in step]
+    keyword_cf = keyword.casefold()
+    matching_steps = [
+        step for step in result.next_steps if keyword_cf in step.casefold()
+    ]
     assert not matching_steps, (
         f"Expected no {item_description} steps for closed items, got: {matching_steps}"
     )
