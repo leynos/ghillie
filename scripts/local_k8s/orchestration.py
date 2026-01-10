@@ -125,6 +125,53 @@ def _validate_and_setup_environment(
     return cfg, env
 
 
+def _ensure_cluster_ready(
+    cluster_name: str, ingress_port: int | None
+) -> tuple[int, bool]:
+    """Ensure k3d cluster exists and determine the ingress port.
+
+    Args:
+        cluster_name: Name for the k3d cluster.
+        ingress_port: Requested host port for ingress (auto-selected if None).
+
+    Returns:
+        Tuple of (port to use, whether this is a new cluster).
+
+    Raises:
+        SystemExit: If there's a port mismatch with an existing cluster.
+
+    """
+    port = ingress_port or pick_free_loopback_port()
+
+    if cluster_exists(cluster_name):
+        print(f"Cluster '{cluster_name}' already exists, reusing...")
+
+        existing_port = get_cluster_ingress_port(cluster_name)
+
+        if existing_port is None:
+            print(
+                f"Warning: Could not determine ingress port for cluster "
+                f"'{cluster_name}'. Assuming port {port}."
+            )
+        elif ingress_port is not None and ingress_port != existing_port:
+            print(
+                f"Error: Ingress port mismatch.\n"
+                f"  Existing cluster '{cluster_name}' uses port {existing_port},\n"
+                f"  but --ingress-port={ingress_port} was requested.\n\n"
+                f"Either re-run without --ingress-port to reuse port {existing_port},\n"
+                f"or delete the cluster first with 'local_k8s down'."
+            )
+            raise SystemExit(1)
+        else:
+            port = existing_port
+
+        return port, False
+
+    print(f"Creating k3d cluster '{cluster_name}' on port {port}...")
+    create_k3d_cluster(cluster_name, port)
+    return port, True
+
+
 def setup_environment(
     cluster_name: str,
     namespace: str,
@@ -149,41 +196,10 @@ def setup_environment(
     for exe in ("docker", "k3d", "kubectl", "helm"):
         require_exe(exe)
 
-    # Determine ingress port and build config
-    port = ingress_port or pick_free_loopback_port()
-
-    # Create k3d cluster if needed, or validate existing cluster's port
-    if cluster_exists(cluster_name):
-        print(f"Cluster '{cluster_name}' already exists, reusing...")
-
-        # Discover the existing cluster's ingress port
-        existing_port = get_cluster_ingress_port(cluster_name)
-
-        if existing_port is None:
-            print(
-                f"Warning: Could not determine ingress port for cluster "
-                f"'{cluster_name}'. Assuming port {port}."
-            )
-        elif ingress_port is not None and ingress_port != existing_port:
-            # User explicitly requested a different port than what exists
-            print(
-                f"Error: Ingress port mismatch.\n"
-                f"  Existing cluster '{cluster_name}' uses port {existing_port},\n"
-                f"  but --ingress-port={ingress_port} was requested.\n\n"
-                f"Either re-run without --ingress-port to reuse port {existing_port},\n"
-                f"or delete the cluster first with 'local_k8s down'."
-            )
-            return 1
-        else:
-            # Use the existing cluster's port
-            port = existing_port
-    else:
-        print(f"Creating k3d cluster '{cluster_name}' on port {port}...")
-        create_k3d_cluster(cluster_name, port)
+    # Ensure cluster exists and determine port
+    port, _is_new = _ensure_cluster_ready(cluster_name, ingress_port)
 
     cfg = Config(cluster_name=cluster_name, namespace=namespace, ingress_port=port)
-
-    # Set up the Kubernetes environment
     env = kubeconfig_env(cluster_name)
 
     # Configure infrastructure and deploy
