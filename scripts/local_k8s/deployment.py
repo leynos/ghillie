@@ -27,7 +27,17 @@ def create_app_secret(
         database_url: PostgreSQL connection URL from CNPG.
         valkey_url: Valkey connection URL.
 
+    Raises:
+        ValueError: If database_url or valkey_url is empty.
+
     """
+    if not database_url:
+        msg = "database_url cannot be empty"
+        raise ValueError(msg)
+    if not valkey_url:
+        msg = "valkey_url cannot be empty"
+        raise ValueError(msg)
+
     # Generate secret YAML using dry-run
     result = subprocess.run(  # noqa: S603
         [  # noqa: S607
@@ -92,7 +102,17 @@ def install_ghillie_chart(cfg: Config, env: dict[str, str]) -> None:
         cfg: Configuration with chart path, namespace, and values file.
         env: Environment dict with KUBECONFIG set.
 
+    Raises:
+        FileNotFoundError: If the chart directory or values file does not exist.
+
     """
+    if not cfg.chart_path.exists():
+        msg = f"Helm chart not found at {cfg.chart_path}"
+        raise FileNotFoundError(msg)
+    if not cfg.values_file.exists():
+        msg = f"Values file not found at {cfg.values_file}"
+        raise FileNotFoundError(msg)
+
     subprocess.run(  # noqa: S603
         [  # noqa: S607
             "helm",

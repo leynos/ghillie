@@ -11,6 +11,8 @@ import sys
 import typing as typ
 from pathlib import Path
 
+import pytest
+
 if typ.TYPE_CHECKING:
     from cyclopts import App
 
@@ -39,3 +41,30 @@ def load_script_app() -> App:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module.app
+
+
+@pytest.fixture
+def script_app() -> App:
+    """Fixture that provides the local_k8s.py App for testing."""
+    return load_script_app()
+
+
+@pytest.fixture
+def test_env(tmp_path: Path) -> dict[str, str]:
+    """Create a test environment with a temporary KUBECONFIG path.
+
+    Returns a copy of the current environment with KUBECONFIG pointing to
+    a temporary file, allowing cmd-mox shims to work properly during testing.
+
+    Args:
+        tmp_path: Pytest's temporary path fixture.
+
+    Returns:
+        Environment dictionary with KUBECONFIG set to a temp file.
+
+    """
+    import os
+
+    env = dict(os.environ)
+    env["KUBECONFIG"] = str(tmp_path / "kubeconfig-test.yaml")
+    return env

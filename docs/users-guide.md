@@ -832,7 +832,7 @@ The local preview environment installs the following components:
 - **Valkey**: Redis-compatible in-memory cache via the hyperspike Valkey
   operator, providing a standalone Valkey instance.
 - **Ghillie deployment**: The Ghillie Helm chart deployed with local values,
-  using the locally-built container image.
+  using the locally built container image.
 
 Connection strings for the database and cache are automatically extracted from
 operator-managed secrets and injected into the application secret.

@@ -2,25 +2,12 @@
 
 from __future__ import annotations
 
-import os
-
 import pytest
 from local_k8s import (
     Config,
     print_status,
     tail_logs,
 )
-
-
-def _test_env() -> dict[str, str]:
-    """Create a test environment with KUBECONFIG set.
-
-    Returns a copy of the current environment with KUBECONFIG set, which allows
-    cmd-mox shims to work properly during testing.
-    """
-    env = dict(os.environ)
-    env["KUBECONFIG"] = "/tmp/kubeconfig-test.yaml"  # noqa: S108
-    return env
 
 
 class TestPrintStatus:
@@ -30,7 +17,12 @@ class TestPrintStatus:
         "namespace",
         ["ghillie", "custom-ns"],
     )
-    def test_invokes_kubectl_get_pods(self, cmd_mox, namespace: str) -> None:  # noqa: ANN001
+    def test_invokes_kubectl_get_pods(
+        self,
+        cmd_mox,  # noqa: ANN001
+        test_env: dict[str, str],
+        namespace: str,
+    ) -> None:
         """Should invoke kubectl get pods with correct namespace."""
         cfg = Config(namespace=namespace)
 
@@ -42,7 +34,7 @@ class TestPrintStatus:
             "wide",
         ).returns(exit_code=0)
 
-        print_status(cfg, _test_env())
+        print_status(cfg, test_env)
 
 
 class TestTailLogs:
@@ -59,6 +51,7 @@ class TestTailLogs:
     def test_invokes_kubectl_logs(
         self,
         cmd_mox,  # noqa: ANN001
+        test_env: dict[str, str],
         namespace: str,
         follow: bool,  # noqa: FBT001
     ) -> None:
@@ -75,4 +68,4 @@ class TestTailLogs:
 
         cmd_mox.mock("kubectl").with_args(*expected_args).returns(exit_code=0)
 
-        tail_logs(cfg, _test_env(), follow=follow)
+        tail_logs(cfg, test_env, follow=follow)

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+import typing as typ
 
 import pytest
+
+if typ.TYPE_CHECKING:
+    from pathlib import Path
 from local_k8s import (
     cluster_exists,
     create_k3d_cluster,
@@ -98,9 +101,14 @@ class TestDeleteK3dCluster:
 class TestWriteKubeconfig:
     """Tests for write_kubeconfig helper using cmd-mox."""
 
-    def test_returns_kubeconfig_path(self, cmd_mox) -> None:  # noqa: ANN001
+    def test_returns_kubeconfig_path(
+        self,
+        cmd_mox,  # noqa: ANN001
+        tmp_path: Path,
+    ) -> None:
         """Should return the path output by k3d kubeconfig write."""
-        expected_path = "/home/user/.k3d/kubeconfig-ghillie-local.yaml"
+        expected_path = tmp_path / "kubeconfig-ghillie-local.yaml"
+        expected_path.touch()  # File must exist for validation
         cmd_mox.mock("k3d").with_args("kubeconfig", "write", "ghillie-local").returns(
             exit_code=0,
             stdout=f"{expected_path}\n",
@@ -108,15 +116,20 @@ class TestWriteKubeconfig:
 
         result = write_kubeconfig("ghillie-local")
 
-        assert result == Path(expected_path)
+        assert result == expected_path
 
 
 class TestKubeconfigEnv:
     """Tests for kubeconfig_env helper using cmd-mox."""
 
-    def test_returns_env_with_kubeconfig(self, cmd_mox) -> None:  # noqa: ANN001
+    def test_returns_env_with_kubeconfig(
+        self,
+        cmd_mox,  # noqa: ANN001
+        tmp_path: Path,
+    ) -> None:
         """Should return environment dict with KUBECONFIG set."""
-        kubeconfig_path = "/tmp/kubeconfig-test.yaml"  # noqa: S108
+        kubeconfig_path = tmp_path / "kubeconfig-test.yaml"
+        kubeconfig_path.touch()  # File must exist for write_kubeconfig validation
         cmd_mox.mock("k3d").with_args("kubeconfig", "write", "test-cluster").returns(
             exit_code=0,
             stdout=f"{kubeconfig_path}\n",
@@ -125,7 +138,7 @@ class TestKubeconfigEnv:
         env = kubeconfig_env("test-cluster")
 
         assert "KUBECONFIG" in env
-        assert env["KUBECONFIG"] == kubeconfig_path
+        assert env["KUBECONFIG"] == str(kubeconfig_path)
 
 
 class TestImportImageToK3d:

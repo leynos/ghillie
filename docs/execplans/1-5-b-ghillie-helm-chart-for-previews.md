@@ -30,8 +30,7 @@ value configurations.
 - ExternalSecret must be optional and only render when
   `secrets.externalSecret.enabled` is true.
 - All Python test code must pass `make check-fmt`, `make lint`,
-  `make typecheck`,
-  and `make test`.
+  `make typecheck`, and `make test`.
 - No modifications to existing application code; this task is chart-only plus
   tests.
 

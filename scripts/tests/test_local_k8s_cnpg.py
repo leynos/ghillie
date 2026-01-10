@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
 import pytest
 from local_k8s import (
     Config,
@@ -13,17 +11,6 @@ from local_k8s import (
     wait_for_cnpg_ready,
 )
 from local_k8s.cnpg import _cnpg_cluster_manifest
-
-
-def _test_env() -> dict[str, str]:
-    """Create a test environment with KUBECONFIG set.
-
-    Returns a copy of the current environment with KUBECONFIG set, which allows
-    cmd-mox shims to work properly during testing.
-    """
-    env = dict(os.environ)
-    env["KUBECONFIG"] = "/tmp/kubeconfig-test.yaml"  # noqa: S108
-    return env
 
 
 class TestCnpgClusterManifest:
@@ -56,12 +43,14 @@ class TestInstallCnpgOperator:
     verifies that all expected subprocess calls are made in the correct order.
     """
 
-    def test_calls_expected_commands(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_calls_expected_commands(
+        self, monkeypatch: pytest.MonkeyPatch, test_env: dict[str, str]
+    ) -> None:
         """Should call helm and kubectl commands in correct order."""
         cfg = Config()
         calls: list[tuple[str, ...]] = []
 
-        def mock_run(args: list[str], **_kwargs) -> None:  # noqa: ANN003
+        def mock_run(args: list[str], **_kwargs: object) -> object:
             calls.append(tuple(args))
             # Simulate namespace not existing (kubectl get returns non-zero)
             returncode = 1 if args[:3] == ["kubectl", "get", "namespace"] else 0
@@ -69,7 +58,7 @@ class TestInstallCnpgOperator:
 
         monkeypatch.setattr("subprocess.run", mock_run)
 
-        install_cnpg_operator(cfg, _test_env())
+        install_cnpg_operator(cfg, test_env)
 
         # Verify the expected commands were called
         assert len(calls) == 5
@@ -99,13 +88,17 @@ class TestInstallCnpgOperator:
 class TestCreateCnpgCluster:
     """Tests for create_cnpg_cluster helper using cmd-mox."""
 
-    def test_applies_manifest(self, cmd_mox) -> None:  # noqa: ANN001
+    def test_applies_manifest(
+        self,
+        cmd_mox,  # noqa: ANN001
+        test_env: dict[str, str],
+    ) -> None:
         """Should apply CNPG cluster manifest via kubectl."""
         cfg = Config()
 
         cmd_mox.mock("kubectl").with_args("apply", "-f", "-").returns(exit_code=0)
 
-        create_cnpg_cluster(cfg, _test_env())
+        create_cnpg_cluster(cfg, test_env)
 
 
 class TestWaitForCnpgReady:
@@ -115,7 +108,12 @@ class TestWaitForCnpgReady:
         "timeout",
         [600, 120],  # default timeout, custom timeout
     )
-    def test_waits_for_pod_ready(self, cmd_mox, timeout: int) -> None:  # noqa: ANN001
+    def test_waits_for_pod_ready(
+        self,
+        cmd_mox,  # noqa: ANN001
+        test_env: dict[str, str],
+        timeout: int,
+    ) -> None:
         """Should invoke kubectl wait with specified timeout."""
         cfg = Config()
 
@@ -129,15 +127,19 @@ class TestWaitForCnpgReady:
         ).returns(exit_code=0)
 
         if timeout == 600:
-            wait_for_cnpg_ready(cfg, _test_env())
+            wait_for_cnpg_ready(cfg, test_env)
         else:
-            wait_for_cnpg_ready(cfg, _test_env(), timeout=timeout)
+            wait_for_cnpg_ready(cfg, test_env, timeout=timeout)
 
 
 class TestReadPgAppUri:
     """Tests for read_pg_app_uri helper using cmd-mox."""
 
-    def test_decodes_secret(self, cmd_mox) -> None:  # noqa: ANN001
+    def test_decodes_secret(
+        self,
+        cmd_mox,  # noqa: ANN001
+        test_env: dict[str, str],
+    ) -> None:
         """Should decode DATABASE_URL from CNPG app secret."""
         cfg = Config()
 
@@ -155,6 +157,6 @@ class TestReadPgAppUri:
             "jsonpath={.data.uri}",
         ).returns(exit_code=0, stdout=encoded_uri)
 
-        result = read_pg_app_uri(cfg, _test_env())
+        result = read_pg_app_uri(cfg, test_env)
 
         assert result == "postgresql://ghillie:pass@pg-ghillie:5432/ghillie"

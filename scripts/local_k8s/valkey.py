@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import subprocess
 import typing as typ
 
 from local_k8s.config import HelmOperatorSpec
+from local_k8s.k8s import apply_manifest, read_secret_field, wait_for_pods_ready
 from local_k8s.operators import install_helm_operator
-from local_k8s.validation import b64decode_k8s_secret_field
 
 if typ.TYPE_CHECKING:
     from local_k8s.config import Config
@@ -71,13 +70,7 @@ def create_valkey_instance(cfg: Config, env: dict[str, str]) -> None:
 
     """
     manifest = _valkey_manifest(cfg.namespace, cfg.valkey_name)
-    subprocess.run(
-        ["kubectl", "apply", "-f", "-"],  # noqa: S607
-        input=manifest,
-        text=True,
-        check=True,
-        env=env,
-    )
+    apply_manifest(manifest, env)
 
 
 def wait_for_valkey_ready(cfg: Config, env: dict[str, str], timeout: int = 300) -> None:
@@ -89,22 +82,15 @@ def wait_for_valkey_ready(cfg: Config, env: dict[str, str], timeout: int = 300) 
     Args:
         cfg: Configuration with namespace and Valkey name.
         env: Environment dict with KUBECONFIG set.
-        timeout: Maximum time to wait in seconds (default 300).
+        timeout: Maximum time to wait in seconds (default 300). Must be between
+            1 and 3600.
+
+    Raises:
+        ValueError: If timeout is outside the valid range.
 
     """
-    subprocess.run(  # noqa: S603
-        [  # noqa: S607
-            "kubectl",
-            "wait",
-            "--for=condition=Ready",
-            "pod",
-            f"--selector=app.kubernetes.io/name={cfg.valkey_name}",
-            f"--namespace={cfg.namespace}",
-            f"--timeout={timeout}s",
-        ],
-        check=True,
-        env=env,
-    )
+    selector = f"app.kubernetes.io/name={cfg.valkey_name}"
+    wait_for_pods_ready(selector, cfg.namespace, env, timeout)
 
 
 def read_valkey_uri(cfg: Config, env: dict[str, str]) -> str:
@@ -120,20 +106,8 @@ def read_valkey_uri(cfg: Config, env: dict[str, str]) -> str:
     Returns:
         The decoded VALKEY_URL connection string.
 
+    Raises:
+        ValueError: If the secret field is empty or missing.
+
     """
-    result = subprocess.run(  # noqa: S603
-        [  # noqa: S607
-            "kubectl",
-            "get",
-            "secret",
-            cfg.valkey_name,
-            f"--namespace={cfg.namespace}",
-            "-o",
-            "jsonpath={.data.uri}",
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-        env=env,
-    )
-    return b64decode_k8s_secret_field(result.stdout)
+    return read_secret_field(cfg.valkey_name, "uri", cfg.namespace, env)

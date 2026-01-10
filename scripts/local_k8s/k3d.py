@@ -100,6 +100,8 @@ def get_cluster_ingress_port(cluster_name: str) -> int | None:
             text=True,
         )
     except (OSError, subprocess.CalledProcessError):
+        # OSError: k3d is not installed or not on PATH.
+        # CalledProcessError: k3d command failed (e.g., Docker not running).
         return None
 
     try:
@@ -121,17 +123,30 @@ def cluster_exists(cluster_name: str) -> bool:
         cluster_name: Name of the cluster to check for.
 
     Returns:
-        True if the cluster exists, False otherwise.
+        True if the cluster exists, False otherwise. Returns False if k3d
+        is unavailable or returns invalid output.
 
     """
-    result = subprocess.run(
-        ["k3d", "cluster", "list", "-o", "json"],  # noqa: S607
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    clusters = json.loads(result.stdout)
+    try:
+        result = subprocess.run(
+            ["k3d", "cluster", "list", "-o", "json"],  # noqa: S607
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return False
+
+    try:
+        clusters = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return False
+
     return any(c.get("name") == cluster_name for c in clusters)
+
+
+_MIN_PORT = 1024
+_MAX_PORT = 65535
 
 
 def create_k3d_cluster(cluster_name: str, port: int, agents: int = 1) -> None:
@@ -143,10 +158,18 @@ def create_k3d_cluster(cluster_name: str, port: int, agents: int = 1) -> None:
 
     Args:
         cluster_name: Name for the new cluster.
-        port: Host port to map to ingress (port 80 on the load balancer).
+        port: Host port to map to ingress (port 80 on the load balancer). Must
+            be in the range 1024-65535 (non-privileged ports).
         agents: Number of agent nodes (default 1).
 
+    Raises:
+        ValueError: If port is outside the valid range.
+
     """
+    if not _MIN_PORT <= port <= _MAX_PORT:
+        msg = f"port must be between {_MIN_PORT} and {_MAX_PORT}, got {port}"
+        raise ValueError(msg)
+
     port_mapping = f"127.0.0.1:{port}:80@loadbalancer"
     subprocess.run(  # noqa: S603
         [  # noqa: S607
@@ -188,6 +211,10 @@ def write_kubeconfig(cluster_name: str) -> Path:
     Returns:
         Path to the generated kubeconfig file.
 
+    Raises:
+        RuntimeError: If the kubeconfig path is empty or the file was not
+            created.
+
     """
     result = subprocess.run(  # noqa: S603
         ["k3d", "kubeconfig", "write", cluster_name],  # noqa: S607
@@ -195,7 +222,17 @@ def write_kubeconfig(cluster_name: str) -> Path:
         text=True,
         check=True,
     )
-    return Path(result.stdout.strip())
+    kubeconfig_path = result.stdout.strip()
+    if not kubeconfig_path:
+        msg = f"k3d returned empty kubeconfig path for cluster '{cluster_name}'"
+        raise RuntimeError(msg)
+
+    path = Path(kubeconfig_path)
+    if not path.exists():
+        msg = f"Kubeconfig file was not created at {kubeconfig_path}"
+        raise RuntimeError(msg)
+
+    return path
 
 
 def kubeconfig_env(cluster_name: str) -> dict[str, str]:

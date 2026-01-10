@@ -56,8 +56,7 @@ Thresholds that trigger escalation when breached:
   `cmd-mox` are required in the script, stop and escalate.
 - Iterations: if tests still fail after 3 attempts to fix, stop and escalate.
 - Ambiguity: if the Valkey operator CustomResourceDefinition (CRD) differs
-  materially from the documented
-  API, stop and present options.
+  materially from the documented API, stop and present options.
 
 ## Risks
 
@@ -107,22 +106,22 @@ Thresholds that trigger escalation when breached:
 - **Decision:** Use Cyclopts with environment variable support rather than
   argparse. Rationale: Aligns with `docs/scripting-standards.md`; provides
   cleaner parameter handling and env var integration for CI use. Date:
-  2026-01-08
+  2026-01-08.
 
 - **Decision:** Place script at `scripts/local_k8s.py` with tests at
   `scripts/tests/`. Rationale: Matches the pattern documented in
   `docs/scripting-standards.md` where tests mirror script locations. Date:
-  2026-01-08
+  2026-01-08.
 
 - **Decision:** Use `cmd-mox` for single-call mocking and monkeypatch for
   multi-call scenarios. Rationale: cmd-mox had verification issues when
   functions called subprocess.run multiple times with different arguments.
   Monkeypatch with a mock factory pattern provides more control. Date:
-  2026-01-08
+  2026-01-08.
 
 - **Decision:** Install Valkey via Helm (hyperspike chart) instead of plain
   kubectl apply. Rationale: Matches the approach used for CNPG operator and
-  provides consistent operator lifecycle management. Date: 2026-01-08
+  provides consistent operator lifecycle management. Date: 2026-01-08.
 
 ## Outcomes & Retrospective
 

@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import subprocess
 import typing as typ
 
 from local_k8s.config import HelmOperatorSpec
+from local_k8s.k8s import apply_manifest, read_secret_field, wait_for_pods_ready
 from local_k8s.operators import install_helm_operator
-from local_k8s.validation import b64decode_k8s_secret_field
 
 if typ.TYPE_CHECKING:
     from local_k8s.config import Config
@@ -73,13 +72,7 @@ def create_cnpg_cluster(cfg: Config, env: dict[str, str]) -> None:
 
     """
     manifest = _cnpg_cluster_manifest(cfg.namespace, cfg.pg_cluster_name)
-    subprocess.run(
-        ["kubectl", "apply", "-f", "-"],  # noqa: S607
-        input=manifest,
-        text=True,
-        check=True,
-        env=env,
-    )
+    apply_manifest(manifest, env)
 
 
 def wait_for_cnpg_ready(cfg: Config, env: dict[str, str], timeout: int = 600) -> None:
@@ -91,22 +84,15 @@ def wait_for_cnpg_ready(cfg: Config, env: dict[str, str], timeout: int = 600) ->
     Args:
         cfg: Configuration with namespace and cluster name.
         env: Environment dict with KUBECONFIG set.
-        timeout: Maximum time to wait in seconds (default 600).
+        timeout: Maximum time to wait in seconds (default 600). Must be between
+            1 and 3600.
+
+    Raises:
+        ValueError: If timeout is outside the valid range.
 
     """
-    subprocess.run(  # noqa: S603
-        [  # noqa: S607
-            "kubectl",
-            "wait",
-            "--for=condition=Ready",
-            "pod",
-            f"--selector=cnpg.io/cluster={cfg.pg_cluster_name}",
-            f"--namespace={cfg.namespace}",
-            f"--timeout={timeout}s",
-        ],
-        check=True,
-        env=env,
-    )
+    selector = f"cnpg.io/cluster={cfg.pg_cluster_name}"
+    wait_for_pods_ready(selector, cfg.namespace, env, timeout)
 
 
 def read_pg_app_uri(cfg: Config, env: dict[str, str]) -> str:
@@ -122,21 +108,9 @@ def read_pg_app_uri(cfg: Config, env: dict[str, str]) -> str:
     Returns:
         The decoded DATABASE_URL connection string.
 
+    Raises:
+        ValueError: If the secret field is empty or missing.
+
     """
     secret_name = f"{cfg.pg_cluster_name}-app"
-    result = subprocess.run(  # noqa: S603
-        [  # noqa: S607
-            "kubectl",
-            "get",
-            "secret",
-            secret_name,
-            f"--namespace={cfg.namespace}",
-            "-o",
-            "jsonpath={.data.uri}",
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-        env=env,
-    )
-    return b64decode_k8s_secret_field(result.stdout)
+    return read_secret_field(secret_name, "uri", cfg.namespace, env)

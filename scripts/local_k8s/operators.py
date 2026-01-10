@@ -10,6 +10,10 @@ from local_k8s.k8s import ensure_namespace
 if typ.TYPE_CHECKING:
     from local_k8s.config import HelmOperatorSpec
 
+# Timeouts for Helm operations (in seconds).
+_HELM_REPO_TIMEOUT = 60
+_HELM_INSTALL_TIMEOUT = 300
+
 
 def install_helm_operator(
     spec: HelmOperatorSpec,
@@ -35,11 +39,13 @@ def install_helm_operator(
         ],
         check=True,
         env=env,
+        timeout=_HELM_REPO_TIMEOUT,
     )
     subprocess.run(
         ["helm", "repo", "update"],  # noqa: S607
         check=True,
         env=env,
+        timeout=_HELM_REPO_TIMEOUT,
     )
     ensure_namespace(spec.namespace, env)
     subprocess.run(  # noqa: S603
@@ -55,4 +61,5 @@ def install_helm_operator(
         ],
         check=True,
         env=env,
+        timeout=_HELM_INSTALL_TIMEOUT,
     )

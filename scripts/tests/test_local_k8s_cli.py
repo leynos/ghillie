@@ -2,44 +2,37 @@
 
 from __future__ import annotations
 
-from conftest import load_script_app
+import typing as typ
+
+if typ.TYPE_CHECKING:
+    from cyclopts import App
 
 
 class TestCliStructure:
     """Tests for CLI structure and subcommands."""
 
-    def test_app_has_name(self) -> None:
+    def test_app_has_name(self, script_app: App) -> None:
         """App should have the correct name."""
-        app = load_script_app()
         # Cyclopts returns name as a tuple
-        assert app.name == ("local_k8s",)
+        assert script_app.name == ("local_k8s",)
 
-    def test_app_has_version(self) -> None:
+    def test_app_has_version(self, script_app: App) -> None:
         """App should have a version."""
-        app = load_script_app()
-        assert app.version == "0.1.0"
+        assert script_app.version == "0.1.0"
 
-    def test_app_has_up_command(self) -> None:
+    def test_app_has_up_command(self, script_app: App) -> None:
         """App should have an 'up' subcommand."""
-        app = load_script_app()
-        # Cyclopts command names are tuples
-        command_names = [cmd.name for cmd in app._commands.values()]
-        assert ("up",) in command_names
+        # Use Cyclopts public API - check command exists via indexing
+        assert "up" in script_app
 
-    def test_app_has_down_command(self) -> None:
+    def test_app_has_down_command(self, script_app: App) -> None:
         """App should have a 'down' subcommand."""
-        app = load_script_app()
-        command_names = [cmd.name for cmd in app._commands.values()]
-        assert ("down",) in command_names
+        assert "down" in script_app
 
-    def test_app_has_status_command(self) -> None:
+    def test_app_has_status_command(self, script_app: App) -> None:
         """App should have a 'status' subcommand."""
-        app = load_script_app()
-        command_names = [cmd.name for cmd in app._commands.values()]
-        assert ("status",) in command_names
+        assert "status" in script_app
 
-    def test_app_has_logs_command(self) -> None:
+    def test_app_has_logs_command(self, script_app: App) -> None:
         """App should have a 'logs' subcommand."""
-        app = load_script_app()
-        command_names = [cmd.name for cmd in app._commands.values()]
-        assert ("logs",) in command_names
+        assert "logs" in script_app

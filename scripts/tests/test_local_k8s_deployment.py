@@ -2,26 +2,18 @@
 
 from __future__ import annotations
 
-import os
+import typing as typ
 
 import pytest
+
+if typ.TYPE_CHECKING:
+    from pathlib import Path
 from local_k8s import (
     Config,
     build_docker_image,
     create_app_secret,
     install_ghillie_chart,
 )
-
-
-def _test_env() -> dict[str, str]:
-    """Create a test environment with KUBECONFIG set.
-
-    Returns a copy of the current environment with KUBECONFIG set, which allows
-    cmd-mox shims to work properly during testing.
-    """
-    env = dict(os.environ)
-    env["KUBECONFIG"] = "/tmp/kubeconfig-test.yaml"  # noqa: S108
-    return env
 
 
 class TestCreateAppSecret:
@@ -31,12 +23,14 @@ class TestCreateAppSecret:
     multiple subprocess calls that need to be verified together.
     """
 
-    def test_creates_secret_with_urls(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_creates_secret_with_urls(
+        self, monkeypatch: pytest.MonkeyPatch, test_env: dict[str, str]
+    ) -> None:
         """Should create secret with DATABASE_URL and VALKEY_URL."""
         cfg = Config()
         calls: list[tuple[str, ...]] = []
 
-        def mock_run(args: list[str], **_kwargs) -> None:  # noqa: ANN003
+        def mock_run(args: list[str], **_kwargs: object) -> object:
             calls.append(tuple(args))
             return type("Result", (), {"stdout": "secret-yaml", "returncode": 0})()
 
@@ -44,7 +38,7 @@ class TestCreateAppSecret:
 
         create_app_secret(
             cfg,
-            _test_env(),
+            test_env,
             database_url="postgresql://user:pass@host:5432/db",
             valkey_url="valkey://valkey:6379",
         )
@@ -55,7 +49,8 @@ class TestCreateAppSecret:
         assert "create" in calls[0]
         assert "secret" in calls[0]
         assert "generic" in calls[0]
-        assert "ghillie" in calls[0]  # secret name
+        # Verify secret name from config is at the expected position (index 4)
+        assert calls[0][4] == "ghillie"
         assert "--dry-run=client" in calls[0]
         assert (
             "--from-literal=DATABASE_URL=postgresql://user:pass@host:5432/db"
@@ -66,21 +61,23 @@ class TestCreateAppSecret:
         # Second call: apply the generated YAML
         assert calls[1] == ("kubectl", "apply", "-f", "-")
 
-    def test_uses_config_secret_name(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_uses_config_secret_name(
+        self, monkeypatch: pytest.MonkeyPatch, test_env: dict[str, str]
+    ) -> None:
         """Should use app_secret_name from config."""
         cfg = Config()
         calls: list[tuple[str, ...]] = []
 
-        def mock_run(args: list[str], **_kwargs) -> None:  # noqa: ANN003
+        def mock_run(args: list[str], **_kwargs: object) -> object:
             calls.append(tuple(args))
             return type("Result", (), {"stdout": "yaml", "returncode": 0})()
 
         monkeypatch.setattr("subprocess.run", mock_run)
 
-        create_app_secret(cfg, _test_env(), "db_url", "valkey_url")
+        create_app_secret(cfg, test_env, "db_url", "valkey_url")
 
-        # Verify secret name from config is used
-        assert cfg.app_secret_name in calls[0]
+        # Verify secret name from config is at the expected position (index 4)
+        assert calls[0][4] == cfg.app_secret_name
 
 
 class TestBuildDockerImage:
@@ -119,29 +116,41 @@ class TestInstallGhillieChart:
             ("custom-ns", "custom-repo", "v1.0.0"),  # custom values
         ],
     )
-    def test_invokes_helm_upgrade(
+    def test_invokes_helm_upgrade(  # noqa: PLR0913
         self,
         cmd_mox,  # noqa: ANN001
+        test_env: dict[str, str],
+        tmp_path: Path,
         namespace: str,
         image_repo: str,
         image_tag: str,
     ) -> None:
         """Should invoke helm upgrade --install with correct args."""
+        # Create the chart and values paths that the function expects
+        chart_path = tmp_path / "charts" / "ghillie"
+        chart_path.mkdir(parents=True)
+        (chart_path / "Chart.yaml").touch()
+
+        values_file = tmp_path / "values_local.yaml"
+        values_file.touch()
+
         cfg = Config(
             namespace=namespace,
             image_repo=image_repo,
             image_tag=image_tag,
+            chart_path=chart_path,
+            values_file=values_file,
         )
 
         cmd_mox.mock("helm").with_args(
             "upgrade",
             "--install",
             "ghillie",
-            "charts/ghillie",
+            str(chart_path),
             "--namespace",
             namespace,
             "--values",
-            "tests/helm/fixtures/values_local.yaml",
+            str(values_file),
             "--set",
             f"image.repository={image_repo}",
             "--set",
@@ -149,4 +158,4 @@ class TestInstallGhillieChart:
             "--wait",
         ).returns(exit_code=0)
 
-        install_ghillie_chart(cfg, _test_env())
+        install_ghillie_chart(cfg, test_env)

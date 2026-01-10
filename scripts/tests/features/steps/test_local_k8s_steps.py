@@ -9,6 +9,9 @@ import typing as typ
 from contextlib import redirect_stdout
 
 import pytest
+
+if typ.TYPE_CHECKING:
+    from pathlib import Path
 from conftest import load_script_app
 from pytest_bdd import given, parsers, scenario, then, when
 
@@ -20,6 +23,7 @@ class LocalK8sContext(typ.TypedDict, total=False):
     captured_calls: list[tuple[str, ...]]
     stdout: str
     exit_code: int
+    kubeconfig_path: str
 
 
 class SubprocessMock:
@@ -56,7 +60,8 @@ class SubprocessMock:
                 return cluster_json, 0
             return "[]", 0
         if args[1:3] == ["kubeconfig", "write"]:
-            return "/mock/kubeconfig", 0
+            # Return the path to the mock kubeconfig file created in the fixture
+            return self.context.get("kubeconfig_path", "/mock/kubeconfig"), 0
         return "", 0  # create, delete, image import
 
     def _handle_kubectl(self, args: list[str]) -> tuple[str, int]:
@@ -70,12 +75,14 @@ class SubprocessMock:
 
     def _handle_kubectl_get_secret(self, args: list[str]) -> tuple[str, int]:
         joined = " ".join(args)
-        if "-o=jsonpath" in joined:
+        # Check for jsonpath output format (can be "-o jsonpath" or "-o=jsonpath")
+        if "jsonpath" in joined:
             if "pg-ghillie" in joined:
                 db_url = "postgresql://ghillie:pass@pg-ghillie:5432/ghillie"
                 return base64.b64encode(db_url.encode()).decode(), 0
             if "valkey-ghillie" in joined:
-                return base64.b64encode(b"valkeypass").decode(), 0
+                valkey_url = "valkey://valkey-ghillie:6379"
+                return base64.b64encode(valkey_url.encode()).decode(), 0
         return "", 0
 
     def _handle_helm(self, _args: list[str]) -> tuple[str, int]:
@@ -143,13 +150,20 @@ def test_up_with_skip_build() -> None:
 
 
 @pytest.fixture
-def local_k8s_context() -> LocalK8sContext:
-    """Provide shared context for the BDD steps."""
+def local_k8s_context(tmp_path: Path) -> LocalK8sContext:
+    """Provide shared context for the BDD steps.
+
+    Creates a temporary kubeconfig file for the mocked k3d kubeconfig write
+    command to return, since write_kubeconfig validates that the file exists.
+    """
+    kubeconfig_file = tmp_path / "kubeconfig-mock.yaml"
+    kubeconfig_file.touch()
     return {
         "cluster_exists": False,
         "captured_calls": [],
         "stdout": "",
         "exit_code": -1,
+        "kubeconfig_path": str(kubeconfig_file),
     }
 
 

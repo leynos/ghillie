@@ -32,6 +32,13 @@ def pick_free_loopback_port() -> int:
     Uses the kernel's ephemeral port allocation by binding to port 0,
     which causes the OS to assign an available port.
 
+    Note:
+        There is an inherent TOCTOU (time-of-check-time-of-use) race condition
+        between this function returning and the caller binding to the port.
+        Another process could claim the port in that brief interval. This is
+        extremely unlikely in practice for local development, but callers
+        should handle subprocess errors from k3d/Docker if port binding fails.
+
     Returns:
         An available port number on the loopback interface.
 
@@ -39,6 +46,10 @@ def pick_free_loopback_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
         return sock.getsockname()[1]
+
+
+class SecretDecodeError(Exception):
+    """Failed to decode a Kubernetes secret field."""
 
 
 def b64decode_k8s_secret_field(b64_text: str) -> str:
@@ -53,5 +64,13 @@ def b64decode_k8s_secret_field(b64_text: str) -> str:
     Returns:
         The decoded UTF-8 string.
 
+    Raises:
+        SecretDecodeError: If the input is not valid base64 or cannot be
+            decoded as UTF-8 text.
+
     """
-    return base64.b64decode(b64_text).decode("utf-8")
+    try:
+        return base64.b64decode(b64_text).decode("utf-8")
+    except (ValueError, UnicodeDecodeError) as e:
+        msg = f"Failed to decode secret field: {e}"
+        raise SecretDecodeError(msg) from e

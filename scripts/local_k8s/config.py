@@ -11,6 +11,15 @@ class Config:
     """Configuration for the local k3d preview environment.
 
     All paths are relative to the repository root unless absolute.
+
+    Attributes:
+        ingress_port: Host port for cluster ingress. When None, a free loopback
+            port is auto-selected during cluster creation. For existing clusters,
+            the port is discovered from the cluster's port mappings.
+        app_secret_name: Kubernetes Secret name for application credentials.
+            This contains connection URLs, not passwords directly (S105 false
+            positive).
+
     """
 
     cluster_name: str = "ghillie-local"
@@ -28,6 +37,7 @@ class Config:
     )
     pg_cluster_name: str = "pg-ghillie"
     valkey_name: str = "valkey-ghillie"
+    # S105: False positive - this is a Kubernetes Secret name, not a password.
     app_secret_name: str = "ghillie"  # noqa: S105
 
 
