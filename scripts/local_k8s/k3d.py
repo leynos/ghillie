@@ -8,48 +8,59 @@ import subprocess
 from pathlib import Path
 
 
-def _parse_int(s: str) -> int | None:
-    """Parse a string as an integer, returning None on failure.
+def _is_http_port(container_port: str) -> bool:
+    """Check if the container port is HTTP (port 80).
 
     Args:
-        s: String to parse.
+        container_port: Container port string (e.g., "80/tcp").
 
     Returns:
-        The parsed integer, or None if parsing fails.
+        True if the port is HTTP port 80.
+
+    """
+    return container_port.startswith("80/")
+
+
+def _parse_host_port(host_port_str: str) -> int | None:
+    """Parse a host port string to an integer.
+
+    Args:
+        host_port_str: Host port string to parse.
+
+    Returns:
+        The parsed port number, or None if parsing fails.
 
     """
     try:
-        return int(s)
+        return int(host_port_str)
     except ValueError:
         return None
 
 
-def _iter_http_host_ports(cluster: dict) -> list[int]:
-    """Collect all HTTP host ports from cluster node port mappings.
+def _find_host_port_in_mappings(mappings: list[dict] | None) -> int | None:
+    """Find the first valid host port from a list of port mappings.
 
     Args:
-        cluster: k3d cluster dict from JSON output.
+        mappings: List of port mapping dicts with "HostPort" keys.
 
     Returns:
-        List of host ports mapped to container port 80.
+        The first valid host port, or None if not found.
 
     """
-    # portMappings is a dict like {"80/tcp": [{"HostPort": "8080", ...}]}
-    ports: list[int] = []
-    for node in cluster.get("nodes") or []:
-        port_mappings = node.get("portMappings") or {}
-        for container_port, mappings in port_mappings.items():
-            if not container_port.startswith("80/"):
-                continue
-            for mapping in mappings or []:
-                host_port_str = mapping.get("HostPort")
-                if host_port_str and (port := _parse_int(host_port_str)) is not None:
-                    ports.append(port)
-    return ports
+    for mapping in mappings or []:
+        host_port_str = mapping.get("HostPort")
+        if host_port_str:
+            port = _parse_host_port(host_port_str)
+            if port is not None:
+                return port
+    return None
 
 
 def _extract_http_host_port(cluster: dict) -> int | None:
     """Extract HTTP host port from cluster node port mappings.
+
+    Searches through cluster nodes for port mappings that map container port 80
+    to a host port.
 
     Args:
         cluster: k3d cluster dict from JSON output.
@@ -58,8 +69,14 @@ def _extract_http_host_port(cluster: dict) -> int | None:
         Host port mapped to container port 80, or None if not found.
 
     """
-    ports = _iter_http_host_ports(cluster)
-    return ports[0] if ports else None
+    for node in cluster.get("nodes") or []:
+        port_mappings = node.get("portMappings") or {}
+        for container_port, mappings in port_mappings.items():
+            if _is_http_port(container_port):
+                port = _find_host_port_in_mappings(mappings)
+                if port is not None:
+                    return port
+    return None
 
 
 def get_cluster_ingress_port(cluster_name: str) -> int | None:
