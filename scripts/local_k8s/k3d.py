@@ -1,4 +1,19 @@
-"""k3d cluster lifecycle operations."""
+"""k3d cluster lifecycle operations.
+
+Provides functions to create, delete, inspect, and interact with k3d
+clusters for local Kubernetes development. The module wraps the k3d CLI
+and exposes a typed Python API.
+
+Public API:
+    get_cluster_ingress_port: Retrieve the host port mapped to ingress.
+    cluster_exists: Check whether a named cluster exists.
+    create_k3d_cluster: Create a new k3d cluster with port mapping.
+    delete_k3d_cluster: Delete an existing k3d cluster.
+    write_kubeconfig: Write and return the kubeconfig path for a cluster.
+    kubeconfig_env: Return environment dict with KUBECONFIG set.
+    import_image_to_k3d: Import a Docker image into a k3d cluster.
+
+"""
 
 from __future__ import annotations
 
@@ -6,6 +21,9 @@ import json
 import os
 import subprocess
 from pathlib import Path
+
+# Default timeout for k3d subprocess operations (seconds)
+_K3D_SUBPROCESS_TIMEOUT = 60
 
 
 def _list_clusters() -> list[dict] | None:
@@ -17,18 +35,20 @@ def _list_clusters() -> list[dict] | None:
     """
     try:
         result = subprocess.run(
+            # k3d is expected on PATH; shell=False mitigates injection
             ["k3d", "cluster", "list", "-o", "json"],  # noqa: S607
             check=True,
             capture_output=True,
             text=True,
+            timeout=_K3D_SUBPROCESS_TIMEOUT,
         )
-    except (OSError, subprocess.CalledProcessError):
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return None
-
-    try:
-        return json.loads(result.stdout)
-    except json.JSONDecodeError:
-        return None
+    else:
+        try:
+            return json.loads(result.stdout)
+        except json.JSONDecodeError:
+            return None
 
 
 def _find_cluster(cluster_name: str) -> dict | None:
@@ -68,16 +88,22 @@ def _is_http_port(container_port: str) -> bool:
 def _parse_host_port(host_port_str: str) -> int | None:
     """Parse a host port string to an integer.
 
+    Only valid port numbers in the range 1-65535 are accepted.
+
     Args:
         host_port_str: Host port string to parse.
 
     Returns:
-        The parsed port number, or None if parsing fails.
+        The parsed port number, or None if parsing fails or port is invalid.
 
     """
     try:
-        return int(host_port_str)
+        port = int(host_port_str)
     except ValueError:
+        return None
+    else:
+        if 1 <= port <= _MAX_PORT:
+            return port
         return None
 
 
@@ -190,21 +216,26 @@ def create_k3d_cluster(
         cluster_name: Name for the new cluster.
         port: Host port to map to ingress (port 80 on the load balancer). Must
             be in the range 1024-65535 (non-privileged ports).
-        agents: Number of agent nodes (default 1).
+        agents: Number of agent nodes (default 1). Must be >= 0.
         timeout: Maximum time in seconds to wait for creation (default 300).
 
     Raises:
-        ValueError: If port is outside the valid range.
-        RuntimeError: If cluster creation times out.
+        ValueError: If port is outside the valid range or agents is negative.
+        RuntimeError: If cluster creation times out or fails.
 
     """
     if not _MIN_PORT <= port <= _MAX_PORT:
         msg = f"port must be between {_MIN_PORT} and {_MAX_PORT}, got {port}"
         raise ValueError(msg)
 
+    if agents < 0:
+        msg = f"agents must be >= 0, got {agents}"
+        raise ValueError(msg)
+
     port_mapping = f"127.0.0.1:{port}:80@loadbalancer"
     try:
         subprocess.run(  # noqa: S603
+            # k3d is expected on PATH; shell=False mitigates injection
             [  # noqa: S607
                 "k3d",
                 "cluster",
@@ -221,6 +252,9 @@ def create_k3d_cluster(
     except subprocess.TimeoutExpired as e:
         msg = f"k3d cluster creation timed out after {timeout} seconds"
         raise RuntimeError(msg) from e
+    except subprocess.CalledProcessError as e:
+        msg = f"k3d cluster creation failed for '{cluster_name}': {e}"
+        raise RuntimeError(msg) from e
 
 
 def delete_k3d_cluster(cluster_name: str, timeout: float = 120) -> None:
@@ -230,15 +264,26 @@ def delete_k3d_cluster(cluster_name: str, timeout: float = 120) -> None:
         cluster_name: Name of the cluster to delete.
         timeout: Maximum time in seconds to wait for deletion (default 120).
 
+    Raises:
+        RuntimeError: If cluster deletion fails or times out.
+
     """
-    subprocess.run(  # noqa: S603
-        ["k3d", "cluster", "delete", cluster_name],  # noqa: S607
-        check=True,
-        timeout=timeout,
-    )
+    try:
+        subprocess.run(  # noqa: S603
+            # k3d is expected on PATH; shell=False mitigates injection
+            ["k3d", "cluster", "delete", cluster_name],  # noqa: S607
+            check=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as e:
+        msg = f"k3d cluster deletion timed out after {timeout} seconds"
+        raise RuntimeError(msg) from e
+    except subprocess.CalledProcessError as e:
+        msg = f"k3d cluster deletion failed for '{cluster_name}': {e}"
+        raise RuntimeError(msg) from e
 
 
-def write_kubeconfig(cluster_name: str) -> Path:
+def write_kubeconfig(cluster_name: str, timeout: float = 30) -> Path:
     """Write and return the kubeconfig path for a k3d cluster.
 
     Uses k3d's kubeconfig write command to generate a dedicated kubeconfig
@@ -246,21 +291,32 @@ def write_kubeconfig(cluster_name: str) -> Path:
 
     Args:
         cluster_name: Name of the k3d cluster.
+        timeout: Maximum time in seconds to wait (default 30).
 
     Returns:
         Path to the generated kubeconfig file.
 
     Raises:
-        RuntimeError: If the kubeconfig path is empty or the file was not
-            created.
+        RuntimeError: If the kubeconfig path is empty, the file was not
+            created, or the operation times out.
 
     """
-    result = subprocess.run(  # noqa: S603
-        ["k3d", "kubeconfig", "write", cluster_name],  # noqa: S607
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    try:
+        result = subprocess.run(  # noqa: S603
+            # k3d is expected on PATH; shell=False mitigates injection
+            ["k3d", "kubeconfig", "write", cluster_name],  # noqa: S607
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as e:
+        msg = f"k3d kubeconfig write timed out after {timeout} seconds"
+        raise RuntimeError(msg) from e
+    except subprocess.CalledProcessError as e:
+        msg = f"k3d kubeconfig write failed for '{cluster_name}': {e}"
+        raise RuntimeError(msg) from e
+
     kubeconfig_path = result.stdout.strip()
     if not kubeconfig_path:
         msg = f"k3d returned empty kubeconfig path for cluster '{cluster_name}'"
@@ -293,7 +349,9 @@ def kubeconfig_env(cluster_name: str) -> dict[str, str]:
     return env
 
 
-def import_image_to_k3d(cluster_name: str, image_repo: str, image_tag: str) -> None:
+def import_image_to_k3d(
+    cluster_name: str, image_repo: str, image_tag: str, timeout: float = 600
+) -> None:
     """Import a Docker image into the k3d cluster.
 
     Uses k3d's image import command to make a locally built image
@@ -303,17 +361,30 @@ def import_image_to_k3d(cluster_name: str, image_repo: str, image_tag: str) -> N
         cluster_name: Name of the k3d cluster.
         image_repo: Repository name of the image.
         image_tag: Tag of the image.
+        timeout: Maximum time in seconds to wait for import (default 600).
+
+    Raises:
+        RuntimeError: If image import fails or times out.
 
     """
     image_name = f"{image_repo}:{image_tag}"
-    subprocess.run(  # noqa: S603
-        [  # noqa: S607
-            "k3d",
-            "image",
-            "import",
-            image_name,
-            "--cluster",
-            cluster_name,
-        ],
-        check=True,
-    )
+    try:
+        subprocess.run(  # noqa: S603
+            # k3d is expected on PATH; shell=False mitigates injection
+            [  # noqa: S607
+                "k3d",
+                "image",
+                "import",
+                image_name,
+                "--cluster",
+                cluster_name,
+            ],
+            check=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as e:
+        msg = f"k3d image import timed out after {timeout} seconds"
+        raise RuntimeError(msg) from e
+    except subprocess.CalledProcessError as e:
+        msg = f"k3d image import failed for '{image_name}': {e}"
+        raise RuntimeError(msg) from e

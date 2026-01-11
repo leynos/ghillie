@@ -1,4 +1,10 @@
-"""CloudNativePG operations."""
+"""CloudNativePG (CNPG) operator and cluster operations.
+
+Provides functions for installing the CloudNativePG operator via Helm,
+creating PostgreSQL database clusters using CNPG CustomResourceDefinitions,
+and reading connection information from CNPG-managed secrets.
+
+"""
 
 from __future__ import annotations
 
@@ -45,8 +51,9 @@ def _cnpg_cluster_manifest(namespace: str, cluster_name: str = "pg-ghillie") -> 
             "bootstrap": {"initdb": {"database": "ghillie", "owner": "ghillie"}},
         },
     }
-    yaml_serializer = YAML()
+    yaml_serializer = YAML(typ="safe")
     yaml_serializer.default_flow_style = False
+    yaml_serializer.indent(mapping=2, sequence=4, offset=2)
     stream = io.StringIO()
     yaml_serializer.dump(manifest, stream)
     return stream.getvalue()
@@ -108,20 +115,23 @@ def wait_for_cnpg_ready(cfg: Config, env: dict[str, str], timeout: int = 600) ->
 
 
 def read_pg_app_uri(cfg: Config, env: dict[str, str]) -> str:
-    """Extract DATABASE_URL from the CNPG application secret.
+    """Read the Postgres connection URI from the CNPG application secret.
 
-    CNPG creates a secret named {cluster_name}-app containing the
-    connection URI for applications.
+    CNPG automatically creates a secret named `{cluster_name}-app` containing
+    the connection URI under the `uri` key. This function retrieves and decodes
+    that value for use as a DATABASE_URL.
 
     Args:
         cfg: Configuration with namespace and cluster name.
         env: Environment dict with KUBECONFIG set.
 
     Returns:
-        The decoded DATABASE_URL connection string.
+        The decoded Postgres connection URI string
+        (e.g., "postgresql://user:pass@host:5432/db").
 
     Raises:
-        ValueError: If the secret field is empty or missing.
+        ValueError: If the secret '{cfg.pg_cluster_name}-app' field 'uri' is
+            empty or missing in namespace '{cfg.namespace}'.
 
     """
     secret_name = f"{cfg.pg_cluster_name}-app"
