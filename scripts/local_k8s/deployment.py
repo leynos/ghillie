@@ -63,6 +63,7 @@ def create_app_secret(
         text=True,
         check=True,
         env=env,
+        timeout=60,
     )
 
 
@@ -78,7 +79,17 @@ def build_docker_image(
         image_tag: Tag for the image.
         context: Build context directory path. Defaults to current directory.
 
+    Raises:
+        FileNotFoundError: If the context path does not exist.
+
     """
+    from pathlib import Path as PathClass
+
+    context_path = PathClass(context)
+    if not context_path.exists():
+        msg = f"Build context path does not exist: {context_path}"
+        raise FileNotFoundError(msg)
+
     image_name = f"{image_repo}:{image_tag}"
     subprocess.run(  # noqa: S603
         [  # noqa: S607
@@ -89,6 +100,7 @@ def build_docker_image(
             str(context),
         ],
         check=True,
+        timeout=600,
     )
 
 
@@ -134,6 +146,7 @@ def install_ghillie_chart(cfg: Config, env: dict[str, str]) -> None:
         ],
         check=True,
         env=env,
+        timeout=600,
     )
 
 
@@ -159,6 +172,7 @@ def print_status(cfg: Config, env: dict[str, str]) -> None:
         ],
         check=True,
         env=env,
+        timeout=30,
     )
 
 
@@ -170,7 +184,9 @@ def tail_logs(cfg: Config, env: dict[str, str], *, follow: bool = False) -> None
     Args:
         cfg: Configuration with namespace.
         env: Environment dict with KUBECONFIG set.
-        follow: If True, continuously stream logs (like tail -f).
+        follow: If True, continuously stream logs (like tail -f). Note that
+            follow mode runs indefinitely until interrupted, so no timeout
+            is applied.
 
     """
     cmd = [
@@ -182,8 +198,11 @@ def tail_logs(cfg: Config, env: dict[str, str], *, follow: bool = False) -> None
     if follow:
         cmd.append("--follow")
 
+    # Only apply timeout for non-follow mode; follow runs indefinitely
+    timeout = None if follow else 30
     subprocess.run(  # noqa: S603
         cmd,
         check=True,
         env=env,
+        timeout=timeout,
     )

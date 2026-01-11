@@ -7,8 +7,8 @@ import json
 import typing as typ
 
 import pytest
-from local_k8s import (
-    Config,
+from local_k8s import Config
+from local_k8s.deployment import (
     build_docker_image,
     create_app_secret,
     install_ghillie_chart,

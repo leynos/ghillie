@@ -1,18 +1,21 @@
-"""Unit tests for local_k8s Valkey operations."""
+"""Unit tests for local_k8s Valkey operations.
+
+Note: Operator installation tests are in test_local_k8s_operators.py.
+
+"""
 
 from __future__ import annotations
 
 import typing as typ
 
 import pytest
-from local_k8s import (
-    Config,
+from local_k8s import Config
+from local_k8s.valkey import (
+    _valkey_manifest,
     create_valkey_instance,
-    install_valkey_operator,
     read_valkey_uri,
     wait_for_valkey_ready,
 )
-from local_k8s.valkey import _valkey_manifest
 
 if typ.TYPE_CHECKING:
     from cmd_mox import CmdMox
@@ -42,65 +45,6 @@ class TestValkeyManifest:
 
         assert "name: custom-valkey" in manifest
         assert "namespace: custom-ns" in manifest
-
-
-class TestInstallValkeyOperator:
-    """Tests for install_valkey_operator helper.
-
-    Note: This test uses monkeypatch to mock subprocess.run since cmd-mox has
-    issues verifying multiple expectations for the same executable. The test
-    verifies that all expected subprocess calls are made in the correct order.
-    """
-
-    def test_calls_expected_commands(
-        self, monkeypatch: pytest.MonkeyPatch, test_env: dict[str, str]
-    ) -> None:
-        """Should call helm and kubectl commands in correct order."""
-        cfg = Config()
-        calls: list[tuple[str, ...]] = []
-
-        def mock_run(args: list[str], **_kwargs: object) -> object:
-            calls.append(tuple(args))
-            # Simulate namespace not existing (kubectl get returns non-zero)
-            returncode = 1 if args[:3] == ["kubectl", "get", "namespace"] else 0
-            return type("Result", (), {"stdout": "", "returncode": returncode})()
-
-        monkeypatch.setattr("subprocess.run", mock_run)
-
-        install_valkey_operator(cfg, test_env)
-
-        # Verify the expected commands were called
-        # Note: create_namespace uses dry-run + apply pattern (2 calls)
-        assert len(calls) == 6
-        assert calls[0] == (
-            "helm",
-            "repo",
-            "add",
-            "--force-update",
-            "valkey-operator",
-            "https://hyperspike.github.io/valkey-operator",
-        )
-        assert calls[1] == ("helm", "repo", "update")
-        assert calls[2] == ("kubectl", "get", "namespace", "valkey-operator-system")
-        # Namespace creation uses dry-run + apply
-        assert calls[3][:4] == (
-            "kubectl",
-            "create",
-            "namespace",
-            "valkey-operator-system",
-        )
-        assert "--dry-run=client" in calls[3]
-        assert calls[4] == ("kubectl", "apply", "-f", "-")
-        assert calls[5] == (
-            "helm",
-            "upgrade",
-            "--install",
-            "valkey-operator",
-            "valkey-operator/valkey-operator",
-            "--namespace",
-            "valkey-operator-system",
-            "--wait",
-        )
 
 
 class TestCreateValkeyInstance:

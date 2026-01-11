@@ -1,36 +1,27 @@
-"""Local k3d preview environment management package."""
+"""Local k3d preview environment management package.
+
+This package provides a programmatic interface to manage local k3d preview
+environments for Ghillie. The primary entrypoints are:
+
+- setup_environment: Create and configure a local k3d preview environment
+- teardown_environment: Delete a local k3d preview environment
+- show_environment_status: Display pod status for a preview environment
+- stream_environment_logs: Stream logs from Ghillie pods
+
+For lower-level operations, import directly from submodules:
+
+- local_k8s.k3d: k3d cluster lifecycle operations
+- local_k8s.k8s: Kubernetes namespace and resource operations
+- local_k8s.cnpg: CloudNativePG operations
+- local_k8s.valkey: Valkey operations
+- local_k8s.deployment: Docker and Helm deployment operations
+- local_k8s.validation: Validation and utility helpers
+
+"""
 
 from __future__ import annotations
 
-from local_k8s.cnpg import (
-    create_cnpg_cluster,
-    install_cnpg_operator,
-    read_pg_app_uri,
-    wait_for_cnpg_ready,
-)
 from local_k8s.config import Config, HelmOperatorSpec
-from local_k8s.deployment import (
-    build_docker_image,
-    create_app_secret,
-    install_ghillie_chart,
-    print_status,
-    tail_logs,
-)
-from local_k8s.k3d import (
-    cluster_exists,
-    create_k3d_cluster,
-    delete_k3d_cluster,
-    get_cluster_ingress_port,
-    import_image_to_k3d,
-    kubeconfig_env,
-    write_kubeconfig,
-)
-from local_k8s.k8s import (
-    create_namespace,
-    ensure_namespace,
-    namespace_exists,
-)
-from local_k8s.operators import install_helm_operator
 from local_k8s.orchestration import (
     setup_environment,
     show_environment_status,
@@ -42,28 +33,10 @@ from local_k8s.validation import (
     LocalK8sError,
     PortMismatchError,
     SecretDecodeError,
-    b64decode_k8s_secret_field,
-    pick_free_loopback_port,
-    require_exe,
-)
-from local_k8s.valkey import (
-    create_valkey_instance,
-    install_valkey_operator,
-    read_valkey_uri,
-    wait_for_valkey_ready,
 )
 
-# Mark the recommended public surface for consumers
-PUBLIC_API = [
-    "Config",
-    "HelmOperatorSpec",
-    "setup_environment",
-    "teardown_environment",
-    "show_environment_status",
-    "stream_environment_logs",
-]
-# Keep __all__ as-is for now; PUBLIC_API helps guide future slimming.
-
+# Public API: only stable exports for external consumers
+# Helpers remain importable via their submodules (e.g., local_k8s.k3d.cluster_exists)
 __all__ = [
     "Config",
     "ExecutableNotFoundError",
@@ -71,35 +44,8 @@ __all__ = [
     "LocalK8sError",
     "PortMismatchError",
     "SecretDecodeError",
-    "b64decode_k8s_secret_field",
-    "build_docker_image",
-    "cluster_exists",
-    "create_app_secret",
-    "create_cnpg_cluster",
-    "create_k3d_cluster",
-    "create_namespace",
-    "create_valkey_instance",
-    "delete_k3d_cluster",
-    "ensure_namespace",
-    "get_cluster_ingress_port",
-    "import_image_to_k3d",
-    "install_cnpg_operator",
-    "install_ghillie_chart",
-    "install_helm_operator",
-    "install_valkey_operator",
-    "kubeconfig_env",
-    "namespace_exists",
-    "pick_free_loopback_port",
-    "print_status",
-    "read_pg_app_uri",
-    "read_valkey_uri",
-    "require_exe",
     "setup_environment",
     "show_environment_status",
     "stream_environment_logs",
-    "tail_logs",
     "teardown_environment",
-    "wait_for_cnpg_ready",
-    "wait_for_valkey_ready",
-    "write_kubeconfig",
 ]

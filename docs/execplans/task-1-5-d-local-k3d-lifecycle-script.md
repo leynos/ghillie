@@ -170,10 +170,10 @@ The implementation will create:
 
 Key external tools the script will invoke:
 
-- `docker` - Build images
-- `k3d` - Create/delete clusters, import images
-- `kubectl` - Kubernetes operations
-- `helm` - Chart operations
+- `docker` — Build images
+- `k3d` — Create/delete clusters, import images
+- `kubectl` — Kubernetes operations
+- `helm` — Chart operations
 
 ## Plan of Work
 
@@ -704,15 +704,15 @@ Integration validation (optional, not run in CI):
 
 ### External CLI tools required
 
-- `docker` - for `docker build`
-- `k3d` - for cluster lifecycle and image import
-- `kubectl` - for namespace, secret, and resource management
-- `helm` - for chart and operator installation
+- `docker` — for `docker build`
+- `k3d` — for cluster lifecycle and image import
+- `kubectl` — for namespace, secret, and resource management
+- `helm` — for chart and operator installation
 
 ### Helm repositories
 
-- `cnpg` - <https://cloudnative-pg.github.io/charts> (for cloudnative-pg)
-- `valkey-operator` - <https://hyperspike.github.io/valkey-operator> (for
+- `cnpg` — <https://cloudnative-pg.github.io/charts> (for cloudnative-pg)
+- `valkey-operator` — <https://hyperspike.github.io/valkey-operator> (for
   valkey-operator)
 
 ### Key function signatures

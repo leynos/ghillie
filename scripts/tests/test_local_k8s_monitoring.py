@@ -5,11 +5,8 @@ from __future__ import annotations
 import typing as typ
 
 import pytest
-from local_k8s import (
-    Config,
-    print_status,
-    tail_logs,
-)
+from local_k8s import Config
+from local_k8s.deployment import print_status, tail_logs
 
 if typ.TYPE_CHECKING:
     from cmd_mox import CmdMox

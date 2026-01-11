@@ -7,8 +7,8 @@ import sys
 from pathlib import Path
 
 import pytest
-from local_k8s import (
-    ExecutableNotFoundError,
+from local_k8s import ExecutableNotFoundError
+from local_k8s.validation import (
     b64decode_k8s_secret_field,
     pick_free_loopback_port,
     require_exe,

@@ -26,6 +26,7 @@ def namespace_exists(namespace: str, env: dict[str, str]) -> bool:
         ["kubectl", "get", "namespace", namespace],  # noqa: S607
         capture_output=True,
         env=env,
+        timeout=30,
     )
     return result.returncode == 0
 
@@ -55,6 +56,7 @@ def create_namespace(namespace: str, env: dict[str, str]) -> None:
         text=True,
         check=True,
         env=env,
+        timeout=30,
     )
     # Apply for idempotent upsert
     subprocess.run(
@@ -63,6 +65,7 @@ def create_namespace(namespace: str, env: dict[str, str]) -> None:
         text=True,
         check=True,
         env=env,
+        timeout=30,
     )
 
 
@@ -92,6 +95,7 @@ def apply_manifest(manifest: str, env: dict[str, str]) -> None:
         text=True,
         check=True,
         env=env,
+        timeout=60,
     )
 
 
@@ -120,6 +124,7 @@ def wait_for_pods_ready(
         )
         raise ValueError(msg)
 
+    # Add buffer to subprocess timeout beyond kubectl's --timeout
     subprocess.run(  # noqa: S603
         [  # noqa: S607
             "kubectl",
@@ -132,6 +137,7 @@ def wait_for_pods_ready(
         ],
         check=True,
         env=env,
+        timeout=timeout + 30,
     )
 
 
@@ -173,6 +179,7 @@ def read_secret_field(
         text=True,
         check=True,
         env=env,
+        timeout=30,
     )
 
     if not result.stdout:

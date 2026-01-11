@@ -5,7 +5,7 @@ from __future__ import annotations
 import typing as typ
 
 import pytest
-from local_k8s import (
+from local_k8s.k3d import (
     cluster_exists,
     create_k3d_cluster,
     delete_k3d_cluster,
