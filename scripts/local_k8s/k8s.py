@@ -1,10 +1,36 @@
-"""Kubernetes namespace and resource operations."""
+"""Kubernetes namespace and resource operations.
+
+This module provides functions for managing Kubernetes namespaces, applying
+manifests, waiting for pod readiness, and reading secret fields. All functions
+require an environment dictionary with KUBECONFIG set to target the correct
+cluster.
+
+Examples
+--------
+Ensure a namespace exists before deploying resources:
+
+    env = kubeconfig_env("my-cluster")
+    ensure_namespace("my-app", env)
+
+Wait for pods to become ready after deployment:
+
+    wait_for_pods_ready("app=my-app", "my-app", env, timeout=120)
+
+Read a database connection URI from a secret:
+
+    db_uri = read_secret_field("db-credentials", "uri", "my-app", env)
+
+"""
 
 from __future__ import annotations
 
+import re
 import subprocess
 
 from local_k8s.validation import b64decode_k8s_secret_field
+
+# Kubernetes secret keys must contain only alphanumeric, dot, underscore, or hyphen
+_SECRET_KEY_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 
 # Timeout bounds for kubectl wait operations (in seconds).
 _MIN_WAIT_TIMEOUT = 1
@@ -14,11 +40,16 @@ _MAX_WAIT_TIMEOUT = 3600
 def namespace_exists(namespace: str, env: dict[str, str]) -> bool:
     """Check if a Kubernetes namespace exists.
 
-    Args:
-        namespace: Name of the namespace to check.
-        env: Environment dict with KUBECONFIG set.
+    Parameters
+    ----------
+    namespace : str
+        Name of the namespace to check.
+    env : dict[str, str]
+        Environment dict with KUBECONFIG set.
 
-    Returns:
+    Returns
+    -------
+    bool
         True if the namespace exists, False otherwise.
 
     """
@@ -37,9 +68,12 @@ def create_namespace(namespace: str, env: dict[str, str]) -> None:
 
     Uses dry-run + apply pattern for idempotent upsert behaviour.
 
-    Args:
-        namespace: Name of the namespace to create.
-        env: Environment dict with KUBECONFIG set.
+    Parameters
+    ----------
+    namespace : str
+        Name of the namespace to create.
+    env : dict[str, str]
+        Environment dict with KUBECONFIG set.
 
     """
     # Generate namespace YAML using dry-run
@@ -75,9 +109,12 @@ def create_namespace(namespace: str, env: dict[str, str]) -> None:
 def ensure_namespace(namespace: str, env: dict[str, str]) -> None:
     """Ensure a Kubernetes namespace exists, creating if necessary.
 
-    Args:
-        namespace: Name of the namespace to ensure.
-        env: Environment dict with KUBECONFIG set.
+    Parameters
+    ----------
+    namespace : str
+        Name of the namespace to ensure.
+    env : dict[str, str]
+        Environment dict with KUBECONFIG set.
 
     """
     if not namespace_exists(namespace, env):
@@ -87,9 +124,12 @@ def ensure_namespace(namespace: str, env: dict[str, str]) -> None:
 def apply_manifest(manifest: str, env: dict[str, str]) -> None:
     """Apply a YAML manifest to the cluster via kubectl.
 
-    Args:
-        manifest: YAML manifest string to apply.
-        env: Environment dict with KUBECONFIG set.
+    Parameters
+    ----------
+    manifest : str
+        YAML manifest string to apply.
+    env : dict[str, str]
+        Environment dict with KUBECONFIG set.
 
     """
     # S607: kubectl via PATH is standard; manifest generated internally
@@ -110,15 +150,21 @@ def wait_for_pods_ready(
 
     Uses kubectl wait to block until all matching pods are in Ready condition.
 
-    Args:
-        selector: Label selector for pods (e.g., "app=myapp").
-        namespace: Kubernetes namespace containing the pods.
-        env: Environment dict with KUBECONFIG set.
-        timeout: Maximum time to wait in seconds (default 300). Must be between
-            1 and 3600.
+    Parameters
+    ----------
+    selector : str
+        Label selector for pods (e.g., "app=myapp").
+    namespace : str
+        Kubernetes namespace containing the pods.
+    env : dict[str, str]
+        Environment dict with KUBECONFIG set.
+    timeout : int, default 300
+        Maximum time to wait in seconds. Must be between 1 and 3600.
 
-    Raises:
-        ValueError: If timeout is outside the valid range (1-3600 seconds).
+    Raises
+    ------
+    ValueError
+        If timeout is outside the valid range (1-3600 seconds).
 
     """
     if not _MIN_WAIT_TIMEOUT <= timeout <= _MAX_WAIT_TIMEOUT:
@@ -154,27 +200,39 @@ def read_secret_field(
     Retrieves the specified field from a secret and decodes it from base64.
     Handles dotted field names (e.g., "ca.crt") correctly via quoted jsonpath.
 
-    Args:
-        secret_name: Name of the Kubernetes secret.
-        field: Name of the field within the secret's data section. Must not
-            be empty or contain characters that break jsonpath syntax.
-        namespace: Kubernetes namespace containing the secret.
-        env: Environment dict with KUBECONFIG set.
+    Parameters
+    ----------
+    secret_name : str
+        Name of the Kubernetes secret.
+    field : str
+        Name of the field within the secret's data section. Must not be empty
+        or contain characters that break jsonpath syntax.
+    namespace : str
+        Kubernetes namespace containing the secret.
+    env : dict[str, str]
+        Environment dict with KUBECONFIG set.
 
-    Returns:
+    Returns
+    -------
+    str
         The decoded UTF-8 string value of the secret field.
 
-    Raises:
-        ValueError: If field is empty, contains invalid characters, or the
-            secret field value is empty or missing.
+    Raises
+    ------
+    ValueError
+        If field is empty, contains invalid characters, or the secret field
+        value is empty or missing.
 
     """
     if not field:
         msg = "field cannot be empty"
         raise ValueError(msg)
-    # Single quotes or brackets would break the jsonpath expression
-    if "'" in field or "]" in field:
-        msg = f"field contains invalid characters for jsonpath: {field}"
+    # Enforce Kubernetes secret key character rules
+    if not _SECRET_KEY_PATTERN.match(field):
+        msg = (
+            f"field '{field}' contains invalid characters; "
+            "only alphanumeric, dot, underscore, and hyphen are allowed"
+        )
         raise ValueError(msg)
 
     # Quote the field name to support dotted keys like "ca.crt"
@@ -198,8 +256,9 @@ def read_secret_field(
         timeout=30,
     )
 
-    if not result.stdout:
+    output = result.stdout.strip()
+    if not output:
         msg = f"Secret '{secret_name}' field '{field}' is empty or missing"
         raise ValueError(msg)
 
-    return b64decode_k8s_secret_field(result.stdout)
+    return b64decode_k8s_secret_field(output)

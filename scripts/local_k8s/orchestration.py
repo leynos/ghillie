@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
+
 from local_k8s.cnpg import (
     create_cnpg_cluster,
     install_cnpg_operator,
@@ -26,6 +29,7 @@ from local_k8s.k3d import (
 )
 from local_k8s.k8s import ensure_namespace
 from local_k8s.validation import (
+    LocalK8sError,
     PortMismatchError,
     pick_free_loopback_port,
     require_exe,
@@ -188,102 +192,191 @@ def setup_environment(
 ) -> int:
     """Create and configure the entire preview environment.
 
-    Args:
-        cluster_name: Name for the k3d cluster.
-        namespace: Kubernetes namespace for Ghillie resources.
-        ingress_port: Host port for ingress (auto-selected if not specified).
-        skip_build: Skip Docker image build (use existing image).
+    Parameters
+    ----------
+    cluster_name : str
+        Name for the k3d cluster.
+    namespace : str
+        Kubernetes namespace for Ghillie resources.
+    ingress_port : int or None
+        Host port for ingress (auto-selected if not specified).
+    skip_build : bool
+        Skip Docker image build (use existing image).
 
-    Returns:
-        Exit code (0 for success, non-zero for failure).
+    Returns
+    -------
+    int
+        Exit code: 0 for success, 2 for LocalK8sError or RuntimeError,
+        3 for subprocess errors.
+
+    Raises
+    ------
+    ExecutableNotFoundError
+        If a required executable (k3d, kubectl, helm, or docker) is not found.
+        Caught and converted to exit code 2.
+    PortMismatchError
+        If the requested port conflicts with an existing cluster's port.
+        Caught and converted to exit code 2.
+    RuntimeError
+        If k3d, kubectl, or helm subprocess operations fail.
+        Caught and converted to exit code 2.
 
     """
-    # Verify required executables (docker only needed for builds)
-    print("Checking required tools...")
-    required_tools = ["k3d", "kubectl", "helm"]
-    if not skip_build:
-        required_tools.insert(0, "docker")
-    for exe in required_tools:
-        require_exe(exe)
+    try:
+        # Verify required executables (docker only needed for builds)
+        print("Checking required tools...")
+        required_tools = ["k3d", "kubectl", "helm"]
+        if not skip_build:
+            required_tools.insert(0, "docker")
+        for exe in required_tools:
+            require_exe(exe)
 
-    # Ensure cluster exists and determine port
-    port, _is_new = _ensure_cluster_ready(cluster_name, ingress_port)
+        # Ensure cluster exists and determine port
+        port, _is_new = _ensure_cluster_ready(cluster_name, ingress_port)
 
-    cfg = Config(cluster_name=cluster_name, namespace=namespace, ingress_port=port)
-    env = kubeconfig_env(cluster_name)
+        cfg = Config(cluster_name=cluster_name, namespace=namespace, ingress_port=port)
+        env = kubeconfig_env(cluster_name)
 
-    # Configure infrastructure and deploy
-    _setup_cnpg(cfg, env)
-    _setup_valkey(cfg, env)
-    _create_secrets_and_deploy(cfg, env, skip_build=skip_build)
+        # Configure infrastructure and deploy
+        _setup_cnpg(cfg, env)
+        _setup_valkey(cfg, env)
+        _create_secrets_and_deploy(cfg, env, skip_build=skip_build)
 
-    _print_success_banner(port)
-    return 0
+        _print_success_banner(port)
+    except (LocalK8sError, RuntimeError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+    except subprocess.CalledProcessError as e:
+        print(f"Subprocess error: {e}", file=sys.stderr)
+        return 3
+    else:
+        return 0
 
 
 def teardown_environment(cluster_name: str) -> int:
     """Delete the k3d cluster and all resources.
 
-    Args:
-        cluster_name: Name of the k3d cluster to delete.
+    Parameters
+    ----------
+    cluster_name : str
+        Name of the k3d cluster to delete.
 
-    Returns:
-        Exit code (0 for success, non-zero for failure).
+    Returns
+    -------
+    int
+        Exit code: 0 for success, 2 for LocalK8sError or RuntimeError,
+        3 for subprocess errors.
+
+    Raises
+    ------
+    ExecutableNotFoundError
+        If k3d is not found. Caught and converted to exit code 2.
+    RuntimeError
+        If delete_k3d_cluster fails. Caught and converted to exit code 2.
 
     """
-    require_exe("k3d")
+    try:
+        require_exe("k3d")
 
-    if not cluster_exists(cluster_name):
-        print(f"Cluster '{cluster_name}' does not exist.")
+        if not cluster_exists(cluster_name):
+            print(f"Cluster '{cluster_name}' does not exist.")
+            return 0
+
+        print(f"Deleting cluster '{cluster_name}'...")
+        delete_k3d_cluster(cluster_name)
+        print("Cluster deleted successfully.")
+    except (LocalK8sError, RuntimeError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+    except subprocess.CalledProcessError as e:
+        print(f"Subprocess error: {e}", file=sys.stderr)
+        return 3
+    else:
         return 0
-
-    print(f"Deleting cluster '{cluster_name}'...")
-    delete_k3d_cluster(cluster_name)
-    print("Cluster deleted successfully.")
-    return 0
 
 
 def show_environment_status(cluster_name: str, namespace: str) -> int:
     """Display the status of the preview environment.
 
-    Args:
-        cluster_name: Name of the k3d cluster.
-        namespace: Kubernetes namespace to inspect.
+    Parameters
+    ----------
+    cluster_name : str
+        Name of the k3d cluster.
+    namespace : str
+        Kubernetes namespace to inspect.
 
-    Returns:
-        Exit code (0 for success, 1 if cluster doesn't exist).
+    Returns
+    -------
+    int
+        Exit code: 0 for success, 1 if cluster does not exist,
+        2 for LocalK8sError or RuntimeError, 3 for subprocess errors.
+
+    Raises
+    ------
+    ExecutableNotFoundError
+        If k3d or kubectl is not found. Caught and converted to exit code 2.
+        Note: returns exit code 1 (not exception) when cluster is missing.
 
     """
-    result = _validate_and_setup_environment(cluster_name, namespace)
-    if result is None:
-        return 1
+    try:
+        result = _validate_and_setup_environment(cluster_name, namespace)
+        if result is None:
+            return 1
 
-    cfg, env = result
+        cfg, env = result
 
-    print(f"Status for cluster: {cluster_name}")
-    print(f"Namespace: {namespace}")
-    print()
-    print_status(cfg, env)
-    return 0
+        print(f"Status for cluster: {cluster_name}")
+        print(f"Namespace: {namespace}")
+        print()
+        print_status(cfg, env)
+    except (LocalK8sError, RuntimeError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+    except subprocess.CalledProcessError as e:
+        print(f"Subprocess error: {e}", file=sys.stderr)
+        return 3
+    else:
+        return 0
 
 
 def stream_environment_logs(cluster_name: str, namespace: str, *, follow: bool) -> int:
     """Stream application logs from the preview environment.
 
-    Args:
-        cluster_name: Name of the k3d cluster.
-        namespace: Kubernetes namespace containing Ghillie pods.
-        follow: Continuously stream logs (like tail -f).
+    Parameters
+    ----------
+    cluster_name : str
+        Name of the k3d cluster.
+    namespace : str
+        Kubernetes namespace containing Ghillie pods.
+    follow : bool
+        Continuously stream logs (like tail -f).
 
-    Returns:
-        Exit code (0 for success, 1 if cluster doesn't exist).
+    Returns
+    -------
+    int
+        Exit code: 0 for success, 1 if cluster does not exist,
+        2 for LocalK8sError or RuntimeError, 3 for subprocess errors.
+
+    Raises
+    ------
+    ExecutableNotFoundError
+        If k3d or kubectl is not found. Caught and converted to exit code 2.
+        Note: returns exit code 1 (not exception) when cluster is missing.
 
     """
-    result = _validate_and_setup_environment(cluster_name, namespace)
-    if result is None:
-        return 1
+    try:
+        result = _validate_and_setup_environment(cluster_name, namespace)
+        if result is None:
+            return 1
 
-    cfg, env = result
+        cfg, env = result
 
-    tail_logs(cfg, env, follow=follow)
-    return 0
+        tail_logs(cfg, env, follow=follow)
+    except (LocalK8sError, RuntimeError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+    except subprocess.CalledProcessError as e:
+        print(f"Subprocess error: {e}", file=sys.stderr)
+        return 3
+    else:
+        return 0

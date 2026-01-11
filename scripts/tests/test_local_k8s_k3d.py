@@ -87,6 +87,23 @@ class TestCreateK3dCluster:
 
         create_k3d_cluster(cluster_name, port=port, agents=agents)
 
+    @pytest.mark.parametrize(
+        ("port", "error_match"),
+        [
+            (1023, r"port must be between 1024 and 65535, got 1023"),
+            (65536, r"port must be between 1024 and 65535, got 65536"),
+            (0, r"port must be between 1024 and 65535, got 0"),
+        ],
+    )
+    def test_raises_on_invalid_port(
+        self,
+        port: int,
+        error_match: str,
+    ) -> None:
+        """Should raise ValueError when port is out of valid range."""
+        with pytest.raises(ValueError, match=error_match):
+            create_k3d_cluster("test-cluster", port=port, agents=1)
+
 
 class TestDeleteK3dCluster:
     """Tests for delete_k3d_cluster helper using cmd-mox."""
@@ -119,6 +136,29 @@ class TestWriteKubeconfig:
         result = write_kubeconfig("ghillie-local")
 
         assert result == expected_path
+
+    def test_raises_when_empty_path_returned(self, cmd_mox: CmdMox) -> None:
+        """Should raise RuntimeError when k3d returns empty path."""
+        cmd_mox.mock("k3d").with_args("kubeconfig", "write", "test-cluster").returns(
+            exit_code=0,
+            stdout="",
+        )
+
+        with pytest.raises(RuntimeError, match="empty kubeconfig path"):
+            write_kubeconfig("test-cluster")
+
+    def test_raises_when_file_not_created(
+        self, cmd_mox: CmdMox, tmp_path: Path
+    ) -> None:
+        """Should raise RuntimeError when kubeconfig file does not exist."""
+        nonexistent_path = tmp_path / "does-not-exist" / "kubeconfig.yaml"
+        cmd_mox.mock("k3d").with_args("kubeconfig", "write", "test-cluster").returns(
+            exit_code=0,
+            stdout=f"{nonexistent_path}\n",
+        )
+
+        with pytest.raises(RuntimeError, match="file was not created"):
+            write_kubeconfig("test-cluster")
 
 
 class TestKubeconfigEnv:

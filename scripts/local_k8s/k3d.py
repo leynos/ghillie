@@ -92,7 +92,7 @@ def _is_http_port(container_port: str) -> bool:
 def _parse_host_port(host_port_str: str) -> int | None:
     """Parse a host port string to an integer.
 
-    Only valid port numbers in the range 1-65535 are accepted.
+    Only valid port numbers in the range 1024-65535 are accepted.
 
     Args:
         host_port_str: Host port string to parse.
@@ -106,7 +106,7 @@ def _parse_host_port(host_port_str: str) -> int | None:
     except ValueError:
         return None
     else:
-        if 1 <= port <= _MAX_PORT:
+        if _MIN_PORT <= port <= _MAX_PORT:
             return port
         return None
 
@@ -133,6 +133,8 @@ def _find_host_port_in_mappings(mappings: list[dict] | None) -> int | None:
 def _find_http_port_in_node(node: dict) -> int | None:
     """Find HTTP host port in a single node's port mappings.
 
+    Returns the first valid HTTP host port mapping found in the node.
+
     Args:
         node: k3d node dict with portMappings.
 
@@ -153,7 +155,8 @@ def _extract_http_host_port(cluster: dict) -> int | None:
     """Extract HTTP host port from cluster node port mappings.
 
     Searches through cluster nodes for port mappings that map container port 80
-    to a host port.
+    to a host port. Returns the first valid HTTP host port found across all
+    cluster nodes.
 
     Args:
         cluster: k3d cluster dict from JSON output.

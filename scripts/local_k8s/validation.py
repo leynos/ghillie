@@ -1,4 +1,43 @@
-"""Validation and utility helpers."""
+"""Validation and utility helpers for local k3d environment setup.
+
+This module provides foundational utilities used across the local_k8s package
+for executable verification, port allocation, and secret decoding. It also
+defines custom exceptions for error handling throughout the package.
+
+Utilities
+---------
+- ``require_exe``: Verifies CLI tools (k3d, kubectl, helm, docker) are available
+- ``pick_free_loopback_port``: Allocates ephemeral ports for ingress mapping
+- ``b64decode_k8s_secret_field``: Decodes base64-encoded Kubernetes secret values
+
+Custom Exceptions
+-----------------
+- ``LocalK8sError``: Base exception for all package errors
+- ``ExecutableNotFoundError``: Raised when a required CLI tool is missing
+- ``SecretDecodeError``: Raised when secret decoding fails
+- ``PortMismatchError``: Raised when requested port conflicts with existing cluster
+
+These utilities are consumed by the orchestration, k3d, k8s, deployment, cnpg,
+and valkey modules throughout the package.
+
+Examples
+--------
+Verify required executables before proceeding:
+
+    require_exe("k3d")
+    require_exe("kubectl")
+
+Allocate a free port for cluster ingress:
+
+    port = pick_free_loopback_port()
+    print(f"Using port {port} for ingress")
+
+Decode a secret value retrieved from Kubernetes:
+
+    encoded = "cG9zdGdyZXM6Ly91c2VyOnBhc3NAaG9zdC9kYg=="
+    db_uri = b64decode_k8s_secret_field(encoded)
+
+"""
 
 from __future__ import annotations
 
@@ -18,11 +57,15 @@ class ExecutableNotFoundError(LocalK8sError):
 def require_exe(name: str) -> None:
     """Verify a CLI tool is available in PATH.
 
-    Args:
-        name: Name of the executable to check for.
+    Parameters
+    ----------
+    name : str
+        Name of the executable to check for.
 
-    Raises:
-        ExecutableNotFoundError: If the executable is not found in PATH.
+    Raises
+    ------
+    ExecutableNotFoundError
+        If the executable is not found in PATH.
 
     """
     if shutil.which(name) is None:
@@ -36,15 +79,18 @@ def pick_free_loopback_port() -> int:
     Uses the kernel's ephemeral port allocation by binding to port 0,
     which causes the OS to assign an available port.
 
-    Note:
-        There is an inherent TOCTOU (time-of-check-time-of-use) race condition
-        between this function returning and the caller binding to the port.
-        Another process could claim the port in that brief interval. This is
-        extremely unlikely in practice for local development, but callers
-        should handle subprocess errors from k3d/Docker if port binding fails.
-
-    Returns:
+    Returns
+    -------
+    int
         An available port number on the loopback interface.
+
+    Notes
+    -----
+    There is an inherent TOCTOU (time-of-check-time-of-use) race condition
+    between this function returning and the caller binding to the port.
+    Another process could claim the port in that brief interval. This is
+    extremely unlikely in practice for local development, but callers
+    should handle subprocess errors from k3d/Docker if port binding fails.
 
     """
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -66,15 +112,20 @@ def b64decode_k8s_secret_field(b64_text: str) -> str:
     Kubernetes secrets store values as base64-encoded strings. This function
     decodes them to UTF-8 text.
 
-    Args:
-        b64_text: Base64-encoded string from a Kubernetes secret.
+    Parameters
+    ----------
+    b64_text : str
+        Base64-encoded string from a Kubernetes secret.
 
-    Returns:
+    Returns
+    -------
+    str
         The decoded UTF-8 string.
 
-    Raises:
-        SecretDecodeError: If the input is not valid base64 or cannot be
-            decoded as UTF-8 text.
+    Raises
+    ------
+    SecretDecodeError
+        If the input is not valid base64 or cannot be decoded as UTF-8 text.
 
     """
     try:
