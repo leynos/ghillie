@@ -5,11 +5,6 @@ from __future__ import annotations
 import typing as typ
 
 import pytest
-
-if typ.TYPE_CHECKING:
-    from pathlib import Path
-
-    from cmd_mox import CmdMox
 from local_k8s import (
     cluster_exists,
     create_k3d_cluster,
@@ -18,6 +13,11 @@ from local_k8s import (
     kubeconfig_env,
     write_kubeconfig,
 )
+
+if typ.TYPE_CHECKING:
+    from pathlib import Path
+
+    from cmd_mox import CmdMox
 
 
 class TestClusterExists:

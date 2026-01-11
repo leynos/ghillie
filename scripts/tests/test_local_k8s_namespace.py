@@ -5,14 +5,14 @@ from __future__ import annotations
 import subprocess
 import typing as typ
 
-if typ.TYPE_CHECKING:
-    import pytest
-    from cmd_mox import CmdMox
-
 from local_k8s import (
     create_namespace,
     namespace_exists,
 )
+
+if typ.TYPE_CHECKING:
+    import pytest
+    from cmd_mox import CmdMox
 
 
 class TestNamespaceExists:

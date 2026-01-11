@@ -5,9 +5,6 @@ from __future__ import annotations
 import typing as typ
 
 import pytest
-
-if typ.TYPE_CHECKING:
-    from cmd_mox import CmdMox
 from local_k8s import (
     Config,
     create_cnpg_cluster,
@@ -16,6 +13,9 @@ from local_k8s import (
     wait_for_cnpg_ready,
 )
 from local_k8s.cnpg import _cnpg_cluster_manifest
+
+if typ.TYPE_CHECKING:
+    from cmd_mox import CmdMox
 
 
 class TestCnpgClusterManifest:

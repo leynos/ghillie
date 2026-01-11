@@ -7,17 +7,17 @@ import subprocess
 import typing as typ
 
 import pytest
-
-if typ.TYPE_CHECKING:
-    from pathlib import Path
-
-    from cmd_mox import CmdMox
 from local_k8s import (
     Config,
     build_docker_image,
     create_app_secret,
     install_ghillie_chart,
 )
+
+if typ.TYPE_CHECKING:
+    from pathlib import Path
+
+    from cmd_mox import CmdMox
 
 
 class TestCreateAppSecret:

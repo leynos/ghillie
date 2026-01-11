@@ -5,15 +5,14 @@ from __future__ import annotations
 import typing as typ
 
 import pytest
-
-if typ.TYPE_CHECKING:
-    from cmd_mox import CmdMox
-
 from local_k8s import (
     Config,
     print_status,
     tail_logs,
 )
+
+if typ.TYPE_CHECKING:
+    from cmd_mox import CmdMox
 
 
 class TestPrintStatus:

@@ -5,9 +5,6 @@ from __future__ import annotations
 import typing as typ
 
 import pytest
-
-if typ.TYPE_CHECKING:
-    from cmd_mox import CmdMox
 from local_k8s import (
     Config,
     create_valkey_instance,
@@ -16,6 +13,9 @@ from local_k8s import (
     wait_for_valkey_ready,
 )
 from local_k8s.valkey import _valkey_manifest
+
+if typ.TYPE_CHECKING:
+    from cmd_mox import CmdMox
 
 
 class TestValkeyManifest:
