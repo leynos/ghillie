@@ -1,4 +1,39 @@
-"""Unit tests for MockStatusModel implementation."""
+"""Unit tests for MockStatusModel implementation.
+
+This module provides comprehensive tests for the MockStatusModel class, which
+serves as a deterministic, offline implementation of the RepositoryStatusModel
+protocol. The mock model uses simple heuristics to generate status reports
+without requiring external LLM services, making it suitable for testing,
+development, and demonstration purposes.
+
+Test Coverage
+-------------
+The tests validate several aspects of MockStatusModel behaviour:
+
+- **Heuristics**: Verifies the deterministic logic for status determination
+  (e.g., ON_TRACK for normal activity, AT_RISK when bugs exceed features).
+- **Output quality**: Ensures generated summaries, highlights, and risks
+  contain appropriate content derived from the evidence bundle.
+- **Next steps**: Validates that actionable recommendations are generated
+  based on open PRs, issues, and overall repository status.
+
+Fixtures
+--------
+Tests rely on shared fixtures from ``conftest.py``:
+
+- ``repository_metadata``: Basic repository identification.
+- ``empty_evidence``: Bundle with no activity (triggers UNKNOWN status).
+- ``feature_evidence``: Normal feature development activity.
+- ``bug_heavy_evidence``: Activity dominated by bug fixes.
+- ``evidence_with_previous_risks``: Bundle with prior AT_RISK report.
+
+Example:
+-------
+Running the tests::
+
+    pytest tests/unit/status/test_mock_status_model.py -v
+
+"""
 
 from __future__ import annotations
 
@@ -21,7 +56,7 @@ from ghillie.evidence.models import (
 from ghillie.status import MockStatusModel, RepositoryStatusResult
 
 
-def _summarize(evidence: RepositoryEvidenceBundle) -> RepositoryStatusResult:
+def _summarise(evidence: RepositoryEvidenceBundle) -> RepositoryStatusResult:
     """Run MockStatusModel on evidence and return the result.
 
     Helper function for test classes to avoid duplication.
@@ -29,7 +64,7 @@ def _summarize(evidence: RepositoryEvidenceBundle) -> RepositoryStatusResult:
     Parameters
     ----------
     evidence
-        The repository evidence bundle to summarize.
+        The repository evidence bundle to summarise.
 
     Returns
     -------
@@ -135,16 +170,19 @@ def _create_evidence_with_open_items(
     numbers starting at 10, and titles from a predefined list of bug descriptions.
 
     """
-    if item_type == "pr":
-        prs = _create_open_prs_tuple(count)
-        issues: tuple[IssueEvidence, ...] = ()
-        pr_count = count
-        issue_count = 0
-    else:
-        issues = _create_open_issues_tuple(count)
-        prs: tuple[PullRequestEvidence, ...] = ()
-        pr_count = 0
-        issue_count = count
+    match item_type:
+        case "pr":
+            prs = _create_open_prs_tuple(count)
+            issues: tuple[IssueEvidence, ...] = ()
+            pr_count = count
+            issue_count = 0
+            work_type = WorkType.FEATURE
+        case "issue":
+            issues = _create_open_issues_tuple(count)
+            prs: tuple[PullRequestEvidence, ...] = ()
+            pr_count = 0
+            issue_count = count
+            work_type = WorkType.BUG
 
     return RepositoryEvidenceBundle(
         repository=metadata,
@@ -161,7 +199,7 @@ def _create_evidence_with_open_items(
         ),
         work_type_groupings=(
             WorkTypeGrouping(
-                work_type=WorkType.FEATURE,
+                work_type=work_type,
                 commit_count=1,
                 pr_count=pr_count,
                 issue_count=issue_count,
@@ -205,7 +243,7 @@ class TestMockStatusModelHeuristics:
         empty_evidence: RepositoryEvidenceBundle,
     ) -> None:
         """Mock returns UNKNOWN when evidence bundle has no events."""
-        result = _summarize(empty_evidence)
+        result = _summarise(empty_evidence)
 
         assert result.status == ReportStatus.UNKNOWN
 
@@ -214,7 +252,7 @@ class TestMockStatusModelHeuristics:
         feature_evidence: RepositoryEvidenceBundle,
     ) -> None:
         """Mock returns ON_TRACK for normal feature activity."""
-        result = _summarize(feature_evidence)
+        result = _summarise(feature_evidence)
 
         assert result.status == ReportStatus.ON_TRACK
 
@@ -223,7 +261,7 @@ class TestMockStatusModelHeuristics:
         bug_heavy_evidence: RepositoryEvidenceBundle,
     ) -> None:
         """Mock returns AT_RISK when bug activity exceeds features."""
-        result = _summarize(bug_heavy_evidence)
+        result = _summarise(bug_heavy_evidence)
 
         assert result.status == ReportStatus.AT_RISK
 
@@ -232,7 +270,7 @@ class TestMockStatusModelHeuristics:
         evidence_with_previous_risks: RepositoryEvidenceBundle,
     ) -> None:
         """Mock returns AT_RISK when previous report had risks and AT_RISK status."""
-        result = _summarize(evidence_with_previous_risks)
+        result = _summarise(evidence_with_previous_risks)
 
         assert result.status == ReportStatus.AT_RISK
 
@@ -245,28 +283,32 @@ class TestMockStatusModelOutput:
         feature_evidence: RepositoryEvidenceBundle,
     ) -> None:
         """Mock generates summary mentioning repository slug."""
-        result = _summarize(feature_evidence)
+        result = _summarise(feature_evidence)
 
-        assert "octo/reef" in result.summary
+        expected_slug = feature_evidence.repository.slug
+        assert expected_slug in result.summary
 
     def test_summary_includes_event_counts(
         self,
         feature_evidence: RepositoryEvidenceBundle,
     ) -> None:
         """Mock generates summary with event counts."""
-        result = _summarize(feature_evidence)
+        result = _summarise(feature_evidence)
 
-        # Evidence has 2 commits, 1 PR, 1 issue
-        assert "2 commits" in result.summary
-        assert "1 pull request" in result.summary
-        assert "1 issue" in result.summary
+        commit_count = len(feature_evidence.commits)
+        pr_count = len(feature_evidence.pull_requests)
+        issue_count = len(feature_evidence.issues)
+
+        assert f"{commit_count} commit" in result.summary
+        assert f"{pr_count} pull request" in result.summary
+        assert f"{issue_count} issue" in result.summary
 
     def test_summary_indicates_no_activity_when_empty(
         self,
         empty_evidence: RepositoryEvidenceBundle,
     ) -> None:
         """Mock generates appropriate summary for empty evidence."""
-        result = _summarize(empty_evidence)
+        result = _summarise(empty_evidence)
 
         assert "no recorded activity" in result.summary.casefold()
 
@@ -275,7 +317,7 @@ class TestMockStatusModelOutput:
         feature_evidence: RepositoryEvidenceBundle,
     ) -> None:
         """Mock extracts highlights from feature work."""
-        result = _summarize(feature_evidence)
+        result = _summarise(feature_evidence)
 
         # Should have highlight about delivered PRs
         assert len(result.highlights) > 0
@@ -285,7 +327,7 @@ class TestMockStatusModelOutput:
         evidence_with_previous_risks: RepositoryEvidenceBundle,
     ) -> None:
         """Mock carries forward risks from previous reports."""
-        result = _summarize(evidence_with_previous_risks)
+        result = _summarise(evidence_with_previous_risks)
 
         # Should reference ongoing risks
         assert len(result.risks) > 0
@@ -337,7 +379,7 @@ class TestMockStatusModelNextSteps:
         """Specific status codes include appropriate next step guidance."""
         evidence = request.getfixturevalue(test_case.evidence_fixture)
 
-        result = _summarize(evidence)
+        result = _summarise(evidence)
 
         assert result.status == test_case.expected_status
         assert result.next_steps, (
@@ -369,7 +411,7 @@ class TestMockStatusModelNextSteps:
             repository_metadata, item_type=item_type, count=count
         )
 
-        result = _summarize(evidence)
+        result = _summarise(evidence)
 
         assert any(expected_step in step for step in result.next_steps), (
             f"Expected '{expected_step}' step, got: {result.next_steps}"
@@ -380,7 +422,7 @@ class TestMockStatusModelNextSteps:
         feature_evidence: RepositoryEvidenceBundle,
     ) -> None:
         """Evidence with only closed/merged PRs does not produce review step."""
-        result = _summarize(feature_evidence)
+        result = _summarise(feature_evidence)
 
         _assert_no_next_steps_containing(result, "Review", "PR review")
 
@@ -389,6 +431,6 @@ class TestMockStatusModelNextSteps:
         feature_evidence: RepositoryEvidenceBundle,
     ) -> None:
         """Evidence with only closed issues does not produce triage step."""
-        result = _summarize(feature_evidence)
+        result = _summarise(feature_evidence)
 
         _assert_no_next_steps_containing(result, "Triage", "issue triage")
