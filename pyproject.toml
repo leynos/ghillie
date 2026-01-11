@@ -28,6 +28,10 @@ dev = [
     "pyright",
     "ty>=0.0.1a21",
     "pytest-timeout",
+    # Script dependencies for type checking and testing
+    "cyclopts>=2.9,<3",
+    "plumbum>=1.10,<2",
+    "cmd-mox>=0.2,<1",
 ]
 
 [tool.ruff]
@@ -114,6 +118,8 @@ max-args = 4
 [tool.pytest.ini_options]
 # Tests automatically killed after seconds elapsed
 timeout = 30
+# Register cmd-mox plugin for external command mocking
+addopts = "-p cmd_mox.pytest_plugin"
 
 [tool.uv]
 package = true

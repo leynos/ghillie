@@ -1,8 +1,8 @@
 # Task 1.5.c: Define container image for preview workloads
 
-This ExecPlan is a living document. The sections Constraints, Tolerances, Risks,
-Progress, Surprises & Discoveries, Decision Log, and Outcomes & Retrospective
-must be kept up to date as work proceeds.
+This ExecPlan is a living document. The sections Constraints, Tolerances,
+Risks, Progress, Surprises & Discoveries, Decision Log, and Outcomes &
+Retrospective must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -17,9 +17,9 @@ k3d, and deploy via the existing Helm chart. The container starts a Falcon ASGI
 server exposing `/health` and `/ready` endpoints on port 8080, proving the
 runtime entrypoint works and enabling Kubernetes liveness/readiness probes.
 
-Observable outcome: Running `docker build -t ghillie:local .` produces an image.
-Running the image logs a startup message and responds to HTTP requests on port
-8080 with health status.
+Observable outcome: Running `docker build -t ghillie:local .` produces an
+image. Running the image logs a startup message and responds to HTTP requests
+on port 8080 with health status.
 
 ## Constraints
 
@@ -48,16 +48,16 @@ Running the image logs a startup message and responds to HTTP requests on port
 ## Risks
 
 - Risk: Granian may have platform-specific build issues in the container.
-  Severity: medium. Likelihood: low.
-  Mitigation: Use standard Python slim image; fall back to uvicorn if needed.
+  Severity: medium. Likelihood: low. Mitigation: Use standard Python slim
+  image; fall back to uvicorn if needed.
 
 - Risk: Port 8080 conflicts with other local services during testing.
-  Severity: low. Likelihood: low.
-  Mitigation: Document port usage; tests use ephemeral ports.
+  Severity: low. Likelihood: low. Mitigation: Document port usage; tests use
+  ephemeral ports.
 
 - Risk: Non-root user may not have write access to required directories.
-  Severity: medium. Likelihood: medium.
-  Mitigation: Create writable directories in Dockerfile; document requirements.
+  Severity: medium. Likelihood: medium. Mitigation: Create writable directories
+  in Dockerfile; document requirements.
 
 ## Progress
 
@@ -87,33 +87,31 @@ Running the image logs a startup message and responds to HTTP requests on port
 ## Surprises & Discoveries
 
 - Observation: Docstring formatting requires specific NumPy style without
-  colons on section headers. The ruff D406 rule enforces this.
-  Evidence: Initial implementation had "Parameters:" which caused lint
-  failures.
-  Impact: Simplified docstrings to avoid formal NumPy sections for
-  method-level docs.
+  colons on section headers. The ruff D406 rule enforces this. Evidence:
+  Initial implementation had "Parameters:" which caused lint failures. Impact:
+  Simplified docstrings to avoid formal NumPy sections for method-level docs.
 
 - Observation: Type checker warning for `falcon.asgi.App` submodule access.
-  Evidence: type-checker warning "possibly-missing-attribute" for falcon.asgi.App.
-  Impact: Added explicit `import falcon.asgi` to test file to satisfy type checker.
+  Evidence: type-checker warning "possibly-missing-attribute" for
+  falcon.asgi.App. Impact: Added explicit `import falcon.asgi` to test file to
+  satisfy type checker.
 
 ## Decision Log
 
 - Decision: Use Falcon for HTTP endpoints.
   Rationale: Falcon is the framework specified in the architecture design
   documents (docs/async-sqlalchemy-with-pg-and-falcon.md). It aligns with the
-  existing async-first architecture.
-  Date/Author: 2026-01-07 / Planning phase
+  existing async-first architecture. Date/Author: 2026-01-07 / Planning phase.
 
 - Decision: Use Granian as ASGI server.
   Rationale: Specified in docs/ghillie-bronze-silver-architecture-design.md as
-  the ASGI application server for Ghillie.
-  Date/Author: 2026-01-07 / Planning phase
+  the ASGI application server for Ghillie. Date/Author: 2026-01-07 / Planning
+  phase.
 
 - Decision: Implement health endpoint only (not full worker logic).
   Rationale: User preference to keep initial implementation minimal. Full
-  worker logic deferred to future tasks.
-  Date/Author: 2026-01-07 / User clarification
+  worker logic deferred to future tasks. Date/Author: 2026-01-07 / User
+  clarification.
 
 ## Outcomes & Retrospective
 
@@ -146,7 +144,8 @@ Key files for this task:
 
 - `pyproject.toml`: Package configuration and dependencies
 - `docs/local-k8s-preview-design.md`: Design document with Dockerfile sketch
-- `charts/ghillie/values.yaml`: Helm chart configuration (port 8080, command/args)
+- `charts/ghillie/values.yaml`: Helm chart configuration (port 8080,
+  command/args)
 - `ghillie/__init__.py`: Package root
 
 The Helm chart (`charts/ghillie/`) is already implemented with support for
@@ -172,14 +171,17 @@ Write failing tests first (test-driven development (TDD) approach per AGENTS.md
 guidelines):
 
 - Unit tests in `tests/unit/test_runtime.py` for health resources
-- BDD feature in `tests/features/runtime.feature` for container startup behaviour
+- BDD feature in `tests/features/runtime.feature` for container startup
+  behaviour
 
 ### Stage B: Implement runtime module
 
 Create `ghillie/runtime.py` with:
 
-1. A `HealthResource` class with `on_get` method returning JSON `{"status": "ok"}`
-2. A `ReadyResource` class with `on_get` method returning JSON `{"status": "ready"}`
+1. A `HealthResource` class with `on_get` method returning JSON
+   `{"status": "ok"}`
+2. A `ReadyResource` class with `on_get` method returning JSON
+   `{"status": "ready"}`
 3. A `create_app()` function that builds the Falcon ASGI app
 4. A `main()` function that starts Granian on `0.0.0.0:8080`
 
@@ -249,7 +251,7 @@ All commands run from repository root `/data/leynos/Projects/ghillie/`.
 1. Edit pyproject.toml to add dependencies:
 
        dependencies = [
-           ...
+           …
            "falcon>=4.0.0",
            "granian>=1.0.0",
        ]
@@ -415,18 +417,18 @@ New module `ghillie/runtime.py`:
             self,
             req: falcon.asgi.Request,
             resp: falcon.asgi.Response,
-        ) -> None: ...
+        ) -> None: …
 
     class ReadyResource:
         async def on_get(
             self,
             req: falcon.asgi.Request,
             resp: falcon.asgi.Response,
-        ) -> None: ...
+        ) -> None: …
 
-    def create_app() -> falcon.asgi.App: ...
+    def create_app() -> falcon.asgi.App: …
 
-    def main() -> None: ...
+    def main() -> None: …
 
 Environment variables:
 

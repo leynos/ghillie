@@ -205,21 +205,21 @@ ephemeral previews platform and supports the Ghillie Helm chart.
   *Completion criteria:* A local build produces an image that starts the
   runtime entrypoint without errors when deployed.
 
-- [ ] **Task 1.5.d – Implement local k3d lifecycle script**  
+- [x] **Task 1.5.d – Implement local k3d lifecycle script**
   Provide a Python script and Makefile targets to create a k3d cluster, install
   platform dependencies, deploy the Ghillie chart, and surface the preview URL.
 
   *Completion criteria:* `make local-k8s-up` and `make local-k8s-down` succeed
   end to end, and `make local-k8s-status` reports ready pods.
 
-- [ ] **Task 1.5.e – Provision Valkey via valkey-operator**  
+- [x] **Task 1.5.e – Provision Valkey via valkey-operator**
   Install `valkey-operator` in the local dev cluster and create a minimal
   Valkey instance for Ghillie to consume, mirroring the platform approach.
 
   *Completion criteria:* The Valkey operator reconciles a Valkey resource, and
   the local preview script wires its connection details into the Ghillie Secret.
 
-- [ ] **Task 1.5.f – Document local preview usage**  
+- [x] **Task 1.5.f – Document local preview usage**
   Update the users' guide with instructions for running the local preview
   workflow and troubleshooting common issues.
 

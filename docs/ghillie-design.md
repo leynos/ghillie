@@ -644,10 +644,11 @@ placing the Falcon Asynchronous Server Gateway Interface (ASGI) application at
 the adapter boundary between external HTTP consumers and the core Medallion
 data layers.
 
-**Current implementation (Phase 1.5.c):** The runtime module (`ghillie.runtime`)
-provides minimal Kubernetes health probe endpoints (`/health`, `/ready`) using
-Falcon ASGI with Granian as the application server. These endpoints are
-stateless and do not require database access or session management.
+**Current implementation (Phase 1.5.c):** The runtime module
+(`ghillie.runtime`) provides minimal Kubernetes health probe endpoints
+(`/health`, `/ready`) using Falcon ASGI with Granian as the application server.
+These endpoints are stateless and do not require database access or session
+management.
 
 **Planned evolution:** As domain-connected endpoints are added (Concordat
 CloudEvents ingestion, status query APIs), the API layer should evolve from the
@@ -672,13 +673,14 @@ This structure maintains clear separation between:
 - **Inbound adapters** (CloudEvents ingestion): Write path to Bronze layer
 - **Outbound adapters** (status queries): Read path from Gold layer
 
-The session middleware pattern documented in `async-sqlalchemy-with-pg-and-falcon.md`
-should be implemented before adding database-dependent endpoints. This provides
-request-scoped `AsyncSession` instances with automatic transaction demarcation.
+The session middleware pattern documented in
+`async-sqlalchemy-with-pg-and-falcon.md` should be implemented before adding
+database-dependent endpoints. This provides request-scoped `AsyncSession`
+instances with automatic transaction demarcation.
 
-**Design decision:** Health probe endpoints remain in a separate resource module
-from domain endpoints. This allows Kubernetes operators to understand which
-endpoints serve operational purposes versus functional purposes.
+**Design decision:** Health probe endpoints remain in a separate resource
+module from domain endpoints. This allows Kubernetes operators to understand
+which endpoints serve operational purposes versus functional purposes.
 
 ## 9. Evidence Bundle Architecture (Phase 2.1)
 
