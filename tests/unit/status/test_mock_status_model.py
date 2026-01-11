@@ -268,7 +268,7 @@ class TestMockStatusModelOutput:
         """Mock generates appropriate summary for empty evidence."""
         result = _summarize(empty_evidence)
 
-        assert "no recorded activity" in result.summary.lower()
+        assert "no recorded activity" in result.summary.casefold()
 
     def test_extracts_highlights_from_features(
         self,
@@ -290,7 +290,7 @@ class TestMockStatusModelOutput:
         # Should reference ongoing risks
         assert len(result.risks) > 0
         # At least one risk should be marked as ongoing
-        ongoing_risks = [r for r in result.risks if "ongoing" in r.lower()]
+        ongoing_risks = [r for r in result.risks if "ongoing" in r.casefold()]
         assert len(ongoing_risks) > 0
 
 
@@ -344,9 +344,9 @@ class TestMockStatusModelNextSteps:
             f"Expected at least one next step for "
             f"{test_case.expected_status.value} status"
         )
-        assert any(test_case.keyword in step.lower() for step in result.next_steps), (
-            f"Expected a {test_case.description} next step, got: {result.next_steps}"
-        )
+        assert any(
+            test_case.keyword in step.casefold() for step in result.next_steps
+        ), f"Expected a {test_case.description} next step, got: {result.next_steps}"
 
     @pytest.mark.parametrize(
         ("item_type", "count", "expected_step"),
