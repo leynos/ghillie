@@ -7,10 +7,10 @@ to reduce duplication while maintaining comprehensive coverage.
 
 from __future__ import annotations
 
-import subprocess
 import typing as typ
 
 import pytest
+from conftest import make_subprocess_mock
 from local_k8s import Config
 from local_k8s.cnpg import install_cnpg_operator
 from local_k8s.valkey import install_valkey_operator
@@ -72,17 +72,9 @@ class TestOperatorInstallation:
         cfg = Config()
         calls: list[tuple[str, ...]] = []
 
-        def mock_run(
-            args: list[str], **_kwargs: object
-        ) -> subprocess.CompletedProcess[str]:
-            calls.append(tuple(args))
-            # Simulate namespace not existing (kubectl get returns non-zero)
-            returncode = 1 if args[:3] == ["kubectl", "get", "namespace"] else 0
-            return subprocess.CompletedProcess(
-                args=args, returncode=returncode, stdout=""
-            )
-
-        monkeypatch.setattr("subprocess.run", mock_run)
+        monkeypatch.setattr(
+            "subprocess.run", make_subprocess_mock(calls, namespace_exists=False)
+        )
 
         case.install_func(cfg, test_env)
 

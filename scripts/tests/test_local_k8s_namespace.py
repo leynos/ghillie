@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import subprocess
 import typing as typ
 
+from conftest import make_subprocess_mock
 from local_k8s.k8s import create_namespace, namespace_exists
 
 if typ.TYPE_CHECKING:
@@ -57,15 +57,10 @@ class TestCreateNamespace:
         """Should use dry-run + apply pattern for idempotent namespace creation."""
         calls: list[tuple[str, ...]] = []
 
-        def mock_run(
-            args: list[str], **_kwargs: object
-        ) -> subprocess.CompletedProcess[str]:
-            calls.append(tuple(args))
-            return subprocess.CompletedProcess(
-                args=args, returncode=0, stdout="namespace-yaml"
-            )
-
-        monkeypatch.setattr("subprocess.run", mock_run)
+        monkeypatch.setattr(
+            "subprocess.run",
+            make_subprocess_mock(calls, namespace_exists=True, stdout="namespace-yaml"),
+        )
 
         create_namespace("ghillie", test_env)
 

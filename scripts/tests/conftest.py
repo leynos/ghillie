@@ -9,6 +9,7 @@ from __future__ import annotations
 import dataclasses
 import importlib.util
 import os
+import subprocess
 import sys
 import typing as typ
 from pathlib import Path
@@ -110,3 +111,57 @@ def mock_subprocess_run(
 
     monkeypatch.setattr("subprocess.run", _mock_run)
     return capture
+
+
+SubprocessMockCallable = typ.Callable[[list[str]], subprocess.CompletedProcess[str]]
+
+
+def make_subprocess_mock(
+    calls: list[tuple[str, ...]],
+    *,
+    namespace_exists: bool = True,
+    stdout: str = "",
+) -> SubprocessMockCallable:
+    """Create a subprocess.run mock that captures calls.
+
+    Factory function to create a mock_run callable for use with monkeypatch.
+    The mock captures all subprocess.run calls and returns CompletedProcess
+    with configurable behaviour for namespace existence checks.
+
+    Parameters
+    ----------
+    calls : list[tuple[str, ...]]
+        List to append captured command tuples to.
+    namespace_exists : bool, default True
+        If False, kubectl get namespace commands return non-zero exit code.
+    stdout : str, default ""
+        Standard output to include in CompletedProcess.
+
+    Returns
+    -------
+    Callable
+        A mock_run function suitable for monkeypatch.setattr("subprocess.run", ...).
+
+    Examples
+    --------
+    Mock subprocess with namespace not existing:
+
+        calls = []
+        mock_run = make_subprocess_mock(calls, namespace_exists=False)
+        monkeypatch.setattr("subprocess.run", mock_run)
+
+    """
+
+    def mock_run(
+        args: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(tuple(args))
+        # Simulate namespace check: return non-zero if namespace_exists=False
+        returncode = 0
+        if not namespace_exists and args[:3] == ["kubectl", "get", "namespace"]:
+            returncode = 1
+        return subprocess.CompletedProcess(
+            args=args, returncode=returncode, stdout=stdout
+        )
+
+    return mock_run
