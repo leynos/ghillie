@@ -103,7 +103,7 @@ def build_docker_image(
             "build",
             "-t",
             image_name,
-            str(context),
+            str(context_path),
         ],
         check=True,
         timeout=600,

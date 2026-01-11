@@ -92,7 +92,7 @@ Thresholds that trigger escalation when breached:
 
 ## Surprises & Discoveries
 
-- **Observation:** cmd-mox works well for single-call scenarios but monkeypatch
+- **Observation:** cmd-mox works well for single-call scenarios, but monkeypatch
   is more suitable for functions that make multiple subprocess calls with
   different expected results. Impact: Used monkeypatch with a mock factory
   pattern for complex helpers like `install_cnpg_operator`.
