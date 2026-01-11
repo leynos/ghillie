@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import typing as typ
 
 import pytest
@@ -106,24 +107,42 @@ class TestBuildDockerImage:
         build_docker_image("custom-repo", "v1.0.0")
 
 
+@dataclasses.dataclass
+class HelmChartParams:
+    """Parameters for Helm chart installation tests."""
+
+    namespace: str
+    image_repo: str
+    image_tag: str
+
+
+@pytest.fixture
+def helm_chart_params(request: pytest.FixtureRequest) -> HelmChartParams:
+    """Provide Helm chart test parameters from indirect parameterisation."""
+    return request.param
+
+
 class TestInstallGhillieChart:
     """Tests for install_ghillie_chart helper using cmd-mox."""
 
     @pytest.mark.parametrize(
-        ("namespace", "image_repo", "image_tag"),
+        "helm_chart_params",
         [
-            ("ghillie", "ghillie", "local"),  # default values
-            ("custom-ns", "custom-repo", "v1.0.0"),  # custom values
+            HelmChartParams(
+                namespace="ghillie", image_repo="ghillie", image_tag="local"
+            ),
+            HelmChartParams(
+                namespace="custom-ns", image_repo="custom-repo", image_tag="v1.0.0"
+            ),
         ],
+        indirect=True,
     )
-    def test_invokes_helm_upgrade(  # noqa: PLR0913
+    def test_invokes_helm_upgrade(
         self,
         cmd_mox,  # noqa: ANN001
         test_env: dict[str, str],
         tmp_path: Path,
-        namespace: str,
-        image_repo: str,
-        image_tag: str,
+        helm_chart_params: HelmChartParams,
     ) -> None:
         """Should invoke helm upgrade --install with correct args."""
         # Create the chart and values paths that the function expects
@@ -135,9 +154,9 @@ class TestInstallGhillieChart:
         values_file.touch()
 
         cfg = Config(
-            namespace=namespace,
-            image_repo=image_repo,
-            image_tag=image_tag,
+            namespace=helm_chart_params.namespace,
+            image_repo=helm_chart_params.image_repo,
+            image_tag=helm_chart_params.image_tag,
             chart_path=chart_path,
             values_file=values_file,
         )
@@ -148,13 +167,13 @@ class TestInstallGhillieChart:
             "ghillie",
             str(chart_path),
             "--namespace",
-            namespace,
+            helm_chart_params.namespace,
             "--values",
             str(values_file),
             "--set",
-            f"image.repository={image_repo}",
+            f"image.repository={helm_chart_params.image_repo}",
             "--set",
-            f"image.tag={image_tag}",
+            f"image.tag={helm_chart_params.image_tag}",
             "--wait",
         ).returns(exit_code=0)
 

@@ -56,6 +56,25 @@ def _find_host_port_in_mappings(mappings: list[dict] | None) -> int | None:
     return None
 
 
+def _find_http_port_in_node(node: dict) -> int | None:
+    """Find HTTP host port in a single node's port mappings.
+
+    Args:
+        node: k3d node dict with portMappings.
+
+    Returns:
+        Host port mapped to container port 80, or None if not found.
+
+    """
+    port_mappings = node.get("portMappings") or {}
+    for container_port, mappings in port_mappings.items():
+        if _is_http_port(container_port):
+            port = _find_host_port_in_mappings(mappings)
+            if port is not None:
+                return port
+    return None
+
+
 def _extract_http_host_port(cluster: dict) -> int | None:
     """Extract HTTP host port from cluster node port mappings.
 
@@ -70,12 +89,9 @@ def _extract_http_host_port(cluster: dict) -> int | None:
 
     """
     for node in cluster.get("nodes") or []:
-        port_mappings = node.get("portMappings") or {}
-        for container_port, mappings in port_mappings.items():
-            if _is_http_port(container_port):
-                port = _find_host_port_in_mappings(mappings)
-                if port is not None:
-                    return port
+        port = _find_http_port_in_node(node)
+        if port is not None:
+            return port
     return None
 
 
