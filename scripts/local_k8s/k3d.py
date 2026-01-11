@@ -1,17 +1,43 @@
 """k3d cluster lifecycle operations.
 
-Provides functions to create, delete, inspect, and interact with k3d
-clusters for local Kubernetes development. The module wraps the k3d CLI
-and exposes a typed Python API.
+This module provides functions for managing k3d clusters used in local
+Kubernetes development environments. It wraps the k3d CLI to create, delete,
+and inspect clusters, manage kubeconfig files, and import Docker images.
 
-Public API:
-    get_cluster_ingress_port: Retrieve the host port mapped to ingress.
-    cluster_exists: Check whether a named cluster exists.
-    create_k3d_cluster: Create a new k3d cluster with port mapping.
-    delete_k3d_cluster: Delete an existing k3d cluster.
-    write_kubeconfig: Write and return the kubeconfig path for a cluster.
-    kubeconfig_env: Return environment dict with KUBECONFIG set.
-    import_image_to_k3d: Import a Docker image into a k3d cluster.
+All functions that interact with k3d use subprocess calls with appropriate
+timeouts and error handling. Port mappings are configured for loopback
+(127.0.0.1) to keep clusters accessible only from the local machine.
+
+Public API
+----------
+- ``get_cluster_ingress_port``: Retrieve the host port mapped to ingress.
+- ``cluster_exists``: Check whether a named cluster exists.
+- ``create_k3d_cluster``: Create a new k3d cluster with port mapping.
+- ``delete_k3d_cluster``: Delete an existing k3d cluster.
+- ``write_kubeconfig``: Write and return the kubeconfig path for a cluster.
+- ``kubeconfig_env``: Return environment dict with KUBECONFIG set.
+- ``import_image_to_k3d``: Import a Docker image into a k3d cluster.
+
+Examples
+--------
+Check if a cluster exists and create one if not:
+
+    if not cluster_exists("ghillie-local"):
+        create_k3d_cluster("ghillie-local", port=8080, agents=1)
+
+Get the kubeconfig environment for kubectl commands:
+
+    env = kubeconfig_env("ghillie-local")
+    subprocess.run(["kubectl", "get", "pods"], env=env)
+
+Import a locally built image into the cluster:
+
+    import_image_to_k3d("ghillie-local", "myapp", "latest")
+
+Notes
+-----
+The module uses non-privileged ports only (1024-65535) for security.
+All k3d subprocess calls have configurable timeouts to prevent hangs.
 
 """
 
@@ -178,10 +204,14 @@ def get_cluster_ingress_port(cluster_name: str) -> int | None:
     Inspects the k3d cluster's port mappings to find the host port that maps
     to port 80 (HTTP ingress) inside the cluster.
 
-    Args:
-        cluster_name: Name of the cluster to inspect.
+    Parameters
+    ----------
+    cluster_name : str
+        Name of the cluster to inspect.
 
-    Returns:
+    Returns
+    -------
+    int or None
         The host port as an int if found, None otherwise.
 
     """
@@ -195,10 +225,14 @@ def get_cluster_ingress_port(cluster_name: str) -> int | None:
 def cluster_exists(cluster_name: str) -> bool:
     """Check if a k3d cluster already exists.
 
-    Args:
-        cluster_name: Name of the cluster to check for.
+    Parameters
+    ----------
+    cluster_name : str
+        Name of the cluster to check for.
 
-    Returns:
+    Returns
+    -------
+    bool
         True if the cluster exists, False otherwise. Returns False if k3d
         is unavailable or returns invalid output.
 
@@ -211,20 +245,27 @@ def create_k3d_cluster(
 ) -> None:
     """Create a k3d cluster with loopback port mapping.
 
-    Creates a k3d cluster configured with:
-    - Specified number of agent nodes
-    - Port mapping from loopback (127.0.0.1) to Traefik on port 80
+    Creates a k3d cluster configured with the specified number of agent nodes
+    and port mapping from loopback (127.0.0.1) to Traefik on port 80.
 
-    Args:
-        cluster_name: Name for the new cluster.
-        port: Host port to map to ingress (port 80 on the load balancer). Must
-            be in the range 1024-65535 (non-privileged ports).
-        agents: Number of agent nodes (default 1). Must be >= 0.
-        timeout: Maximum time in seconds to wait for creation (default 300).
+    Parameters
+    ----------
+    cluster_name : str
+        Name for the new cluster.
+    port : int
+        Host port to map to ingress (port 80 on the load balancer). Must be
+        in the range 1024-65535 (non-privileged ports).
+    agents : int, default 1
+        Number of agent nodes. Must be >= 0.
+    timeout : float, default 300
+        Maximum time in seconds to wait for creation.
 
-    Raises:
-        ValueError: If port is outside the valid range or agents is negative.
-        RuntimeError: If cluster creation times out or fails.
+    Raises
+    ------
+    ValueError
+        If port is outside the valid range or agents is negative.
+    RuntimeError
+        If cluster creation times out or fails.
 
     """
     if not _MIN_PORT <= port <= _MAX_PORT:
@@ -263,12 +304,17 @@ def create_k3d_cluster(
 def delete_k3d_cluster(cluster_name: str, timeout: float = 120) -> None:
     """Delete a k3d cluster.
 
-    Args:
-        cluster_name: Name of the cluster to delete.
-        timeout: Maximum time in seconds to wait for deletion (default 120).
+    Parameters
+    ----------
+    cluster_name : str
+        Name of the cluster to delete.
+    timeout : float, default 120
+        Maximum time in seconds to wait for deletion.
 
-    Raises:
-        RuntimeError: If cluster deletion fails or times out.
+    Raises
+    ------
+    RuntimeError
+        If cluster deletion fails or times out.
 
     """
     try:
@@ -292,16 +338,23 @@ def write_kubeconfig(cluster_name: str, timeout: float = 30) -> Path:
     Uses k3d's kubeconfig write command to generate a dedicated kubeconfig
     file for the specified cluster.
 
-    Args:
-        cluster_name: Name of the k3d cluster.
-        timeout: Maximum time in seconds to wait (default 30).
+    Parameters
+    ----------
+    cluster_name : str
+        Name of the k3d cluster.
+    timeout : float, default 30
+        Maximum time in seconds to wait.
 
-    Returns:
+    Returns
+    -------
+    Path
         Path to the generated kubeconfig file.
 
-    Raises:
-        RuntimeError: If the kubeconfig path is empty, the file was not
-            created, or the operation times out.
+    Raises
+    ------
+    RuntimeError
+        If the kubeconfig path is empty, the file was not created, or the
+        operation times out.
 
     """
     try:
@@ -339,10 +392,14 @@ def kubeconfig_env(cluster_name: str) -> dict[str, str]:
     Creates a copy of the current environment with KUBECONFIG pointing to
     the cluster's kubeconfig file.
 
-    Args:
-        cluster_name: Name of the k3d cluster.
+    Parameters
+    ----------
+    cluster_name : str
+        Name of the k3d cluster.
 
-    Returns:
+    Returns
+    -------
+    dict[str, str]
         Environment dictionary with KUBECONFIG set.
 
     """
@@ -360,14 +417,21 @@ def import_image_to_k3d(
     Uses k3d's image import command to make a locally built image
     available to pods running in the cluster.
 
-    Args:
-        cluster_name: Name of the k3d cluster.
-        image_repo: Repository name of the image.
-        image_tag: Tag of the image.
-        timeout: Maximum time in seconds to wait for import (default 600).
+    Parameters
+    ----------
+    cluster_name : str
+        Name of the k3d cluster.
+    image_repo : str
+        Repository name of the image.
+    image_tag : str
+        Tag of the image.
+    timeout : float, default 600
+        Maximum time in seconds to wait for import.
 
-    Raises:
-        RuntimeError: If image import fails or times out.
+    Raises
+    ------
+    RuntimeError
+        If image import fails or times out.
 
     """
     image_name = f"{image_repo}:{image_tag}"
