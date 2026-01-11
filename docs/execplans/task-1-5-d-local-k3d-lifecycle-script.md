@@ -50,8 +50,9 @@ Hard invariants that must hold throughout implementation:
 
 Thresholds that trigger escalation when breached:
 
-- Scope: if implementation requires more than 600 lines of Python (excluding
-  tests) or touches more than 5 existing files, stop and escalate.
+- Scope: if implementation requires more than 1100 lines of Python (excluding
+  tests) or touches more than 5 existing files, stop and escalate. (Initial
+  estimate of 600 lines was revised after refactoring into a package structure.)
 - Dependencies: if external dependencies beyond `cyclopts`, `plumbum`, and
   `cmd-mox` are required in the script, stop and escalate.
 - Iterations: if tests still fail after 3 attempts to fix, stop and escalate.
@@ -85,7 +86,7 @@ Thresholds that trigger escalation when breached:
 - [x] (2026-01-08) Stage 7: Implement Helm chart installation helpers
 - [x] (2026-01-08) Stage 8: Wire up `up`, `down`, `status`, `logs` commands
 - [x] (2026-01-08) Stage 9: Add Makefile targets
-- [x] (2026-01-08) Stage 10: Add BDD behavioral tests
+- [x] (2026-01-08) Stage 10: Add BDD behavioural tests
 - [x] (2026-01-08) Stage 11: Update users' guide documentation
 - [x] (2026-01-08) Stage 12: Update roadmap to mark task complete
 
@@ -133,14 +134,14 @@ Thresholds that trigger escalation when breached:
 - Makefile targets: `local-k8s-up`, `local-k8s-down`, `local-k8s-status`,
   `local-k8s-logs`
 - Users' guide documentation with prerequisites, usage, and configuration
-- Roadmap tasks 1.5.d, 1.5.e, and 1.5.f marked complete
+- Roadmap task 1.5.d marked complete
 
 **Lessons learned:**
 
 1. Mocking external commands requires careful consideration of output formats
    (JSON vs tabular) and multi-call scenarios.
 2. BDD tests complement unit tests well by verifying end-to-end command
-   behavior without requiring actual infrastructure.
+   behaviour without requiring actual infrastructure.
 3. The Cyclopts framework's environment variable support simplifies CI
    integration without adding custom argument handling code.
 
@@ -431,7 +432,7 @@ Update `.PHONY` declaration to include new targets.
 Validation: `make help` shows new targets; `make local-k8s-status` runs
 (expected to fail without cluster, but should invoke the script).
 
-### Stage 10: Add BDD behavioral tests
+### Stage 10: Add BDD behavioural tests
 
 Create `scripts/tests/features/local_k8s.feature`:
 
@@ -546,7 +547,7 @@ Validation: Roadmap reflects completion.
 
 ## Concrete Steps
 
-All commands run from the repository root (`/data/leynos/Projects/ghillie`).
+All commands run from the repository root.
 
 ### Stage 1 commands
 

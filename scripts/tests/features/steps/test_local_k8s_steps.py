@@ -69,7 +69,7 @@ class SubprocessMock:
             return "", 1  # namespace doesn't exist
         if args[1:3] == ["get", "secret"]:
             return self._handle_kubectl_get_secret(args)
-        if args[1:3] == ["get", "pod"]:
+        if args[1:3] == ["get", "pods"]:
             return "NAME           READY   STATUS\nghillie-abc   1/1     Running", 0
         return "", 0  # create, apply, wait, logs, rollout
 
@@ -100,7 +100,6 @@ class SubprocessMock:
         # Extract parameters from kwargs with defaults
         check = kwargs.get("check", False)
         capture_output = kwargs.get("capture_output", False)
-        text = kwargs.get("text", False)
 
         self.context["captured_calls"].append(tuple(args))
 
@@ -113,7 +112,7 @@ class SubprocessMock:
         return subprocess.CompletedProcess(
             args=args,
             returncode=returncode,
-            stdout=stdout if capture_output or text else "",
+            stdout=stdout if capture_output else "",
             stderr="",
         )
 

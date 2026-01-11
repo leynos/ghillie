@@ -206,7 +206,8 @@ def logs(
 
 def main() -> int:
     """Entry point for the CLI."""
-    return app()
+    result = app()
+    return result if result is not None else 0
 
 
 if __name__ == "__main__":

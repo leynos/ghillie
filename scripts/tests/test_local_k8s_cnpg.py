@@ -71,7 +71,8 @@ class TestInstallCnpgOperator:
         install_cnpg_operator(cfg, test_env)
 
         # Verify the expected commands were called
-        assert len(calls) == 5
+        # Note: create_namespace uses dry-run + apply pattern (2 calls)
+        assert len(calls) == 6
         assert calls[0] == (
             "helm",
             "repo",
@@ -82,8 +83,11 @@ class TestInstallCnpgOperator:
         )
         assert calls[1] == ("helm", "repo", "update")
         assert calls[2] == ("kubectl", "get", "namespace", "cnpg-system")
-        assert calls[3] == ("kubectl", "create", "namespace", "cnpg-system")
-        assert calls[4] == (
+        # Namespace creation uses dry-run + apply
+        assert calls[3][:4] == ("kubectl", "create", "namespace", "cnpg-system")
+        assert "--dry-run=client" in calls[3]
+        assert calls[4] == ("kubectl", "apply", "-f", "-")
+        assert calls[5] == (
             "helm",
             "upgrade",
             "--install",

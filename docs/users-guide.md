@@ -682,7 +682,7 @@ The runtime reads configuration from environment variables:
 | Variable            | Default   | Description                   |
 | ------------------- | --------- | ----------------------------- |
 | `GHILLIE_HOST`      | `0.0.0.0` | Bind address for the server   |
-| `GHILLIE_PORT`      | `8080`    | Listen port for HTTP traffic  |
+| `GHILLIE_PORT`      | `8080`    | Listening port for HTTP       |
 | `GHILLIE_LOG_LEVEL` | `INFO`    | Log level (DEBUG, INFO, etc.) |
 
 Additional environment variables for database and cache connectivity should be
@@ -756,7 +756,7 @@ make local-k8s-up
 This command:
 
 1. Creates a k3d cluster with loopback-only ingress on an ephemeral port
-2. Installs the CloudNativePG operator and creates a Postgres instance
+2. Installs the CloudNativePG (CNPG) operator and creates a Postgres instance
 3. Installs the Valkey operator and creates a Valkey instance
 4. Builds the Ghillie Docker image and imports it into the cluster
 5. Creates application secrets with database and cache connection strings

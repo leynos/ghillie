@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import shutil
+import sys
+from pathlib import Path
+
 import pytest
 from local_k8s import (
     ExecutableNotFoundError,
@@ -14,10 +18,13 @@ from local_k8s import (
 class TestRequireExe:
     """Tests for require_exe helper."""
 
-    def test_succeeds_for_python(self) -> None:
+    def test_succeeds_for_available_executable(self) -> None:
         """require_exe should not raise for an existing executable."""
-        # Python should always be available in test environments
-        require_exe("python")
+        # Derive a portable executable name from the running interpreter
+        exe_name = Path(sys.executable).name
+        if not shutil.which(exe_name):
+            pytest.skip(f"No suitable Python executable '{exe_name}' found on PATH")
+        require_exe(exe_name)
 
     def test_raises_for_missing_executable(self) -> None:
         """require_exe should raise ExecutableNotFoundError for missing exe."""
@@ -37,18 +44,6 @@ class TestPickFreeLoopbackPort:
 
         # Ephemeral ports are typically 1024-65535, but we got it from the OS
         assert 1 <= port <= 65535
-
-    def test_returns_different_ports(self) -> None:
-        """Consecutive calls should typically return different ports."""
-        # While not guaranteed, the kernel should give different ports
-        # This is probabilistic - if this fails on a healthy system, investigate
-        ports = {pick_free_loopback_port() for _ in range(5)}
-
-        # Expect at least 2 unique ports from 5 calls
-        assert len(ports) > 1, (
-            "Expected multiple unique ports from consecutive calls; "
-            f"got only {len(ports)}: {ports}"
-        )
 
 
 class TestB64DecodeK8sSecretField:

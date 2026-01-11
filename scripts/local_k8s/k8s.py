@@ -31,15 +31,36 @@ def namespace_exists(namespace: str, env: dict[str, str]) -> bool:
 
 
 def create_namespace(namespace: str, env: dict[str, str]) -> None:
-    """Create a Kubernetes namespace.
+    """Create a Kubernetes namespace idempotently.
+
+    Uses dry-run + apply pattern for idempotent upsert behaviour.
 
     Args:
         namespace: Name of the namespace to create.
         env: Environment dict with KUBECONFIG set.
 
     """
-    subprocess.run(  # noqa: S603
-        ["kubectl", "create", "namespace", namespace],  # noqa: S607
+    # Generate namespace YAML using dry-run
+    result = subprocess.run(  # noqa: S603
+        [  # noqa: S607
+            "kubectl",
+            "create",
+            "namespace",
+            namespace,
+            "--dry-run=client",
+            "-o",
+            "yaml",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+        env=env,
+    )
+    # Apply for idempotent upsert
+    subprocess.run(
+        ["kubectl", "apply", "-f", "-"],  # noqa: S607
+        input=result.stdout,
+        text=True,
         check=True,
         env=env,
     )

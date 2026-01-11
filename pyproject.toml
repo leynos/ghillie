@@ -29,7 +29,7 @@ dev = [
     "ty>=0.0.1a21",
     "pytest-timeout",
     # Script dependencies for type checking and testing
-    "cyclopts>=2.9,<4",
+    "cyclopts>=2.9,<3",
     "plumbum>=1.10,<2",
     "cmd-mox>=0.2,<1",
 ]

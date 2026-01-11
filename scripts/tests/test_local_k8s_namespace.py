@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import subprocess
 import typing as typ
 
 if typ.TYPE_CHECKING:
+    import pytest
     from cmd_mox import CmdMox
 
 from local_k8s import (
@@ -46,16 +48,39 @@ class TestNamespaceExists:
 
 
 class TestCreateNamespace:
-    """Tests for create_namespace helper using cmd-mox."""
+    """Tests for create_namespace helper.
 
-    def test_invokes_kubectl(
-        self,
-        cmd_mox: CmdMox,
-        test_env: dict[str, str],
+    Uses monkeypatch since the function makes multiple subprocess calls that
+    need to be verified together (dry-run + apply pattern).
+    """
+
+    def test_uses_dry_run_apply_pattern(
+        self, monkeypatch: pytest.MonkeyPatch, test_env: dict[str, str]
     ) -> None:
-        """Should invoke kubectl create namespace."""
-        cmd_mox.mock("kubectl").with_args("create", "namespace", "ghillie").returns(
-            exit_code=0
-        )
+        """Should use dry-run + apply pattern for idempotent namespace creation."""
+        calls: list[tuple[str, ...]] = []
+
+        def mock_run(
+            args: list[str], **_kwargs: object
+        ) -> subprocess.CompletedProcess[str]:
+            calls.append(tuple(args))
+            return subprocess.CompletedProcess(
+                args=args, returncode=0, stdout="namespace-yaml"
+            )
+
+        monkeypatch.setattr("subprocess.run", mock_run)
 
         create_namespace("ghillie", test_env)
+
+        # First call: generate namespace YAML with dry-run
+        assert len(calls) == 2
+        assert calls[0][0] == "kubectl"
+        assert "create" in calls[0]
+        assert "namespace" in calls[0]
+        assert "ghillie" in calls[0]
+        assert "--dry-run=client" in calls[0]
+        assert "-o" in calls[0]
+        assert "yaml" in calls[0]
+
+        # Second call: apply the generated YAML
+        assert calls[1] == ("kubectl", "apply", "-f", "-")

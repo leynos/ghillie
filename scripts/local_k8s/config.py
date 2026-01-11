@@ -37,7 +37,8 @@ class Config:
     )
     pg_cluster_name: str = "pg-ghillie"
     valkey_name: str = "valkey-ghillie"
-    # S105: False positive - this is a Kubernetes Secret name, not a password.
+    # S105 false positive: This is a Kubernetes Secret resource name, not a
+    # hardcoded password. The secret contains connection URLs, not credentials.
     app_secret_name: str = "ghillie"  # noqa: S105
 
 
