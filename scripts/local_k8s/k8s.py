@@ -258,7 +258,10 @@ def read_secret_field(
 
     output = result.stdout.strip()
     if not output:
-        msg = f"Secret '{secret_name}' field '{field}' is empty or missing"
+        msg = (
+            f"Secret '{secret_name}' field '{field}' is empty or missing "
+            f"in namespace '{namespace}'"
+        )
         raise ValueError(msg)
 
     return b64decode_k8s_secret_field(output)
