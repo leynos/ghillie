@@ -177,7 +177,9 @@ _MIN_PORT = 1024
 _MAX_PORT = 65535
 
 
-def create_k3d_cluster(cluster_name: str, port: int, agents: int = 1) -> None:
+def create_k3d_cluster(
+    cluster_name: str, port: int, agents: int = 1, timeout: float = 300
+) -> None:
     """Create a k3d cluster with loopback port mapping.
 
     Creates a k3d cluster configured with:
@@ -189,9 +191,11 @@ def create_k3d_cluster(cluster_name: str, port: int, agents: int = 1) -> None:
         port: Host port to map to ingress (port 80 on the load balancer). Must
             be in the range 1024-65535 (non-privileged ports).
         agents: Number of agent nodes (default 1).
+        timeout: Maximum time in seconds to wait for creation (default 300).
 
     Raises:
         ValueError: If port is outside the valid range.
+        RuntimeError: If cluster creation times out.
 
     """
     if not _MIN_PORT <= port <= _MAX_PORT:
@@ -199,31 +203,38 @@ def create_k3d_cluster(cluster_name: str, port: int, agents: int = 1) -> None:
         raise ValueError(msg)
 
     port_mapping = f"127.0.0.1:{port}:80@loadbalancer"
-    subprocess.run(  # noqa: S603
-        [  # noqa: S607
-            "k3d",
-            "cluster",
-            "create",
-            cluster_name,
-            "--agents",
-            str(agents),
-            "--port",
-            port_mapping,
-        ],
-        check=True,
-    )
+    try:
+        subprocess.run(  # noqa: S603
+            [  # noqa: S607
+                "k3d",
+                "cluster",
+                "create",
+                cluster_name,
+                "--agents",
+                str(agents),
+                "--port",
+                port_mapping,
+            ],
+            check=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as e:
+        msg = f"k3d cluster creation timed out after {timeout} seconds"
+        raise RuntimeError(msg) from e
 
 
-def delete_k3d_cluster(cluster_name: str) -> None:
+def delete_k3d_cluster(cluster_name: str, timeout: float = 120) -> None:
     """Delete a k3d cluster.
 
     Args:
         cluster_name: Name of the cluster to delete.
+        timeout: Maximum time in seconds to wait for deletion (default 120).
 
     """
     subprocess.run(  # noqa: S603
         ["k3d", "cluster", "delete", cluster_name],  # noqa: S607
         check=True,
+        timeout=timeout,
     )
 
 

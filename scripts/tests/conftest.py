@@ -6,6 +6,7 @@ The cmd-mox plugin is registered globally via pyproject.toml.
 
 from __future__ import annotations
 
+import dataclasses
 import importlib.util
 import os
 import sys
@@ -67,3 +68,45 @@ def test_env(tmp_path: Path) -> dict[str, str]:
     env = dict(os.environ)
     env["KUBECONFIG"] = str(tmp_path / "kubeconfig-test.yaml")
     return env
+
+
+@dataclasses.dataclass
+class MockSubprocessCapture:
+    """Captured data from mocked subprocess.run calls."""
+
+    calls: list[tuple[str, ...]]
+    inputs: list[str]
+
+
+@pytest.fixture
+def mock_subprocess_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> MockSubprocessCapture:
+    """Mock subprocess.run and return captured calls and inputs.
+
+    Creates a mock that captures subprocess.run invocations and returns
+    successful CompletedProcess results.
+
+    Args:
+        monkeypatch: Pytest's monkeypatch fixture.
+
+    Returns:
+        MockSubprocessCapture with calls list and inputs list.
+
+    """
+    import subprocess
+
+    capture = MockSubprocessCapture(calls=[], inputs=[])
+
+    def _mock_run(
+        args: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        capture.calls.append(tuple(args))
+        if "input" in kwargs:
+            capture.inputs.append(str(kwargs["input"]))
+        return subprocess.CompletedProcess(
+            args=args, returncode=0, stdout="yaml-output"
+        )
+
+    monkeypatch.setattr("subprocess.run", _mock_run)
+    return capture

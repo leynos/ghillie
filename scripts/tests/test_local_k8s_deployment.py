@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
-import subprocess
+import json
 import typing as typ
 
 import pytest
@@ -18,34 +18,21 @@ if typ.TYPE_CHECKING:
     from pathlib import Path
 
     from cmd_mox import CmdMox
+    from conftest import MockSubprocessCapture
 
 
 class TestCreateAppSecret:
     """Tests for create_app_secret helper.
 
-    Uses monkeypatch to mock subprocess.run since the function applies
+    Uses mock_subprocess_run fixture since the function applies
     a JSON manifest via stdin.
     """
 
     def test_creates_secret_with_urls(
-        self, monkeypatch: pytest.MonkeyPatch, test_env: dict[str, str]
+        self, mock_subprocess_run: MockSubprocessCapture, test_env: dict[str, str]
     ) -> None:
         """Should create secret with DATABASE_URL and VALKEY_URL."""
-        import json
-
         cfg = Config()
-        calls: list[tuple[str, ...]] = []
-        captured_input: list[str] = []
-
-        def mock_run(
-            args: list[str], **kwargs: object
-        ) -> subprocess.CompletedProcess[str]:
-            calls.append(tuple(args))
-            if "input" in kwargs:
-                captured_input.append(str(kwargs["input"]))
-            return subprocess.CompletedProcess(args=args, returncode=0, stdout="")
-
-        monkeypatch.setattr("subprocess.run", mock_run)
 
         create_app_secret(
             cfg,
@@ -55,12 +42,12 @@ class TestCreateAppSecret:
         )
 
         # Single call: apply JSON manifest via stdin
-        assert len(calls) == 1
-        assert calls[0] == ("kubectl", "apply", "-f", "-")
+        assert len(mock_subprocess_run.calls) == 1
+        assert mock_subprocess_run.calls[0] == ("kubectl", "apply", "-f", "-")
 
         # Verify the JSON manifest content
-        assert len(captured_input) == 1
-        manifest = json.loads(captured_input[0])
+        assert len(mock_subprocess_run.inputs) == 1
+        manifest = json.loads(mock_subprocess_run.inputs[0])
         assert manifest["kind"] == "Secret"
         assert manifest["metadata"]["name"] == "ghillie"
         assert manifest["metadata"]["namespace"] == "ghillie"
@@ -71,28 +58,16 @@ class TestCreateAppSecret:
         assert manifest["stringData"]["VALKEY_URL"] == "valkey://valkey:6379"
 
     def test_uses_config_secret_name(
-        self, monkeypatch: pytest.MonkeyPatch, test_env: dict[str, str]
+        self, mock_subprocess_run: MockSubprocessCapture, test_env: dict[str, str]
     ) -> None:
         """Should use app_secret_name from config."""
-        import json
-
         cfg = Config()
-        captured_input: list[str] = []
-
-        def mock_run(
-            args: list[str], **kwargs: object
-        ) -> subprocess.CompletedProcess[str]:
-            if "input" in kwargs:
-                captured_input.append(str(kwargs["input"]))
-            return subprocess.CompletedProcess(args=args, returncode=0, stdout="")
-
-        monkeypatch.setattr("subprocess.run", mock_run)
 
         create_app_secret(cfg, test_env, "db_url", "valkey_url")
 
         # Verify secret name from config is in the manifest
-        assert len(captured_input) == 1
-        manifest = json.loads(captured_input[0])
+        assert len(mock_subprocess_run.inputs) == 1
+        manifest = json.loads(mock_subprocess_run.inputs[0])
         assert manifest["metadata"]["name"] == cfg.app_secret_name
 
 

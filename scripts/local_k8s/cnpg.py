@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import io
 import typing as typ
+
+from ruamel.yaml import YAML
 
 from local_k8s.config import HelmOperatorSpec
 from local_k8s.k8s import apply_manifest, read_secret_field, wait_for_pods_ready
@@ -23,26 +26,30 @@ def _cnpg_cluster_manifest(namespace: str, cluster_name: str = "pg-ghillie") -> 
         YAML manifest string for the CNPG Cluster resource.
 
     """
-    return f"""\
-apiVersion: postgresql.cnpg.io/v1
-kind: Cluster
-metadata:
-  name: {cluster_name}
-  namespace: {namespace}
-  labels:
-    app.kubernetes.io/managed-by: local_k8s
-    app.kubernetes.io/name: cnpg-cluster
-    app.kubernetes.io/instance: {cluster_name}
-    app.kubernetes.io/component: database
-spec:
-  instances: 1
-  storage:
-    size: 1Gi
-  bootstrap:
-    initdb:
-      database: ghillie
-      owner: ghillie
-"""
+    manifest = {
+        "apiVersion": "postgresql.cnpg.io/v1",
+        "kind": "Cluster",
+        "metadata": {
+            "name": cluster_name,
+            "namespace": namespace,
+            "labels": {
+                "app.kubernetes.io/managed-by": "local_k8s",
+                "app.kubernetes.io/name": "cnpg-cluster",
+                "app.kubernetes.io/instance": cluster_name,
+                "app.kubernetes.io/component": "database",
+            },
+        },
+        "spec": {
+            "instances": 1,
+            "storage": {"size": "1Gi"},
+            "bootstrap": {"initdb": {"database": "ghillie", "owner": "ghillie"}},
+        },
+    }
+    yaml_serializer = YAML()
+    yaml_serializer.default_flow_style = False
+    stream = io.StringIO()
+    yaml_serializer.dump(manifest, stream)
+    return stream.getvalue()
 
 
 def install_cnpg_operator(cfg: Config, env: dict[str, str]) -> None:
