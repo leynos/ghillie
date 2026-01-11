@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import subprocess
 import typing as typ
 
 import pytest
@@ -31,9 +32,13 @@ class TestCreateAppSecret:
         cfg = Config()
         calls: list[tuple[str, ...]] = []
 
-        def mock_run(args: list[str], **_kwargs: object) -> object:
+        def mock_run(
+            args: list[str], **_kwargs: object
+        ) -> subprocess.CompletedProcess[str]:
             calls.append(tuple(args))
-            return type("Result", (), {"stdout": "secret-yaml", "returncode": 0})()
+            return subprocess.CompletedProcess(
+                args=args, returncode=0, stdout="secret-yaml"
+            )
 
         monkeypatch.setattr("subprocess.run", mock_run)
 
@@ -69,9 +74,11 @@ class TestCreateAppSecret:
         cfg = Config()
         calls: list[tuple[str, ...]] = []
 
-        def mock_run(args: list[str], **_kwargs: object) -> object:
+        def mock_run(
+            args: list[str], **_kwargs: object
+        ) -> subprocess.CompletedProcess[str]:
             calls.append(tuple(args))
-            return type("Result", (), {"stdout": "yaml", "returncode": 0})()
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="yaml")
 
         monkeypatch.setattr("subprocess.run", mock_run)
 

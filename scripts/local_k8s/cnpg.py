@@ -29,6 +29,11 @@ kind: Cluster
 metadata:
   name: {cluster_name}
   namespace: {namespace}
+  labels:
+    app.kubernetes.io/managed-by: local_k8s
+    app.kubernetes.io/name: cnpg-cluster
+    app.kubernetes.io/instance: {cluster_name}
+    app.kubernetes.io/component: database
 spec:
   instances: 1
   storage:

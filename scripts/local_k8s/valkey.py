@@ -29,6 +29,11 @@ kind: Valkey
 metadata:
   name: {valkey_name}
   namespace: {namespace}
+  labels:
+    app.kubernetes.io/managed-by: local_k8s
+    app.kubernetes.io/name: valkey
+    app.kubernetes.io/instance: {valkey_name}
+    app.kubernetes.io/component: cache
 spec:
   replicas: 1
   resources:

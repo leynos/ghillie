@@ -6,6 +6,8 @@ import subprocess
 import typing as typ
 
 if typ.TYPE_CHECKING:
+    from pathlib import Path
+
     from local_k8s.config import Config
 
 
@@ -68,7 +70,9 @@ def create_app_secret(
     )
 
 
-def build_docker_image(image_repo: str, image_tag: str) -> None:
+def build_docker_image(
+    image_repo: str, image_tag: str, context: Path | str = "."
+) -> None:
     """Build the Docker image locally.
 
     Builds the Ghillie Docker image from the Dockerfile in the repository root.
@@ -76,6 +80,7 @@ def build_docker_image(image_repo: str, image_tag: str) -> None:
     Args:
         image_repo: Repository name for the image.
         image_tag: Tag for the image.
+        context: Build context directory path. Defaults to current directory.
 
     """
     image_name = f"{image_repo}:{image_tag}"
@@ -85,7 +90,7 @@ def build_docker_image(image_repo: str, image_tag: str) -> None:
             "build",
             "-t",
             image_name,
-            ".",
+            str(context),
         ],
         check=True,
     )

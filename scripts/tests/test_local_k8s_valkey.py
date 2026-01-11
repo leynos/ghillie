@@ -25,6 +25,11 @@ class TestValkeyManifest:
         assert "name: valkey-ghillie" in manifest
         assert "namespace: ghillie" in manifest
         assert "replicas: 1" in manifest
+        # Verify standard Kubernetes labels
+        assert "app.kubernetes.io/managed-by: local_k8s" in manifest
+        assert "app.kubernetes.io/name: valkey" in manifest
+        assert "app.kubernetes.io/instance: valkey-ghillie" in manifest
+        assert "app.kubernetes.io/component: cache" in manifest
 
     def test_uses_custom_valkey_name(self) -> None:
         """Should use custom Valkey name in manifest."""

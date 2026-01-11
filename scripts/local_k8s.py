@@ -22,6 +22,7 @@ Environment variables:
 
 from __future__ import annotations
 
+import subprocess
 import sys
 import typing as typ
 
@@ -33,6 +34,34 @@ from local_k8s.orchestration import (
     teardown_environment,
 )
 from local_k8s.validation import ExecutableNotFoundError
+
+_K3D_CREATE_CMD = ("k3d", "cluster", "create")
+
+
+def _handle_subprocess_error(e: subprocess.CalledProcessError) -> int:
+    """Handle subprocess errors with context-specific messages.
+
+    Args:
+        e: The CalledProcessError exception.
+
+    Returns:
+        Exit code 1.
+
+    """
+    cmd = e.cmd if isinstance(e.cmd, list) else [e.cmd]
+    # Check if this was a k3d cluster create failure (likely port in use)
+    if tuple(cmd[: len(_K3D_CREATE_CMD)]) == _K3D_CREATE_CMD:
+        print(
+            "Error: Failed to create k3d cluster. The ingress port may be in use.\n"
+            "Try one of the following:\n"
+            "  - Let the tool auto-select a port: unset GHILLIE_K3D_PORT\n"
+            "  - Choose a different port: export GHILLIE_K3D_PORT=<port>",
+            file=sys.stderr,
+        )
+    else:
+        print(f"Error: Command failed: {' '.join(cmd)}", file=sys.stderr)
+    return 1
+
 
 app = App(
     name="local_k8s",
@@ -78,6 +107,8 @@ def up(
     except ExecutableNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
+    except subprocess.CalledProcessError as e:
+        return _handle_subprocess_error(e)
 
 
 @app.command
@@ -104,6 +135,8 @@ def down(
     except ExecutableNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
+    except subprocess.CalledProcessError as e:
+        return _handle_subprocess_error(e)
 
 
 @app.command
@@ -134,6 +167,8 @@ def status(
     except ExecutableNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
+    except subprocess.CalledProcessError as e:
+        return _handle_subprocess_error(e)
 
 
 @app.command
@@ -165,6 +200,8 @@ def logs(
     except ExecutableNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
+    except subprocess.CalledProcessError as e:
+        return _handle_subprocess_error(e)
 
 
 def main() -> int:

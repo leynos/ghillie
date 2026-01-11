@@ -26,6 +26,11 @@ class TestCnpgClusterManifest:
         assert "namespace: ghillie" in manifest
         assert "instances: 1" in manifest
         assert "database: ghillie" in manifest
+        # Verify standard Kubernetes labels
+        assert "app.kubernetes.io/managed-by: local_k8s" in manifest
+        assert "app.kubernetes.io/name: cnpg-cluster" in manifest
+        assert "app.kubernetes.io/instance: pg-ghillie" in manifest
+        assert "app.kubernetes.io/component: database" in manifest
 
     def test_uses_custom_cluster_name(self) -> None:
         """Should use custom cluster name in manifest."""

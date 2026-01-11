@@ -101,17 +101,17 @@ on port 8080 with health status.
 - Decision: Use Falcon for HTTP endpoints.
   Rationale: Falcon is the framework specified in the architecture design
   documents (docs/async-sqlalchemy-with-pg-and-falcon.md). It aligns with the
-  existing async-first architecture. Date/Author: 2026-01-07 / Planning phase
+  existing async-first architecture. Date/Author: 2026-01-07 / Planning phase.
 
 - Decision: Use Granian as ASGI server.
   Rationale: Specified in docs/ghillie-bronze-silver-architecture-design.md as
   the ASGI application server for Ghillie. Date/Author: 2026-01-07 / Planning
-  phase
+  phase.
 
 - Decision: Implement health endpoint only (not full worker logic).
   Rationale: User preference to keep initial implementation minimal. Full
   worker logic deferred to future tasks. Date/Author: 2026-01-07 / User
-  clarification
+  clarification.
 
 ## Outcomes & Retrospective
 
