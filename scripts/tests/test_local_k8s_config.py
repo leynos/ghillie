@@ -29,7 +29,8 @@ class TestConfig:
         assert cfg.values_file == Path("tests/helm/fixtures/values_local.yaml")
         assert cfg.pg_cluster_name == "pg-ghillie"
         assert cfg.valkey_name == "valkey-ghillie"
-        # This is a Kubernetes Secret name, not a password (S105 false positive).
+        # S105 suppression: Bandit flags "ghillie" as a potential hardcoded
+        # password. This is a Kubernetes Secret name, not a password value.
         assert cfg.app_secret_name == "ghillie"  # noqa: S105
 
     def test_config_is_frozen(self) -> None:

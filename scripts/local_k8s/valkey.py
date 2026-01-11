@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import io
 import typing as typ
+
+from ruamel.yaml import YAML
 
 from local_k8s.config import HelmOperatorSpec
 from local_k8s.k8s import apply_manifest, read_secret_field, wait_for_pods_ready
@@ -23,24 +26,35 @@ def _valkey_manifest(namespace: str, valkey_name: str = "valkey-ghillie") -> str
         YAML manifest string for the Valkey resource.
 
     """
-    return f"""\
-apiVersion: valkey.io/v1alpha1
-kind: Valkey
-metadata:
-  name: {valkey_name}
-  namespace: {namespace}
-  labels:
-    app.kubernetes.io/managed-by: local_k8s
-    app.kubernetes.io/name: valkey
-    app.kubernetes.io/instance: {valkey_name}
-    app.kubernetes.io/component: cache
-spec:
-  replicas: 1
-  resources:
-    requests:
-      memory: "64Mi"
-      cpu: "50m"
-"""
+    manifest = {
+        "apiVersion": "valkey.io/v1alpha1",
+        "kind": "Valkey",
+        "metadata": {
+            "name": valkey_name,
+            "namespace": namespace,
+            "labels": {
+                "app.kubernetes.io/managed-by": "local_k8s",
+                "app.kubernetes.io/name": "valkey",
+                "app.kubernetes.io/instance": valkey_name,
+                "app.kubernetes.io/component": "cache",
+            },
+        },
+        "spec": {
+            "replicas": 1,
+            "resources": {
+                "requests": {
+                    "memory": "64Mi",
+                    "cpu": "50m",
+                },
+            },
+        },
+    }
+    yaml_serializer = YAML(typ="safe")
+    yaml_serializer.default_flow_style = False
+    yaml_serializer.indent(mapping=2, sequence=4, offset=2)
+    stream = io.StringIO()
+    yaml_serializer.dump(manifest, stream)
+    return stream.getvalue()
 
 
 def install_valkey_operator(cfg: Config, env: dict[str, str]) -> None:
