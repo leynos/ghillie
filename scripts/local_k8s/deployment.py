@@ -82,6 +82,7 @@ def build_docker_image(
 
     Raises:
         FileNotFoundError: If the context path does not exist.
+        NotADirectoryError: If the context path is not a directory.
 
     """
     from pathlib import Path as PathClass
@@ -90,6 +91,9 @@ def build_docker_image(
     if not context_path.exists():
         msg = f"Build context path does not exist: {context_path}"
         raise FileNotFoundError(msg)
+    if not context_path.is_dir():
+        msg = f"Build context must be a directory: {context_path}"
+        raise NotADirectoryError(msg)
 
     image_name = f"{image_repo}:{image_tag}"
     # S603/S607: docker via PATH is standard; args are validated inputs

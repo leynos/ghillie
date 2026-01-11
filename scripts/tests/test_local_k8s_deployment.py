@@ -74,27 +74,25 @@ class TestCreateAppSecret:
 class TestBuildDockerImage:
     """Tests for build_docker_image helper using cmd-mox."""
 
-    def test_invokes_docker_build(self, cmd_mox: CmdMox) -> None:
-        """Should invoke docker build with correct tag."""
+    @pytest.mark.parametrize(
+        ("image_repo", "image_tag"),
+        [
+            ("ghillie", "local"),
+            ("custom-repo", "v1.0.0"),
+        ],
+    )
+    def test_invokes_docker_build(
+        self, cmd_mox: CmdMox, image_repo: str, image_tag: str
+    ) -> None:
+        """Should invoke docker build with correct repo and tag."""
         cmd_mox.mock("docker").with_args(
             "build",
             "-t",
-            "ghillie:local",
+            f"{image_repo}:{image_tag}",
             ".",
         ).returns(exit_code=0)
 
-        build_docker_image("ghillie", "local")
-
-    def test_uses_custom_repo_and_tag(self, cmd_mox: CmdMox) -> None:
-        """Should use custom repository and tag."""
-        cmd_mox.mock("docker").with_args(
-            "build",
-            "-t",
-            "custom-repo:v1.0.0",
-            ".",
-        ).returns(exit_code=0)
-
-        build_docker_image("custom-repo", "v1.0.0")
+        build_docker_image(image_repo, image_tag)
 
 
 @dataclasses.dataclass(slots=True)
