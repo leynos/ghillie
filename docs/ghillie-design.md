@@ -892,6 +892,63 @@ commit patterns:
 Custom configurations can be provided to `EvidenceBundleService` to match
 project-specific conventions.
 
+### 9.4 Status Model Interface (Phase 2.2)
+
+The status model interface abstracts LLM-backed summarization behind a
+`StatusModel` protocol. This enables:
+
+- Vendor-agnostic model switching (OpenAI, Gemini via OpenRouter)
+- Deterministic mock implementations for testing
+- Future agentic capabilities without pipeline changes
+
+**Protocol design:** The protocol uses `runtime_checkable` to support
+isinstance checks without enforcing inheritance. All methods are async to match
+the async-first architecture of the evidence and reporting pipeline.
+
+```python
+@runtime_checkable
+class StatusModel(Protocol):
+    async def summarize_repository(
+        self,
+        evidence: RepositoryEvidenceBundle,
+    ) -> RepositoryStatusResult: ...
+```
+
+**Output structure:** `RepositoryStatusResult` mirrors the expected JSON schema
+from the proposal, using `ReportStatus` for status codes. The struct includes:
+
+- `summary`: Narrative text describing repository status
+- `status`: One of `ON_TRACK`, `AT_RISK`, `BLOCKED`, `UNKNOWN`
+- `highlights`: Key achievements (up to 5)
+- `risks`: Identified concerns (up to 5)
+- `next_steps`: Suggested actions (up to 5)
+
+The `to_machine_summary()` helper converts the frozen struct to a dict suitable
+for storage in `Report.machine_summary`.
+
+**Mock implementation:** `MockStatusModel` uses deterministic heuristics for
+testing without LLM dependencies:
+
+1. Empty evidence bundle → UNKNOWN
+2. Previous reports with risks and AT_RISK/BLOCKED status → AT_RISK
+3. Bug activity exceeds feature activity → AT_RISK
+4. Otherwise → ON_TRACK
+
+The mock generates contextual summaries mentioning repository slugs and event
+counts, extracts highlights from feature work type groupings, carries forward
+previous risks with "(Ongoing)" prefix, and suggests next steps based on open
+PRs and issues.
+
+**Integration with Gold layer:** Status results map directly to the `Report`
+model:
+
+- `RepositoryStatusResult.summary` → `Report.human_text`
+- `to_machine_summary(result)` → `Report.machine_summary`
+- Model identifier (e.g., "mock-v1", "gpt-5.1-thinking") → `Report.model`
+
+This satisfies the Phase 2.2.a completion criteria: at least one implementation
+of the interface is available with tests that mock model responses.
+
 ## 10. Conclusion
 
 Ghillie represents a paradigm shift in how engineering organizations perceive

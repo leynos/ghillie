@@ -265,7 +265,7 @@ data, ready for summarisation.
 **Goal:** Introduce LLM-backed summarisation while keeping vendor choices and
 context window sizes abstracted.
 
-- [ ] **Task 2.2.a – Define status model interface**  
+- [x] **Task 2.2.a – Define status model interface**
   Define an interface for a status model with operations to summarise a
   repository evidence bundle and return structured output, including summary
   text, status code (for example, on track, at risk, blocked, unknown),
