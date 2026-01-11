@@ -70,7 +70,7 @@ def test_env(tmp_path: Path) -> dict[str, str]:
     return env
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(slots=True)
 class MockSubprocessCapture:
     """Captured data from mocked subprocess.run calls."""
 

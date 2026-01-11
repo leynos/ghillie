@@ -143,6 +143,8 @@ def _ensure_cluster_ready(
 
     Raises:
         PortMismatchError: If there's a port mismatch with an existing cluster.
+        RuntimeError: If the ingress port cannot be determined for an existing
+            cluster.
 
     """
     port = ingress_port or pick_free_loopback_port()
@@ -153,11 +155,13 @@ def _ensure_cluster_ready(
         existing_port = get_cluster_ingress_port(cluster_name)
 
         if existing_port is None:
-            print(
-                f"Warning: Could not determine ingress port for cluster "
-                f"'{cluster_name}'. Assuming port {port}."
+            msg = (
+                f"Could not determine ingress port for existing cluster "
+                f"'{cluster_name}'. The cluster may be misconfigured. "
+                f"Delete it with 'make local-k8s-down' and retry."
             )
-        elif ingress_port is not None and ingress_port != existing_port:
+            raise RuntimeError(msg)
+        if ingress_port is not None and ingress_port != existing_port:
             msg = (
                 f"Ingress port mismatch: existing cluster '{cluster_name}' uses "
                 f"port {existing_port}, but --ingress-port={ingress_port} was "
@@ -166,9 +170,8 @@ def _ensure_cluster_ready(
                 f"'make local-k8s-down'."
             )
             raise PortMismatchError(msg)
-        else:
-            port = existing_port
 
+        port = existing_port
         return port, False
 
     print(f"Creating k3d cluster '{cluster_name}' on port {port}...")

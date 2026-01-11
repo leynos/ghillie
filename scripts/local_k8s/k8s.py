@@ -22,6 +22,7 @@ def namespace_exists(namespace: str, env: dict[str, str]) -> bool:
         True if the namespace exists, False otherwise.
 
     """
+    # S603/S607: kubectl via PATH is standard; namespace is validated by k8s API
     result = subprocess.run(  # noqa: S603
         ["kubectl", "get", "namespace", namespace],  # noqa: S607
         capture_output=True,
@@ -42,6 +43,7 @@ def create_namespace(namespace: str, env: dict[str, str]) -> None:
 
     """
     # Generate namespace YAML using dry-run
+    # S603/S607: kubectl via PATH is standard; namespace validated by k8s API
     result = subprocess.run(  # noqa: S603
         [  # noqa: S607
             "kubectl",
@@ -59,6 +61,7 @@ def create_namespace(namespace: str, env: dict[str, str]) -> None:
         timeout=30,
     )
     # Apply for idempotent upsert
+    # S607: kubectl via PATH is standard; no user input
     subprocess.run(
         ["kubectl", "apply", "-f", "-"],  # noqa: S607
         input=result.stdout,
@@ -89,6 +92,7 @@ def apply_manifest(manifest: str, env: dict[str, str]) -> None:
         env: Environment dict with KUBECONFIG set.
 
     """
+    # S607: kubectl via PATH is standard; manifest generated internally
     subprocess.run(
         ["kubectl", "apply", "-f", "-"],  # noqa: S607
         input=manifest,
@@ -125,6 +129,7 @@ def wait_for_pods_ready(
         raise ValueError(msg)
 
     # Add buffer to subprocess timeout beyond kubectl's --timeout
+    # S603/S607: kubectl via PATH is standard; selector/namespace from Config
     subprocess.run(  # noqa: S603
         [  # noqa: S607
             "kubectl",
@@ -151,7 +156,8 @@ def read_secret_field(
 
     Args:
         secret_name: Name of the Kubernetes secret.
-        field: Name of the field within the secret's data section.
+        field: Name of the field within the secret's data section. Must not
+            be empty or contain characters that break jsonpath syntax.
         namespace: Kubernetes namespace containing the secret.
         env: Environment dict with KUBECONFIG set.
 
@@ -159,12 +165,22 @@ def read_secret_field(
         The decoded UTF-8 string value of the secret field.
 
     Raises:
-        ValueError: If the secret field is empty or missing.
+        ValueError: If field is empty, contains invalid characters, or the
+            secret field value is empty or missing.
 
     """
+    if not field:
+        msg = "field cannot be empty"
+        raise ValueError(msg)
+    # Single quotes or brackets would break the jsonpath expression
+    if "'" in field or "]" in field:
+        msg = f"field contains invalid characters for jsonpath: {field}"
+        raise ValueError(msg)
+
     # Quote the field name to support dotted keys like "ca.crt"
     jsonpath = f"jsonpath={{.data['{field}']}}"
 
+    # S603/S607: kubectl via PATH is standard; args from Config or hardcoded
     result = subprocess.run(  # noqa: S603
         [  # noqa: S607
             "kubectl",

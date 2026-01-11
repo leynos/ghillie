@@ -25,6 +25,10 @@ from pathlib import Path
 # Default timeout for k3d subprocess operations (seconds)
 _K3D_SUBPROCESS_TIMEOUT = 60
 
+# Port range constants for validation
+_MIN_PORT = 1024
+_MAX_PORT = 65535
+
 
 def _list_clusters() -> list[dict] | None:
     """List all k3d clusters as parsed JSON.
@@ -197,10 +201,6 @@ def cluster_exists(cluster_name: str) -> bool:
 
     """
     return _find_cluster(cluster_name) is not None
-
-
-_MIN_PORT = 1024
-_MAX_PORT = 65535
 
 
 def create_k3d_cluster(

@@ -28,6 +28,7 @@ def install_helm_operator(
         env: Environment dict with KUBECONFIG set.
 
     """
+    # S603/S607: helm via PATH is standard; args from validated HelmOperatorSpec
     subprocess.run(  # noqa: S603
         [  # noqa: S607
             "helm",
@@ -41,6 +42,7 @@ def install_helm_operator(
         env=env,
         timeout=_HELM_REPO_TIMEOUT,
     )
+    # S607: helm via PATH is standard; no user input
     subprocess.run(
         ["helm", "repo", "update"],  # noqa: S607
         check=True,
@@ -48,6 +50,7 @@ def install_helm_operator(
         timeout=_HELM_REPO_TIMEOUT,
     )
     ensure_namespace(spec.namespace, env)
+    # S603/S607: helm via PATH is standard; args from validated HelmOperatorSpec
     subprocess.run(  # noqa: S603
         [  # noqa: S607
             "helm",

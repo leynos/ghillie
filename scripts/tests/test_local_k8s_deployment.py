@@ -97,7 +97,7 @@ class TestBuildDockerImage:
         build_docker_image("custom-repo", "v1.0.0")
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(slots=True)
 class HelmChartParams:
     """Parameters for Helm chart installation tests."""
 

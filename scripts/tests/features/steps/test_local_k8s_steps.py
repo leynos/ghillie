@@ -20,6 +20,7 @@ class LocalK8sContext(typ.TypedDict, total=False):
     """Shared mutable scenario state."""
 
     cluster_exists: bool
+    cluster_name: str
     captured_calls: list[tuple[str, ...]]
     stdout: str
     exit_code: int
@@ -29,10 +30,13 @@ class LocalK8sContext(typ.TypedDict, total=False):
 class SubprocessMock:
     """Mock for subprocess.run that tracks calls and returns appropriate results."""
 
-    def __init__(self, context: LocalK8sContext, *, cluster_exists: bool) -> None:
+    def __init__(
+        self, context: LocalK8sContext, *, cluster_exists: bool, cluster_name: str
+    ) -> None:
         """Initialize the mock with context and cluster state."""
         self.context = context
         self.cluster_exists = cluster_exists
+        self.cluster_name = cluster_name
         self._handlers: dict[str, typ.Callable[[list[str]], tuple[str, int]]] = {
             "which": self._handle_which,
             "k3d": self._handle_k3d,
@@ -48,15 +52,15 @@ class SubprocessMock:
         if args[1:3] == ["cluster", "list"]:
             # k3d cluster list -o json returns JSON array with port mappings
             if self.cluster_exists:
-                cluster_json = """[{
-                    "name": "ghillie-local",
-                    "nodes": [{
-                        "name": "k3d-ghillie-local-serverlb",
-                        "portMappings": {
-                            "80/tcp": [{"HostPort": "12345"}]
-                        }
-                    }]
-                }]"""
+                cluster_json = f"""[{{
+                    "name": "{self.cluster_name}",
+                    "nodes": [{{
+                        "name": "k3d-{self.cluster_name}-serverlb",
+                        "portMappings": {{
+                            "80/tcp": [{{"HostPort": "12345"}}]
+                        }}
+                    }}]
+                }}]"""
                 return cluster_json, 0
             return "[]", 0
         if args[1:3] == ["kubeconfig", "write"]:
@@ -78,11 +82,14 @@ class SubprocessMock:
         # Check for jsonpath output format (can be "-o jsonpath" or "-o=jsonpath")
         if "jsonpath" in joined:
             if "pg-ghillie" in joined:
+                # CNPG stores a complete URI in the "uri" field
                 db_url = "postgresql://ghillie:pass@pg-ghillie:5432/ghillie"
                 return base64.b64encode(db_url.encode()).decode(), 0
             if "valkey-ghillie" in joined:
-                valkey_url = "valkey://valkey-ghillie:6379"
-                return base64.b64encode(valkey_url.encode()).decode(), 0
+                # Valkey operator stores only "password", URI is constructed
+                # S105: This is test fixture data, not a production secret
+                password = "testpassword"  # noqa: S105
+                return base64.b64encode(password.encode()).decode(), 0
         return "", 0
 
     def _handle_helm(self, _args: list[str]) -> tuple[str, int]:
@@ -179,19 +186,25 @@ def given_no_cluster_exists(
 ) -> None:
     """Configure context to indicate no cluster exists."""
     local_k8s_context["cluster_exists"] = False
+    local_k8s_context["cluster_name"] = cluster_name
 
 
 @given(parsers.parse("a k3d cluster named {cluster_name} exists"))
 def given_cluster_exists(local_k8s_context: LocalK8sContext, cluster_name: str) -> None:
     """Configure context to indicate cluster already exists."""
     local_k8s_context["cluster_exists"] = True
+    local_k8s_context["cluster_name"] = cluster_name
 
 
 def _run_command(
     ctx: LocalK8sContext, monkeypatch: pytest.MonkeyPatch, args: list[str]
 ) -> None:
     """Execute a CLI command with mocked subprocess and capture output."""
-    mock = SubprocessMock(ctx, cluster_exists=ctx.get("cluster_exists", False))
+    mock = SubprocessMock(
+        ctx,
+        cluster_exists=ctx.get("cluster_exists", False),
+        cluster_name=ctx.get("cluster_name", "ghillie-local"),
+    )
     monkeypatch.setattr("subprocess.run", mock)
     # Mock shutil.which to return a path for all required tools
     monkeypatch.setattr("shutil.which", lambda name: f"/usr/bin/{name}")
@@ -252,7 +265,7 @@ def _has_call_containing(
     ctx: LocalK8sContext, prefix: tuple[str, ...], text: str
 ) -> bool:
     calls = [c for c in ctx["captured_calls"] if c[: len(prefix)] == prefix]
-    return any(text in str(c).lower() for c in calls)
+    return any(text.lower() in str(c).lower() for c in calls)
 
 
 @then(parsers.parse("a k3d cluster named {cluster_name} is created"))

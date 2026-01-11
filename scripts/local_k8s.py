@@ -33,7 +33,7 @@ from local_k8s.orchestration import (
     stream_environment_logs,
     teardown_environment,
 )
-from local_k8s.validation import ExecutableNotFoundError
+from local_k8s.validation import LocalK8sError
 
 _K3D_CREATE_CMD = ("k3d", "cluster", "create")
 
@@ -104,11 +104,14 @@ def up(
         return setup_environment(
             cluster_name, namespace, ingress_port, skip_build=skip_build
         )
-    except ExecutableNotFoundError as e:
+    except LocalK8sError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
     except subprocess.CalledProcessError as e:
         return _handle_subprocess_error(e)
+    except RuntimeError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
 
 
 @app.command
@@ -132,11 +135,14 @@ def down(
     """
     try:
         return teardown_environment(cluster_name)
-    except ExecutableNotFoundError as e:
+    except LocalK8sError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
     except subprocess.CalledProcessError as e:
         return _handle_subprocess_error(e)
+    except RuntimeError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
 
 
 @app.command
@@ -164,11 +170,14 @@ def status(
     """
     try:
         return show_environment_status(cluster_name, namespace)
-    except ExecutableNotFoundError as e:
+    except LocalK8sError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
     except subprocess.CalledProcessError as e:
         return _handle_subprocess_error(e)
+    except RuntimeError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
 
 
 @app.command
@@ -197,11 +206,14 @@ def logs(
     """
     try:
         return stream_environment_logs(cluster_name, namespace, follow=follow)
-    except ExecutableNotFoundError as e:
+    except LocalK8sError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
     except subprocess.CalledProcessError as e:
         return _handle_subprocess_error(e)
+    except RuntimeError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
 
 
 def main() -> int:

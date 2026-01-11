@@ -68,14 +68,18 @@ class TestWaitForCnpgReady:
     """Tests for wait_for_cnpg_ready helper using cmd-mox."""
 
     @pytest.mark.parametrize(
-        "timeout",
-        [600, 120],  # default timeout, custom timeout
+        ("expected_timeout", "call_kwargs"),
+        [
+            (600, {}),  # default timeout
+            (120, {"timeout": 120}),  # custom timeout
+        ],
     )
     def test_waits_for_pod_ready(
         self,
         cmd_mox: CmdMox,
         test_env: dict[str, str],
-        timeout: int,
+        expected_timeout: int,
+        call_kwargs: dict[str, int],
     ) -> None:
         """Should invoke kubectl wait with specified timeout."""
         cfg = Config()
@@ -86,13 +90,10 @@ class TestWaitForCnpgReady:
             "pod",
             "--selector=cnpg.io/cluster=pg-ghillie",
             "--namespace=ghillie",
-            f"--timeout={timeout}s",
+            f"--timeout={expected_timeout}s",
         ).returns(exit_code=0)
 
-        if timeout == 600:
-            wait_for_cnpg_ready(cfg, test_env)
-        else:
-            wait_for_cnpg_ready(cfg, test_env, timeout=timeout)
+        wait_for_cnpg_ready(cfg, test_env, **call_kwargs)
 
 
 class TestReadPgAppUri:

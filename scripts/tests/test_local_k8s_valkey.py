@@ -67,56 +67,62 @@ class TestWaitForValkeyReady:
     """Tests for wait_for_valkey_ready helper using cmd-mox."""
 
     @pytest.mark.parametrize(
-        "timeout",
-        [300, 120],  # default timeout, custom timeout
+        ("expected_timeout", "call_kwargs"),
+        [
+            (300, {}),  # default timeout
+            (120, {"timeout": 120}),  # custom timeout
+        ],
     )
     def test_waits_for_pod_ready(
         self,
         cmd_mox: CmdMox,
         test_env: dict[str, str],
-        timeout: int,
+        expected_timeout: int,
+        call_kwargs: dict[str, int],
     ) -> None:
         """Should invoke kubectl wait with specified timeout."""
         cfg = Config()
 
+        # Selector uses app.kubernetes.io/instance to match valkey_name in manifest
         cmd_mox.mock("kubectl").with_args(
             "wait",
             "--for=condition=Ready",
             "pod",
-            "--selector=app.kubernetes.io/name=valkey-ghillie",
+            "--selector=app.kubernetes.io/instance=valkey-ghillie",
             "--namespace=ghillie",
-            f"--timeout={timeout}s",
+            f"--timeout={expected_timeout}s",
         ).returns(exit_code=0)
 
-        if timeout == 300:
-            wait_for_valkey_ready(cfg, test_env)
-        else:
-            wait_for_valkey_ready(cfg, test_env, timeout=timeout)
+        wait_for_valkey_ready(cfg, test_env, **call_kwargs)
 
 
 class TestReadValkeyUri:
     """Tests for read_valkey_uri helper using cmd-mox."""
 
-    def test_decodes_secret(
+    def test_constructs_uri_from_password(
         self,
         cmd_mox: CmdMox,
         test_env: dict[str, str],
     ) -> None:
-        """Should decode VALKEY_URL from Valkey secret."""
+        """Should construct Valkey URI from password secret field."""
         cfg = Config()
 
-        # "valkey://valkey-ghillie:6379" base64 encoded
-        encoded_uri = "dmFsa2V5Oi8vdmFsa2V5LWdoaWxsaWU6NjM3OQ=="
+        # "secretpass" base64 encoded
+        # S105: This is test fixture data, not a production secret
+        encoded_password = "c2VjcmV0cGFzcw=="  # noqa: S105
 
+        # The operator only stores "password" field, not a complete URI
         cmd_mox.mock("kubectl").with_args(
             "get",
             "secret",
             "valkey-ghillie",
             "--namespace=ghillie",
             "-o",
-            "jsonpath={.data['uri']}",
-        ).returns(exit_code=0, stdout=encoded_uri)
+            "jsonpath={.data['password']}",
+        ).returns(exit_code=0, stdout=encoded_password)
 
         result = read_valkey_uri(cfg, test_env)
 
-        assert result == "valkey://valkey-ghillie:6379"
+        # URI is constructed from password + service DNS name
+        expected = "valkey://:secretpass@valkey-ghillie.ghillie.svc.cluster.local:6379"
+        assert result == expected, f"Expected {expected}, got {result}"

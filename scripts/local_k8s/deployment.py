@@ -57,6 +57,7 @@ def create_app_secret(
     }
 
     # Apply via stdin for idempotent upsert
+    # S607: kubectl via PATH is standard; shell=False mitigates injection
     subprocess.run(
         ["kubectl", "apply", "-f", "-"],  # noqa: S607
         input=json.dumps(secret_manifest),
@@ -91,6 +92,7 @@ def build_docker_image(
         raise FileNotFoundError(msg)
 
     image_name = f"{image_repo}:{image_tag}"
+    # S603/S607: docker via PATH is standard; args are validated inputs
     subprocess.run(  # noqa: S603
         [  # noqa: S607
             "docker",
@@ -126,6 +128,7 @@ def install_ghillie_chart(cfg: Config, env: dict[str, str]) -> None:
         msg = f"Values file not found at {cfg.values_file}"
         raise FileNotFoundError(msg)
 
+    # S603/S607: helm via PATH is standard; args from validated Config paths
     subprocess.run(  # noqa: S603
         [  # noqa: S607
             "helm",
@@ -161,6 +164,7 @@ def print_status(cfg: Config, env: dict[str, str]) -> None:
         env: Environment dict with KUBECONFIG set.
 
     """
+    # S603/S607: kubectl via PATH is standard; namespace from Config
     subprocess.run(  # noqa: S603
         [  # noqa: S607
             "kubectl",
@@ -200,6 +204,7 @@ def tail_logs(cfg: Config, env: dict[str, str], *, follow: bool = False) -> None
 
     # Only apply timeout for non-follow mode; follow runs indefinitely
     timeout = None if follow else 30
+    # S603: kubectl via PATH is standard; args from hardcoded flags and Config
     subprocess.run(  # noqa: S603
         cmd,
         check=True,

@@ -4,6 +4,24 @@ Provides functions for installing the CloudNativePG operator via Helm,
 creating PostgreSQL database clusters using CNPG CustomResourceDefinitions,
 and reading connection information from CNPG-managed secrets.
 
+Public API:
+    install_cnpg_operator: Install the CNPG operator Helm chart.
+    create_cnpg_cluster: Deploy a CNPG Cluster CR to the cluster.
+    wait_for_cnpg_ready: Block until CNPG pods are ready.
+    read_pg_app_uri: Read the Postgres connection URI from CNPG secret.
+
+Example:
+    >>> cfg = Config()
+    >>> env = kubeconfig_env("ghillie-local")
+    >>> install_cnpg_operator(cfg, env)
+    >>> create_cnpg_cluster(cfg, env)
+    >>> wait_for_cnpg_ready(cfg, env)
+    >>> uri = read_pg_app_uri(cfg, env)
+
+Note:
+    The namespace must exist before calling create_cnpg_cluster. Use
+    ensure_namespace() from local_k8s.k8s to create it if needed.
+
 """
 
 from __future__ import annotations
@@ -54,9 +72,9 @@ def _cnpg_cluster_manifest(namespace: str, cluster_name: str = "pg-ghillie") -> 
     yaml_serializer = YAML(typ="safe")
     yaml_serializer.default_flow_style = False
     yaml_serializer.indent(mapping=2, sequence=4, offset=2)
-    stream = io.StringIO()
-    yaml_serializer.dump(manifest, stream)
-    return stream.getvalue()
+    with io.StringIO() as stream:
+        yaml_serializer.dump(manifest, stream)
+        return stream.getvalue()
 
 
 def install_cnpg_operator(cfg: Config, env: dict[str, str]) -> None:
