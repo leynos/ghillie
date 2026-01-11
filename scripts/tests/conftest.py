@@ -20,9 +20,9 @@ if typ.TYPE_CHECKING:
     from cyclopts import App
 
 # Add scripts directory to path so we can import local_k8s
-_scripts_dir = Path(__file__).resolve().parents[1]
-if str(_scripts_dir) not in sys.path:
-    sys.path.insert(0, str(_scripts_dir))
+_SCRIPTS_DIR = Path(__file__).resolve().parents[1]
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
 
 
 def load_script_app() -> App:
@@ -32,17 +32,31 @@ def load_script_app() -> App:
     Python's import system would prefer the package. This function loads
     the script directly using importlib.
 
-    Returns:
+    Returns
+    -------
+    App
         The Cyclopts App instance from local_k8s.py.
 
+    Raises
+    ------
+    ImportError
+        If local_k8s.py is missing, cannot be loaded, or does not expose
+        an ``app`` attribute.
+
     """
-    script_path = _scripts_dir / "local_k8s.py"
+    script_path = _SCRIPTS_DIR / "local_k8s.py"
+    if not script_path.exists():
+        msg = f"local_k8s.py not found at {script_path}"
+        raise ImportError(msg)
     spec = importlib.util.spec_from_file_location("local_k8s_script", script_path)
     if spec is None or spec.loader is None:
         msg = f"Could not load script from {script_path}"
         raise ImportError(msg)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    if not hasattr(module, "app"):
+        msg = f"{script_path} does not define an 'app' attribute"
+        raise ImportError(msg)
     return module.app
 
 
@@ -95,8 +109,6 @@ def mock_subprocess_run(
         MockSubprocessCapture with calls list and inputs list.
 
     """
-    import subprocess
-
     capture = MockSubprocessCapture(calls=[], inputs=[])
 
     def _mock_run(
@@ -105,15 +117,26 @@ def mock_subprocess_run(
         capture.calls.append(tuple(args))
         if "input" in kwargs:
             capture.inputs.append(str(kwargs["input"]))
-        return subprocess.CompletedProcess(
+        result = subprocess.CompletedProcess(
             args=args, returncode=0, stdout="yaml-output"
         )
+        if kwargs.get("check") and result.returncode != 0:
+            raise subprocess.CalledProcessError(
+                result.returncode, args, result.stdout, ""
+            )
+        return result
 
     monkeypatch.setattr("subprocess.run", _mock_run)
     return capture
 
 
-SubprocessMockCallable = typ.Callable[[list[str]], subprocess.CompletedProcess[str]]
+class SubprocessMockCallable(typ.Protocol):
+    """Callable protocol for subprocess.run test doubles."""
+
+    def __call__(
+        self, args: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        """Execute the mock subprocess run."""
 
 
 def make_subprocess_mock(
@@ -152,16 +175,17 @@ def make_subprocess_mock(
 
     """
 
-    def mock_run(
-        args: list[str], **_kwargs: object
-    ) -> subprocess.CompletedProcess[str]:
+    def mock_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         calls.append(tuple(args))
         # Simulate namespace check: return non-zero if namespace_exists=False
         returncode = 0
         if not namespace_exists and args[:3] == ["kubectl", "get", "namespace"]:
             returncode = 1
-        return subprocess.CompletedProcess(
+        result = subprocess.CompletedProcess(
             args=args, returncode=returncode, stdout=stdout
         )
+        if kwargs.get("check") and returncode != 0:
+            raise subprocess.CalledProcessError(returncode, args, stdout, "")
+        return result
 
     return mock_run

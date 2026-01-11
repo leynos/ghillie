@@ -32,7 +32,7 @@ class TestClusterExists:
 
         result = cluster_exists("ghillie-local")
 
-        assert result is True
+        assert result is True, "Expected cluster_exists to return True"
 
     def test_returns_false_when_cluster_absent(self, cmd_mox: CmdMox) -> None:
         """Should return False when cluster is not in k3d list."""
@@ -43,7 +43,7 @@ class TestClusterExists:
 
         result = cluster_exists("ghillie-local")
 
-        assert result is False
+        assert result is False, "Expected cluster_exists to return False"
 
     def test_returns_false_when_different_cluster(self, cmd_mox: CmdMox) -> None:
         """Should return False when only other clusters exist."""
@@ -54,7 +54,7 @@ class TestClusterExists:
 
         result = cluster_exists("ghillie-local")
 
-        assert result is False
+        assert result is False, "Expected cluster_exists to return False"
 
 
 class TestCreateK3dCluster:
@@ -135,7 +135,7 @@ class TestWriteKubeconfig:
 
         result = write_kubeconfig("ghillie-local")
 
-        assert result == expected_path
+        assert result == expected_path, "Expected kubeconfig path from k3d output"
 
     def test_raises_when_empty_path_returned(self, cmd_mox: CmdMox) -> None:
         """Should raise RuntimeError when k3d returns empty path."""
@@ -179,8 +179,10 @@ class TestKubeconfigEnv:
 
         env = kubeconfig_env("test-cluster")
 
-        assert "KUBECONFIG" in env
-        assert env["KUBECONFIG"] == str(kubeconfig_path)
+        assert "KUBECONFIG" in env, "Expected KUBECONFIG to be set"
+        assert env["KUBECONFIG"] == str(kubeconfig_path), (
+            "Expected KUBECONFIG to match kubeconfig path"
+        )
 
 
 class TestImportImageToK3d:

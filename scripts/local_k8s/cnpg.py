@@ -87,9 +87,12 @@ def install_cnpg_operator(cfg: Config, env: dict[str, str]) -> None:
     Adds the CNPG Helm repository and installs the operator chart
     into its dedicated namespace.
 
-    Args:
-        cfg: Configuration with CNPG release name and namespace.
-        env: Environment dict with KUBECONFIG set.
+    Parameters
+    ----------
+    cfg : Config
+        Configuration with CNPG release name and namespace.
+    env : dict[str, str]
+        Environment dict with KUBECONFIG set.
 
     """
     spec = HelmOperatorSpec(

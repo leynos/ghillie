@@ -1,14 +1,30 @@
-"""Docker and Helm deployment operations."""
+"""Deployment operations for the local k3d preview environment.
+
+This module wraps the docker, kubectl, and helm calls needed to build the
+Ghillie image, create the application secret, and install the chart. It keeps
+subprocess usage and input validation in one place so higher-level orchestration
+commands stay focused on workflow.
+
+Examples
+--------
+Build and deploy the application:
+
+    cfg = Config()
+    env = kubeconfig_env(cfg.cluster_name)
+    create_app_secret(cfg, env, database_url, valkey_url)
+    build_docker_image(cfg.image_repo, cfg.image_tag)
+    install_ghillie_chart(cfg, env)
+
+"""
 
 from __future__ import annotations
 
 import json
 import subprocess
 import typing as typ
+from pathlib import Path
 
 if typ.TYPE_CHECKING:
-    from pathlib import Path
-
     from local_k8s.config import Config
 
 
@@ -58,6 +74,7 @@ def create_app_secret(
 
     # Apply via stdin for idempotent upsert
     # S607: kubectl via PATH is standard; shell=False mitigates injection
+    # S603 not needed: command is static and shell=False.
     subprocess.run(
         ["kubectl", "apply", "-f", "-"],  # noqa: S607
         input=json.dumps(secret_manifest),
@@ -83,11 +100,10 @@ def build_docker_image(
     Raises:
         FileNotFoundError: If the context path does not exist.
         NotADirectoryError: If the context path is not a directory.
+        subprocess.CalledProcessError: If the docker build command fails.
 
     """
-    from pathlib import Path as PathClass
-
-    context_path = PathClass(context)
+    context_path = Path(context)
     if not context_path.exists():
         msg = f"Build context path does not exist: {context_path}"
         raise FileNotFoundError(msg)

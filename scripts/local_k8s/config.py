@@ -37,7 +37,7 @@ class Config:
     valkey_name: str = "valkey-ghillie"
     # S105 false positive: This is a Kubernetes Secret resource name, not a
     # hardcoded password. The secret contains connection URLs, not credentials.
-    app_secret_name: str = "ghillie"  # noqa: S105
+    app_secret_name: str = "ghillie"  # noqa: S105  # PR-33 false positive
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

@@ -42,20 +42,32 @@ class TestCreateAppSecret:
         )
 
         # Single call: apply JSON manifest via stdin
-        assert len(mock_subprocess_run.calls) == 1
-        assert mock_subprocess_run.calls[0] == ("kubectl", "apply", "-f", "-")
+        assert len(mock_subprocess_run.calls) == 1, "Expected one kubectl call"
+        assert mock_subprocess_run.calls[0] == (
+            "kubectl",
+            "apply",
+            "-f",
+            "-",
+        ), "Expected kubectl apply via stdin"
 
         # Verify the JSON manifest content
-        assert len(mock_subprocess_run.inputs) == 1
+        assert len(mock_subprocess_run.inputs) == 1, "Expected one manifest input"
         manifest = json.loads(mock_subprocess_run.inputs[0])
-        assert manifest["kind"] == "Secret"
-        assert manifest["metadata"]["name"] == "ghillie"
-        assert manifest["metadata"]["namespace"] == "ghillie"
+        assert manifest["apiVersion"] == "v1", "Expected Secret apiVersion v1"
+        assert manifest["kind"] == "Secret", "Expected Secret manifest kind"
+        assert manifest["metadata"]["name"] == cfg.app_secret_name, (
+            "Expected secret name from config"
+        )
+        assert manifest["metadata"]["namespace"] == cfg.namespace, (
+            "Expected secret namespace from config"
+        )
         assert (
             manifest["stringData"]["DATABASE_URL"]
             == "postgresql://user:pass@host:5432/db"
+        ), "Expected DATABASE_URL in stringData"
+        assert manifest["stringData"]["VALKEY_URL"] == "valkey://valkey:6379", (
+            "Expected VALKEY_URL in stringData"
         )
-        assert manifest["stringData"]["VALKEY_URL"] == "valkey://valkey:6379"
 
     def test_uses_config_secret_name(
         self, mock_subprocess_run: MockSubprocessCapture, test_env: dict[str, str]
@@ -66,9 +78,11 @@ class TestCreateAppSecret:
         create_app_secret(cfg, test_env, "db_url", "valkey_url")
 
         # Verify secret name from config is in the manifest
-        assert len(mock_subprocess_run.inputs) == 1
+        assert len(mock_subprocess_run.inputs) == 1, "Expected one manifest input"
         manifest = json.loads(mock_subprocess_run.inputs[0])
-        assert manifest["metadata"]["name"] == cfg.app_secret_name
+        assert manifest["metadata"]["name"] == cfg.app_secret_name, (
+            "Expected custom secret name from config"
+        )
 
 
 class TestBuildDockerImage:
@@ -104,12 +118,6 @@ class HelmChartParams:
     image_tag: str
 
 
-@pytest.fixture
-def helm_chart_params(request: pytest.FixtureRequest) -> HelmChartParams:
-    """Provide Helm chart test parameters from indirect parameterisation."""
-    return request.param
-
-
 class TestInstallGhillieChart:
     """Tests for install_ghillie_chart helper using cmd-mox."""
 
@@ -123,7 +131,6 @@ class TestInstallGhillieChart:
                 namespace="custom-ns", image_repo="custom-repo", image_tag="v1.0.0"
             ),
         ],
-        indirect=True,
     )
     def test_invokes_helm_upgrade(
         self,

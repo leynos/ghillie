@@ -80,7 +80,7 @@ class TestOperatorInstallation:
 
         # Verify the expected commands were called
         # Note: create_namespace uses dry-run + apply pattern (2 calls)
-        assert len(calls) == 6
+        assert len(calls) == 6, "Expected six subprocess calls"
 
         # 1. Add Helm repository
         assert calls[0] == (
@@ -90,20 +90,35 @@ class TestOperatorInstallation:
             "--force-update",
             case.repo_name,
             case.repo_url,
-        )
+        ), "Expected helm repo add call"
 
         # 2. Update Helm repos
-        assert calls[1] == ("helm", "repo", "update")
+        assert calls[1] == ("helm", "repo", "update"), "Expected helm repo update"
 
         # 3. Check namespace existence
-        assert calls[2] == ("kubectl", "get", "namespace", case.namespace)
+        assert calls[2] == (
+            "kubectl",
+            "get",
+            "namespace",
+            case.namespace,
+        ), "Expected kubectl namespace probe"
 
         # 4. Create namespace with dry-run
-        assert calls[3][:4] == ("kubectl", "create", "namespace", case.namespace)
-        assert "--dry-run=client" in calls[3]
+        assert calls[3][:4] == (
+            "kubectl",
+            "create",
+            "namespace",
+            case.namespace,
+        ), "Expected kubectl create namespace"
+        assert "--dry-run=client" in calls[3], "Expected dry-run namespace creation"
 
         # 5. Apply namespace
-        assert calls[4] == ("kubectl", "apply", "-f", "-")
+        assert calls[4] == (
+            "kubectl",
+            "apply",
+            "-f",
+            "-",
+        ), "Expected kubectl apply for namespace"
 
         # 6. Install operator via Helm
         assert calls[5] == (
@@ -115,4 +130,4 @@ class TestOperatorInstallation:
             "--namespace",
             case.namespace,
             "--wait",
-        )
+        ), "Expected helm upgrade/install for operator"

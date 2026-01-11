@@ -6,6 +6,7 @@ Common create/wait patterns are in test_local_k8s_datastore_ops.py.
 
 from __future__ import annotations
 
+import subprocess
 import typing as typ
 
 import pytest
@@ -79,8 +80,6 @@ class TestWaitForCnpgReadyErrors:
         test_env: dict[str, str],
     ) -> None:
         """Should raise LocalK8sError when pre-flight check finds no pods."""
-        import subprocess
-
         cfg = Config()
 
         def mock_run(
@@ -105,8 +104,6 @@ class TestWaitForCnpgReadyErrors:
         test_env: dict[str, str],
     ) -> None:
         """Should raise LocalK8sError when kubectl get pods fails."""
-        import subprocess
-
         cfg = Config()
 
         def mock_run(
@@ -131,8 +128,6 @@ class TestWaitForCnpgReadyErrors:
         test_env: dict[str, str],
     ) -> None:
         """Should raise LocalK8sError with timeout guidance when wait times out."""
-        import subprocess
-
         cfg = Config()
 
         def mock_run(
@@ -166,8 +161,6 @@ class TestWaitForCnpgReadyErrors:
         test_env: dict[str, str],
     ) -> None:
         """Should raise LocalK8sError with stderr on generic kubectl failure."""
-        import subprocess
-
         cfg = Config()
 
         def mock_run(
