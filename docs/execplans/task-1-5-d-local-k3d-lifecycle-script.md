@@ -16,7 +16,7 @@ enable developers to create a local k3d-based preview environment for Ghillie.
 After this change, running `make local-k8s-up` will:
 
 1. Create a k3d cluster with loopback-only ingress
-2. Install CloudNativePG and Valkey operators
+2. Install CloudNativePG (CNPG) and Valkey operators
 3. Create Postgres and Valkey instances
 4. Build and import the Ghillie Docker image
 5. Deploy the Ghillie Helm chart
@@ -199,14 +199,18 @@ Validation: `make check-fmt && make lint && make typecheck && make test`
 
 Add to `scripts/local_k8s.py`:
 
-    def require_exe(name: str) -> None:
-        """Verify a CLI tool is available in PATH. Raises SystemExit if not."""
+```python
+def require_exe(name: str) -> None:
+    """Verify a CLI tool is available in PATH. Raises SystemExit if not."""
 
-    def pick_free_loopback_port() -> int:
-        """Find an available TCP port on 127.0.0.1 using socket.bind."""
 
-    def b64decode_k8s_secret_field(b64_text: str) -> str:
-        """Decode a base64-encoded Kubernetes secret value."""
+def pick_free_loopback_port() -> int:
+    """Find an available TCP port on 127.0.0.1 using socket.bind."""
+
+
+def b64decode_k8s_secret_field(b64_text: str) -> str:
+    """Decode a base64-encoded Kubernetes secret value."""
+```
 
 Add tests:
 
@@ -221,20 +225,26 @@ Validation: Quality gates pass.
 
 Add to `scripts/local_k8s.py`:
 
-    def cluster_exists(cluster_name: str) -> bool:
-        """Check if a k3d cluster exists by parsing k3d cluster list -o json."""
+```python
+def cluster_exists(cluster_name: str) -> bool:
+    """Check if a k3d cluster exists by parsing k3d cluster list -o json."""
 
-    def create_k3d_cluster(cluster_name: str, port: int, agents: int = 1) -> None:
-        """Create a k3d cluster with loopback port mapping."""
 
-    def delete_k3d_cluster(cluster_name: str) -> None:
-        """Delete a k3d cluster."""
+def create_k3d_cluster(cluster_name: str, port: int, agents: int = 1) -> None:
+    """Create a k3d cluster with loopback port mapping."""
 
-    def write_kubeconfig(cluster_name: str) -> Path:
-        """Write kubeconfig for cluster and return the path."""
 
-    def kubeconfig_env(cluster_name: str) -> dict[str, str]:
-        """Return environment dict with KUBECONFIG set."""
+def delete_k3d_cluster(cluster_name: str) -> None:
+    """Delete a k3d cluster."""
+
+
+def write_kubeconfig(cluster_name: str) -> Path:
+    """Write kubeconfig for cluster and return the path."""
+
+
+def kubeconfig_env(cluster_name: str) -> dict[str, str]:
+    """Return environment dict with KUBECONFIG set."""
+```
 
 Add tests using cmd-mox:
 
@@ -250,28 +260,37 @@ Validation: Quality gates pass.
 
 Add to `scripts/local_k8s.py`:
 
-    def namespace_exists(namespace: str, env: dict[str, str]) -> bool:
-        """Check if a Kubernetes namespace exists."""
+```python
+def namespace_exists(namespace: str, env: dict[str, str]) -> bool:
+    """Check if a Kubernetes namespace exists."""
 
-    def create_namespace(namespace: str, env: dict[str, str]) -> None:
-        """Create a Kubernetes namespace."""
 
-    def install_cnpg_operator(cfg: Config, env: dict[str, str]) -> None:
-        """Install CloudNativePG operator via Helm."""
+def create_namespace(namespace: str, env: dict[str, str]) -> None:
+    """Create a Kubernetes namespace."""
 
-    def create_cnpg_cluster(cfg: Config, env: dict[str, str]) -> None:
-        """Create a CNPG Postgres cluster by applying a manifest."""
 
-    def wait_for_cnpg_ready(cfg: Config, env: dict[str, str], timeout: int = 600) -> None:
-        """Wait for CNPG cluster pods to be ready."""
+def install_cnpg_operator(cfg: Config, env: dict[str, str]) -> None:
+    """Install CloudNativePG operator via Helm."""
 
-    def read_pg_app_uri(cfg: Config, env: dict[str, str]) -> str:
-        """Extract DATABASE_URL from CNPG *-app secret."""
+
+def create_cnpg_cluster(cfg: Config, env: dict[str, str]) -> None:
+    """Create a CNPG Postgres cluster by applying a manifest."""
+
+
+def wait_for_cnpg_ready(cfg: Config, env: dict[str, str], timeout: int = 600) -> None:
+    """Wait for CNPG cluster pods to be ready."""
+
+
+def read_pg_app_uri(cfg: Config, env: dict[str, str]) -> str:
+    """Extract DATABASE_URL from CNPG *-app secret."""
+```
 
 Add private helper for CNPG manifest generation:
 
-    def _cnpg_cluster_manifest(namespace: str, cluster_name: str = "pg-ghillie") -> str:
-        """Generate CNPG Cluster YAML manifest."""
+```python
+def _cnpg_cluster_manifest(namespace: str, cluster_name: str = "pg-ghillie") -> str:
+    """Generate CNPG Cluster YAML manifest."""
+```
 
 Add tests:
 
@@ -289,22 +308,29 @@ Validation: Quality gates pass.
 
 Add to `scripts/local_k8s.py`:
 
-    def install_valkey_operator(cfg: Config, env: dict[str, str]) -> None:
-        """Install Valkey operator via Helm from hyperspike chart."""
+```python
+def install_valkey_operator(cfg: Config, env: dict[str, str]) -> None:
+    """Install Valkey operator via Helm from hyperspike chart."""
 
-    def create_valkey_instance(cfg: Config, env: dict[str, str]) -> None:
-        """Create a Valkey instance by applying a manifest."""
 
-    def wait_for_valkey_ready(cfg: Config, env: dict[str, str], timeout: int = 300) -> None:
-        """Wait for Valkey pods to be ready."""
+def create_valkey_instance(cfg: Config, env: dict[str, str]) -> None:
+    """Create a Valkey instance by applying a manifest."""
 
-    def read_valkey_uri(cfg: Config, env: dict[str, str]) -> str:
-        """Extract VALKEY_URL from Valkey secret."""
+
+def wait_for_valkey_ready(cfg: Config, env: dict[str, str], timeout: int = 300) -> None:
+    """Wait for Valkey pods to be ready."""
+
+
+def read_valkey_uri(cfg: Config, env: dict[str, str]) -> str:
+    """Extract VALKEY_URL from Valkey secret."""
+```
 
 Add private helper:
 
-    def _valkey_manifest(namespace: str, name: str = "valkey-ghillie") -> str:
-        """Generate Valkey CR YAML manifest."""
+```python
+def _valkey_manifest(namespace: str, name: str = "valkey-ghillie") -> str:
+    """Generate Valkey CR YAML manifest."""
+```
 
 Add tests:
 
@@ -319,19 +345,23 @@ Validation: Quality gates pass.
 
 Add to `scripts/local_k8s.py`:
 
-    def create_app_secret(
-        cfg: Config,
-        env: dict[str, str],
-        database_url: str,
-        valkey_url: str,
-    ) -> None:
-        """Create the ghillie Kubernetes Secret with connection URLs."""
+```python
+def create_app_secret(
+    cfg: Config,
+    env: dict[str, str],
+    database_url: str,
+    valkey_url: str,
+) -> None:
+    """Create the ghillie Kubernetes Secret with connection URLs."""
 
-    def build_docker_image(image_repo: str, image_tag: str) -> None:
-        """Build the Docker image locally."""
 
-    def import_image_to_k3d(cluster_name: str, image_repo: str, image_tag: str) -> None:
-        """Import the Docker image into the k3d cluster."""
+def build_docker_image(image_repo: str, image_tag: str) -> None:
+    """Build the Docker image locally."""
+
+
+def import_image_to_k3d(cluster_name: str, image_repo: str, image_tag: str) -> None:
+    """Import the Docker image into the k3d cluster."""
+```
 
 Add tests:
 
@@ -346,14 +376,18 @@ Validation: Quality gates pass.
 
 Add to `scripts/local_k8s.py`:
 
-    def install_ghillie_chart(cfg: Config, env: dict[str, str]) -> None:
-        """Install the Ghillie Helm chart using values_local.yaml."""
+```python
+def install_ghillie_chart(cfg: Config, env: dict[str, str]) -> None:
+    """Install the Ghillie Helm chart using values_local.yaml."""
 
-    def print_status(cfg: Config, env: dict[str, str]) -> None:
-        """Print pod status for the preview environment."""
 
-    def tail_logs(cfg: Config, env: dict[str, str], follow: bool = False) -> None:
-        """Stream logs from Ghillie pods."""
+def print_status(cfg: Config, env: dict[str, str]) -> None:
+    """Print pod status for the preview environment."""
+
+
+def tail_logs(cfg: Config, env: dict[str, str], follow: bool = False) -> None:
+    """Stream logs from Ghillie pods."""
+```
 
 Add tests:
 
@@ -369,37 +403,42 @@ Validation: Quality gates pass.
 
 Complete the Cyclopts command implementations:
 
-    @app.command
-    def up(
-        *,
-        cluster_name: Annotated[str, Parameter(env_var="GHILLIE_K3D_CLUSTER")] = "ghillie-local",
-        namespace: Annotated[str, Parameter(env_var="GHILLIE_K3D_NAMESPACE")] = "ghillie",
-        ingress_port: Annotated[int | None, Parameter(env_var="GHILLIE_K3D_PORT")] = None,
-        skip_build: bool = False,
-    ) -> int:
-        """Create or update the local k3d preview environment."""
-        # 1. Verify executables
-        # 2. Check if cluster exists; create if not
-        # 3. Install CNPG, create Postgres cluster, wait for ready
-        # 4. Install Valkey operator, create instance, wait for ready
-        # 5. Read DATABASE_URL and VALKEY_URL from secrets
-        # 6. Create application secret
-        # 7. Build and import Docker image (unless skip_build)
-        # 8. Install Helm chart
-        # 9. Print preview URL
-        return 0
+```python
+@app.command
+def up(
+    *,
+    cluster_name: Annotated[str, Parameter(env_var="GHILLIE_K3D_CLUSTER")] = "ghillie-local",
+    namespace: Annotated[str, Parameter(env_var="GHILLIE_K3D_NAMESPACE")] = "ghillie",
+    ingress_port: Annotated[int | None, Parameter(env_var="GHILLIE_K3D_PORT")] = None,
+    skip_build: bool = False,
+) -> int:
+    """Create or update the local k3d preview environment."""
+    # 1. Verify executables
+    # 2. Check if cluster exists; create if not
+    # 3. Install CNPG, create Postgres cluster, wait for ready
+    # 4. Install Valkey operator, create instance, wait for ready
+    # 5. Read DATABASE_URL and VALKEY_URL from secrets
+    # 6. Create application secret
+    # 7. Build and import Docker image (unless skip_build)
+    # 8. Install Helm chart
+    # 9. Print preview URL
+    return 0
 
-    @app.command
-    def down(…) -> int:
-        """Delete the local k3d cluster."""
 
-    @app.command
-    def status(…) -> int:
-        """Show status of the local preview environment."""
+@app.command
+def down(…) -> int:
+    """Delete the local k3d cluster."""
 
-    @app.command
-    def logs(…) -> int:
-        """Tail application logs from the preview environment."""
+
+@app.command
+def status(…) -> int:
+    """Show status of the local preview environment."""
+
+
+@app.command
+def logs(…) -> int:
+    """Tail application logs from the preview environment."""
+```
 
 Add unit tests for command orchestration:
 
@@ -415,17 +454,19 @@ Validation: Quality gates pass.
 
 Add to `Makefile` (after the `docker-run` target):
 
-    local-k8s-up: build ## Create local k3d preview environment
-    	$(UV_ENV) uv run scripts/local_k8s.py up
+```make
+local-k8s-up: build ## Create local k3d preview environment
+	$(UV_ENV) uv run scripts/local_k8s.py up
 
-    local-k8s-down: ## Delete local k3d preview environment
-    	$(UV_ENV) uv run scripts/local_k8s.py down
+local-k8s-down: ## Delete local k3d preview environment
+	$(UV_ENV) uv run scripts/local_k8s.py down
 
-    local-k8s-status: ## Show local k3d preview status
-    	$(UV_ENV) uv run scripts/local_k8s.py status
+local-k8s-status: ## Show local k3d preview status
+	$(UV_ENV) uv run scripts/local_k8s.py status
 
-    local-k8s-logs: ## Tail logs from local preview
-    	$(UV_ENV) uv run scripts/local_k8s.py logs --follow
+local-k8s-logs: ## Tail logs from local preview
+	$(UV_ENV) uv run scripts/local_k8s.py logs --follow
+```
 
 Update `.PHONY` declaration to include new targets.
 
@@ -436,43 +477,45 @@ Validation: `make help` shows new targets; `make local-k8s-status` runs
 
 Create `scripts/tests/features/local_k8s.feature`:
 
-    Feature: Local k3d preview environment lifecycle
+```gherkin
+Feature: Local k3d preview environment lifecycle
 
-      Background:
-        Given the CLI tools docker, k3d, kubectl, and helm are available
+  Background:
+    Given the CLI tools docker, k3d, kubectl, and helm are available
 
-      Scenario: Create preview environment from scratch
-        Given no k3d cluster named ghillie-local exists
-        When the user runs local_k8s up
-        Then a k3d cluster named ghillie-local is created
-        And the CNPG operator is installed
-        And a CNPG Postgres cluster is created
-        And the Valkey operator is installed
-        And a Valkey instance is created
-        And a secret named ghillie exists with DATABASE_URL and VALKEY_URL
-        And the Docker image is built and imported
-        And the Ghillie Helm chart is installed
-        And the preview URL is printed to stdout
-        And the exit code is 0
+  Scenario: Create preview environment from scratch
+    Given no k3d cluster named ghillie-local exists
+    When the user runs local_k8s up
+    Then a k3d cluster named ghillie-local is created
+    And the CNPG operator is installed
+    And a CNPG Postgres cluster is created
+    And the Valkey operator is installed
+    And a Valkey instance is created
+    And a secret named ghillie exists with DATABASE_URL and VALKEY_URL
+    And the Docker image is built and imported
+    And the Ghillie Helm chart is installed
+    And the preview URL is printed to stdout
+    And the exit code is 0
 
-      Scenario: Idempotent up reuses existing cluster
-        Given a k3d cluster named ghillie-local exists
-        When the user runs local_k8s up
-        Then the existing cluster is not deleted
-        And the Helm release is upgraded
-        And the exit code is 0
+  Scenario: Idempotent up reuses existing cluster
+    Given a k3d cluster named ghillie-local exists
+    When the user runs local_k8s up
+    Then the existing cluster is not deleted
+    And the Helm release is upgraded
+    And the exit code is 0
 
-      Scenario: Delete preview environment
-        Given a k3d cluster named ghillie-local exists
-        When the user runs local_k8s down
-        Then the k3d cluster is deleted
-        And the exit code is 0
+  Scenario: Delete preview environment
+    Given a k3d cluster named ghillie-local exists
+    When the user runs local_k8s down
+    Then the k3d cluster is deleted
+    And the exit code is 0
 
-      Scenario: Status shows pod information
-        Given a k3d cluster named ghillie-local exists
-        When the user runs local_k8s status
-        Then pod status is printed
-        And the exit code is 0
+  Scenario: Status shows pod information
+    Given a k3d cluster named ghillie-local exists
+    When the user runs local_k8s status
+    Then pod status is printed
+    And the exit code is 0
+```
 
 Create step definitions in
 `scripts/tests/features/steps/test_local_k8s_steps.py` using cmd-mox.
@@ -483,53 +526,55 @@ Validation: Quality gates pass; BDD tests pass with mocked externals.
 
 Add section to `docs/users-guide.md` after container image section:
 
-    ## Local k3d preview
+```markdown
+## Local k3d preview
 
-    Ghillie provides a local preview environment using k3d (k3s-in-Docker).
-    This mirrors the ephemeral previews architecture while running on a
-    developer workstation.
+Ghillie provides a local preview environment using k3d (k3s-in-Docker).
+This mirrors the ephemeral previews architecture while running on a
+developer workstation.
 
-    ### Prerequisites
+### Prerequisites
 
-    Install:
-    - docker (Docker Desktop with WSL2 or Docker Engine)
-    - k3d (v5.x or later)
-    - kubectl (v1.28 or later)
-    - helm (v3.x)
+Install:
+- docker (Docker Desktop with WSL2 or Docker Engine)
+- k3d (v5.x or later)
+- kubectl (v1.28 or later)
+- helm (v3.x)
 
-    ### Creating a preview environment
+### Creating a preview environment
 
-        make local-k8s-up
+    make local-k8s-up
 
-    This creates a k3d cluster, installs Postgres and Valkey, builds the
-    Docker image, and deploys the Helm chart. On success, it prints the
-    preview URL.
+This creates a k3d cluster, installs Postgres and Valkey, builds the
+Docker image, and deploys the Helm chart. On success, it prints the
+preview URL.
 
-    ### Environment variables
+### Environment variables
 
-    | Variable              | Default       | Description           |
-    | --------------------- | ------------- | --------------------- |
-    | GHILLIE_K3D_CLUSTER   | ghillie-local | k3d cluster name      |
-    | GHILLIE_K3D_NAMESPACE | ghillie       | Kubernetes namespace  |
-    | GHILLIE_K3D_PORT      | (auto)        | Host port for ingress |
+| Variable              | Default       | Description           |
+| --------------------- | ------------- | --------------------- |
+| GHILLIE_K3D_CLUSTER   | ghillie-local | k3d cluster name      |
+| GHILLIE_K3D_NAMESPACE | ghillie       | Kubernetes namespace  |
+| GHILLIE_K3D_PORT      | (auto)        | Host port for ingress |
 
-    ### Checking status
+### Checking status
 
-        make local-k8s-status
+    make local-k8s-status
 
-    ### Viewing logs
+### Viewing logs
 
-        uv run scripts/local_k8s.py logs
-        uv run scripts/local_k8s.py logs --follow
+    uv run scripts/local_k8s.py logs
+    uv run scripts/local_k8s.py logs --follow
 
-    ### Deleting the environment
+### Deleting the environment
 
-        make local-k8s-down
+    make local-k8s-down
 
-    ### Idempotency
+### Idempotency
 
-    Running `make local-k8s-up` when a cluster exists is safe. The script
-    reuses the existing cluster and upgrades the Helm release.
+Running `make local-k8s-up` when a cluster exists is safe. The script
+reuses the existing cluster and upgrades the Helm release.
+```
 
 Validation: `make markdownlint && make nixie`
 
@@ -537,11 +582,15 @@ Validation: `make markdownlint && make nixie`
 
 Edit `docs/roadmap.md` to change:
 
-    - [ ] **Task 1.5.d – Implement local k3d lifecycle script**
+```markdown
+- [ ] **Task 1.5.d – Implement local k3d lifecycle script**
+```
 
 to:
 
-    - [x] **Task 1.5.d – Implement local k3d lifecycle script**
+```markdown
+- [x] **Task 1.5.d – Implement local k3d lifecycle script**
+```
 
 Validation: Roadmap reflects completion.
 
@@ -551,49 +600,57 @@ All commands run from the repository root.
 
 ### Stage 1 commands
 
-    # Create scripts directory
-    mkdir -p scripts/tests/features/steps
+```bash
+# Create scripts directory
+mkdir -p scripts/tests/features/steps
 
-    # Create conftest.py
-    # (content via Edit tool)
+# Create conftest.py
+# (content via Edit tool)
 
-    # Create local_k8s.py scaffold
-    # (content via Edit tool)
+# Create local_k8s.py scaffold
+# (content via Edit tool)
 
-    # Create test_local_k8s.py
-    # (content via Edit tool)
+# Create test_local_k8s.py
+# (content via Edit tool)
 
-    # Verify quality gates
-    make check-fmt && make lint && make typecheck && make test
+# Verify quality gates
+make check-fmt && make lint && make typecheck && make test
+```
 
 ### Stage 9 commands (Makefile)
 
-    # Edit Makefile to add targets
-    # (content via Edit tool)
+```bash
+# Edit Makefile to add targets
+# (content via Edit tool)
 
-    # Validate Makefile
-    mbake validate .
+# Validate Makefile
+mbake validate .
 
-    # Verify targets appear in help
-    make help | grep local-k8s
+# Verify targets appear in help
+make help | grep local-k8s
+```
 
 ### Stage 11 commands (documentation)
 
-    # Edit docs/users-guide.md
-    # (content via Edit tool)
+```bash
+# Edit docs/users-guide.md
+# (content via Edit tool)
 
-    # Format and validate
-    make fmt
-    make markdownlint
-    make nixie
+# Format and validate
+make fmt
+make markdownlint
+make nixie
+```
 
 ### Final validation
 
-    # Full quality gate check
-    make all
+```bash
+# Full quality gate check
+make all
 
-    # Confirm test count increased
-    make test 2>&1 | grep -E 'passed|failed'
+# Confirm test count increased
+make test 2>&1 | grep -E 'passed|failed'
+```
 
 ## Validation and Acceptance
 
@@ -606,7 +663,9 @@ Quality criteria:
 
 Quality method:
 
-    make all  # runs check-fmt, lint, typecheck, test
+```bash
+make all  # runs check-fmt, lint, typecheck, test
+```
 
 Acceptance behaviour:
 
@@ -618,13 +677,15 @@ Acceptance behaviour:
 
 Integration validation (optional, not run in CI):
 
-    # On a machine with Docker and k3d installed:
-    make local-k8s-up
-    curl http://127.0.0.1:<port>/health
-    # Expected: {"status": "ok"}
-    make local-k8s-status
-    # Expected: ghillie pod in Running state
-    make local-k8s-down
+```bash
+# On a machine with Docker and k3d installed:
+make local-k8s-up
+curl http://127.0.0.1:<port>/health
+# Expected: {"status": "ok"}
+make local-k8s-status
+# Expected: ghillie pod in Running state
+make local-k8s-down
+```
 
 ## Idempotence and Recovery
 
@@ -634,73 +695,83 @@ Integration validation (optional, not run in CI):
   error message.
 - To recover from a partial state, run `make local-k8s-down` to clean up,
   then `make local-k8s-up` again.
-- All Helm installs use `upgrade --install` for idempotent behavior.
+- All Helm installs use `upgrade --install` for idempotent behaviour.
 
 ## Artifacts and Notes
 
 ### Config dataclass (from design document)
 
-    @dataclasses.dataclass(frozen=True, slots=True)
-    class Config:
-        cluster_name: str = "ghillie-local"
-        namespace: str = "ghillie"
-        ingress_port: int | None = None
-        chart_path: Path = Path("charts/ghillie")
-        image_repo: str = "ghillie"
-        image_tag: str = "local"
-        cnpg_release: str = "cnpg"
-        cnpg_namespace: str = "cnpg-system"
-        valkey_release: str = "valkey-operator"
-        valkey_namespace: str = "valkey-operator-system"
-        values_file: Path = Path("tests/helm/fixtures/values_local.yaml")
-        pg_cluster_name: str = "pg-ghillie"
-        valkey_name: str = "valkey-ghillie"
-        app_secret_name: str = "ghillie"
+```python
+@dataclasses.dataclass(frozen=True, slots=True)
+class Config:
+    cluster_name: str = "ghillie-local"
+    namespace: str = "ghillie"
+    ingress_port: int | None = None
+    chart_path: Path = Path("charts/ghillie")
+    image_repo: str = "ghillie"
+    image_tag: str = "local"
+    cnpg_release: str = "cnpg"
+    cnpg_namespace: str = "cnpg-system"
+    valkey_release: str = "valkey-operator"
+    valkey_namespace: str = "valkey-operator-system"
+    values_file: Path = Path("tests/helm/fixtures/values_local.yaml")
+    pg_cluster_name: str = "pg-ghillie"
+    valkey_name: str = "valkey-ghillie"
+    app_secret_name: str = "ghillie"
+```
 
 ### CNPG Cluster manifest template
 
-    apiVersion: postgresql.cnpg.io/v1
-    kind: Cluster
-    metadata:
-      name: {pg_cluster_name}
-      namespace: {namespace}
-    spec:
-      instances: 1
-      storage:
-        size: 1Gi
-      bootstrap:
-        initdb:
-          database: ghillie
-          owner: ghillie
+```yaml
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {pg_cluster_name}
+  namespace: {namespace}
+spec:
+  instances: 1
+  storage:
+    size: 1Gi
+  bootstrap:
+    initdb:
+      database: ghillie
+      owner: ghillie
+```
 
 ### Valkey manifest template
 
-    apiVersion: valkey.io/v1alpha1
-    kind: Valkey
-    metadata:
-      name: {valkey_name}
-      namespace: {namespace}
-    spec:
-      replicas: 1
-      resources:
-        requests:
-          memory: "64Mi"
-          cpu: "50m"
+```yaml
+apiVersion: valkey.io/v1alpha1
+kind: Valkey
+metadata:
+  name: {valkey_name}
+  namespace: {namespace}
+spec:
+  replicas: 1
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+```
 
 ### k3d cluster create command pattern
 
-    k3d cluster create {cluster_name} \
-      --agents 1 \
-      --port "127.0.0.1:{port}:80@loadbalancer"
+```bash
+k3d cluster create {cluster_name} \
+  --agents 1 \
+  --port "127.0.0.1:{port}:80@loadbalancer"
+```
 
 ## Interfaces and Dependencies
 
 ### Script dependencies (inline uv block)
 
-    # /// script
-    # requires-python = ">=3.13"
-    # dependencies = ["cyclopts>=2.9", "plumbum", "cmd-mox"]
-    # ///
+```text
+# /// script
+# requires-python = ">=3.13"
+# dependencies = ["cyclopts>=2.9", "plumbum", "cmd-mox"]
+# ///
+```
 
 ### External CLI tools required
 
@@ -717,27 +788,29 @@ Integration validation (optional, not run in CI):
 
 ### Key function signatures
 
-    def require_exe(name: str) -> None: …
-    def pick_free_loopback_port() -> int: …
-    def b64decode_k8s_secret_field(b64_text: str) -> str: …
-    def cluster_exists(cluster_name: str) -> bool: …
-    def create_k3d_cluster(cluster_name: str, port: int, agents: int = 1) -> None: …
-    def delete_k3d_cluster(cluster_name: str) -> None: …
-    def write_kubeconfig(cluster_name: str) -> Path: …
-    def kubeconfig_env(cluster_name: str) -> dict[str, str]: …
-    def namespace_exists(namespace: str, env: dict[str, str]) -> bool: …
-    def create_namespace(namespace: str, env: dict[str, str]) -> None: …
-    def install_cnpg_operator(cfg: Config, env: dict[str, str]) -> None: …
-    def create_cnpg_cluster(cfg: Config, env: dict[str, str]) -> None: …
-    def wait_for_cnpg_ready(cfg: Config, env: dict[str, str], timeout: int = 600) -> None: …
-    def read_pg_app_uri(cfg: Config, env: dict[str, str]) -> str: …
-    def install_valkey_operator(cfg: Config, env: dict[str, str]) -> None: …
-    def create_valkey_instance(cfg: Config, env: dict[str, str]) -> None: …
-    def wait_for_valkey_ready(cfg: Config, env: dict[str, str], timeout: int = 300) -> None: …
-    def read_valkey_uri(cfg: Config, env: dict[str, str]) -> str: …
-    def create_app_secret(cfg: Config, env: dict[str, str], database_url: str, valkey_url: str) -> None: …
-    def build_docker_image(image_repo: str, image_tag: str) -> None: …
-    def import_image_to_k3d(cluster_name: str, image_repo: str, image_tag: str) -> None: …
-    def install_ghillie_chart(cfg: Config, env: dict[str, str]) -> None: …
-    def print_status(cfg: Config, env: dict[str, str]) -> None: …
-    def tail_logs(cfg: Config, env: dict[str, str], follow: bool = False) -> None: …
+```python
+def require_exe(name: str) -> None: …
+def pick_free_loopback_port() -> int: …
+def b64decode_k8s_secret_field(b64_text: str) -> str: …
+def cluster_exists(cluster_name: str) -> bool: …
+def create_k3d_cluster(cluster_name: str, port: int, agents: int = 1) -> None: …
+def delete_k3d_cluster(cluster_name: str) -> None: …
+def write_kubeconfig(cluster_name: str) -> Path: …
+def kubeconfig_env(cluster_name: str) -> dict[str, str]: …
+def namespace_exists(namespace: str, env: dict[str, str]) -> bool: …
+def create_namespace(namespace: str, env: dict[str, str]) -> None: …
+def install_cnpg_operator(cfg: Config, env: dict[str, str]) -> None: …
+def create_cnpg_cluster(cfg: Config, env: dict[str, str]) -> None: …
+def wait_for_cnpg_ready(cfg: Config, env: dict[str, str], timeout: int = 600) -> None: …
+def read_pg_app_uri(cfg: Config, env: dict[str, str]) -> str: …
+def install_valkey_operator(cfg: Config, env: dict[str, str]) -> None: …
+def create_valkey_instance(cfg: Config, env: dict[str, str]) -> None: …
+def wait_for_valkey_ready(cfg: Config, env: dict[str, str], timeout: int = 300) -> None: …
+def read_valkey_uri(cfg: Config, env: dict[str, str]) -> str: …
+def create_app_secret(cfg: Config, env: dict[str, str], database_url: str, valkey_url: str) -> None: …
+def build_docker_image(image_repo: str, image_tag: str) -> None: …
+def import_image_to_k3d(cluster_name: str, image_repo: str, image_tag: str) -> None: …
+def install_ghillie_chart(cfg: Config, env: dict[str, str]) -> None: …
+def print_status(cfg: Config, env: dict[str, str]) -> None: …
+def tail_logs(cfg: Config, env: dict[str, str], follow: bool = False) -> None: …
+```
