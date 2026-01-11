@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import typing as typ
+
 import pytest
+
+if typ.TYPE_CHECKING:
+    from cmd_mox import CmdMox
 from local_k8s import (
     Config,
     create_valkey_instance,
@@ -94,7 +99,7 @@ class TestCreateValkeyInstance:
 
     def test_applies_manifest(
         self,
-        cmd_mox,  # noqa: ANN001
+        cmd_mox: CmdMox,
         test_env: dict[str, str],
     ) -> None:
         """Should apply Valkey manifest via kubectl."""
@@ -114,7 +119,7 @@ class TestWaitForValkeyReady:
     )
     def test_waits_for_pod_ready(
         self,
-        cmd_mox,  # noqa: ANN001
+        cmd_mox: CmdMox,
         test_env: dict[str, str],
         timeout: int,
     ) -> None:
@@ -141,7 +146,7 @@ class TestReadValkeyUri:
 
     def test_decodes_secret(
         self,
-        cmd_mox,  # noqa: ANN001
+        cmd_mox: CmdMox,
         test_env: dict[str, str],
     ) -> None:
         """Should decode VALKEY_URL from Valkey secret."""

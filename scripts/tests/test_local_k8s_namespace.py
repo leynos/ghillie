@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import typing as typ
+
+if typ.TYPE_CHECKING:
+    from cmd_mox import CmdMox
+
 from local_k8s import (
     create_namespace,
     namespace_exists,
@@ -13,7 +18,7 @@ class TestNamespaceExists:
 
     def test_returns_true_when_present(
         self,
-        cmd_mox,  # noqa: ANN001
+        cmd_mox: CmdMox,
         test_env: dict[str, str],
     ) -> None:
         """Should return True when namespace exists."""
@@ -27,7 +32,7 @@ class TestNamespaceExists:
 
     def test_returns_false_when_absent(
         self,
-        cmd_mox,  # noqa: ANN001
+        cmd_mox: CmdMox,
         test_env: dict[str, str],
     ) -> None:
         """Should return False when namespace does not exist."""
@@ -45,7 +50,7 @@ class TestCreateNamespace:
 
     def test_invokes_kubectl(
         self,
-        cmd_mox,  # noqa: ANN001
+        cmd_mox: CmdMox,
         test_env: dict[str, str],
     ) -> None:
         """Should invoke kubectl create namespace."""

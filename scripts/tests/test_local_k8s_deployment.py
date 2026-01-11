@@ -10,6 +10,8 @@ import pytest
 
 if typ.TYPE_CHECKING:
     from pathlib import Path
+
+    from cmd_mox import CmdMox
 from local_k8s import (
     Config,
     build_docker_image,
@@ -91,7 +93,7 @@ class TestCreateAppSecret:
 class TestBuildDockerImage:
     """Tests for build_docker_image helper using cmd-mox."""
 
-    def test_invokes_docker_build(self, cmd_mox) -> None:  # noqa: ANN001
+    def test_invokes_docker_build(self, cmd_mox: CmdMox) -> None:
         """Should invoke docker build with correct tag."""
         cmd_mox.mock("docker").with_args(
             "build",
@@ -102,7 +104,7 @@ class TestBuildDockerImage:
 
         build_docker_image("ghillie", "local")
 
-    def test_uses_custom_repo_and_tag(self, cmd_mox) -> None:  # noqa: ANN001
+    def test_uses_custom_repo_and_tag(self, cmd_mox: CmdMox) -> None:
         """Should use custom repository and tag."""
         cmd_mox.mock("docker").with_args(
             "build",
@@ -146,7 +148,7 @@ class TestInstallGhillieChart:
     )
     def test_invokes_helm_upgrade(
         self,
-        cmd_mox,  # noqa: ANN001
+        cmd_mox: CmdMox,
         test_env: dict[str, str],
         tmp_path: Path,
         helm_chart_params: HelmChartParams,

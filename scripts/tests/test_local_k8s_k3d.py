@@ -8,6 +8,8 @@ import pytest
 
 if typ.TYPE_CHECKING:
     from pathlib import Path
+
+    from cmd_mox import CmdMox
 from local_k8s import (
     cluster_exists,
     create_k3d_cluster,
@@ -21,7 +23,7 @@ from local_k8s import (
 class TestClusterExists:
     """Tests for cluster_exists helper using cmd-mox."""
 
-    def test_returns_true_when_cluster_present(self, cmd_mox) -> None:  # noqa: ANN001
+    def test_returns_true_when_cluster_present(self, cmd_mox: CmdMox) -> None:
         """Should return True when cluster is in k3d list."""
         cmd_mox.mock("k3d").with_args("cluster", "list", "-o", "json").returns(
             exit_code=0,
@@ -32,7 +34,7 @@ class TestClusterExists:
 
         assert result is True
 
-    def test_returns_false_when_cluster_absent(self, cmd_mox) -> None:  # noqa: ANN001
+    def test_returns_false_when_cluster_absent(self, cmd_mox: CmdMox) -> None:
         """Should return False when cluster is not in k3d list."""
         cmd_mox.mock("k3d").with_args("cluster", "list", "-o", "json").returns(
             exit_code=0,
@@ -43,7 +45,7 @@ class TestClusterExists:
 
         assert result is False
 
-    def test_returns_false_when_different_cluster(self, cmd_mox) -> None:  # noqa: ANN001
+    def test_returns_false_when_different_cluster(self, cmd_mox: CmdMox) -> None:
         """Should return False when only other clusters exist."""
         cmd_mox.mock("k3d").with_args("cluster", "list", "-o", "json").returns(
             exit_code=0,
@@ -67,7 +69,7 @@ class TestCreateK3dCluster:
     )
     def test_invokes_correct_command(
         self,
-        cmd_mox,  # noqa: ANN001
+        cmd_mox: CmdMox,
         cluster_name: str,
         port: int,
         agents: int,
@@ -89,7 +91,7 @@ class TestCreateK3dCluster:
 class TestDeleteK3dCluster:
     """Tests for delete_k3d_cluster helper using cmd-mox."""
 
-    def test_invokes_delete_command(self, cmd_mox) -> None:  # noqa: ANN001
+    def test_invokes_delete_command(self, cmd_mox: CmdMox) -> None:
         """Should invoke k3d cluster delete with cluster name."""
         cmd_mox.mock("k3d").with_args("cluster", "delete", "ghillie-local").returns(
             exit_code=0
@@ -103,7 +105,7 @@ class TestWriteKubeconfig:
 
     def test_returns_kubeconfig_path(
         self,
-        cmd_mox,  # noqa: ANN001
+        cmd_mox: CmdMox,
         tmp_path: Path,
     ) -> None:
         """Should return the path output by k3d kubeconfig write."""
@@ -124,7 +126,7 @@ class TestKubeconfigEnv:
 
     def test_returns_env_with_kubeconfig(
         self,
-        cmd_mox,  # noqa: ANN001
+        cmd_mox: CmdMox,
         tmp_path: Path,
     ) -> None:
         """Should return environment dict with KUBECONFIG set."""
@@ -144,7 +146,7 @@ class TestKubeconfigEnv:
 class TestImportImageToK3d:
     """Tests for import_image_to_k3d helper using cmd-mox."""
 
-    def test_invokes_k3d_import(self, cmd_mox) -> None:  # noqa: ANN001
+    def test_invokes_k3d_import(self, cmd_mox: CmdMox) -> None:
         """Should invoke k3d image import with correct args."""
         cmd_mox.mock("k3d").with_args(
             "image",
@@ -156,7 +158,7 @@ class TestImportImageToK3d:
 
         import_image_to_k3d("ghillie-local", "ghillie", "local")
 
-    def test_uses_custom_cluster_name(self, cmd_mox) -> None:  # noqa: ANN001
+    def test_uses_custom_cluster_name(self, cmd_mox: CmdMox) -> None:
         """Should use custom cluster name."""
         cmd_mox.mock("k3d").with_args(
             "image",

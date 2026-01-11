@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import typing as typ
+
 import pytest
+
+if typ.TYPE_CHECKING:
+    from cmd_mox import CmdMox
 from local_k8s import (
     Config,
     print_status,
@@ -19,7 +24,7 @@ class TestPrintStatus:
     )
     def test_invokes_kubectl_get_pods(
         self,
-        cmd_mox,  # noqa: ANN001
+        cmd_mox: CmdMox,
         test_env: dict[str, str],
         namespace: str,
     ) -> None:
@@ -50,7 +55,7 @@ class TestTailLogs:
     )
     def test_invokes_kubectl_logs(
         self,
-        cmd_mox,  # noqa: ANN001
+        cmd_mox: CmdMox,
         test_env: dict[str, str],
         namespace: str,
         follow: bool,  # noqa: FBT001

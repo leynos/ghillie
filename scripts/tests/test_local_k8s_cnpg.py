@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import typing as typ
+
 import pytest
+
+if typ.TYPE_CHECKING:
+    from cmd_mox import CmdMox
 from local_k8s import (
     Config,
     create_cnpg_cluster,
@@ -95,7 +100,7 @@ class TestCreateCnpgCluster:
 
     def test_applies_manifest(
         self,
-        cmd_mox,  # noqa: ANN001
+        cmd_mox: CmdMox,
         test_env: dict[str, str],
     ) -> None:
         """Should apply CNPG cluster manifest via kubectl."""
@@ -115,7 +120,7 @@ class TestWaitForCnpgReady:
     )
     def test_waits_for_pod_ready(
         self,
-        cmd_mox,  # noqa: ANN001
+        cmd_mox: CmdMox,
         test_env: dict[str, str],
         timeout: int,
     ) -> None:
@@ -142,7 +147,7 @@ class TestReadPgAppUri:
 
     def test_decodes_secret(
         self,
-        cmd_mox,  # noqa: ANN001
+        cmd_mox: CmdMox,
         test_env: dict[str, str],
     ) -> None:
         """Should decode DATABASE_URL from CNPG app secret."""
