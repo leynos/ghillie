@@ -170,17 +170,18 @@ def _create_evidence_with_open_items(
     numbers starting at 10, and titles from a predefined list of bug descriptions.
 
     """
+    prs: tuple[PullRequestEvidence, ...] = ()
+    issues: tuple[IssueEvidence, ...] = ()
+    pr_count = 0
+    issue_count = 0
+
     match item_type:
         case "pr":
             prs = _create_open_prs_tuple(count)
-            issues: tuple[IssueEvidence, ...] = ()
             pr_count = count
-            issue_count = 0
             work_type = WorkType.FEATURE
         case "issue":
             issues = _create_open_issues_tuple(count)
-            prs: tuple[PullRequestEvidence, ...] = ()
-            pr_count = 0
             issue_count = count
             work_type = WorkType.BUG
 
