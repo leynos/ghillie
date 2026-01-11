@@ -23,24 +23,27 @@ from local_k8s import (
 class TestCreateAppSecret:
     """Tests for create_app_secret helper.
 
-    Uses monkeypatch to mock subprocess.run since the function makes
-    multiple subprocess calls that need to be verified together.
+    Uses monkeypatch to mock subprocess.run since the function applies
+    a JSON manifest via stdin.
     """
 
     def test_creates_secret_with_urls(
         self, monkeypatch: pytest.MonkeyPatch, test_env: dict[str, str]
     ) -> None:
         """Should create secret with DATABASE_URL and VALKEY_URL."""
+        import json
+
         cfg = Config()
         calls: list[tuple[str, ...]] = []
+        captured_input: list[str] = []
 
         def mock_run(
-            args: list[str], **_kwargs: object
+            args: list[str], **kwargs: object
         ) -> subprocess.CompletedProcess[str]:
             calls.append(tuple(args))
-            return subprocess.CompletedProcess(
-                args=args, returncode=0, stdout="secret-yaml"
-            )
+            if "input" in kwargs:
+                captured_input.append(str(kwargs["input"]))
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="")
 
         monkeypatch.setattr("subprocess.run", mock_run)
 
@@ -51,43 +54,46 @@ class TestCreateAppSecret:
             valkey_url="valkey://valkey:6379",
         )
 
-        # First call: generate secret YAML with dry-run
-        assert len(calls) == 2
-        assert calls[0][0] == "kubectl"
-        assert "create" in calls[0]
-        assert "secret" in calls[0]
-        assert "generic" in calls[0]
-        # Verify secret name from config is at the expected position (index 4)
-        assert calls[0][4] == "ghillie"
-        assert "--dry-run=client" in calls[0]
-        assert (
-            "--from-literal=DATABASE_URL=postgresql://user:pass@host:5432/db"
-            in calls[0]
-        )
-        assert "--from-literal=VALKEY_URL=valkey://valkey:6379" in calls[0]
+        # Single call: apply JSON manifest via stdin
+        assert len(calls) == 1
+        assert calls[0] == ("kubectl", "apply", "-f", "-")
 
-        # Second call: apply the generated YAML
-        assert calls[1] == ("kubectl", "apply", "-f", "-")
+        # Verify the JSON manifest content
+        assert len(captured_input) == 1
+        manifest = json.loads(captured_input[0])
+        assert manifest["kind"] == "Secret"
+        assert manifest["metadata"]["name"] == "ghillie"
+        assert manifest["metadata"]["namespace"] == "ghillie"
+        assert (
+            manifest["stringData"]["DATABASE_URL"]
+            == "postgresql://user:pass@host:5432/db"
+        )
+        assert manifest["stringData"]["VALKEY_URL"] == "valkey://valkey:6379"
 
     def test_uses_config_secret_name(
         self, monkeypatch: pytest.MonkeyPatch, test_env: dict[str, str]
     ) -> None:
         """Should use app_secret_name from config."""
+        import json
+
         cfg = Config()
-        calls: list[tuple[str, ...]] = []
+        captured_input: list[str] = []
 
         def mock_run(
-            args: list[str], **_kwargs: object
+            args: list[str], **kwargs: object
         ) -> subprocess.CompletedProcess[str]:
-            calls.append(tuple(args))
-            return subprocess.CompletedProcess(args=args, returncode=0, stdout="yaml")
+            if "input" in kwargs:
+                captured_input.append(str(kwargs["input"]))
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="")
 
         monkeypatch.setattr("subprocess.run", mock_run)
 
         create_app_secret(cfg, test_env, "db_url", "valkey_url")
 
-        # Verify secret name from config is at the expected position (index 4)
-        assert calls[0][4] == cfg.app_secret_name
+        # Verify secret name from config is in the manifest
+        assert len(captured_input) == 1
+        manifest = json.loads(captured_input[0])
+        assert manifest["metadata"]["name"] == cfg.app_secret_name
 
 
 class TestBuildDockerImage:
@@ -177,6 +183,7 @@ class TestInstallGhillieChart:
             str(chart_path),
             "--namespace",
             helm_chart_params.namespace,
+            "--create-namespace",
             "--values",
             str(values_file),
             "--set",

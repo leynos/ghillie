@@ -8,6 +8,7 @@ import pytest
 
 if typ.TYPE_CHECKING:
     from cmd_mox import CmdMox
+
 from local_k8s import (
     Config,
     print_status,

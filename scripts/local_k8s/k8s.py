@@ -141,6 +141,7 @@ def read_secret_field(
     """Read and decode a field from a Kubernetes secret.
 
     Retrieves the specified field from a secret and decodes it from base64.
+    Handles dotted field names (e.g., "ca.crt") correctly via quoted jsonpath.
 
     Args:
         secret_name: Name of the Kubernetes secret.
@@ -155,6 +156,9 @@ def read_secret_field(
         ValueError: If the secret field is empty or missing.
 
     """
+    # Quote the field name to support dotted keys like "ca.crt"
+    jsonpath = f"jsonpath={{.data['{field}']}}"
+
     result = subprocess.run(  # noqa: S603
         [  # noqa: S607
             "kubectl",
@@ -163,7 +167,7 @@ def read_secret_field(
             secret_name,
             f"--namespace={namespace}",
             "-o",
-            f"jsonpath={{.data.{field}}}",
+            jsonpath,
         ],
         capture_output=True,
         text=True,

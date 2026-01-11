@@ -7,7 +7,11 @@ import shutil
 import socket
 
 
-class ExecutableNotFoundError(Exception):
+class LocalK8sError(Exception):
+    """Base exception for all local_k8s package errors."""
+
+
+class ExecutableNotFoundError(LocalK8sError):
     """Required CLI tool is not installed."""
 
 
@@ -48,8 +52,12 @@ def pick_free_loopback_port() -> int:
         return sock.getsockname()[1]
 
 
-class SecretDecodeError(Exception):
+class SecretDecodeError(LocalK8sError):
     """Failed to decode a Kubernetes secret field."""
+
+
+class PortMismatchError(LocalK8sError):
+    """Requested port does not match existing cluster's port."""
 
 
 def b64decode_k8s_secret_field(b64_text: str) -> str:

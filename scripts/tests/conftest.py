@@ -7,6 +7,7 @@ The cmd-mox plugin is registered globally via pyproject.toml.
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 import typing as typ
 from pathlib import Path
@@ -63,8 +64,6 @@ def test_env(tmp_path: Path) -> dict[str, str]:
         Environment dictionary with KUBECONFIG set to a temp file.
 
     """
-    import os
-
     env = dict(os.environ)
     env["KUBECONFIG"] = str(tmp_path / "kubeconfig-test.yaml")
     return env

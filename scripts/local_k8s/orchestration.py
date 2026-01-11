@@ -25,7 +25,11 @@ from local_k8s.k3d import (
     kubeconfig_env,
 )
 from local_k8s.k8s import ensure_namespace
-from local_k8s.validation import pick_free_loopback_port, require_exe
+from local_k8s.validation import (
+    PortMismatchError,
+    pick_free_loopback_port,
+    require_exe,
+)
 from local_k8s.valkey import (
     create_valkey_instance,
     install_valkey_operator,
@@ -94,9 +98,9 @@ def _print_success_banner(port: int) -> None:
     print(f"  Health check: http://127.0.0.1:{port}/health")
     print()
     print("Commands:")
-    print("  Status: uv run scripts/local_k8s.py status")
-    print("  Logs:   uv run scripts/local_k8s.py logs --follow")
-    print("  Down:   uv run scripts/local_k8s.py down")
+    print("  Status: make local-k8s-status")
+    print("  Logs:   make local-k8s-logs")
+    print("  Down:   make local-k8s-down")
     print("=" * 60)
 
 
@@ -138,7 +142,7 @@ def _ensure_cluster_ready(
         Tuple of (port to use, whether this is a new cluster).
 
     Raises:
-        SystemExit: If there's a port mismatch with an existing cluster.
+        PortMismatchError: If there's a port mismatch with an existing cluster.
 
     """
     port = ingress_port or pick_free_loopback_port()
@@ -154,14 +158,14 @@ def _ensure_cluster_ready(
                 f"'{cluster_name}'. Assuming port {port}."
             )
         elif ingress_port is not None and ingress_port != existing_port:
-            print(
-                f"Error: Ingress port mismatch.\n"
-                f"  Existing cluster '{cluster_name}' uses port {existing_port},\n"
-                f"  but --ingress-port={ingress_port} was requested.\n\n"
-                f"Either re-run without --ingress-port to reuse port {existing_port},\n"
-                f"or delete the cluster first with 'local_k8s down'."
+            msg = (
+                f"Ingress port mismatch: existing cluster '{cluster_name}' uses "
+                f"port {existing_port}, but --ingress-port={ingress_port} was "
+                f"requested. Either re-run without --ingress-port to reuse port "
+                f"{existing_port}, or delete the cluster first with "
+                f"'make local-k8s-down'."
             )
-            raise SystemExit(1)
+            raise PortMismatchError(msg)
         else:
             port = existing_port
 
@@ -191,9 +195,12 @@ def setup_environment(
         Exit code (0 for success, non-zero for failure).
 
     """
-    # Verify required executables
+    # Verify required executables (docker only needed for builds)
     print("Checking required tools...")
-    for exe in ("docker", "k3d", "kubectl", "helm"):
+    required_tools = ["k3d", "kubectl", "helm"]
+    if not skip_build:
+        required_tools.insert(0, "docker")
+    for exe in required_tools:
         require_exe(exe)
 
     # Ensure cluster exists and determine port

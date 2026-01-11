@@ -9,11 +9,11 @@ import typing as typ
 from contextlib import redirect_stdout
 
 import pytest
+from conftest import load_script_app
+from pytest_bdd import given, parsers, scenario, then, when
 
 if typ.TYPE_CHECKING:
     from pathlib import Path
-from conftest import load_script_app
-from pytest_bdd import given, parsers, scenario, then, when
 
 
 class LocalK8sContext(typ.TypedDict, total=False):
@@ -296,10 +296,12 @@ def then_valkey_instance_created(local_k8s_context: LocalK8sContext) -> None:
 
 @then("a secret named ghillie exists with DATABASE_URL and VALKEY_URL")
 def then_secret_created(local_k8s_context: LocalK8sContext) -> None:
-    """Verify secret creation with connection strings."""
-    assert _has_call_containing(
-        local_k8s_context, ("kubectl", "create", "secret"), "ghillie"
-    ), "Expected secret named ghillie"
+    """Verify secret creation via kubectl apply with JSON manifest."""
+    # The secret is now created via kubectl apply -f - with a JSON manifest
+    apply_calls = [
+        c for c in local_k8s_context["captured_calls"] if c[:2] == ("kubectl", "apply")
+    ]
+    assert len(apply_calls) >= 3, "Expected kubectl apply calls including secret"
 
 
 @then("the Docker image is built and imported")

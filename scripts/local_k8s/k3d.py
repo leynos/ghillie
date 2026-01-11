@@ -8,6 +8,50 @@ import subprocess
 from pathlib import Path
 
 
+def _list_clusters() -> list[dict] | None:
+    """List all k3d clusters as parsed JSON.
+
+    Returns:
+        List of cluster dicts if successful, None on error.
+
+    """
+    try:
+        result = subprocess.run(
+            ["k3d", "cluster", "list", "-o", "json"],  # noqa: S607
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+
+
+def _find_cluster(cluster_name: str) -> dict | None:
+    """Find a cluster by name from the list of k3d clusters.
+
+    Args:
+        cluster_name: Name of the cluster to find.
+
+    Returns:
+        The cluster dict if found, None otherwise.
+
+    """
+    clusters = _list_clusters()
+    if clusters is None:
+        return None
+
+    for cluster in clusters:
+        if cluster.get("name") == cluster_name:
+            return cluster
+
+    return None
+
+
 def _is_http_port(container_port: str) -> bool:
     """Check if the container port is HTTP (port 80).
 
@@ -108,28 +152,11 @@ def get_cluster_ingress_port(cluster_name: str) -> int | None:
         The host port as an int if found, None otherwise.
 
     """
-    try:
-        result = subprocess.run(
-            ["k3d", "cluster", "list", "-o", "json"],  # noqa: S607
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except (OSError, subprocess.CalledProcessError):
-        # OSError: k3d is not installed or not on PATH.
-        # CalledProcessError: k3d command failed (e.g., Docker not running).
+    cluster = _find_cluster(cluster_name)
+    if cluster is None:
         return None
 
-    try:
-        clusters = json.loads(result.stdout)
-    except json.JSONDecodeError:
-        return None
-
-    for cluster in clusters:
-        if cluster.get("name") == cluster_name:
-            return _extract_http_host_port(cluster)
-
-    return None
+    return _extract_http_host_port(cluster)
 
 
 def cluster_exists(cluster_name: str) -> bool:
@@ -143,22 +170,7 @@ def cluster_exists(cluster_name: str) -> bool:
         is unavailable or returns invalid output.
 
     """
-    try:
-        result = subprocess.run(
-            ["k3d", "cluster", "list", "-o", "json"],  # noqa: S607
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-    except (OSError, subprocess.CalledProcessError):
-        return False
-
-    try:
-        clusters = json.loads(result.stdout)
-    except json.JSONDecodeError:
-        return False
-
-    return any(c.get("name") == cluster_name for c in clusters)
+    return _find_cluster(cluster_name) is not None
 
 
 _MIN_PORT = 1024

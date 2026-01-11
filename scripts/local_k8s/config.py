@@ -25,16 +25,14 @@ class Config:
     cluster_name: str = "ghillie-local"
     namespace: str = "ghillie"
     ingress_port: int | None = None
-    chart_path: Path = dataclasses.field(default_factory=lambda: Path("charts/ghillie"))
+    chart_path: Path = Path("charts/ghillie")
     image_repo: str = "ghillie"
     image_tag: str = "local"
     cnpg_release: str = "cnpg"
     cnpg_namespace: str = "cnpg-system"
     valkey_release: str = "valkey-operator"
     valkey_namespace: str = "valkey-operator-system"
-    values_file: Path = dataclasses.field(
-        default_factory=lambda: Path("tests/helm/fixtures/values_local.yaml")
-    )
+    values_file: Path = Path("tests/helm/fixtures/values_local.yaml")
     pg_cluster_name: str = "pg-ghillie"
     valkey_name: str = "valkey-ghillie"
     # S105 false positive: This is a Kubernetes Secret resource name, not a

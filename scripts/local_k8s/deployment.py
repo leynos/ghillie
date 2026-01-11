@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import typing as typ
 
@@ -20,8 +21,9 @@ def create_app_secret(
     """Create the Ghillie application Kubernetes Secret.
 
     Creates a generic secret containing DATABASE_URL and VALKEY_URL for
-    the application to connect to Postgres and Valkey. Uses dry-run + apply
-    pattern for idempotent upsert behavior.
+    the application to connect to Postgres and Valkey. Uses kubectl apply
+    with JSON manifest via stdin for idempotent upsert behaviour, avoiding
+    exposure of secret values in command-line arguments.
 
     Args:
         cfg: Configuration with namespace and secret name.
@@ -40,30 +42,24 @@ def create_app_secret(
         msg = "valkey_url cannot be empty"
         raise ValueError(msg)
 
-    # Generate secret YAML using dry-run
-    result = subprocess.run(  # noqa: S603
-        [  # noqa: S607
-            "kubectl",
-            "create",
-            "secret",
-            "generic",
-            cfg.app_secret_name,
-            f"--namespace={cfg.namespace}",
-            f"--from-literal=DATABASE_URL={database_url}",
-            f"--from-literal=VALKEY_URL={valkey_url}",
-            "--dry-run=client",
-            "-o",
-            "yaml",
-        ],
-        check=True,
-        env=env,
-        capture_output=True,
-        text=True,
-    )
-    # Apply for idempotent upsert
+    # Build secret manifest as JSON to avoid leaking values via command-line
+    secret_manifest = {
+        "apiVersion": "v1",
+        "kind": "Secret",
+        "metadata": {
+            "name": cfg.app_secret_name,
+            "namespace": cfg.namespace,
+        },
+        "stringData": {
+            "DATABASE_URL": database_url,
+            "VALKEY_URL": valkey_url,
+        },
+    }
+
+    # Apply via stdin for idempotent upsert
     subprocess.run(
         ["kubectl", "apply", "-f", "-"],  # noqa: S607
-        input=result.stdout,
+        input=json.dumps(secret_manifest),
         text=True,
         check=True,
         env=env,
@@ -127,6 +123,7 @@ def install_ghillie_chart(cfg: Config, env: dict[str, str]) -> None:
             str(cfg.chart_path),
             "--namespace",
             cfg.namespace,
+            "--create-namespace",
             "--values",
             str(cfg.values_file),
             "--set",

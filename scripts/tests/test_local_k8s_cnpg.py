@@ -168,7 +168,7 @@ class TestReadPgAppUri:
             "pg-ghillie-app",
             "--namespace=ghillie",
             "-o",
-            "jsonpath={.data.uri}",
+            "jsonpath={.data['uri']}",
         ).returns(exit_code=0, stdout=encoded_uri)
 
         result = read_pg_app_uri(cfg, test_env)

@@ -170,7 +170,7 @@ class TestReadValkeyUri:
             "valkey-ghillie",
             "--namespace=ghillie",
             "-o",
-            "jsonpath={.data.uri}",
+            "jsonpath={.data['uri']}",
         ).returns(exit_code=0, stdout=encoded_uri)
 
         result = read_valkey_uri(cfg, test_env)

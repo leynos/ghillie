@@ -39,6 +39,8 @@ from local_k8s.orchestration import (
 )
 from local_k8s.validation import (
     ExecutableNotFoundError,
+    LocalK8sError,
+    PortMismatchError,
     SecretDecodeError,
     b64decode_k8s_secret_field,
     pick_free_loopback_port,
@@ -66,6 +68,8 @@ __all__ = [
     "Config",
     "ExecutableNotFoundError",
     "HelmOperatorSpec",
+    "LocalK8sError",
+    "PortMismatchError",
     "SecretDecodeError",
     "b64decode_k8s_secret_field",
     "build_docker_image",

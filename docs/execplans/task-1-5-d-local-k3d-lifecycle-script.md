@@ -572,7 +572,7 @@ All commands run from the repository root.
     # (content via Edit tool)
 
     # Validate Makefile
-    mbake validate Makefile
+    mbake validate .
 
     # Verify targets appear in help
     make help | grep local-k8s
