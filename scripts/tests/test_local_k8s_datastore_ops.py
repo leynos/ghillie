@@ -17,7 +17,7 @@ import typing as typ
 import pytest
 from local_k8s import Config
 from local_k8s.cnpg import (
-    _cnpg_cluster_manifest,
+    cnpg_cluster_manifest,
     create_cnpg_cluster,
     wait_for_cnpg_ready,
 )
@@ -54,7 +54,7 @@ class WaitTestCase(typ.NamedTuple):
 
 CNPG_PARAMS = DatastoreParams(
     name="cnpg",
-    manifest_fn=_cnpg_cluster_manifest,
+    manifest_fn=cnpg_cluster_manifest,
     create_fn=create_cnpg_cluster,
     wait_fn=wait_for_cnpg_ready,
     default_timeout=600,
@@ -119,14 +119,10 @@ class TestWaitForReady:
     @pytest.mark.parametrize(
         "test_case",
         [
-            WaitTestCase(CNPG_PARAMS, 600, {}),
-            WaitTestCase(CNPG_PARAMS, 120, {"timeout": 120}),
             WaitTestCase(VALKEY_PARAMS, 300, {}),
             WaitTestCase(VALKEY_PARAMS, 120, {"timeout": 120}),
         ],
         ids=[
-            "cnpg-default",
-            "cnpg-custom",
             "valkey-default",
             "valkey-custom",
         ],
@@ -137,7 +133,7 @@ class TestWaitForReady:
         test_env: dict[str, str],
         test_case: WaitTestCase,
     ) -> None:
-        """Should invoke kubectl wait with specified timeout."""
+        """Should invoke kubectl wait with specified timeout (Valkey)."""
         cfg = Config()
 
         cmd_mox.mock("kubectl").with_args(
@@ -150,3 +146,60 @@ class TestWaitForReady:
         ).returns(exit_code=0)
 
         test_case.params.wait_fn(cfg, test_env, **test_case.call_kwargs)
+
+
+class TestCnpgWaitForReady:
+    """Tests for CNPG readiness waiting with pre-flight pod check.
+
+    Uses monkeypatch because the CNPG pre-flight check uses capture_output=True
+    which requires specific subprocess result handling that cmd-mox doesn't
+    fully support.
+    """
+
+    @pytest.mark.parametrize(
+        ("expected_timeout", "call_kwargs"),
+        [
+            (600, {}),
+            (120, {"timeout": 120}),
+        ],
+        ids=["default", "custom"],
+    )
+    def test_waits_for_pod_ready(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        test_env: dict[str, str],
+        expected_timeout: int,
+        call_kwargs: dict[str, int],
+    ) -> None:
+        """Should invoke kubectl wait with specified timeout after pod check."""
+        import subprocess
+
+        cfg = Config()
+        calls: list[tuple[str, ...]] = []
+
+        def mock_run(
+            args: list[str], **kwargs: object
+        ) -> subprocess.CompletedProcess[str]:
+            calls.append(tuple(args))
+            if args[1:3] == ["get", "pods"]:
+                # Pre-flight check passes
+                return subprocess.CompletedProcess(
+                    args=args,
+                    returncode=0,
+                    stdout='{"items": [{"metadata": {"name": "pod-1"}}]}',
+                    stderr="",
+                )
+            # kubectl wait succeeds
+            return subprocess.CompletedProcess(
+                args=args, returncode=0, stdout="", stderr=""
+            )
+
+        monkeypatch.setattr("subprocess.run", mock_run)
+
+        wait_for_cnpg_ready(cfg, test_env, **call_kwargs)
+
+        # Verify both commands were called
+        assert len(calls) == 2
+        assert calls[0][1:3] == ("get", "pods")
+        assert calls[1][1] == "wait"
+        assert f"--timeout={expected_timeout}s" in calls[1]

@@ -5,6 +5,7 @@ creating PostgreSQL database clusters using CNPG CustomResourceDefinitions,
 and reading connection information from CNPG-managed secrets.
 
 Public API:
+    cnpg_cluster_manifest: Generate a CNPG Cluster YAML manifest.
     install_cnpg_operator: Install the CNPG operator Helm chart.
     create_cnpg_cluster: Deploy a CNPG Cluster CR to the cluster.
     wait_for_cnpg_ready: Block until CNPG pods are ready.
@@ -27,6 +28,8 @@ Note:
 from __future__ import annotations
 
 import io
+import json
+import subprocess
 import typing as typ
 
 from ruamel.yaml import YAML
@@ -34,12 +37,13 @@ from ruamel.yaml import YAML
 from local_k8s.config import HelmOperatorSpec
 from local_k8s.k8s import apply_manifest, read_secret_field, wait_for_pods_ready
 from local_k8s.operators import install_helm_operator
+from local_k8s.validation import LocalK8sError
 
 if typ.TYPE_CHECKING:
     from local_k8s.config import Config
 
 
-def _cnpg_cluster_manifest(namespace: str, cluster_name: str = "pg-ghillie") -> str:
+def cnpg_cluster_manifest(namespace: str, cluster_name: str = "pg-ghillie") -> str:
     """Generate a CNPG Cluster YAML manifest.
 
     Args:
@@ -108,28 +112,105 @@ def create_cnpg_cluster(cfg: Config, env: dict[str, str]) -> None:
         env: Environment dict with KUBECONFIG set.
 
     """
-    manifest = _cnpg_cluster_manifest(cfg.namespace, cfg.pg_cluster_name)
+    manifest = cnpg_cluster_manifest(cfg.namespace, cfg.pg_cluster_name)
     apply_manifest(manifest, env)
+
+
+def _check_pods_exist(selector: str, namespace: str, env: dict[str, str]) -> bool:
+    """Check if any pods match the given label selector.
+
+    Parameters
+    ----------
+    selector : str
+        Label selector for pods (e.g., "cnpg.io/cluster=pg-ghillie").
+    namespace : str
+        Kubernetes namespace to search in.
+    env : dict[str, str]
+        Environment dict with KUBECONFIG set.
+
+    Returns
+    -------
+    bool
+        True if at least one pod exists matching the selector.
+
+    """
+    # S603/S607: kubectl via PATH is standard; selector/namespace from Config
+    result = subprocess.run(  # noqa: S603
+        [  # noqa: S607
+            "kubectl",
+            "get",
+            "pods",
+            f"--selector={selector}",
+            f"--namespace={namespace}",
+            "-o",
+            "json",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        return False
+    try:
+        data = json.loads(result.stdout)
+        return len(data.get("items", [])) > 0
+    except json.JSONDecodeError:
+        return False
 
 
 def wait_for_cnpg_ready(cfg: Config, env: dict[str, str], timeout: int = 600) -> None:
     """Wait for the CNPG Postgres cluster pods to be ready.
 
     Uses kubectl wait to block until all pods matching the cluster label
-    are in Ready condition.
+    are in Ready condition. Performs a pre-flight check to verify pods exist
+    before waiting, providing clearer error messages for common failure modes.
 
-    Args:
-        cfg: Configuration with namespace and cluster name.
-        env: Environment dict with KUBECONFIG set.
-        timeout: Maximum time to wait in seconds (default 600). Must be between
-            1 and 3600.
+    Parameters
+    ----------
+    cfg : Config
+        Configuration with namespace and cluster name.
+    env : dict[str, str]
+        Environment dict with KUBECONFIG set.
+    timeout : int, default 600
+        Maximum time to wait in seconds. Must be between 1 and 3600.
 
-    Raises:
-        ValueError: If timeout is outside the valid range.
+    Raises
+    ------
+    ValueError
+        If timeout is outside the valid range (1-3600 seconds).
+    LocalK8sError
+        If no pods exist for the cluster (likely the Cluster CR was not created
+        or the CNPG operator is not running), or if the wait times out.
 
     """
     selector = f"cnpg.io/cluster={cfg.pg_cluster_name}"
-    wait_for_pods_ready(selector, cfg.namespace, env, timeout)
+
+    # Pre-flight check: verify pods exist before waiting
+    if not _check_pods_exist(selector, cfg.namespace, env):
+        msg = (
+            f"CNPG cluster '{cfg.pg_cluster_name}' has no pods in namespace "
+            f"'{cfg.namespace}'. Ensure the CNPG Cluster resource was created "
+            "and the CNPG operator is running."
+        )
+        raise LocalK8sError(msg)
+
+    try:
+        wait_for_pods_ready(selector, cfg.namespace, env, timeout)
+    except subprocess.CalledProcessError as e:
+        stderr = e.stderr.decode() if isinstance(e.stderr, bytes) else str(e.stderr)
+        if "timed out" in stderr.lower():
+            msg = (
+                f"Timeout waiting for CNPG cluster '{cfg.pg_cluster_name}' pods "
+                f"to become ready after {timeout}s. Check pod logs for issues: "
+                f"kubectl logs -l {selector} -n {cfg.namespace}"
+            )
+        else:
+            msg = (
+                f"Failed waiting for CNPG cluster '{cfg.pg_cluster_name}' pods: "
+                f"{stderr or e}"
+            )
+        raise LocalK8sError(msg) from e
 
 
 def read_pg_app_uri(cfg: Config, env: dict[str, str]) -> str:

@@ -74,6 +74,9 @@ class SubprocessMock:
         if args[1:3] == ["get", "secret"]:
             return self._handle_kubectl_get_secret(args)
         if args[1:3] == ["get", "pods"]:
+            # Check if JSON output is requested (for pre-flight pod existence check)
+            if "-o" in args and "json" in " ".join(args):
+                return '{"items": [{"metadata": {"name": "pod-1"}}]}', 0
             return "NAME           READY   STATUS\nghillie-abc   1/1     Running", 0
         return "", 0  # create, apply, wait, logs, rollout
 
