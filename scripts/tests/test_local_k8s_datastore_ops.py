@@ -44,6 +44,14 @@ class DatastoreParams(typ.NamedTuple):
     custom_instance_name: str
 
 
+class WaitTestCase(typ.NamedTuple):
+    """Test case parameters for wait-for-ready tests."""
+
+    params: DatastoreParams
+    expected_timeout: int
+    call_kwargs: dict[str, int]
+
+
 CNPG_PARAMS = DatastoreParams(
     name="cnpg",
     manifest_fn=_cnpg_cluster_manifest,
@@ -109,12 +117,12 @@ class TestWaitForReady:
     """Tests for readiness waiting with configurable timeouts."""
 
     @pytest.mark.parametrize(
-        ("params", "expected_timeout", "call_kwargs"),
+        "test_case",
         [
-            (CNPG_PARAMS, 600, {}),
-            (CNPG_PARAMS, 120, {"timeout": 120}),
-            (VALKEY_PARAMS, 300, {}),
-            (VALKEY_PARAMS, 120, {"timeout": 120}),
+            WaitTestCase(CNPG_PARAMS, 600, {}),
+            WaitTestCase(CNPG_PARAMS, 120, {"timeout": 120}),
+            WaitTestCase(VALKEY_PARAMS, 300, {}),
+            WaitTestCase(VALKEY_PARAMS, 120, {"timeout": 120}),
         ],
         ids=[
             "cnpg-default",
@@ -123,14 +131,11 @@ class TestWaitForReady:
             "valkey-custom",
         ],
     )
-    # PLR0913: Test methods need fixtures and parametrized values
-    def test_waits_for_pod_ready(  # noqa: PLR0913
+    def test_waits_for_pod_ready(
         self,
         cmd_mox: CmdMox,
         test_env: dict[str, str],
-        params: DatastoreParams,
-        expected_timeout: int,
-        call_kwargs: dict[str, int],
+        test_case: WaitTestCase,
     ) -> None:
         """Should invoke kubectl wait with specified timeout."""
         cfg = Config()
@@ -139,9 +144,9 @@ class TestWaitForReady:
             "wait",
             "--for=condition=Ready",
             "pod",
-            f"--selector={params.selector}",
+            f"--selector={test_case.params.selector}",
             "--namespace=ghillie",
-            f"--timeout={expected_timeout}s",
+            f"--timeout={test_case.expected_timeout}s",
         ).returns(exit_code=0)
 
-        params.wait_fn(cfg, test_env, **call_kwargs)
+        test_case.params.wait_fn(cfg, test_env, **test_case.call_kwargs)
