@@ -22,6 +22,7 @@ Environment variables:
 
 from __future__ import annotations
 
+import functools
 import subprocess
 import sys
 import typing as typ
@@ -36,6 +37,29 @@ from local_k8s.orchestration import (
 from local_k8s.validation import LocalK8sError
 
 _K3D_CREATE_CMD = ("k3d", "cluster", "create")
+_P = typ.ParamSpec("_P")
+_R = typ.TypeVar("_R", bound=int)
+
+
+def handle_cli_errors(  # noqa: UP047
+    func: typ.Callable[_P, _R],
+) -> typ.Callable[_P, int]:
+    """Wrap CLI handlers to standardize error reporting and exit codes."""
+
+    @functools.wraps(func)
+    def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> int:
+        try:
+            return int(func(*args, **kwargs))
+        except LocalK8sError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+        except subprocess.CalledProcessError as e:
+            return _handle_subprocess_error(e)
+        except RuntimeError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+
+    return wrapper
 
 
 def _handle_subprocess_error(e: subprocess.CalledProcessError) -> int:
@@ -63,20 +87,6 @@ def _handle_subprocess_error(e: subprocess.CalledProcessError) -> int:
     return 1
 
 
-def _run_with_cli_error_handling(action: typ.Callable[[], int]) -> int:
-    """Run a CLI action with consistent error handling."""
-    try:
-        return action()
-    except LocalK8sError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-    except subprocess.CalledProcessError as e:
-        return _handle_subprocess_error(e)
-    except RuntimeError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-
-
 app = App(
     name="local_k8s",
     help="Local k3d preview environment for Ghillie",
@@ -85,6 +95,7 @@ app = App(
 
 
 @app.command
+@handle_cli_errors
 def up(
     *,
     cluster_name: typ.Annotated[
@@ -114,14 +125,13 @@ def up(
         Exit code (0 for success, non-zero for failure).
 
     """
-    return _run_with_cli_error_handling(
-        lambda: setup_environment(
-            cluster_name, namespace, ingress_port, skip_build=skip_build
-        )
+    return setup_environment(
+        cluster_name, namespace, ingress_port, skip_build=skip_build
     )
 
 
 @app.command
+@handle_cli_errors
 def down(
     *,
     cluster_name: typ.Annotated[
@@ -140,10 +150,11 @@ def down(
         Exit code (0 for success, non-zero for failure).
 
     """
-    return _run_with_cli_error_handling(lambda: teardown_environment(cluster_name))
+    return teardown_environment(cluster_name)
 
 
 @app.command
+@handle_cli_errors
 def status(
     *,
     cluster_name: typ.Annotated[
@@ -166,12 +177,11 @@ def status(
         Exit code (0 for success, non-zero for failure).
 
     """
-    return _run_with_cli_error_handling(
-        lambda: show_environment_status(cluster_name, namespace)
-    )
+    return show_environment_status(cluster_name, namespace)
 
 
 @app.command
+@handle_cli_errors
 def logs(
     *,
     cluster_name: typ.Annotated[
@@ -195,9 +205,7 @@ def logs(
         Exit code (0 for success, non-zero for failure).
 
     """
-    return _run_with_cli_error_handling(
-        lambda: stream_environment_logs(cluster_name, namespace, follow=follow)
-    )
+    return stream_environment_logs(cluster_name, namespace, follow=follow)
 
 
 def main() -> int:

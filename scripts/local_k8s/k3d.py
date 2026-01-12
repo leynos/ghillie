@@ -66,9 +66,7 @@ def _ensure_valid_host_port(port: int) -> None:
         raise ValueError(msg)
 
 
-def _run_k3d_json(
-    args: list[str], *, timeout: float | None = None
-) -> Any:  # noqa: ANN401
+def _run_k3d_json(args: list[str], *, timeout: float | None = None) -> Any:  # noqa: ANN401
     """Run a k3d command and parse JSON output."""
     try:
         result = subprocess.run(  # noqa: S603
