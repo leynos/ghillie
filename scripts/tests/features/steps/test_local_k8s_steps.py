@@ -1,0 +1,402 @@
+"""Behavioural coverage for the local k3d preview environment lifecycle."""
+
+from __future__ import annotations
+
+import base64
+import io
+import subprocess
+import typing as typ
+from contextlib import redirect_stdout
+
+import pytest
+from conftest import load_script_app
+from pytest_bdd import given, parsers, scenario, then, when
+
+if typ.TYPE_CHECKING:
+    from pathlib import Path
+
+
+class LocalK8sContext(typ.TypedDict, total=False):
+    """Shared mutable scenario state."""
+
+    cluster_exists: bool
+    cluster_name: str
+    captured_calls: list[tuple[str, ...]]
+    stdout: str
+    exit_code: int
+    kubeconfig_path: str
+
+
+class SubprocessMock:
+    """Mock for subprocess.run that tracks calls and returns appropriate results."""
+
+    def __init__(
+        self, context: LocalK8sContext, *, cluster_exists: bool, cluster_name: str
+    ) -> None:
+        """Initialize the mock with context and cluster state."""
+        self.context = context
+        self.cluster_exists = cluster_exists
+        self.cluster_name = cluster_name
+        self._handlers: dict[str, typ.Callable[[list[str]], tuple[str, int]]] = {
+            "which": self._handle_which,
+            "k3d": self._handle_k3d,
+            "kubectl": self._handle_kubectl,
+            "helm": self._handle_helm,
+            "docker": self._handle_docker,
+        }
+
+    def _handle_which(self, args: list[str]) -> tuple[str, int]:
+        return f"/usr/bin/{args[1]}", 0
+
+    def _handle_k3d(self, args: list[str]) -> tuple[str, int]:
+        if args[1:3] == ["cluster", "list"]:
+            # k3d cluster list -o json returns JSON array with port mappings
+            if self.cluster_exists:
+                cluster_json = f"""[{{
+                    "name": "{self.cluster_name}",
+                    "nodes": [{{
+                        "name": "k3d-{self.cluster_name}-serverlb",
+                        "portMappings": {{
+                            "80/tcp": [{{"HostPort": "12345"}}]
+                        }}
+                    }}]
+                }}]"""
+                return cluster_json, 0
+            return "[]", 0
+        if args[1:3] == ["kubeconfig", "write"]:
+            # Return the path to the mock kubeconfig file created in the fixture
+            return self.context.get("kubeconfig_path", "/mock/kubeconfig"), 0
+        return "", 0  # create, delete, image import
+
+    def _handle_kubectl(self, args: list[str]) -> tuple[str, int]:
+        if args[1:3] == ["get", "namespace"]:
+            return "", 1  # namespace doesn't exist
+        if args[1:3] == ["get", "secret"]:
+            return self._handle_kubectl_get_secret(args)
+        if args[1:3] == ["get", "pods"]:
+            # Check if JSON output is requested (for pre-flight pod existence check)
+            if "-o" in args and "json" in " ".join(args):
+                return '{"items": [{"metadata": {"name": "pod-1"}}]}', 0
+            return "NAME           READY   STATUS\nghillie-abc   1/1     Running", 0
+        return "", 0  # create, apply, wait, logs, rollout
+
+    def _handle_kubectl_get_secret(self, args: list[str]) -> tuple[str, int]:
+        joined = " ".join(args)
+        # Check for jsonpath output format (can be "-o jsonpath" or "-o=jsonpath")
+        if "jsonpath" in joined:
+            if "pg-ghillie" in joined:
+                # CNPG stores a complete URI in the "uri" field
+                db_url = "postgresql://ghillie:pass@pg-ghillie:5432/ghillie"
+                return base64.b64encode(db_url.encode()).decode(), 0
+            if "valkey-ghillie" in joined:
+                # Valkey operator stores only "password", URI is constructed
+                # S105: This is test fixture data, not a production secret
+                password = "testpassword"  # noqa: S105
+                return base64.b64encode(password.encode()).decode(), 0
+        return "", 0
+
+    def _handle_helm(self, _args: list[str]) -> tuple[str, int]:
+        return "", 0  # repo, upgrade, uninstall all succeed
+
+    def _handle_docker(self, _args: list[str]) -> tuple[str, int]:
+        return "", 0  # build succeeds
+
+    def __call__(
+        self,
+        args: list[str],
+        **kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        """Handle a subprocess.run call."""
+        # Extract parameters from kwargs with defaults
+        check = kwargs.get("check", False)
+        capture_output = kwargs.get("capture_output", False)
+
+        self.context["captured_calls"].append(tuple(args))
+
+        handler = self._handlers.get(args[0], lambda _: ("", 0))
+        stdout, returncode = handler(args)
+
+        if check and returncode != 0:
+            raise subprocess.CalledProcessError(returncode, args, stdout, "")
+
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=returncode,
+            stdout=stdout if capture_output else "",
+            stderr="",
+        )
+
+
+# Scenario wrappers
+@scenario("../local_k8s.feature", "Create preview environment from scratch")
+def test_create_preview_from_scratch() -> None:
+    """Wrap the pytest-bdd scenario for creating preview from scratch."""
+
+
+@scenario("../local_k8s.feature", "Idempotent up reuses existing cluster")
+def test_idempotent_up_reuses_cluster() -> None:
+    """Wrap the pytest-bdd scenario for idempotent up."""
+
+
+@scenario("../local_k8s.feature", "Delete preview environment")
+def test_delete_preview_environment() -> None:
+    """Wrap the pytest-bdd scenario for deleting preview."""
+
+
+@scenario("../local_k8s.feature", "Status shows pod information")
+def test_status_shows_pod_information() -> None:
+    """Wrap the pytest-bdd scenario for status command."""
+
+
+@scenario("../local_k8s.feature", "Status for missing cluster")
+def test_status_for_missing_cluster() -> None:
+    """Wrap the pytest-bdd scenario for status when cluster is missing."""
+
+
+@scenario("../local_k8s.feature", "Up with skip-build does not build or import image")
+def test_up_with_skip_build() -> None:
+    """Wrap the pytest-bdd scenario for up with skip-build."""
+
+
+@pytest.fixture
+def local_k8s_context(tmp_path: Path) -> LocalK8sContext:
+    """Provide shared context for the BDD steps.
+
+    Creates a temporary kubeconfig file for the mocked k3d kubeconfig write
+    command to return, since write_kubeconfig validates that the file exists.
+    """
+    kubeconfig_file = tmp_path / "kubeconfig-mock.yaml"
+    kubeconfig_file.touch()
+    return {
+        "cluster_exists": False,
+        "captured_calls": [],
+        "stdout": "",
+        "exit_code": -1,
+        "kubeconfig_path": str(kubeconfig_file),
+    }
+
+
+# Background step
+@given("the CLI tools docker, k3d, kubectl, and helm are available")
+def given_tools_available() -> None:
+    """Ensure the required CLI tools are considered available (handled by mock)."""
+
+
+# Given steps
+@given(parsers.parse("no k3d cluster named {cluster_name} exists"))
+def given_no_cluster_exists(
+    local_k8s_context: LocalK8sContext, cluster_name: str
+) -> None:
+    """Configure context to indicate no cluster exists."""
+    local_k8s_context["cluster_exists"] = False
+    local_k8s_context["cluster_name"] = cluster_name
+
+
+@given(parsers.parse("a k3d cluster named {cluster_name} exists"))
+def given_cluster_exists(local_k8s_context: LocalK8sContext, cluster_name: str) -> None:
+    """Configure context to indicate cluster already exists."""
+    local_k8s_context["cluster_exists"] = True
+    local_k8s_context["cluster_name"] = cluster_name
+
+
+def _run_command(
+    ctx: LocalK8sContext, monkeypatch: pytest.MonkeyPatch, args: list[str]
+) -> None:
+    """Execute a CLI command with mocked subprocess and capture output."""
+    mock = SubprocessMock(
+        ctx,
+        cluster_exists=ctx.get("cluster_exists", False),
+        cluster_name=ctx.get("cluster_name", "ghillie-local"),
+    )
+    monkeypatch.setattr("subprocess.run", mock)
+    # Mock shutil.which to return a path for all required tools
+    monkeypatch.setattr("shutil.which", lambda name: f"/usr/bin/{name}")
+
+    app = load_script_app()
+    captured = io.StringIO()
+    with redirect_stdout(captured):
+        try:
+            exit_code = app(args)
+            ctx["exit_code"] = exit_code if exit_code is not None else 0
+        except SystemExit as e:
+            ctx["exit_code"] = e.code if isinstance(e.code, int) else 1
+
+    ctx["stdout"] = captured.getvalue()
+
+
+# When steps
+@when("I run local_k8s up")
+def when_run_up(
+    local_k8s_context: LocalK8sContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Execute the up command with mocked subprocess."""
+    _run_command(local_k8s_context, monkeypatch, ["up", "--ingress-port=12345"])
+
+
+@when("I run local_k8s down")
+def when_run_down(
+    local_k8s_context: LocalK8sContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Execute the down command with mocked subprocess."""
+    _run_command(local_k8s_context, monkeypatch, ["down"])
+
+
+@when("I run local_k8s status")
+def when_run_status(
+    local_k8s_context: LocalK8sContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Execute the status command with mocked subprocess."""
+    _run_command(local_k8s_context, monkeypatch, ["status"])
+
+
+@when("I run local_k8s up with skip-build")
+def when_run_up_with_skip_build(
+    local_k8s_context: LocalK8sContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Execute the up command with --skip-build and mocked subprocess."""
+    _run_command(
+        local_k8s_context, monkeypatch, ["up", "--skip-build", "--ingress-port=12345"]
+    )
+
+
+# Then steps - assertions on captured calls
+def _has_call(ctx: LocalK8sContext, prefix: tuple[str, ...]) -> bool:
+    return any(c[: len(prefix)] == prefix for c in ctx["captured_calls"])
+
+
+def _has_call_containing(
+    ctx: LocalK8sContext, prefix: tuple[str, ...], text: str
+) -> bool:
+    calls = [c for c in ctx["captured_calls"] if c[: len(prefix)] == prefix]
+    return any(text.lower() in str(c).lower() for c in calls)
+
+
+@then(parsers.parse("a k3d cluster named {cluster_name} is created"))
+def then_cluster_created(local_k8s_context: LocalK8sContext, cluster_name: str) -> None:
+    """Verify k3d cluster create was called."""
+    assert _has_call_containing(
+        local_k8s_context, ("k3d", "cluster", "create"), cluster_name
+    ), "Expected k3d cluster create with cluster name"
+
+
+@then("the CNPG operator is installed")
+def then_cnpg_operator_installed(local_k8s_context: LocalK8sContext) -> None:
+    """Verify CNPG operator installation was triggered."""
+    assert _has_call_containing(local_k8s_context, ("helm",), "cnpg"), (
+        "Expected CNPG helm installation"
+    )
+
+
+@then("a CNPG Postgres cluster is created")
+def then_cnpg_cluster_created(local_k8s_context: LocalK8sContext) -> None:
+    """Verify CNPG Postgres cluster creation via kubectl apply."""
+    assert _has_call(local_k8s_context, ("kubectl", "apply")), "Expected kubectl apply"
+
+
+@then("the Valkey operator is installed")
+def then_valkey_operator_installed(local_k8s_context: LocalK8sContext) -> None:
+    """Verify Valkey operator installation via Helm was triggered."""
+    assert _has_call_containing(local_k8s_context, ("helm",), "valkey"), (
+        "Expected Valkey helm installation"
+    )
+
+
+@then("a Valkey instance is created")
+def then_valkey_instance_created(local_k8s_context: LocalK8sContext) -> None:
+    """Verify Valkey instance creation via kubectl apply."""
+    apply_calls = [
+        c for c in local_k8s_context["captured_calls"] if c[:2] == ("kubectl", "apply")
+    ]
+    assert len(apply_calls) >= 2, "Expected multiple kubectl apply calls"
+
+
+@then("a secret named ghillie exists with DATABASE_URL and VALKEY_URL")
+def then_secret_created(local_k8s_context: LocalK8sContext) -> None:
+    """Verify secret creation via kubectl apply with JSON manifest."""
+    # The secret is now created via kubectl apply -f - with a JSON manifest
+    apply_calls = [
+        c for c in local_k8s_context["captured_calls"] if c[:2] == ("kubectl", "apply")
+    ]
+    assert len(apply_calls) >= 3, "Expected kubectl apply calls including secret"
+
+
+@then("the Docker image is built and imported")
+def then_docker_image_built(local_k8s_context: LocalK8sContext) -> None:
+    """Verify Docker image was built and imported to k3d."""
+    assert _has_call(local_k8s_context, ("docker", "build")), "Expected docker build"
+    assert _has_call(local_k8s_context, ("k3d", "image", "import")), (
+        "Expected k3d image import"
+    )
+
+
+@then("the Ghillie Helm chart is installed")
+def then_helm_chart_installed(local_k8s_context: LocalK8sContext) -> None:
+    """Verify Ghillie Helm chart was installed."""
+    assert _has_call_containing(local_k8s_context, ("helm",), "upgrade"), (
+        "Expected helm upgrade"
+    )
+
+
+@then("the preview URL is printed to stdout")
+def then_preview_url_printed(local_k8s_context: LocalK8sContext) -> None:
+    """Verify the preview URL appears in stdout."""
+    assert "http://127.0.0.1:" in local_k8s_context["stdout"], (
+        "Expected preview URL in stdout"
+    )
+
+
+@then(parsers.parse("the exit code is {code:d}"))
+def then_exit_code(local_k8s_context: LocalK8sContext, code: int) -> None:
+    """Verify the exit code matches expected."""
+    assert local_k8s_context["exit_code"] == code, f"Expected exit code {code}"
+
+
+@then("the existing cluster is not deleted")
+def then_cluster_not_deleted(local_k8s_context: LocalK8sContext) -> None:
+    """Verify that k3d cluster delete was not called."""
+    assert not _has_call(local_k8s_context, ("k3d", "cluster", "delete")), (
+        "Expected no k3d cluster delete"
+    )
+
+
+@then("the Helm release is upgraded")
+def then_helm_release_upgraded(local_k8s_context: LocalK8sContext) -> None:
+    """Verify Helm release was upgraded."""
+    assert _has_call_containing(local_k8s_context, ("helm",), "upgrade"), (
+        "Expected helm upgrade"
+    )
+
+
+@then("the k3d cluster is deleted")
+def then_cluster_deleted(local_k8s_context: LocalK8sContext) -> None:
+    """Verify k3d cluster was deleted."""
+    assert _has_call(local_k8s_context, ("k3d", "cluster", "delete")), (
+        "Expected k3d delete"
+    )
+
+
+@then("pod status is printed")
+def then_pod_status_printed(local_k8s_context: LocalK8sContext) -> None:
+    """Verify pod status was queried."""
+    assert _has_call(local_k8s_context, ("kubectl", "get", "pods")), (
+        "Expected kubectl get pods"
+    )
+
+
+@then(parsers.parse('the output contains "{text}"'))
+def then_output_contains(local_k8s_context: LocalK8sContext, text: str) -> None:
+    """Verify the output contains the expected text."""
+    assert text in local_k8s_context["stdout"], (
+        f"Expected '{text}' in output, got: {local_k8s_context['stdout']}"
+    )
+
+
+@then("Docker image is not built or imported")
+def then_docker_image_not_built_or_imported(local_k8s_context: LocalK8sContext) -> None:
+    """Assert that no Docker build or k3d image import commands were invoked."""
+    assert not _has_call(local_k8s_context, ("docker", "build")), (
+        "Expected no docker build call"
+    )
+    assert not _has_call(local_k8s_context, ("k3d", "image", "import")), (
+        "Expected no k3d image import call"
+    )
