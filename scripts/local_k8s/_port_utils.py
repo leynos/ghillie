@@ -1,4 +1,4 @@
-"""Port parsing helpers for k3d cluster metadata."""
+"""Internal port-parsing utilities for k3d cluster ingress resolution."""
 
 from __future__ import annotations
 
@@ -35,19 +35,27 @@ def _find_host_port_in_mappings(mappings: list[dict] | None) -> int | None:
     return None
 
 
-def extract_http_host_port(cluster: dict) -> int | None:
+def _find_http_port_in_node(node: dict) -> int | None:
+    """Return the HTTP host port from a node's port mappings."""
+    port_mappings = node.get("portMappings")
+    if not port_mappings:
+        return None
+    for container_port, mappings in port_mappings.items():
+        if not _is_http_port(container_port):
+            continue
+        port = _find_host_port_in_mappings(mappings)
+        if port is not None:
+            return port
+    return None
+
+
+def _extract_http_host_port(cluster: dict) -> int | None:
     """Extract the HTTP host port from a k3d cluster definition."""
     nodes = cluster.get("nodes")
     if not nodes:
         return None
     for node in nodes:
-        port_mappings = node.get("portMappings")
-        if not port_mappings:
-            continue
-        for container_port, mappings in port_mappings.items():
-            if not _is_http_port(container_port):
-                continue
-            port = _find_host_port_in_mappings(mappings)
-            if port is not None:
-                return port
+        port = _find_http_port_in_node(node)
+        if port is not None:
+            return port
     return None

@@ -49,7 +49,13 @@ import subprocess
 from pathlib import Path
 from typing import Any  # noqa: ICN003
 
-from .k3d_ports import extract_http_host_port as _extract_http_host_port
+from ._port_utils import (  # noqa: F401
+    _extract_http_host_port,
+    _find_host_port_in_mappings,
+    _find_http_port_in_node,
+    _is_http_port,
+    _parse_host_port,
+)
 
 # Default timeout for k3d subprocess operations (seconds)
 _K3D_SUBPROCESS_TIMEOUT = 60
