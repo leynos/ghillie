@@ -46,13 +46,17 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import typing as typ
 from pathlib import Path
+from typing import Any  # noqa: ICN003
 
-from local_k8s._port_utils import _MAX_PORT, _MIN_PORT, _extract_http_host_port
+from .k3d_ports import extract_http_host_port as _extract_http_host_port
 
 # Default timeout for k3d subprocess operations (seconds)
 _K3D_SUBPROCESS_TIMEOUT = 60
+
+# Port range constants for validation
+_MIN_PORT = 1024
+_MAX_PORT = 65535
 
 
 def _ensure_valid_host_port(port: int) -> None:
@@ -62,7 +66,9 @@ def _ensure_valid_host_port(port: int) -> None:
         raise ValueError(msg)
 
 
-def _run_k3d_json(args: list[str], *, timeout: float | None = None) -> typ.Any:  # noqa: ANN401
+def _run_k3d_json(
+    args: list[str], *, timeout: float | None = None
+) -> Any:  # noqa: ANN401
     """Run a k3d command and parse JSON output."""
     try:
         result = subprocess.run(  # noqa: S603
@@ -75,42 +81,36 @@ def _run_k3d_json(args: list[str], *, timeout: float | None = None) -> typ.Any: 
         )
     except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return None
-    else:
-        try:
-            return json.loads(result.stdout)
-        except json.JSONDecodeError:
-            return None
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
 
 
-def _list_clusters() -> list[dict] | None:
+def _list_clusters(*, timeout: float | None = None) -> list[dict]:
     """List all k3d clusters as parsed JSON.
 
     Returns:
-        List of cluster dicts if successful, None on error.
+        List of cluster dicts if successful, empty list on error.
 
     """
-    result = _run_k3d_json(["cluster", "list"])
-    if isinstance(result, list):
-        return result
-    return None
+    result = _run_k3d_json(["cluster", "list"], timeout=timeout)
+    return result if isinstance(result, list) else []
 
 
-def _find_cluster(cluster_name: str) -> dict | None:
+def _find_cluster(name: str, clusters: list[dict]) -> dict | None:
     """Find a cluster by name from the list of k3d clusters.
 
     Args:
-        cluster_name: Name of the cluster to find.
+        name: Name of the cluster to find.
+        clusters: List of cluster metadata to search.
 
     Returns:
         The cluster dict if found, None otherwise.
 
     """
-    clusters = _list_clusters()
-    if clusters is None:
-        return None
-
     for cluster in clusters:
-        if cluster.get("name") == cluster_name:
+        if cluster.get("name") == name:
             return cluster
 
     return None
@@ -133,11 +133,7 @@ def get_cluster_ingress_port(cluster_name: str) -> int | None:
         The host port as an int if found, None otherwise.
 
     """
-    clusters = _run_k3d_json(["cluster", "list"])
-    cluster = next(
-        (item for item in clusters or [] if item.get("name") == cluster_name),
-        None,
-    )
+    cluster = _find_cluster(cluster_name, _list_clusters())
     if cluster is None:
         return None
 
@@ -159,8 +155,7 @@ def cluster_exists(cluster_name: str) -> bool:
         is unavailable or returns invalid output.
 
     """
-    clusters = _run_k3d_json(["cluster", "list"])
-    return any(cluster.get("name") == cluster_name for cluster in clusters or [])
+    return _find_cluster(cluster_name, _list_clusters()) is not None
 
 
 def create_k3d_cluster(
