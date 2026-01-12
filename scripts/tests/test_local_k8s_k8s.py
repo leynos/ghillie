@@ -11,48 +11,53 @@ if typ.TYPE_CHECKING:
     from cmd_mox import CmdMox
 
 
+class ReadSecretFieldCase(typ.NamedTuple):
+    """Parameters for read_secret_field success cases."""
+
+    field: str
+    kubectl_stdout: str
+    expected: str
+
+
 class TestReadSecretField:
     """Tests for read_secret_field validation and decoding."""
 
-    def test_decodes_base64_secret(
-        self, cmd_mox: CmdMox, test_env: dict[str, str]
+    @pytest.mark.parametrize(
+        "case",
+        [
+            ReadSecretFieldCase("uri", "aGVsbG8=", "hello"),
+            ReadSecretFieldCase("ca.crt", "Y2VydA==", "cert"),
+            ReadSecretFieldCase("uri", "  aGVsbG8= \n", "hello"),
+            ReadSecretFieldCase(
+                "Db_Url-Primary", "cG9zdGdyZXM6Ly9sb2NhbA==", "postgres://local"
+            ),
+        ],
+        ids=[
+            "decodes-base64",
+            "handles-dotted-field",
+            "strips-whitespace",
+            "accepts-valid-field-names",
+        ],
+    )
+    def test_reads_and_decodes_secret_fields(
+        self,
+        cmd_mox: CmdMox,
+        test_env: dict[str, str],
+        case: ReadSecretFieldCase,
     ) -> None:
-        """Should decode base64-encoded secret value."""
-        # "secretvalue" base64 encoded
-        encoded = "c2VjcmV0dmFsdWU="
-
+        """Should read and decode secret fields for supported formats."""
         cmd_mox.mock("kubectl").with_args(
             "get",
             "secret",
             "my-secret",
             "--namespace=ghillie",
             "-o",
-            "jsonpath={.data['password']}",
-        ).returns(exit_code=0, stdout=encoded)
+            f"jsonpath={{.data['{case.field}']}}",
+        ).returns(stdout=case.kubectl_stdout, exit_code=0)
 
-        result = read_secret_field("my-secret", "password", "ghillie", test_env)
+        actual = read_secret_field("my-secret", case.field, "ghillie", test_env)
 
-        assert result == "secretvalue"
-
-    def test_handles_dotted_field_names(
-        self, cmd_mox: CmdMox, test_env: dict[str, str]
-    ) -> None:
-        """Should handle dotted field names like ca.crt."""
-        # "cert-data" base64 encoded
-        encoded = "Y2VydC1kYXRh"
-
-        cmd_mox.mock("kubectl").with_args(
-            "get",
-            "secret",
-            "tls-secret",
-            "--namespace=ghillie",
-            "-o",
-            "jsonpath={.data['ca.crt']}",
-        ).returns(exit_code=0, stdout=encoded)
-
-        result = read_secret_field("tls-secret", "ca.crt", "ghillie", test_env)
-
-        assert result == "cert-data"
+        assert actual == case.expected
 
     def test_raises_on_empty_field(self, test_env: dict[str, str]) -> None:
         """Should raise ValueError when field is empty."""
@@ -76,38 +81,6 @@ class TestReadSecretField:
         with pytest.raises(ValueError, match=error_match):
             read_secret_field("my-secret", field, "ghillie", test_env)
 
-    @pytest.mark.parametrize(
-        "field",
-        [
-            "password",
-            "DATABASE_URL",
-            "ca.crt",
-            "my-key",
-            "key_name",
-            "field.with.dots",
-            "MixedCase123",
-        ],
-    )
-    def test_accepts_valid_field_names(
-        self, cmd_mox: CmdMox, field: str, test_env: dict[str, str]
-    ) -> None:
-        """Should accept valid Kubernetes secret key names."""
-        # "test" base64 encoded
-        encoded = "dGVzdA=="
-
-        cmd_mox.mock("kubectl").with_args(
-            "get",
-            "secret",
-            "my-secret",
-            "--namespace=ghillie",
-            "-o",
-            f"jsonpath={{.data['{field}']}}",
-        ).returns(exit_code=0, stdout=encoded)
-
-        result = read_secret_field("my-secret", field, "ghillie", test_env)
-
-        assert result == "test"
-
     def test_raises_on_empty_output(
         self, cmd_mox: CmdMox, test_env: dict[str, str]
     ) -> None:
@@ -123,23 +96,3 @@ class TestReadSecretField:
 
         with pytest.raises(ValueError, match="empty or missing"):
             read_secret_field("my-secret", "password", "ghillie", test_env)
-
-    def test_strips_whitespace_from_output(
-        self, cmd_mox: CmdMox, test_env: dict[str, str]
-    ) -> None:
-        """Should strip whitespace from kubectl output before decoding."""
-        # "value" base64 encoded, with trailing whitespace
-        encoded = "dmFsdWU=\n  "
-
-        cmd_mox.mock("kubectl").with_args(
-            "get",
-            "secret",
-            "my-secret",
-            "--namespace=ghillie",
-            "-o",
-            "jsonpath={.data['key']}",
-        ).returns(exit_code=0, stdout=encoded)
-
-        result = read_secret_field("my-secret", "key", "ghillie", test_env)
-
-        assert result == "value"
