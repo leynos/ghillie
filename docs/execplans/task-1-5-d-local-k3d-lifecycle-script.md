@@ -66,7 +66,7 @@ Thresholds that trigger escalation when breached:
   current CRD schema before implementing; make manifest generation a separate
   function for easy updates.
 
-- **Risk:** CloudNativePG (CNPG) secret naming convention changes.
+- **Risk:** CNPG secret naming convention changes.
   Severity: low. Likelihood: low. Mitigation: Use consistent naming
   (`pg-ghillie`) and verify secret name pattern in unit tests.
 
