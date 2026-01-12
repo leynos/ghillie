@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from local_k8s import ExecutableNotFoundError
 from local_k8s.validation import (
+    SecretDecodeError,
     b64decode_k8s_secret_field,
     pick_free_loopback_port,
     require_exe,
@@ -28,11 +29,14 @@ class TestRequireExe:
 
     def test_raises_for_missing_executable(self) -> None:
         """require_exe should raise ExecutableNotFoundError for missing exe."""
-        with pytest.raises(ExecutableNotFoundError) as exc_info:
+        with pytest.raises(
+            ExecutableNotFoundError,
+            match=(
+                "Required executable 'definitely_not_a_real_executable_xyz_123' "
+                "not found in PATH"
+            ),
+        ):
             require_exe("definitely_not_a_real_executable_xyz_123")
-
-        assert "definitely_not_a_real_executable_xyz_123" in str(exc_info.value)
-        assert "not found" in str(exc_info.value).lower()
 
 
 class TestPickFreeLoopbackPort:
@@ -71,3 +75,8 @@ class TestB64DecodeK8sSecretField:
         # "café" in base64
         encoded = "Y2Fmw6k="
         assert b64decode_k8s_secret_field(encoded) == "café"
+
+    def test_raises_on_invalid_base64(self) -> None:
+        """Should raise SecretDecodeError for invalid base64 input."""
+        with pytest.raises(SecretDecodeError, match="Failed to decode secret field"):
+            b64decode_k8s_secret_field("not-base64")

@@ -27,6 +27,9 @@ from pathlib import Path
 if typ.TYPE_CHECKING:
     from local_k8s.config import Config
 
+# Timeout for Helm install operations (seconds).
+_HELM_INSTALL_TIMEOUT = 600
+
 
 def create_app_secret(
     cfg: Config,
@@ -65,6 +68,11 @@ def create_app_secret(
         "metadata": {
             "name": cfg.app_secret_name,
             "namespace": cfg.namespace,
+            "labels": {
+                "app.kubernetes.io/managed-by": "local_k8s",
+                "app.kubernetes.io/name": cfg.app_name,
+                "app.kubernetes.io/instance": cfg.app_name,
+            },
         },
         "stringData": {
             "DATABASE_URL": database_url,
@@ -72,11 +80,10 @@ def create_app_secret(
         },
     }
 
-    # Apply via stdin for idempotent upsert
-    # S607: kubectl via PATH is standard; shell=False mitigates injection
-    # S603 not needed: command is static and shell=False.
-    subprocess.run(
-        ["kubectl", "apply", "-f", "-"],  # noqa: S607
+    # Apply via stdin for idempotent upsert; shell=False mitigates injection.
+    cmd = ["kubectl", "apply", "-f", "-"]
+    subprocess.run(  # noqa: S603
+        cmd,
         input=json.dumps(secret_manifest),
         text=True,
         check=True,
@@ -154,7 +161,7 @@ def install_ghillie_chart(cfg: Config, env: dict[str, str]) -> None:
             "helm",
             "upgrade",
             "--install",
-            "ghillie",
+            cfg.app_name,
             str(cfg.chart_path),
             "--namespace",
             cfg.namespace,
@@ -166,10 +173,12 @@ def install_ghillie_chart(cfg: Config, env: dict[str, str]) -> None:
             "--set",
             f"image.tag={cfg.image_tag}",
             "--wait",
+            "--timeout",
+            f"{_HELM_INSTALL_TIMEOUT}s",
         ],
         check=True,
         env=env,
-        timeout=600,
+        timeout=_HELM_INSTALL_TIMEOUT,
     )
 
 
@@ -203,7 +212,7 @@ def print_status(cfg: Config, env: dict[str, str]) -> None:
 def tail_logs(cfg: Config, env: dict[str, str], *, follow: bool = False) -> None:
     """Stream logs from Ghillie pods.
 
-    Uses kubectl logs to display logs from pods with the app=ghillie label.
+    Uses kubectl logs to display logs from pods with the configured app label.
 
     Args:
         cfg: Configuration with namespace.
@@ -216,7 +225,7 @@ def tail_logs(cfg: Config, env: dict[str, str], *, follow: bool = False) -> None
     cmd = [
         "kubectl",
         "logs",
-        "--selector=app.kubernetes.io/name=ghillie",
+        f"--selector=app.kubernetes.io/name={cfg.app_name}",
         f"--namespace={cfg.namespace}",
     ]
     if follow:

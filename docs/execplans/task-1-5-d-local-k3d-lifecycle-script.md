@@ -1,4 +1,4 @@
-# Implement local k3d lifecycle script (Task 1.5.d)
+# Implement local k3d lifecycle script (task 1.5.d)
 
 This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
@@ -9,7 +9,7 @@ Status: COMPLETE
 This document must be maintained in accordance with `docs/execplans/PLANS.md`
 (if it exists) and the execplans skill guidance.
 
-## Purpose / Big Picture
+## Purpose / big picture
 
 Provide a Python script (`scripts/local_k8s.py`) and Makefile targets that
 enable developers to create a local k3d-based preview environment for Ghillie.
@@ -46,7 +46,7 @@ Hard invariants that must hold throughout implementation:
   `build` where needed).
 - The script must not modify any existing files beyond adding Makefile targets.
 
-## Tolerances (Exception Triggers)
+## Tolerances (exception triggers)
 
 Thresholds that trigger escalation when breached:
 
@@ -76,21 +76,22 @@ Thresholds that trigger escalation when breached:
 
 ## Progress
 
-- [x] (2026-01-08) Stage 1: Scaffold CLI structure and Config dataclass
-- [x] (2026-01-08) Stage 2: Implement port selection and executable verification
+- [x] (2026-01-08) Stage 1: scaffold CLI structure and Config dataclass
+- [x] (2026-01-08) Stage 2: implement port selection and executable verification
   helpers
-- [x] (2026-01-08) Stage 3: Implement k3d cluster lifecycle helpers
-- [x] (2026-01-08) Stage 4: Implement namespace and CNPG helpers
-- [x] (2026-01-08) Stage 5: Implement Valkey helpers
-- [x] (2026-01-08) Stage 6: Implement application secret and image helpers
-- [x] (2026-01-08) Stage 7: Implement Helm chart installation helpers
-- [x] (2026-01-08) Stage 8: Wire up `up`, `down`, `status`, `logs` commands
-- [x] (2026-01-08) Stage 9: Add Makefile targets
-- [x] (2026-01-08) Stage 10: Add BDD behavioural tests
-- [x] (2026-01-08) Stage 11: Update users' guide documentation
-- [x] (2026-01-08) Stage 12: Update roadmap to mark task complete
+- [x] (2026-01-08) Stage 3: implement k3d cluster lifecycle helpers
+- [x] (2026-01-08) Stage 4: implement namespace and CNPG helpers
+- [x] (2026-01-08) Stage 5: implement Valkey helpers
+- [x] (2026-01-08) Stage 6: implement application secret and image helpers
+- [x] (2026-01-08) Stage 7: implement Helm chart installation helpers
+- [x] (2026-01-08) Stage 8: wire up `up`, `down`, `status`, `logs` commands
+- [x] (2026-01-08) Stage 9: add Makefile targets
+- [x] (2026-01-08) Stage 10: add Behaviour-Driven Development (BDD) behavioural
+  tests
+- [x] (2026-01-08) Stage 11: update users' guide documentation
+- [x] (2026-01-08) Stage 12: update roadmap to mark task complete
 
-## Surprises & Discoveries
+## Surprises & discoveries
 
 - **Observation:** cmd-mox works well for single-call scenarios, but monkeypatch
   is more suitable for functions that make multiple subprocess calls with
@@ -102,7 +103,7 @@ Thresholds that trigger escalation when breached:
   needed to return valid JSON instead of tabular output. Impact: Updated
   SubprocessMock to return JSON arrays for `k3d cluster list -o json`.
 
-## Decision Log
+## Decision log
 
 - **Decision:** Use Cyclopts with environment variable support rather than
   argparse. Rationale: Aligns with `docs/scripting-standards.md`; provides
@@ -124,7 +125,7 @@ Thresholds that trigger escalation when breached:
   kubectl apply. Rationale: Matches the approach used for CNPG operator and
   provides consistent operator lifecycle management. Date: 2026-01-08.
 
-## Outcomes & Retrospective
+## Outcomes & retrospective
 
 **What was achieved:**
 
@@ -145,7 +146,7 @@ Thresholds that trigger escalation when breached:
 3. The Cyclopts framework's environment variable support simplifies CI
    integration without adding custom argument handling code.
 
-## Context and Orientation
+## Context and orientation
 
 The Ghillie project already has:
 
@@ -162,11 +163,11 @@ The Ghillie project already has:
 
 The implementation will create:
 
-- `scripts/local_k8s.py` - Main CLI script
-- `scripts/tests/conftest.py` - pytest configuration with cmd-mox
-- `scripts/tests/test_local_k8s.py` - Unit tests for helpers
-- `scripts/tests/features/local_k8s.feature` - BDD scenarios
-- `scripts/tests/features/steps/test_local_k8s_steps.py` - Step definitions
+- `scripts/local_k8s.py` — Main CLI script
+- `scripts/tests/conftest.py` — pytest configuration with cmd-mox
+- `scripts/tests/test_local_k8s.py` — Unit tests for helpers
+- `scripts/tests/features/local_k8s.feature` — BDD scenarios
+- `scripts/tests/features/steps/test_local_k8s_steps.py` — Step definitions
 
 Key external tools the script will invoke:
 
@@ -175,9 +176,9 @@ Key external tools the script will invoke:
 - `kubectl` — Kubernetes operations
 - `helm` — Chart operations
 
-## Plan of Work
+## Plan of work
 
-### Stage 1: Scaffold CLI structure and Config dataclass
+### Stage 1: scaffold CLI structure and Config dataclass
 
 Create `scripts/local_k8s.py` with:
 
@@ -190,12 +191,12 @@ Create `scripts/tests/conftest.py` with cmd-mox plugin registration.
 
 Create `scripts/tests/test_local_k8s.py` with initial tests:
 
-- `test_config_defaults` - verify Config dataclass defaults
-- `test_cli_has_subcommands` - verify all four subcommands exist
+- `test_config_defaults` — verify Config dataclass defaults
+- `test_cli_has_subcommands` — verify all four subcommands exist
 
 Validation: `make check-fmt && make lint && make typecheck && make test`
 
-### Stage 2: Implement port selection and executable verification helpers
+### Stage 2: implement port selection and executable verification helpers
 
 Add to `scripts/local_k8s.py`:
 
@@ -221,7 +222,7 @@ Add tests:
 
 Validation: Quality gates pass.
 
-### Stage 3: Implement k3d cluster lifecycle helpers
+### Stage 3: implement k3d cluster lifecycle helpers
 
 Add to `scripts/local_k8s.py`:
 
@@ -256,7 +257,7 @@ Add tests using cmd-mox:
 
 Validation: Quality gates pass.
 
-### Stage 4: Implement namespace and CNPG helpers
+### Stage 4: implement namespace and CNPG helpers
 
 Add to `scripts/local_k8s.py`:
 
@@ -304,7 +305,7 @@ Add tests:
 
 Validation: Quality gates pass.
 
-### Stage 5: Implement Valkey helpers
+### Stage 5: implement Valkey helpers
 
 Add to `scripts/local_k8s.py`:
 
@@ -341,7 +342,7 @@ Add tests:
 
 Validation: Quality gates pass.
 
-### Stage 6: Implement application secret and image helpers
+### Stage 6: implement application secret and image helpers
 
 Add to `scripts/local_k8s.py`:
 
@@ -372,7 +373,7 @@ Add tests:
 
 Validation: Quality gates pass.
 
-### Stage 7: Implement Helm chart installation helpers
+### Stage 7: implement Helm chart installation helpers
 
 Add to `scripts/local_k8s.py`:
 
@@ -399,7 +400,7 @@ Add tests:
 
 Validation: Quality gates pass.
 
-### Stage 8: Wire up `up`, `down`, `status`, `logs` commands
+### Stage 8: wire up `up`, `down`, `status`, `logs` commands
 
 Complete the Cyclopts command implementations:
 
@@ -450,7 +451,7 @@ Add unit tests for command orchestration:
 
 Validation: Quality gates pass.
 
-### Stage 9: Add Makefile targets
+### Stage 9: add Makefile targets
 
 Add to `Makefile` (after the `docker-run` target):
 
@@ -473,7 +474,7 @@ Update `.PHONY` declaration to include new targets.
 Validation: `make help` shows new targets; `make local-k8s-status` runs
 (expected to fail without cluster, but should invoke the script).
 
-### Stage 10: Add BDD behavioural tests
+### Stage 10: add BDD behavioural tests
 
 Create `scripts/tests/features/local_k8s.feature`:
 
@@ -522,7 +523,7 @@ Create step definitions in
 
 Validation: Quality gates pass; BDD tests pass with mocked externals.
 
-### Stage 11: Update users' guide documentation
+### Stage 11: update users' guide documentation
 
 Add section to `docs/users-guide.md` after container image section:
 
@@ -578,7 +579,7 @@ reuses the existing cluster and upgrades the Helm release.
 
 Validation: `make markdownlint && make nixie`
 
-### Stage 12: Update roadmap to mark task complete
+### Stage 12: update roadmap to mark task complete
 
 Edit `docs/roadmap.md` to change:
 
@@ -594,7 +595,7 @@ to:
 
 Validation: Roadmap reflects completion.
 
-## Concrete Steps
+## Concrete steps
 
 All commands run from the repository root.
 
@@ -652,7 +653,7 @@ make all
 make test 2>&1 | grep -E 'passed|failed'
 ```
 
-## Validation and Acceptance
+## Validation and acceptance
 
 Quality criteria:
 
@@ -687,7 +688,7 @@ make local-k8s-status
 make local-k8s-down
 ```
 
-## Idempotence and Recovery
+## Idempotence and recovery
 
 - Running `make local-k8s-up` multiple times is safe; existing clusters are
   reused.
@@ -697,7 +698,7 @@ make local-k8s-down
   then `make local-k8s-up` again.
 - All Helm installs use `upgrade --install` for idempotent behaviour.
 
-## Artifacts and Notes
+## Artifacts and notes
 
 ### Config dataclass (from design document)
 
@@ -720,7 +721,7 @@ class Config:
     app_secret_name: str = "ghillie"
 ```
 
-### CNPG Cluster manifest template
+### CNPG cluster manifest template
 
 ```yaml
 apiVersion: postgresql.cnpg.io/v1
@@ -762,7 +763,7 @@ k3d cluster create {cluster_name} \
   --port "127.0.0.1:{port}:80@loadbalancer"
 ```
 
-## Interfaces and Dependencies
+## Interfaces and dependencies
 
 ### Script dependencies (inline uv block)
 

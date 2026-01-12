@@ -18,6 +18,7 @@ class TestConfig:
 
         assert cfg.cluster_name == "ghillie-local", "cluster_name default mismatch"
         assert cfg.namespace == "ghillie", "namespace default mismatch"
+        assert cfg.app_name == "ghillie", "app_name default mismatch"
         assert cfg.ingress_port is None, "ingress_port should default to None"
         assert cfg.chart_path == Path("charts/ghillie"), "chart_path default mismatch"
         assert cfg.image_repo == "ghillie", "image_repo default mismatch"

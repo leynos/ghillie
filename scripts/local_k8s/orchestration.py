@@ -109,9 +109,16 @@ def _print_success_banner(port: int) -> None:
     print("=" * 60)
 
 
+class _ValidatedEnvironment(typ.NamedTuple):
+    """Validated config and environment for a cluster."""
+
+    cfg: Config
+    env: dict[str, str]
+
+
 def _validate_and_setup_environment(
     cluster_name: str, namespace: str
-) -> tuple[Config, dict[str, str]] | None:
+) -> _ValidatedEnvironment | None:
     """Validate cluster exists and return config and environment.
 
     Args:
@@ -119,7 +126,7 @@ def _validate_and_setup_environment(
         namespace: Kubernetes namespace.
 
     Returns:
-        Tuple of (Config, environment dict) if cluster exists, None otherwise.
+        Validated environment if cluster exists, None otherwise.
 
     """
     for exe in ("k3d", "kubectl"):
@@ -131,7 +138,7 @@ def _validate_and_setup_environment(
 
     cfg = Config(cluster_name=cluster_name, namespace=namespace)
     env = kubeconfig_env(cluster_name)
-    return cfg, env
+    return _ValidatedEnvironment(cfg=cfg, env=env)
 
 
 def _with_validated_environment(
@@ -144,8 +151,7 @@ def _with_validated_environment(
     if result is None:
         return 1
 
-    cfg, env = result
-    action(cfg, env)
+    action(result.cfg, result.env)
     return 0
 
 

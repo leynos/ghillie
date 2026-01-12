@@ -21,14 +21,14 @@ For lower-level operations, import directly from submodules:
 
 from __future__ import annotations
 
-from local_k8s.config import Config, HelmOperatorSpec
-from local_k8s.orchestration import (
+from .config import Config, HelmOperatorSpec
+from .orchestration import (
     setup_environment,
     show_environment_status,
     stream_environment_logs,
     teardown_environment,
 )
-from local_k8s.validation import (
+from .validation import (
     ExecutableNotFoundError,
     LocalK8sError,
     PortMismatchError,

@@ -73,10 +73,14 @@ def test_env(tmp_path: Path) -> dict[str, str]:
     Returns a copy of the current environment with KUBECONFIG pointing to
     a temporary file, allowing cmd-mox shims to work properly during testing.
 
-    Args:
-        tmp_path: Pytest's temporary path fixture.
+    Parameters
+    ----------
+    tmp_path : Path
+        Pytest's temporary path fixture.
 
-    Returns:
+    Returns
+    -------
+    dict[str, str]
         Environment dictionary with KUBECONFIG set to a temp file.
 
     """
@@ -102,10 +106,14 @@ def mock_subprocess_run(
     Creates a mock that captures subprocess.run invocations and returns
     successful CompletedProcess results.
 
-    Args:
-        monkeypatch: Pytest's monkeypatch fixture.
+    Parameters
+    ----------
+    monkeypatch : pytest.MonkeyPatch
+        Pytest's monkeypatch fixture.
 
-    Returns:
+    Returns
+    -------
+    MockSubprocessCapture
         MockSubprocessCapture with calls list and inputs list.
 
     """

@@ -63,6 +63,20 @@ def _handle_subprocess_error(e: subprocess.CalledProcessError) -> int:
     return 1
 
 
+def _run_with_cli_error_handling(action: typ.Callable[[], int]) -> int:
+    """Run a CLI action with consistent error handling."""
+    try:
+        return action()
+    except LocalK8sError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    except subprocess.CalledProcessError as e:
+        return _handle_subprocess_error(e)
+    except RuntimeError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
 app = App(
     name="local_k8s",
     help="Local k3d preview environment for Ghillie",
@@ -100,18 +114,11 @@ def up(
         Exit code (0 for success, non-zero for failure).
 
     """
-    try:
-        return setup_environment(
+    return _run_with_cli_error_handling(
+        lambda: setup_environment(
             cluster_name, namespace, ingress_port, skip_build=skip_build
         )
-    except LocalK8sError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-    except subprocess.CalledProcessError as e:
-        return _handle_subprocess_error(e)
-    except RuntimeError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
+    )
 
 
 @app.command
@@ -133,16 +140,7 @@ def down(
         Exit code (0 for success, non-zero for failure).
 
     """
-    try:
-        return teardown_environment(cluster_name)
-    except LocalK8sError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-    except subprocess.CalledProcessError as e:
-        return _handle_subprocess_error(e)
-    except RuntimeError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
+    return _run_with_cli_error_handling(lambda: teardown_environment(cluster_name))
 
 
 @app.command
@@ -168,16 +166,9 @@ def status(
         Exit code (0 for success, non-zero for failure).
 
     """
-    try:
-        return show_environment_status(cluster_name, namespace)
-    except LocalK8sError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-    except subprocess.CalledProcessError as e:
-        return _handle_subprocess_error(e)
-    except RuntimeError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
+    return _run_with_cli_error_handling(
+        lambda: show_environment_status(cluster_name, namespace)
+    )
 
 
 @app.command
@@ -204,16 +195,9 @@ def logs(
         Exit code (0 for success, non-zero for failure).
 
     """
-    try:
-        return stream_environment_logs(cluster_name, namespace, follow=follow)
-    except LocalK8sError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-    except subprocess.CalledProcessError as e:
-        return _handle_subprocess_error(e)
-    except RuntimeError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
+    return _run_with_cli_error_handling(
+        lambda: stream_environment_logs(cluster_name, namespace, follow=follow)
+    )
 
 
 def main() -> int:

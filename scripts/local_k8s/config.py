@@ -12,18 +12,47 @@ class Config:
 
     All paths are relative to the repository root unless absolute.
 
-    Attributes:
-        ingress_port: Host port for cluster ingress. When None, a free loopback
-            port is auto-selected during cluster creation. For existing clusters,
-            the port is discovered from the cluster's port mappings.
-        app_secret_name: Kubernetes Secret name for application credentials.
-            This contains connection URLs, not passwords directly (S105 false
-            positive).
+    Attributes
+    ----------
+    cluster_name : str
+        Name of the k3d cluster to manage.
+    namespace : str
+        Kubernetes namespace for Ghillie resources.
+    app_name : str
+        Application name used for Kubernetes labels and selectors.
+    ingress_port : int | None
+        Host port for cluster ingress. When None, a free loopback port is
+        auto-selected during cluster creation. For existing clusters, the
+        port is discovered from the cluster's port mappings.
+    chart_path : Path
+        Path to the Helm chart directory.
+    image_repo : str
+        Docker image repository name.
+    image_tag : str
+        Docker image tag.
+    cnpg_release : str
+        Helm release name for the CNPG operator.
+    cnpg_namespace : str
+        Namespace for the CNPG operator.
+    valkey_release : str
+        Helm release name for the Valkey operator.
+    valkey_namespace : str
+        Namespace for the Valkey operator.
+    values_file : Path
+        Path to the Helm values file used for installation.
+    pg_cluster_name : str
+        Name of the CNPG cluster resource.
+    valkey_name : str
+        Name of the Valkey instance.
+    app_secret_name : str
+        Kubernetes Secret name for application credentials. This contains
+        connection URLs, not passwords directly (S105 false positive).
 
     """
 
     cluster_name: str = "ghillie-local"
     namespace: str = "ghillie"
+    app_name: str = "ghillie"
     ingress_port: int | None = None
     chart_path: Path = Path("charts/ghillie")
     image_repo: str = "ghillie"

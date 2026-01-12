@@ -63,7 +63,7 @@ class TestTailLogs:
 
         expected_args = [
             "logs",
-            "--selector=app.kubernetes.io/name=ghillie",
+            f"--selector=app.kubernetes.io/name={cfg.app_name}",
             f"--namespace={namespace}",
         ]
         if follow:

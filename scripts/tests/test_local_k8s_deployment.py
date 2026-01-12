@@ -9,6 +9,7 @@ import typing as typ
 import pytest
 from local_k8s import Config
 from local_k8s.deployment import (
+    _HELM_INSTALL_TIMEOUT,
     build_docker_image,
     create_app_secret,
     install_ghillie_chart,
@@ -61,6 +62,11 @@ class TestCreateAppSecret:
         assert manifest["metadata"]["namespace"] == cfg.namespace, (
             "Expected secret namespace from config"
         )
+        assert manifest["metadata"]["labels"] == {
+            "app.kubernetes.io/managed-by": "local_k8s",
+            "app.kubernetes.io/name": cfg.app_name,
+            "app.kubernetes.io/instance": cfg.app_name,
+        }, "Expected standard Kubernetes labels"
         assert (
             manifest["stringData"]["DATABASE_URL"]
             == "postgresql://user:pass@host:5432/db"
@@ -159,7 +165,7 @@ class TestInstallGhillieChart:
         cmd_mox.mock("helm").with_args(
             "upgrade",
             "--install",
-            "ghillie",
+            cfg.app_name,
             str(chart_path),
             "--namespace",
             helm_chart_params.namespace,
@@ -171,6 +177,8 @@ class TestInstallGhillieChart:
             "--set",
             f"image.tag={helm_chart_params.image_tag}",
             "--wait",
+            "--timeout",
+            f"{_HELM_INSTALL_TIMEOUT}s",
         ).returns(exit_code=0)
 
         install_ghillie_chart(cfg, test_env)
