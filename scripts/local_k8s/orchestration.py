@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import typing as typ
 
 from local_k8s.cnpg import (
     create_cnpg_cluster,
@@ -131,6 +132,21 @@ def _validate_and_setup_environment(
     cfg = Config(cluster_name=cluster_name, namespace=namespace)
     env = kubeconfig_env(cluster_name)
     return cfg, env
+
+
+def _with_validated_environment(
+    cluster_name: str,
+    namespace: str,
+    action: typ.Callable[[Config, dict[str, str]], None],
+) -> int:
+    """Run an action after validating the cluster exists."""
+    result = _validate_and_setup_environment(cluster_name, namespace)
+    if result is None:
+        return 1
+
+    cfg, env = result
+    action(cfg, env)
+    return 0
 
 
 def _ensure_cluster_ready(
@@ -319,16 +335,14 @@ def show_environment_status(cluster_name: str, namespace: str) -> int:
 
     """
     try:
-        result = _validate_and_setup_environment(cluster_name, namespace)
-        if result is None:
-            return 1
 
-        cfg, env = result
+        def _action(cfg: Config, env: dict[str, str]) -> None:
+            print(f"Status for cluster: {cluster_name}")
+            print(f"Namespace: {namespace}")
+            print()
+            print_status(cfg, env)
 
-        print(f"Status for cluster: {cluster_name}")
-        print(f"Namespace: {namespace}")
-        print()
-        print_status(cfg, env)
+        return _with_validated_environment(cluster_name, namespace, _action)
     except (LocalK8sError, RuntimeError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 2
@@ -365,13 +379,11 @@ def stream_environment_logs(cluster_name: str, namespace: str, *, follow: bool) 
 
     """
     try:
-        result = _validate_and_setup_environment(cluster_name, namespace)
-        if result is None:
-            return 1
-
-        cfg, env = result
-
-        tail_logs(cfg, env, follow=follow)
+        return _with_validated_environment(
+            cluster_name,
+            namespace,
+            lambda cfg, env: tail_logs(cfg, env, follow=follow),
+        )
     except (LocalK8sError, RuntimeError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 2
