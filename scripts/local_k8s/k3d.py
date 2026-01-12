@@ -46,6 +46,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import typing as typ
 from pathlib import Path
 
 # Default timeout for k3d subprocess operations (seconds)
@@ -56,21 +57,23 @@ _MIN_PORT = 1024
 _MAX_PORT = 65535
 
 
-def _list_clusters() -> list[dict] | None:
-    """List all k3d clusters as parsed JSON.
+def _ensure_valid_host_port(port: int) -> None:
+    """Validate a host port is within the allowed range."""
+    if not _MIN_PORT <= port <= _MAX_PORT:
+        msg = f"port must be between {_MIN_PORT} and {_MAX_PORT}, got {port}"
+        raise ValueError(msg)
 
-    Returns:
-        List of cluster dicts if successful, None on error.
 
-    """
+def _run_k3d_json(args: list[str], *, timeout: float | None = None) -> typ.Any:  # noqa: ANN401
+    """Run a k3d command and parse JSON output."""
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: S603
             # k3d is expected on PATH; shell=False mitigates injection
-            ["k3d", "cluster", "list", "-o", "json"],  # noqa: S607
+            ["k3d", *args, "-o", "json"],  # noqa: S607
             check=True,
             capture_output=True,
             text=True,
-            timeout=_K3D_SUBPROCESS_TIMEOUT,
+            timeout=timeout or _K3D_SUBPROCESS_TIMEOUT,
         )
     except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return None
@@ -79,6 +82,19 @@ def _list_clusters() -> list[dict] | None:
             return json.loads(result.stdout)
         except json.JSONDecodeError:
             return None
+
+
+def _list_clusters() -> list[dict] | None:
+    """List all k3d clusters as parsed JSON.
+
+    Returns:
+        List of cluster dicts if successful, None on error.
+
+    """
+    result = _run_k3d_json(["cluster", "list"])
+    if isinstance(result, list):
+        return result
+    return None
 
 
 def _find_cluster(cluster_name: str) -> dict | None:
@@ -215,7 +231,11 @@ def get_cluster_ingress_port(cluster_name: str) -> int | None:
         The host port as an int if found, None otherwise.
 
     """
-    cluster = _find_cluster(cluster_name)
+    clusters = _run_k3d_json(["cluster", "list"])
+    cluster = next(
+        (item for item in clusters or [] if item.get("name") == cluster_name),
+        None,
+    )
     if cluster is None:
         return None
 
@@ -237,7 +257,8 @@ def cluster_exists(cluster_name: str) -> bool:
         is unavailable or returns invalid output.
 
     """
-    return _find_cluster(cluster_name) is not None
+    clusters = _run_k3d_json(["cluster", "list"])
+    return any(cluster.get("name") == cluster_name for cluster in clusters or [])
 
 
 def create_k3d_cluster(
@@ -268,10 +289,7 @@ def create_k3d_cluster(
         If cluster creation times out or fails.
 
     """
-    if not _MIN_PORT <= port <= _MAX_PORT:
-        msg = f"port must be between {_MIN_PORT} and {_MAX_PORT}, got {port}"
-        raise ValueError(msg)
-
+    _ensure_valid_host_port(port)
     if agents < 0:
         msg = f"agents must be >= 0, got {agents}"
         raise ValueError(msg)
