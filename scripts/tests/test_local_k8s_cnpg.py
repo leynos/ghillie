@@ -113,6 +113,14 @@ def _make_wait_for_cnpg_ready_mock(
     return mock_run
 
 
+class _WaitForCnpgReadyCase(typ.NamedTuple):
+    pods_stdout: str
+    pods_returncode: int
+    pods_stderr: str
+    wait_error: subprocess.CalledProcessError | None
+    error_match: str
+
+
 class TestWaitForCnpgReadyErrors:
     """Tests for wait_for_cnpg_ready error handling.
 
@@ -120,80 +128,67 @@ class TestWaitForCnpgReadyErrors:
     capture_output=True which requires specific subprocess result handling.
     """
 
-    def test_raises_when_no_pods_exist(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        test_env: dict[str, str],
-    ) -> None:
-        """Should raise LocalK8sError when pre-flight check finds no pods."""
-        cfg = Config()
-
-        monkeypatch.setattr(
-            "subprocess.run",
-            _make_wait_for_cnpg_ready_mock(pods_stdout='{"items": []}'),
-        )
-
-        with pytest.raises(LocalK8sError, match="has no pods"):
-            wait_for_cnpg_ready(cfg, test_env)
-
-    def test_raises_when_pod_check_fails(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        test_env: dict[str, str],
-    ) -> None:
-        """Should raise LocalK8sError when kubectl get pods fails."""
-        cfg = Config()
-
-        monkeypatch.setattr(
-            "subprocess.run",
-            _make_wait_for_cnpg_ready_mock(
+    @pytest.mark.parametrize(
+        "case",
+        [
+            _WaitForCnpgReadyCase(
+                pods_stdout='{"items": []}',
+                pods_returncode=0,
+                pods_stderr="",
+                wait_error=None,
+                error_match="has no pods",
+            ),
+            _WaitForCnpgReadyCase(
                 pods_stdout="",
                 pods_returncode=1,
                 pods_stderr="connection refused",
+                wait_error=None,
+                error_match="has no pods",
             ),
-        )
-
-        with pytest.raises(LocalK8sError, match="has no pods"):
-            wait_for_cnpg_ready(cfg, test_env)
-
-    def test_raises_contextual_error_on_timeout(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        test_env: dict[str, str],
-    ) -> None:
-        """Should raise LocalK8sError with timeout guidance when wait times out."""
-        cfg = Config()
-
-        monkeypatch.setattr(
-            "subprocess.run",
-            _make_wait_for_cnpg_ready_mock(
+            _WaitForCnpgReadyCase(
                 pods_stdout='{"items": [{"metadata": {"name": "pod-1"}}]}',
+                pods_returncode=0,
+                pods_stderr="",
                 wait_error=subprocess.CalledProcessError(
                     1, ["kubectl", "wait"], "", "error: timed out waiting for condition"
                 ),
+                error_match="Timeout waiting",
             ),
-        )
-
-        with pytest.raises(LocalK8sError, match="Timeout waiting"):
-            wait_for_cnpg_ready(cfg, test_env)
-
-    def test_raises_contextual_error_on_generic_failure(
+            _WaitForCnpgReadyCase(
+                pods_stdout='{"items": [{"metadata": {"name": "pod-1"}}]}',
+                pods_returncode=0,
+                pods_stderr="",
+                wait_error=subprocess.CalledProcessError(
+                    1, ["kubectl", "wait"], "", "error: some other failure"
+                ),
+                error_match="Failed waiting",
+            ),
+        ],
+        ids=[
+            "no-pods",
+            "pod-check-fails",
+            "timeout",
+            "generic-failure",
+        ],
+    )
+    def test_wait_for_cnpg_ready_errors(
         self,
         monkeypatch: pytest.MonkeyPatch,
         test_env: dict[str, str],
+        case: _WaitForCnpgReadyCase,
     ) -> None:
-        """Should raise LocalK8sError with stderr on generic kubectl failure."""
+        """Should raise contextual LocalK8sError messages for failures."""
         cfg = Config()
 
         monkeypatch.setattr(
             "subprocess.run",
             _make_wait_for_cnpg_ready_mock(
-                pods_stdout='{"items": [{"metadata": {"name": "pod-1"}}]}',
-                wait_error=subprocess.CalledProcessError(
-                    1, ["kubectl", "wait"], "", "error: some other failure"
-                ),
+                pods_stdout=case.pods_stdout,
+                pods_returncode=case.pods_returncode,
+                pods_stderr=case.pods_stderr,
+                wait_error=case.wait_error,
             ),
         )
 
-        with pytest.raises(LocalK8sError, match="Failed waiting"):
+        with pytest.raises(LocalK8sError, match=case.error_match):
             wait_for_cnpg_ready(cfg, test_env)

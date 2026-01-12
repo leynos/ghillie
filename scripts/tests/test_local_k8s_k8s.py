@@ -11,16 +11,24 @@ if typ.TYPE_CHECKING:
     from cmd_mox import CmdMox
 
 
+class _SecretFieldCase(typ.NamedTuple):
+    field: str
+    kubectl_stdout: str
+    expected: str
+
+
 class TestReadSecretField:
     """Tests for read_secret_field validation and decoding."""
 
     @pytest.mark.parametrize(
-        ("field", "kubectl_stdout", "expected"),
+        "case",
         [
-            ("uri", "aGVsbG8=", "hello"),
-            ("ca.crt", "Y2VydA==", "cert"),
-            ("uri", "  aGVsbG8= \n", "hello"),
-            ("Db_Url-Primary", "cG9zdGdyZXM6Ly9sb2NhbA==", "postgres://local"),
+            _SecretFieldCase("uri", "aGVsbG8=", "hello"),
+            _SecretFieldCase("ca.crt", "Y2VydA==", "cert"),
+            _SecretFieldCase("uri", "  aGVsbG8= \n", "hello"),
+            _SecretFieldCase(
+                "Db_Url-Primary", "cG9zdGdyZXM6Ly9sb2NhbA==", "postgres://local"
+            ),
         ],
         ids=[
             "decodes-base64",
@@ -29,13 +37,8 @@ class TestReadSecretField:
             "accepts-valid-field-names",
         ],
     )
-    def test_reads_and_decodes_secret_fields(  # noqa: PLR0913
-        self,
-        cmd_mox: CmdMox,
-        test_env: dict[str, str],
-        field: str,
-        kubectl_stdout: str,
-        expected: str,
+    def test_reads_and_decodes_secret_fields(
+        self, cmd_mox: CmdMox, test_env: dict[str, str], case: _SecretFieldCase
     ) -> None:
         """Should read and decode secret fields for supported formats."""
         cmd_mox.mock("kubectl").with_args(
@@ -44,12 +47,12 @@ class TestReadSecretField:
             "my-secret",
             "--namespace=ghillie",
             "-o",
-            f"jsonpath={{.data['{field}']}}",
-        ).returns(stdout=kubectl_stdout, exit_code=0)
+            f"jsonpath={{.data['{case.field}']}}",
+        ).returns(stdout=case.kubectl_stdout, exit_code=0)
 
-        actual = read_secret_field("my-secret", field, "ghillie", test_env)
+        actual = read_secret_field("my-secret", case.field, "ghillie", test_env)
 
-        assert actual == expected
+        assert actual == case.expected
 
     def test_raises_on_empty_field(self, test_env: dict[str, str]) -> None:
         """Should raise ValueError when field is empty."""
