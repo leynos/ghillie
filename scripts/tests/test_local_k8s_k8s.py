@@ -11,7 +11,9 @@ if typ.TYPE_CHECKING:
     from cmd_mox import CmdMox
 
 
-class _SecretFieldCase(typ.NamedTuple):
+class SecretFieldCase(typ.NamedTuple):
+    """Parametrized inputs for read_secret_field success cases."""
+
     field: str
     kubectl_stdout: str
     expected: str
@@ -23,10 +25,10 @@ class TestReadSecretField:
     @pytest.mark.parametrize(
         "case",
         [
-            _SecretFieldCase("uri", "aGVsbG8=", "hello"),
-            _SecretFieldCase("ca.crt", "Y2VydA==", "cert"),
-            _SecretFieldCase("uri", "  aGVsbG8= \n", "hello"),
-            _SecretFieldCase(
+            SecretFieldCase("uri", "aGVsbG8=", "hello"),
+            SecretFieldCase("ca.crt", "Y2VydA==", "cert"),
+            SecretFieldCase("uri", "  aGVsbG8= \n", "hello"),
+            SecretFieldCase(
                 "Db_Url-Primary", "cG9zdGdyZXM6Ly9sb2NhbA==", "postgres://local"
             ),
         ],
@@ -38,7 +40,7 @@ class TestReadSecretField:
         ],
     )
     def test_reads_and_decodes_secret_fields(
-        self, cmd_mox: CmdMox, test_env: dict[str, str], case: _SecretFieldCase
+        self, cmd_mox: CmdMox, test_env: dict[str, str], case: SecretFieldCase
     ) -> None:
         """Should read and decode secret fields for supported formats."""
         cmd_mox.mock("kubectl").with_args(
