@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import typing as typ
+from typing import NamedTuple  # noqa: ICN003
 
 from local_k8s.cnpg import (
     create_cnpg_cluster,
@@ -109,7 +110,7 @@ def _print_success_banner(port: int) -> None:
     print("=" * 60)
 
 
-class _ValidatedEnvironment(typ.NamedTuple):
+class _EnvironmentSetup(NamedTuple):
     """Validated config and environment for a cluster."""
 
     cfg: Config
@@ -118,7 +119,7 @@ class _ValidatedEnvironment(typ.NamedTuple):
 
 def _validate_and_setup_environment(
     cluster_name: str, namespace: str
-) -> _ValidatedEnvironment | None:
+) -> _EnvironmentSetup | None:
     """Validate cluster exists and return config and environment.
 
     Args:
@@ -126,7 +127,8 @@ def _validate_and_setup_environment(
         namespace: Kubernetes namespace.
 
     Returns:
-        Validated environment if cluster exists, None otherwise.
+        Environment setup with config and environment if cluster exists,
+        None otherwise.
 
     """
     for exe in ("k3d", "kubectl"):
@@ -138,7 +140,7 @@ def _validate_and_setup_environment(
 
     cfg = Config(cluster_name=cluster_name, namespace=namespace)
     env = kubeconfig_env(cluster_name)
-    return _ValidatedEnvironment(cfg=cfg, env=env)
+    return _EnvironmentSetup(cfg, env)
 
 
 def _with_validated_environment(
