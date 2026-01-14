@@ -1210,6 +1210,9 @@ tests/
 │   │   └── vidaimock/
 │   │       ├── openai.yaml
 │   │       ├── anthropic.yaml
+│   │       ├── gemini.yaml
+│   │       ├── azure-openai.yaml
+│   │       ├── bedrock.yaml
 │   │       └── chaos/
 │   │           ├── timeout.yaml
 │   │           ├── intermittent.yaml

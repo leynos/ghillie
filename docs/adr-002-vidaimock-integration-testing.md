@@ -16,7 +16,7 @@ Testing LLM integrations presents distinct challenges:
 
 - **Cost:** Production APIs charge per token, making integration tests
   expensive.
-- **Latency:** Real API calls introduce 1–30 second delays per request, slowing
+- **Latency:** Real API calls introduce 1–30-second delays per request, slowing
   CI pipelines.
 - **Non-determinism:** Model outputs vary between calls, complicating
   assertions.
@@ -45,7 +45,7 @@ Unit tests with in-process mocks verify protocol compliance but cannot exercise:
 VidaiMock[^vidaimock] is a Rust-based LLM mock server with the following
 characteristics:
 
-- **Single binary:** ~7MB executable with embedded provider configurations
+- **Single binary:** ~7 MB executable with embedded provider configurations
 - **Multi-provider support:** OpenAI, Anthropic, Gemini, Azure, Bedrock,
   Cohere, Mistral, Groq
 - **Physics-accurate streaming:** Per-token timing simulation for SSE responses
@@ -80,11 +80,49 @@ Integration tests will use a session-scoped pytest fixture that:
 5. Terminates the subprocess on fixture teardown
 
 ```python
+import socket
+import subprocess
+import time
+from collections.abc import Iterator
+from contextlib import closing
+from typing import TYPE_CHECKING
+
+import httpx
+import pytest
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+
+def _bind_ephemeral_port() -> int:
+    """Bind to port 0 and return the assigned port, avoiding TOCTOU races."""
+    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def _wait_for_server(url: str, *, timeout: float = 10.0) -> None:
+    """Poll a health endpoint until it responds or timeout is exceeded."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            response = httpx.get(url, timeout=1.0)
+            if response.status_code == 200:
+                return
+        except httpx.RequestError:
+            pass
+        time.sleep(0.1)
+    msg = f"Server at {url} did not become ready within {timeout}s"
+    raise TimeoutError(msg)
+
+
 @pytest.fixture(scope="session")
 def vidaimock_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
     """Start VidaiMock server and yield its base URL."""
-    port = find_free_port()
-    config_path = tmp_path_factory.mktemp("vidaimock") / "config.yaml"
+    port = _bind_ephemeral_port()
+    config_dir: Path = tmp_path_factory.mktemp("vidaimock")
+    config_path = config_dir / "config.yaml"
     config_path.write_text(VIDAIMOCK_CONFIG)
 
     proc = subprocess.Popen(
@@ -92,7 +130,7 @@ def vidaimock_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    wait_for_server(f"http://127.0.0.1:{port}/health", timeout=10)
+    _wait_for_server(f"http://127.0.0.1:{port}/health", timeout=10)
 
     try:
         yield f"http://127.0.0.1:{port}"
