@@ -95,7 +95,7 @@ if TYPE_CHECKING:
 
 
 def _bind_ephemeral_port() -> int:
-    """Bind to port 0 and return the assigned port, avoiding TOCTOU races."""
+    """Bind to port 0 and return the assigned port, reducing TOCTOU race likelihood."""
     with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind(("127.0.0.1", 0))
@@ -136,7 +136,11 @@ def vidaimock_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
         yield f"http://127.0.0.1:{port}"
     finally:
         proc.terminate()
-        proc.wait(timeout=5)
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
 ```
 
 ### Test categories
