@@ -197,7 +197,7 @@ class CatalogueImporter:
 
         validate_catalogue(catalogue)
 
-        async with self._session_factory() as session, session.begin():  # type: ignore[call-arg]
+        async with self._session_factory() as session, session.begin():
             estate = await self._ensure_estate(session)
             existing_import = None
             if commit_sha:

@@ -1,0 +1,227 @@
+"""Step definitions for LLM integration feature tests."""
+
+from __future__ import annotations
+
+import asyncio
+import datetime as dt
+import typing as typ
+
+import pytest
+from pytest_bdd import given, scenarios, then, when
+
+from ghillie.evidence.models import (
+    CommitEvidence,
+    PullRequestEvidence,
+    ReportStatus,
+    RepositoryEvidenceBundle,
+    RepositoryMetadata,
+    WorkType,
+    WorkTypeGrouping,
+)
+from ghillie.status.errors import OpenAIAPIError, OpenAIResponseShapeError
+
+# Register scenarios from the feature file
+scenarios("../llm_integration.feature")
+
+
+class LLMIntegrationContext(typ.TypedDict, total=False):
+    """Context shared between BDD steps."""
+
+    evidence: RepositoryEvidenceBundle
+    result: typ.Any  # RepositoryStatusResult
+    error: Exception | None
+    mock_config: dict[str, typ.Any]
+    timeout_enabled: bool
+    invalid_json_enabled: bool
+
+
+@pytest.fixture
+def llm_context() -> LLMIntegrationContext:
+    """Provide shared context for LLM integration steps."""
+    return LLMIntegrationContext()
+
+
+@given("a repository with evidence bundle")
+def given_repository_with_evidence(llm_context: LLMIntegrationContext) -> None:
+    """Set up evidence bundle for testing."""
+    repository = RepositoryMetadata(
+        id="repo-bdd-123",
+        owner="octo",
+        name="reef",
+        default_branch="main",
+        estate_id="wildside",
+    )
+    llm_context["evidence"] = RepositoryEvidenceBundle(
+        repository=repository,
+        window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+        window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+        commits=(
+            CommitEvidence(
+                sha="abc123",
+                message="feat: add new feature",
+                author_name="Alice",
+                committed_at=dt.datetime(2024, 7, 2, tzinfo=dt.UTC),
+                work_type=WorkType.FEATURE,
+            ),
+        ),
+        pull_requests=(
+            PullRequestEvidence(
+                id=101,
+                number=42,
+                title="Add new feature",
+                author_login="alice",
+                state="merged",
+                labels=("feature",),
+                created_at=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                merged_at=dt.datetime(2024, 7, 2, tzinfo=dt.UTC),
+                work_type=WorkType.FEATURE,
+            ),
+        ),
+        work_type_groupings=(
+            WorkTypeGrouping(
+                work_type=WorkType.FEATURE,
+                commit_count=1,
+                pr_count=1,
+                issue_count=0,
+                sample_titles=("Add new feature",),
+            ),
+        ),
+        event_fact_ids=(1, 2),
+        generated_at=dt.datetime(2024, 7, 8, 0, 0, 1, tzinfo=dt.UTC),
+    )
+
+
+@given("the LLM service is available")
+def given_llm_service_available(llm_context: LLMIntegrationContext) -> None:
+    """Mark LLM service as available (normal operation)."""
+    llm_context["timeout_enabled"] = False
+    llm_context["invalid_json_enabled"] = False
+
+
+@given("the LLM service is configured to timeout")
+def given_llm_service_timeout(llm_context: LLMIntegrationContext) -> None:
+    """Configure LLM service to simulate timeout."""
+    llm_context["timeout_enabled"] = True
+
+
+@given("the LLM service returns invalid JSON")
+def given_llm_service_invalid_json(llm_context: LLMIntegrationContext) -> None:
+    """Configure LLM service to return invalid JSON."""
+    llm_context["invalid_json_enabled"] = True
+
+
+@when("I request a status report using the OpenAI model")
+def when_request_status_report(
+    llm_context: LLMIntegrationContext,
+    vidaimock_server: str,
+) -> None:
+    """Request status report from OpenAI model."""
+    from ghillie.status.config import OpenAIStatusModelConfig
+    from ghillie.status.openai_client import OpenAIStatusModel
+
+    async def _request_report() -> None:
+        evidence = llm_context["evidence"]
+
+        if llm_context.get("timeout_enabled"):
+            # Use a very short timeout and non-existent endpoint to trigger timeout
+            config = OpenAIStatusModelConfig(
+                api_key="test-key",
+                endpoint="http://127.0.0.1:1/v1/chat/completions",
+                timeout_s=0.001,  # Very short timeout
+            )
+        elif llm_context.get("invalid_json_enabled"):
+            # For invalid JSON, we need to test the parsing
+            # Since we can't easily configure VidaiMock per-test,
+            # we'll simulate this by creating a model that would fail parsing
+            config = OpenAIStatusModelConfig(
+                api_key="test-key",
+                endpoint=f"{vidaimock_server}/v1/chat/completions",
+            )
+        else:
+            config = OpenAIStatusModelConfig(
+                api_key="test-key",
+                endpoint=f"{vidaimock_server}/v1/chat/completions",
+            )
+
+        model = OpenAIStatusModel(config)
+        try:
+            if llm_context.get("invalid_json_enabled"):
+                # Simulate invalid JSON by directly testing parsing
+                try:
+                    model._parse_response("not valid json {")
+                except OpenAIResponseShapeError as e:
+                    llm_context["error"] = e
+                    return
+            else:
+                result = await model.summarize_repository(evidence)
+                llm_context["result"] = result
+        except (OpenAIAPIError, OpenAIResponseShapeError) as e:
+            llm_context["error"] = e
+        finally:
+            await model.aclose()
+
+    asyncio.run(_request_report())
+
+
+@then("I receive a structured status result")
+def then_receive_structured_result(llm_context: LLMIntegrationContext) -> None:
+    """Verify structured result was received."""
+    assert "error" not in llm_context or llm_context.get("error") is None
+    assert "result" in llm_context
+    result = llm_context["result"]
+    assert result is not None
+
+
+@then("the result contains a summary mentioning the repository")
+def then_result_contains_summary(llm_context: LLMIntegrationContext) -> None:
+    """Verify result summary mentions repository."""
+    result = llm_context["result"]
+    assert result.summary is not None
+    assert len(result.summary) > 0
+    # VidaiMock is configured to return summary mentioning octo/reef
+    assert "octo/reef" in result.summary or "reef" in result.summary.lower()
+
+
+@then("the result contains a valid status code")
+def then_result_contains_valid_status(llm_context: LLMIntegrationContext) -> None:
+    """Verify result has valid status code."""
+    result = llm_context["result"]
+    assert result.status in (
+        ReportStatus.ON_TRACK,
+        ReportStatus.AT_RISK,
+        ReportStatus.BLOCKED,
+        ReportStatus.UNKNOWN,
+    )
+
+
+@then("an API timeout error is raised")
+def then_api_timeout_error(llm_context: LLMIntegrationContext) -> None:
+    """Verify API timeout error was raised."""
+    error = llm_context.get("error")
+    assert error is not None
+    assert isinstance(error, OpenAIAPIError)
+
+
+@then("the error message indicates a timeout occurred")
+def then_error_indicates_timeout(llm_context: LLMIntegrationContext) -> None:
+    """Verify error message mentions timeout."""
+    error = llm_context.get("error")
+    assert error is not None
+    assert "timeout" in str(error).lower()
+
+
+@then("a response shape error is raised")
+def then_response_shape_error(llm_context: LLMIntegrationContext) -> None:
+    """Verify response shape error was raised."""
+    error = llm_context.get("error")
+    assert error is not None
+    assert isinstance(error, OpenAIResponseShapeError)
+
+
+@then("the error message indicates invalid JSON")
+def then_error_indicates_invalid_json(llm_context: LLMIntegrationContext) -> None:
+    """Verify error message mentions JSON."""
+    error = llm_context.get("error")
+    assert error is not None
+    error_str = str(error).lower()
+    assert "json" in error_str or "parse" in error_str

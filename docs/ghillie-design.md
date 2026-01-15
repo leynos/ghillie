@@ -951,6 +951,74 @@ model:
 This satisfies the Phase 2.2.a completion criteria: at least one implementation
 of the interface is available with tests that mock model responses.
 
+### 9.5 OpenAI status model implementation (Phase 2.2.b)
+
+The OpenAI status model implementation (`OpenAIStatusModel`) provides the first
+real LLM integration in Ghillie, connecting the `StatusModel` protocol to an
+OpenAI-compatible API.
+
+**Configuration:** The `OpenAIStatusModelConfig` dataclass follows the pattern
+established by `GitHubGraphQLConfig`:
+
+```python
+@dataclass(frozen=True, slots=True)
+class OpenAIStatusModelConfig:
+    api_key: str
+    endpoint: str = "https://api.openai.com/v1/chat/completions"
+    model: str = "gpt-5.1-thinking"
+    timeout_s: float = 120.0
+    temperature: float = 0.3
+    max_tokens: int = 2048
+
+    @classmethod
+    def from_env(cls) -> OpenAIStatusModelConfig: ...
+```
+
+Environment variables:
+
+- `GHILLIE_OPENAI_API_KEY`: Required API key
+- `GHILLIE_OPENAI_ENDPOINT`: Optional endpoint override for VidaiMock testing
+- `GHILLIE_OPENAI_MODEL`: Optional model override
+
+**Prompt design:** The implementation uses a two-part prompt structure:
+
+1. **System prompt**: Contains JSON schema for structured output, status
+   determination guidelines, and instructions to avoid repetition of unchanged
+   information from previous reports.
+
+2. **User prompt**: Serializes the `RepositoryEvidenceBundle` into structured
+   sections:
+   - Repository identification and reporting window
+   - Previous reports context (status, highlights, risks)
+   - Activity summary (counts by entity type)
+   - Work type breakdown (feature, bug, documentation, etc.)
+   - Pull request and issue details
+
+The prompt explicitly requests `response_format: {"type": "json_object"}` to
+ensure structured output from models that support JSON mode.
+
+**Response parsing:** The `LLMStatusResponse` msgspec struct validates the JSON
+response and provides type-safe access to fields. The `_parse_status()`
+function normalizes status strings (handling case variations and hyphens) and
+falls back to `UNKNOWN` for unrecognized values.
+
+**Error handling:** Three custom exception classes provide clear error context:
+
+- `OpenAIAPIError`: HTTP errors (with status code), rate limiting (429), and
+  timeouts
+- `OpenAIResponseShapeError`: Missing fields or invalid JSON in responses
+- `OpenAIConfigError`: Missing or invalid configuration
+
+**HTTP client pattern:** The implementation mirrors `GitHubGraphQLClient`:
+
+- Accepts optional `http_client` parameter for testing
+- Owns its `httpx.AsyncClient` if none provided
+- Implements `aclose()` for resource cleanup
+- Uses bearer token authentication
+
+This satisfies the Phase 2.2.b completion criteria: round-trip inference
+demonstrating the integration using VidaiMock.
+
 ## 10. Integration testing strategy for LLM backends
 
 The Intelligence Engine's reliance on external LLM providers introduces testing
@@ -1182,13 +1250,13 @@ The `StatusModel` interface abstracts provider differences, but integration
 tests must verify that each provider implementation handles its specific
 response shape correctly. VidaiMock configurations exist per provider:
 
-| Provider | Configuration file | Key differences |
-| -------- | ------------------ | --------------- |
-| OpenAI | `openai.yaml` | Standard chat completions API |
-| Anthropic | `anthropic.yaml` | Messages API with `content` blocks |
-| Gemini | `gemini.yaml` | `generateContent` with `candidates` |
-| Azure OpenAI | `azure-openai.yaml` | Deployment-based URLs |
-| Bedrock | `bedrock.yaml` | AWS Signature V4, model-specific payloads |
+| Provider     | Configuration file  | Key differences                           |
+| ------------ | ------------------- | ----------------------------------------- |
+| OpenAI       | `openai.yaml`       | Standard chat completions API             |
+| Anthropic    | `anthropic.yaml`    | Messages API with `content` blocks        |
+| Gemini       | `gemini.yaml`       | `generateContent` with `candidates`       |
+| Azure OpenAI | `azure-openai.yaml` | Deployment-based URLs                     |
+| Bedrock      | `bedrock.yaml`      | AWS Signature V4, model-specific payloads |
 
 Tests parameterized by provider run the same evidence bundle through each
 implementation, verifying that:

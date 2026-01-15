@@ -2,8 +2,8 @@
 
 This package provides the abstraction layer for transforming evidence bundles
 into structured status reports. The `StatusModel` protocol defines the
-interface, while implementations like `MockStatusModel` provide concrete
-behavior.
+interface, while implementations like `MockStatusModel` and `OpenAIStatusModel`
+provide concrete behavior.
 
 Public API
 ----------
@@ -13,6 +13,16 @@ RepositoryStatusResult
     Structured output for repository status reports.
 MockStatusModel
     Deterministic mock implementation for testing.
+OpenAIStatusModel
+    OpenAI-compatible LLM implementation.
+OpenAIStatusModelConfig
+    Configuration dataclass for OpenAI client.
+OpenAIAPIError
+    Exception for API errors.
+OpenAIResponseShapeError
+    Exception for response parsing errors.
+OpenAIConfigError
+    Exception for configuration errors.
 to_machine_summary
     Helper to convert results for Report.machine_summary storage.
 
@@ -28,12 +38,24 @@ Examples
 
 from __future__ import annotations
 
+from ghillie.status.config import OpenAIStatusModelConfig
+from ghillie.status.errors import (
+    OpenAIAPIError,
+    OpenAIConfigError,
+    OpenAIResponseShapeError,
+)
 from ghillie.status.mock import MockStatusModel
 from ghillie.status.models import RepositoryStatusResult, to_machine_summary
+from ghillie.status.openai_client import OpenAIStatusModel
 from ghillie.status.protocol import StatusModel
 
 __all__ = [
     "MockStatusModel",
+    "OpenAIAPIError",
+    "OpenAIConfigError",
+    "OpenAIResponseShapeError",
+    "OpenAIStatusModel",
+    "OpenAIStatusModelConfig",
     "RepositoryStatusResult",
     "StatusModel",
     "to_machine_summary",

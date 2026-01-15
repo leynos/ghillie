@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed (blocked on Task 2.2.b StatusModel implementation)
+Accepted (Task 2.2.b implemented)
 
 ## Context
 
@@ -27,11 +27,11 @@ Testing LLM integrations presents distinct challenges:
 
 The current testing infrastructure includes:
 
-| Layer | Mechanism | Purpose |
-| ----- | --------- | ------- |
-| Unit tests | `MockStatusModel` (planned) | Protocol compliance, response parsing |
-| Feature tests | pytest-bdd in `tests/features/` | Behavioural verification |
-| Helpers | `tests/helpers/event_builders.py` | Deterministic event construction |
+| Layer         | Mechanism                         | Purpose                               |
+| ------------- | --------------------------------- | ------------------------------------- |
+| Unit tests    | `MockStatusModel` (planned)       | Protocol compliance, response parsing |
+| Feature tests | pytest-bdd in `tests/features/`   | Behavioural verification              |
+| Helpers       | `tests/helpers/event_builders.py` | Deterministic event construction      |
 
 Unit tests with in-process mocks verify protocol compliance but cannot exercise:
 
@@ -172,14 +172,14 @@ def vidaimock_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
 
 ### Test categories
 
-| Category | Purpose | VidaiMock configuration |
-| -------- | ------- | ----------------------- |
-| Happy path | Verify correct request/response flow | Standard responses |
-| Streaming | Test SSE handling and token accumulation | Streaming enabled |
-| Timeout | Test client timeout handling | Latency injection >30s |
-| Malformed | Test JSON parsing error recovery | Invalid JSON responses |
-| Rate limit | Test retry/backoff logic | 429 responses |
-| Provider errors | Test error classification | 500/503 responses |
+| Category        | Purpose                                  | VidaiMock configuration |
+| --------------- | ---------------------------------------- | ----------------------- |
+| Happy path      | Verify correct request/response flow     | Standard responses      |
+| Streaming       | Test SSE handling and token accumulation | Streaming enabled       |
+| Timeout         | Test client timeout handling             | Latency injection >30s  |
+| Malformed       | Test JSON parsing error recovery         | Invalid JSON responses  |
+| Rate limit      | Test retry/backoff logic                 | 429 responses           |
+| Provider errors | Test error classification                | 500/503 responses       |
 
 ### Chaos testing patterns
 
