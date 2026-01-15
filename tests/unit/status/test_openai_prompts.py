@@ -8,6 +8,7 @@ import pytest
 
 from ghillie.evidence.models import (
     CommitEvidence,
+    DocumentationEvidence,
     IssueEvidence,
     PreviousReportSummary,
     PullRequestEvidence,
@@ -88,6 +89,8 @@ class TestBuildUserPrompt:
         self, repository_metadata: RepositoryMetadata
     ) -> None:
         """User prompt includes activity counts."""
+        import re
+
         evidence = RepositoryEvidenceBundle(
             repository=repository_metadata,
             window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
@@ -103,15 +106,17 @@ class TestBuildUserPrompt:
             ),
         )
         prompt = build_user_prompt(evidence)
-
-        # Should mention counts
-        assert "2" in prompt  # 2 commits
-        assert "1" in prompt  # 1 PR
-        # Should mention entity types
         lower = prompt.lower()
+
+        # Should mention entity types
         assert "commit" in lower
         assert "pull request" in lower or "pr" in lower
         assert "issue" in lower
+
+        # Verify counts are associated with entity types (patterns like "2 commits")
+        assert re.search(r"2\s*commit|commit\D*2", lower)
+        assert re.search(r"1\s*(pull request|pr)|pr\D*1|pull request\D*1", lower)
+        assert re.search(r"2\s*issue|issue\D*2", lower)
 
     def test_includes_previous_reports(
         self, repository_metadata: RepositoryMetadata
@@ -227,3 +232,29 @@ class TestBuildUserPrompt:
         # Should include issue number and title
         assert "#10" in prompt or "10" in prompt
         assert "Performance" in prompt or "regression" in prompt.lower()
+
+    def test_includes_documentation_changes(
+        self, repository_metadata: RepositoryMetadata
+    ) -> None:
+        """User prompt includes documentation change counts when present."""
+        evidence = RepositoryEvidenceBundle(
+            repository=repository_metadata,
+            window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+            window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+            commits=(CommitEvidence(sha="abc123", message="docs: update README"),),
+            documentation_changes=(
+                DocumentationEvidence(
+                    path="docs/usage.md",
+                    change_type="modified",
+                    commit_sha="abc123",
+                    occurred_at=dt.datetime(2024, 7, 2, tzinfo=dt.UTC),
+                ),
+            ),
+        )
+        prompt = build_user_prompt(evidence)
+
+        # Commits are summarized
+        assert "1" in prompt
+        # Documentation changes should be mentioned
+        lower = prompt.lower()
+        assert "documentation" in lower or "docs" in lower or "usage.md" in prompt

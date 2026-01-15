@@ -6,6 +6,7 @@ import asyncio
 import datetime as dt
 import typing as typ
 
+import httpx
 import pytest
 from pytest_bdd import given, scenarios, then, when
 
@@ -20,6 +21,9 @@ from ghillie.evidence.models import (
 )
 from ghillie.status.errors import OpenAIAPIError, OpenAIResponseShapeError
 
+if typ.TYPE_CHECKING:
+    from ghillie.status.models import RepositoryStatusResult
+
 # Register scenarios from the feature file
 scenarios("../llm_integration.feature")
 
@@ -28,9 +32,8 @@ class LLMIntegrationContext(typ.TypedDict, total=False):
     """Context shared between BDD steps."""
 
     evidence: RepositoryEvidenceBundle
-    result: typ.Any  # RepositoryStatusResult
+    result: RepositoryStatusResult
     error: Exception | None
-    mock_config: dict[str, typ.Any]
     timeout_enabled: bool
     invalid_json_enabled: bool
 
@@ -110,6 +113,43 @@ def given_llm_service_invalid_json(llm_context: LLMIntegrationContext) -> None:
     llm_context["invalid_json_enabled"] = True
 
 
+def _create_timeout_transport() -> httpx.AsyncBaseTransport:
+    """Create a mock transport that raises TimeoutException."""
+
+    class TimeoutTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(
+            self, request: httpx.Request
+        ) -> httpx.Response:  # pragma: no cover
+            raise httpx.TimeoutException("Mock timeout", request=request)  # noqa: TRY003
+
+    return TimeoutTransport()
+
+
+def _create_invalid_json_transport() -> httpx.AsyncBaseTransport:
+    """Create a mock transport that returns invalid JSON."""
+
+    class InvalidJSONTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                status_code=200,
+                json={
+                    "id": "chatcmpl-test",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": "not valid json {",
+                            },
+                            "finish_reason": "stop",
+                        }
+                    ],
+                },
+            )
+
+    return InvalidJSONTransport()
+
+
 @when("I request a status report using the OpenAI model")
 def when_request_status_report(
     llm_context: LLMIntegrationContext,
@@ -122,43 +162,27 @@ def when_request_status_report(
     async def _request_report() -> None:
         evidence = llm_context["evidence"]
 
-        if llm_context.get("timeout_enabled"):
-            # Use a very short timeout and non-existent endpoint to trigger timeout
-            config = OpenAIStatusModelConfig(
-                api_key="test-key",
-                endpoint="http://127.0.0.1:1/v1/chat/completions",
-                timeout_s=0.001,  # Very short timeout
-            )
-        elif llm_context.get("invalid_json_enabled"):
-            # For invalid JSON, we need to test the parsing
-            # Since we can't easily configure VidaiMock per-test,
-            # we'll simulate this by creating a model that would fail parsing
-            config = OpenAIStatusModelConfig(
-                api_key="test-key",
-                endpoint=f"{vidaimock_server}/v1/chat/completions",
-            )
-        else:
-            config = OpenAIStatusModelConfig(
-                api_key="test-key",
-                endpoint=f"{vidaimock_server}/v1/chat/completions",
-            )
+        config = OpenAIStatusModelConfig(
+            api_key="test-key",
+            endpoint=f"{vidaimock_server}/v1/chat/completions",
+        )
 
-        model = OpenAIStatusModel(config)
+        http_client: httpx.AsyncClient | None = None
+        if llm_context.get("timeout_enabled"):
+            http_client = httpx.AsyncClient(transport=_create_timeout_transport())
+        elif llm_context.get("invalid_json_enabled"):
+            http_client = httpx.AsyncClient(transport=_create_invalid_json_transport())
+
+        model = OpenAIStatusModel(config, http_client=http_client)
         try:
-            if llm_context.get("invalid_json_enabled"):
-                # Simulate invalid JSON by directly testing parsing
-                try:
-                    model._parse_response("not valid json {")
-                except OpenAIResponseShapeError as e:
-                    llm_context["error"] = e
-                    return
-            else:
-                result = await model.summarize_repository(evidence)
-                llm_context["result"] = result
+            result = await model.summarize_repository(evidence)
+            llm_context["result"] = result
         except (OpenAIAPIError, OpenAIResponseShapeError) as e:
             llm_context["error"] = e
         finally:
             await model.aclose()
+            if http_client is not None:
+                await http_client.aclose()
 
     asyncio.run(_request_report())
 
@@ -166,9 +190,8 @@ def when_request_status_report(
 @then("I receive a structured status result")
 def then_receive_structured_result(llm_context: LLMIntegrationContext) -> None:
     """Verify structured result was received."""
-    assert "error" not in llm_context or llm_context.get("error") is None
-    assert "result" in llm_context
-    result = llm_context["result"]
+    assert llm_context.get("error") is None
+    result = llm_context.get("result")
     assert result is not None
 
 

@@ -7,6 +7,13 @@ import os
 
 from ghillie.status.errors import OpenAIConfigError
 
+# Default configuration values - single source of truth
+_DEFAULT_ENDPOINT = "https://api.openai.com/v1/chat/completions"
+_DEFAULT_MODEL = "gpt-5.1-thinking"
+_DEFAULT_TIMEOUT_S = 120.0
+_DEFAULT_TEMPERATURE = 0.3
+_DEFAULT_MAX_TOKENS = 2048
+
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class OpenAIStatusModelConfig:
@@ -30,11 +37,11 @@ class OpenAIStatusModelConfig:
     """
 
     api_key: str
-    endpoint: str = "https://api.openai.com/v1/chat/completions"
-    model: str = "gpt-5.1-thinking"
-    timeout_s: float = 120.0
-    temperature: float = 0.3
-    max_tokens: int = 2048
+    endpoint: str = _DEFAULT_ENDPOINT
+    model: str = _DEFAULT_MODEL
+    timeout_s: float = _DEFAULT_TIMEOUT_S
+    temperature: float = _DEFAULT_TEMPERATURE
+    max_tokens: int = _DEFAULT_MAX_TOKENS
 
     @classmethod
     def from_env(cls) -> OpenAIStatusModelConfig:
@@ -61,10 +68,7 @@ class OpenAIStatusModelConfig:
         if not api_key:
             raise OpenAIConfigError.missing_api_key()
 
-        endpoint = os.environ.get(
-            "GHILLIE_OPENAI_ENDPOINT",
-            "https://api.openai.com/v1/chat/completions",
-        )
-        model = os.environ.get("GHILLIE_OPENAI_MODEL", "gpt-5.1-thinking")
+        endpoint = os.environ.get("GHILLIE_OPENAI_ENDPOINT", _DEFAULT_ENDPOINT)
+        model = os.environ.get("GHILLIE_OPENAI_MODEL", _DEFAULT_MODEL)
 
         return cls(api_key=api_key, endpoint=endpoint, model=model)

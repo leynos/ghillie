@@ -61,17 +61,18 @@ class TestOpenAIStatusModelConfigFromEnv:
 class TestOpenAIStatusModelConfigValidation:
     """Tests for configuration validation."""
 
-    def test_rejects_empty_api_key(self) -> None:
-        """Configuration fails when API key is empty string."""
-        env = {"GHILLIE_OPENAI_API_KEY": ""}
-        with mock.patch.dict(os.environ, env, clear=True):
-            with pytest.raises(OpenAIConfigError) as exc_info:
-                OpenAIStatusModelConfig.from_env()
-            assert "GHILLIE_OPENAI_API_KEY" in str(exc_info.value)
-
-    def test_rejects_whitespace_only_api_key(self) -> None:
-        """Configuration fails when API key is whitespace only."""
-        env = {"GHILLIE_OPENAI_API_KEY": "   "}
+    @pytest.mark.parametrize(
+        ("api_key", "description"),
+        [
+            ("", "empty string"),
+            ("   ", "whitespace only"),
+            ("\t\n", "whitespace with tab and newline"),
+        ],
+        ids=["empty", "spaces", "mixed-whitespace"],
+    )
+    def test_rejects_invalid_api_key(self, api_key: str, description: str) -> None:
+        """Configuration fails when API key is invalid ({description})."""
+        env = {"GHILLIE_OPENAI_API_KEY": api_key}
         with mock.patch.dict(os.environ, env, clear=True):
             with pytest.raises(OpenAIConfigError) as exc_info:
                 OpenAIStatusModelConfig.from_env()

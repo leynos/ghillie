@@ -7,6 +7,9 @@ import typing as typ
 
 import pytest
 
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
 from ghillie.evidence.models import (
     CommitEvidence,
     PullRequestEvidence,
@@ -83,67 +86,64 @@ def feature_evidence(
 class TestOpenAIStatusModelWithVidaiMock:
     """Integration tests using VidaiMock as the LLM backend."""
 
+    @pytest.fixture
+    async def model(
+        self, openai_config_for_vidaimock: OpenAIStatusModelConfig
+    ) -> cabc.AsyncIterator[OpenAIStatusModel]:
+        """Create and cleanup OpenAIStatusModel for tests."""
+        model = OpenAIStatusModel(openai_config_for_vidaimock)
+        yield model
+        await model.aclose()
+
     @pytest.mark.asyncio
     async def test_round_trip_inference(
         self,
-        openai_config_for_vidaimock: OpenAIStatusModelConfig,
+        model: OpenAIStatusModel,
         feature_evidence: RepositoryEvidenceBundle,
     ) -> None:
         """Test complete request/response flow with VidaiMock."""
-        model = OpenAIStatusModel(openai_config_for_vidaimock)
-        try:
-            result = await model.summarize_repository(feature_evidence)
+        result = await model.summarize_repository(feature_evidence)
 
-            # Verify structured result
-            assert result.summary is not None
-            assert len(result.summary) > 0
-            assert result.status in (
-                ReportStatus.ON_TRACK,
-                ReportStatus.AT_RISK,
-                ReportStatus.BLOCKED,
-                ReportStatus.UNKNOWN,
-            )
-        finally:
-            await model.aclose()
+        # Verify structured result
+        assert result.summary is not None
+        assert len(result.summary) > 0
+        assert result.status in (
+            ReportStatus.ON_TRACK,
+            ReportStatus.AT_RISK,
+            ReportStatus.BLOCKED,
+            ReportStatus.UNKNOWN,
+        )
 
     @pytest.mark.asyncio
     async def test_result_contains_expected_fields(
         self,
-        openai_config_for_vidaimock: OpenAIStatusModelConfig,
+        model: OpenAIStatusModel,
         feature_evidence: RepositoryEvidenceBundle,
     ) -> None:
         """Test that result contains all expected fields from VidaiMock response."""
-        model = OpenAIStatusModel(openai_config_for_vidaimock)
-        try:
-            result = await model.summarize_repository(feature_evidence)
+        result = await model.summarize_repository(feature_evidence)
 
-            # VidaiMock is configured to return on_track status
-            assert result.status == ReportStatus.ON_TRACK
+        # VidaiMock is configured to return on_track status
+        assert result.status == ReportStatus.ON_TRACK
 
-            # Should have highlights (VidaiMock returns 2)
-            assert len(result.highlights) >= 1
+        # Should have highlights (VidaiMock returns 2)
+        assert len(result.highlights) >= 1
 
-            # Should have next_steps (VidaiMock returns 2)
-            assert len(result.next_steps) >= 1
+        # Should have next_steps (VidaiMock returns 2)
+        assert len(result.next_steps) >= 1
 
-            # Summary should mention the repository
-            assert "octo/reef" in result.summary or "reef" in result.summary
-        finally:
-            await model.aclose()
+        # Summary should mention the repository
+        assert "octo/reef" in result.summary or "reef" in result.summary
 
     @pytest.mark.asyncio
     async def test_implements_status_model_protocol(
         self,
-        openai_config_for_vidaimock: OpenAIStatusModelConfig,
+        model: OpenAIStatusModel,
     ) -> None:
         """Test that OpenAIStatusModel implements StatusModel protocol."""
         from ghillie.status.protocol import StatusModel
 
-        model = OpenAIStatusModel(openai_config_for_vidaimock)
-        try:
-            assert isinstance(model, StatusModel)
-        finally:
-            await model.aclose()
+        assert isinstance(model, StatusModel)
 
     @pytest.mark.asyncio
     async def test_client_uses_configured_endpoint(
@@ -169,22 +169,18 @@ class TestOpenAIStatusModelWithVidaiMock:
     @pytest.mark.asyncio
     async def test_client_handles_response_correctly(
         self,
-        openai_config_for_vidaimock: OpenAIStatusModelConfig,
+        model: OpenAIStatusModel,
         feature_evidence: RepositoryEvidenceBundle,
     ) -> None:
         """Test that client correctly parses VidaiMock response."""
-        model = OpenAIStatusModel(openai_config_for_vidaimock)
-        try:
-            result = await model.summarize_repository(feature_evidence)
+        result = await model.summarize_repository(feature_evidence)
 
-            # Result should be a proper RepositoryStatusResult
-            from ghillie.status.models import RepositoryStatusResult
+        # Result should be a proper RepositoryStatusResult
+        from ghillie.status.models import RepositoryStatusResult
 
-            assert isinstance(result, RepositoryStatusResult)
+        assert isinstance(result, RepositoryStatusResult)
 
-            # Should have tuple fields (not lists)
-            assert isinstance(result.highlights, tuple)
-            assert isinstance(result.risks, tuple)
-            assert isinstance(result.next_steps, tuple)
-        finally:
-            await model.aclose()
+        # Should have tuple fields (not lists)
+        assert isinstance(result.highlights, tuple)
+        assert isinstance(result.risks, tuple)
+        assert isinstance(result.next_steps, tuple)

@@ -79,6 +79,23 @@ class OpenAIAPIError(RuntimeError):
         """
         return cls("OpenAI API request timed out")
 
+    @classmethod
+    def network_error(cls, detail: str) -> OpenAIAPIError:
+        """Create error for network failures (DNS, connection, TLS, etc.).
+
+        Parameters
+        ----------
+        detail
+            Description of the network failure.
+
+        Returns
+        -------
+        OpenAIAPIError
+            Error indicating network failure.
+
+        """
+        return cls(f"OpenAI API network error: {detail}")
+
 
 class OpenAIResponseShapeError(RuntimeError):
     """Raised when OpenAI response is missing expected fields or malformed."""

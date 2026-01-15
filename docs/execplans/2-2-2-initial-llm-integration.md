@@ -1,4 +1,4 @@
-# Implement initial LLM integration
+# Implement initial Large Language Model (LLM) integration
 
 This execution plan (ExecPlan) is a living document. The sections `Progress`,
 `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must
@@ -111,7 +111,8 @@ The HTTP client pattern is established:
 
 ### Phase 1: Write failing tests first (AGENTS.md requirement)
 
-Create unit tests and BDD scenarios before implementation:
+Create unit tests and Behaviour-Driven Development (BDD) scenarios before
+implementation:
 
 - Unit tests in `tests/unit/status/` covering config validation, prompt
   building, response parsing, and error handling

@@ -21,7 +21,7 @@ class TestOpenAIAPIError:
     def test_http_error_factory_includes_context(self) -> None:
         """http_error message includes HTTP context."""
         error = OpenAIAPIError.http_error(503)
-        assert "HTTP" in str(error) or "http" in str(error).lower()
+        assert "http" in str(error).lower()
 
     def test_rate_limited_factory(self) -> None:
         """rate_limited creates error for 429 responses."""
@@ -38,6 +38,12 @@ class TestOpenAIAPIError:
         """Timeout factory creates error for request timeouts."""
         error = OpenAIAPIError.timeout()
         assert "timed out" in str(error).lower()
+
+    def test_network_error_factory(self) -> None:
+        """network_error creates error for network failures."""
+        error = OpenAIAPIError.network_error("Connection refused")
+        assert "network" in str(error).lower()
+        assert "Connection refused" in str(error)
 
 
 class TestOpenAIResponseShapeError:

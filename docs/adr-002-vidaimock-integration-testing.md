@@ -48,7 +48,8 @@ characteristics:
 - **Single binary:** ~7 MB executable with embedded provider configurations
 - **Multi-provider support:** OpenAI, Anthropic, Gemini, Azure, Bedrock,
   Cohere, Mistral, Groq
-- **Physics-accurate streaming:** Per-token timing simulation for SSE responses
+- **Physics-accurate streaming:** Per-token timing simulation for Server-Sent
+  Events (SSE) responses
 - **Chaos testing:** Configurable failure injection, latency spikes, malformed
   responses
 - **High throughput:** 50,000+ requests/second in benchmark mode

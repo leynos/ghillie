@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import typing as typ
 
 import httpx
@@ -186,6 +187,8 @@ class OpenAIStatusModel:
             )
         except httpx.TimeoutException as exc:
             raise OpenAIAPIError.timeout() from exc
+        except httpx.RequestError as exc:
+            raise OpenAIAPIError.network_error(str(exc)) from exc
 
         if response.status_code == _HTTP_RATE_LIMITED:
             retry_after = response.headers.get("Retry-After")
@@ -196,7 +199,10 @@ class OpenAIStatusModel:
         if response.status_code >= _HTTP_ERROR_STATUS_THRESHOLD:
             raise OpenAIAPIError.http_error(response.status_code)
 
-        data = response.json()
+        try:
+            data = response.json()
+        except json.JSONDecodeError as exc:
+            raise OpenAIResponseShapeError.invalid_json(response.text) from exc
         return self._extract_content(data)
 
     def _extract_content(self, data: dict[str, typ.Any]) -> str:
@@ -218,76 +224,23 @@ class OpenAIStatusModel:
             If the response is missing expected fields.
 
         """
-        choices = self._validate_choices_list(data.get("choices"))
-        first_choice = self._validate_type(choices[0], dict, "choices[0]")
-        message = self._validate_type(
-            first_choice.get("message"), dict, "choices[0].message"
-        )
-        return self._validate_type(
-            message.get("content"), str, "choices[0].message.content"
-        )
-
-    def _validate_choices_list(self, value: object) -> list[typ.Any]:
-        """Validate that choices is a non-empty list.
-
-        Parameters
-        ----------
-        value
-            Value to validate.
-
-        Returns
-        -------
-        list[Any]
-            The validated choices list.
-
-        Raises
-        ------
-        OpenAIResponseShapeError
-            If value is not a non-empty list.
-
-        """
-        if not isinstance(value, list) or not value:
+        choices = data.get("choices")
+        if not isinstance(choices, list) or not choices:
             raise OpenAIResponseShapeError.missing("choices")
-        return value
 
-    @typ.overload
-    def _validate_type(
-        self, value: object, expected: type[dict], path: str
-    ) -> dict[str, typ.Any]: ...
+        first_choice = choices[0]
+        if not isinstance(first_choice, dict):
+            raise OpenAIResponseShapeError.missing("choices[0]")
 
-    @typ.overload
-    def _validate_type(self, value: object, expected: type[str], path: str) -> str: ...
+        message = first_choice.get("message")
+        if not isinstance(message, dict):
+            raise OpenAIResponseShapeError.missing("choices[0].message")
 
-    def _validate_type(
-        self, value: object, expected: type[dict] | type[str], path: str
-    ) -> dict[str, typ.Any] | str:
-        """Validate that a value matches the expected type.
+        content = message.get("content")
+        if not isinstance(content, str):
+            raise OpenAIResponseShapeError.missing("choices[0].message.content")
 
-        Parameters
-        ----------
-        value
-            Value to validate.
-        expected
-            Expected type (dict or str).
-        path
-            JSON path for error reporting.
-
-        Returns
-        -------
-        dict[str, Any] | str
-            The validated value cast to the expected type.
-
-        Raises
-        ------
-        OpenAIResponseShapeError
-            If value is not of the expected type.
-
-        """
-        if not isinstance(value, expected):
-            raise OpenAIResponseShapeError.missing(path)
-        if expected is dict:
-            return typ.cast("dict[str, typ.Any]", value)
-        return typ.cast("str", value)
+        return content
 
     def _parse_response(self, content: str) -> LLMStatusResponse:
         """Parse JSON response content into typed structure.

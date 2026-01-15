@@ -24,9 +24,6 @@ if typ.TYPE_CHECKING:
 
 _HTTP_OK = 200
 
-# Check if VidaiMock binary is available
-_VIDAIMOCK_AVAILABLE = shutil.which("vidaimock") is not None
-
 # VidaiMock configuration following ADR-002 structure.
 # The response body content is a JSON string that will be returned as the
 # assistant message content.
@@ -173,7 +170,7 @@ def vidaimock_server(
         If VidaiMock does not become healthy within 10 seconds.
 
     """
-    if not _VIDAIMOCK_AVAILABLE:
+    if shutil.which("vidaimock") is None:
         pytest.skip("VidaiMock binary not found in PATH")
 
     port = _bind_ephemeral_port()
