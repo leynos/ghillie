@@ -13,12 +13,13 @@ import subprocess
 import time
 import typing as typ
 from contextlib import closing
-from pathlib import Path  # noqa: TC003
 
 import httpx
 import pytest
 
 if typ.TYPE_CHECKING:
+    from pathlib import Path
+
     from ghillie.status.config import OpenAIStatusModelConfig
 
 _HTTP_OK = 200
