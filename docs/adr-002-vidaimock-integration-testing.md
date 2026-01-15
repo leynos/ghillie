@@ -117,6 +117,33 @@ def _wait_for_server(url: str, *, timeout: float = 10.0) -> None:
     raise TimeoutError(msg)
 
 
+VIDAIMOCK_CONFIG = """\
+providers:
+  - name: openai
+    base_url: /v1
+    endpoints:
+      - path: /chat/completions
+        method: POST
+        response:
+          status: 200
+          body:
+            id: "chatcmpl-mock"
+            object: "chat.completion"
+            created: 1700000000
+            model: "gpt-4"
+            choices:
+              - index: 0
+                message:
+                  role: "assistant"
+                  content: "Mock response from VidaiMock"
+                finish_reason: "stop"
+            usage:
+              prompt_tokens: 10
+              completion_tokens: 5
+              total_tokens: 15
+"""
+
+
 @pytest.fixture(scope="session")
 def vidaimock_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
     """Start VidaiMock server and yield its base URL."""
