@@ -54,7 +54,7 @@ ADR-002's updated format (nested `endpoints` within `providers` list).
    conventions)
 3. Prompt uses JSON mode with explicit schema in system prompt (reliable
    structured output)
-4. Error classes use factory classmethods for consistency with existing patterns
+4. Error classes use factory classmethods for consistency with existing patterns.
 
 ## Outcomes & Retrospective
 
@@ -73,7 +73,7 @@ The StatusModel infrastructure is complete (Task 2.2.a):
 - **RepositoryStatusResult** (`ghillie/status/models.py`): msgspec.Struct with
   summary, status, highlights, risks, next_steps
 - **RepositoryEvidenceBundle** (`ghillie/evidence/models.py`): Complete evidence
-  structure with commits, PRs, issues, docs, work type groupings
+  structure with commits, PRs, issues, docs, work type groupings.
 
 The HTTP client pattern is established:
 
@@ -94,7 +94,7 @@ The HTTP client pattern is established:
 4. **Custom exceptions**: Use classmethod factory constructors (for example,
    `cls.http_error()`, `cls.missing()`)
 5. **msgspec for data**: Use msgspec.Struct for response parsing
-6. **Environment variables**: Follow `GHILLIE_*` naming convention
+6. **Environment variables**: Follow `GHILLIE_*` naming convention.
 
 ### Files to Reference
 

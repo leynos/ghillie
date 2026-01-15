@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import contextlib
+import typing as typ
+
+import httpx
 import msgspec
 import pytest
 
@@ -13,6 +17,24 @@ from ghillie.status.openai_client import (
     OpenAIStatusModel,
     _parse_status,
 )
+
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
+
+@contextlib.asynccontextmanager
+async def create_model_with_transport(
+    config: OpenAIStatusModelConfig,
+    transport: httpx.AsyncBaseTransport,
+) -> cabc.AsyncIterator[OpenAIStatusModel]:
+    """Create OpenAIStatusModel with custom transport, handling cleanup."""
+    client = httpx.AsyncClient(transport=transport)
+    model = OpenAIStatusModel(config, http_client=client)
+    try:
+        yield model
+    finally:
+        await model.aclose()
+        await client.aclose()
 
 
 class TestLLMStatusResponseParsing:
@@ -187,7 +209,6 @@ class TestOpenAIHTTPErrorHandling:
         self, config: OpenAIStatusModelConfig
     ) -> None:
         """429 with numeric Retry-After produces rate-limited OpenAIAPIError."""
-        import httpx
 
         class RateLimitTransport(httpx.AsyncBaseTransport):
             async def handle_async_request(
@@ -199,23 +220,17 @@ class TestOpenAIHTTPErrorHandling:
                     json={"error": {"message": "Rate limit exceeded"}},
                 )
 
-        client = httpx.AsyncClient(transport=RateLimitTransport())
-        model = OpenAIStatusModel(config, http_client=client)
-        try:
+        async with create_model_with_transport(config, RateLimitTransport()) as model:
             with pytest.raises(OpenAIAPIError) as exc_info:
                 await model._call_chat_completion("test prompt")
             assert exc_info.value.status_code == 429
             assert "30" in str(exc_info.value)
-        finally:
-            await model.aclose()
-            await client.aclose()
 
     @pytest.mark.asyncio
     async def test_rate_limited_without_retry_after(
         self, config: OpenAIStatusModelConfig
     ) -> None:
         """429 without Retry-After still produces rate-limited OpenAIAPIError."""
-        import httpx
 
         class RateLimitTransport(httpx.AsyncBaseTransport):
             async def handle_async_request(
@@ -226,21 +241,15 @@ class TestOpenAIHTTPErrorHandling:
                     json={"error": {"message": "Rate limit exceeded"}},
                 )
 
-        client = httpx.AsyncClient(transport=RateLimitTransport())
-        model = OpenAIStatusModel(config, http_client=client)
-        try:
+        async with create_model_with_transport(config, RateLimitTransport()) as model:
             with pytest.raises(OpenAIAPIError) as exc_info:
                 await model._call_chat_completion("test prompt")
             assert exc_info.value.status_code == 429
             assert "rate" in str(exc_info.value).lower()
-        finally:
-            await model.aclose()
-            await client.aclose()
 
     @pytest.mark.asyncio
     async def test_http_error_502(self, config: OpenAIStatusModelConfig) -> None:
         """Non-2xx (e.g. 502) produces HTTP error OpenAIAPIError."""
-        import httpx
 
         class BadGatewayTransport(httpx.AsyncBaseTransport):
             async def handle_async_request(
@@ -251,21 +260,15 @@ class TestOpenAIHTTPErrorHandling:
                     json={"error": {"message": "Bad gateway"}},
                 )
 
-        client = httpx.AsyncClient(transport=BadGatewayTransport())
-        model = OpenAIStatusModel(config, http_client=client)
-        try:
+        async with create_model_with_transport(config, BadGatewayTransport()) as model:
             with pytest.raises(OpenAIAPIError) as exc_info:
                 await model._call_chat_completion("test prompt")
             assert exc_info.value.status_code == 502
             assert "502" in str(exc_info.value)
-        finally:
-            await model.aclose()
-            await client.aclose()
 
     @pytest.mark.asyncio
     async def test_timeout_error(self, config: OpenAIStatusModelConfig) -> None:
         """Timeout raises OpenAIAPIError with timeout message."""
-        import httpx
 
         class TimeoutTransport(httpx.AsyncBaseTransport):
             async def handle_async_request(
@@ -273,20 +276,14 @@ class TestOpenAIHTTPErrorHandling:
             ) -> httpx.Response:
                 raise httpx.TimeoutException("timeout", request=request)
 
-        client = httpx.AsyncClient(transport=TimeoutTransport())
-        model = OpenAIStatusModel(config, http_client=client)
-        try:
+        async with create_model_with_transport(config, TimeoutTransport()) as model:
             with pytest.raises(OpenAIAPIError) as exc_info:
                 await model._call_chat_completion("test prompt")
             assert "timed out" in str(exc_info.value).lower()
-        finally:
-            await model.aclose()
-            await client.aclose()
 
     @pytest.mark.asyncio
     async def test_network_error(self, config: OpenAIStatusModelConfig) -> None:
         """Network errors (DNS, connection) raise OpenAIAPIError."""
-        import httpx
 
         class NetworkErrorTransport(httpx.AsyncBaseTransport):
             async def handle_async_request(
@@ -294,12 +291,9 @@ class TestOpenAIHTTPErrorHandling:
             ) -> httpx.Response:
                 raise httpx.ConnectError("refused")
 
-        client = httpx.AsyncClient(transport=NetworkErrorTransport())
-        model = OpenAIStatusModel(config, http_client=client)
-        try:
+        async with create_model_with_transport(
+            config, NetworkErrorTransport()
+        ) as model:
             with pytest.raises(OpenAIAPIError) as exc_info:
                 await model._call_chat_completion("test prompt")
             assert "network" in str(exc_info.value).lower()
-        finally:
-            await model.aclose()
-            await client.aclose()

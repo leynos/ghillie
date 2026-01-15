@@ -120,7 +120,8 @@ def _create_timeout_transport() -> httpx.AsyncBaseTransport:
         async def handle_async_request(
             self, request: httpx.Request
         ) -> httpx.Response:  # pragma: no cover
-            raise httpx.TimeoutException("Mock timeout", request=request)  # noqa: TRY003
+            msg = "Mock timeout"
+            raise httpx.TimeoutException(msg, request=request)
 
     return TimeoutTransport()
 
@@ -190,9 +191,10 @@ def when_request_status_report(
 @then("I receive a structured status result")
 def then_receive_structured_result(llm_context: LLMIntegrationContext) -> None:
     """Verify structured result was received."""
-    assert llm_context.get("error") is None
+    error = llm_context.get("error")
+    assert error is None, f"Expected no error but got: {error}"
     result = llm_context.get("result")
-    assert result is not None
+    assert result is not None, "Expected a result but got None"
 
 
 @then("the result contains a summary mentioning the repository")

@@ -64,9 +64,12 @@ class OpenAIStatusModelConfig:
             If required environment variables are missing or invalid.
 
         """
-        api_key = os.environ.get("GHILLIE_OPENAI_API_KEY", "").strip()
-        if not api_key:
+        raw_api_key = os.environ.get("GHILLIE_OPENAI_API_KEY")
+        if raw_api_key is None:
             raise OpenAIConfigError.missing_api_key()
+        api_key = raw_api_key.strip()
+        if not api_key:
+            raise OpenAIConfigError.empty_api_key()
 
         endpoint = os.environ.get("GHILLIE_OPENAI_ENDPOINT", _DEFAULT_ENDPOINT)
         model = os.environ.get("GHILLIE_OPENAI_MODEL", _DEFAULT_MODEL)

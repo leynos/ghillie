@@ -6,7 +6,15 @@ from __future__ import annotations
 _CONTENT_PREVIEW_LIMIT = 100
 
 
-class OpenAIAPIError(RuntimeError):
+class OpenAIStatusError(Exception):
+    """Base exception for all OpenAI status model errors.
+
+    This provides a single catch point for all OpenAI-related errors
+    in the status module.
+    """
+
+
+class OpenAIAPIError(OpenAIStatusError):
     """Raised when OpenAI API returns an error response.
 
     Attributes
@@ -45,7 +53,8 @@ class OpenAIAPIError(RuntimeError):
             Error with status code context.
 
         """
-        return cls(f"OpenAI API HTTP error {status_code}", status_code=status_code)
+        msg = f"OpenAI API HTTP error {status_code}"
+        return cls(msg, status_code=status_code)
 
     @classmethod
     def rate_limited(cls, retry_after: int | None = None) -> OpenAIAPIError:
@@ -94,10 +103,11 @@ class OpenAIAPIError(RuntimeError):
             Error indicating network failure.
 
         """
-        return cls(f"OpenAI API network error: {detail}")
+        msg = f"OpenAI API network error: {detail}"
+        return cls(msg)
 
 
-class OpenAIResponseShapeError(RuntimeError):
+class OpenAIResponseShapeError(OpenAIStatusError):
     """Raised when OpenAI response is missing expected fields or malformed."""
 
     @classmethod
@@ -115,7 +125,8 @@ class OpenAIResponseShapeError(RuntimeError):
             Error with field context.
 
         """
-        return cls(f"OpenAI response missing expected field: {field}")
+        msg = f"OpenAI response missing expected field: {field}"
+        return cls(msg)
 
     @classmethod
     def invalid_json(cls, content: str) -> OpenAIResponseShapeError:
@@ -136,10 +147,11 @@ class OpenAIResponseShapeError(RuntimeError):
             preview = content[:_CONTENT_PREVIEW_LIMIT] + "..."
         else:
             preview = content
-        return cls(f"Failed to parse JSON from response: {preview}")
+        msg = f"Failed to parse JSON from response: {preview}"
+        return cls(msg)
 
 
-class OpenAIConfigError(RuntimeError):
+class OpenAIConfigError(OpenAIStatusError):
     """Raised when OpenAI client configuration is invalid."""
 
     @classmethod

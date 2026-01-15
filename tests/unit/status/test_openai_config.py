@@ -76,10 +76,12 @@ class TestOpenAIStatusModelConfigValidation:
         with mock.patch.dict(os.environ, env, clear=True):
             with pytest.raises(OpenAIConfigError) as exc_info:
                 OpenAIStatusModelConfig.from_env()
-            assert "GHILLIE_OPENAI_API_KEY" in str(exc_info.value)
+            assert "non-empty" in str(exc_info.value).lower()
 
     def test_config_is_frozen(self) -> None:
         """Configuration dataclass is frozen (immutable)."""
+        import dataclasses
+
         config = OpenAIStatusModelConfig(api_key="test-key")
-        with pytest.raises(AttributeError):
+        with pytest.raises(dataclasses.FrozenInstanceError):
             config.api_key = "new-key"  # type: ignore[misc]

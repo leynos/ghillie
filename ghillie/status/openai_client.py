@@ -24,6 +24,24 @@ _HTTP_ERROR_STATUS_THRESHOLD = 400
 _HTTP_RATE_LIMITED = 429
 
 
+def _get_retry_after(response: httpx.Response) -> int | None:
+    """Extract Retry-After header value if present and numeric."""
+    retry_after = response.headers.get("Retry-After")
+    if retry_after and retry_after.isdigit():
+        return int(retry_after)
+    return None
+
+
+def _get_nested(data: dict[str, object], *keys: str) -> object:
+    """Traverse nested dict path, returning None for missing keys."""
+    current: object = data
+    for key in keys:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
+
+
 class LLMStatusResponse(msgspec.Struct, kw_only=True):
     """Parsed response from LLM for status report.
 
@@ -191,10 +209,7 @@ class OpenAIStatusModel:
             raise OpenAIAPIError.network_error(str(exc)) from exc
 
         if response.status_code == _HTTP_RATE_LIMITED:
-            retry_after = response.headers.get("Retry-After")
-            raise OpenAIAPIError.rate_limited(
-                int(retry_after) if retry_after and retry_after.isdigit() else None
-            )
+            raise OpenAIAPIError.rate_limited(_get_retry_after(response))
 
         if response.status_code >= _HTTP_ERROR_STATUS_THRESHOLD:
             raise OpenAIAPIError.http_error(response.status_code)
@@ -205,7 +220,7 @@ class OpenAIStatusModel:
             raise OpenAIResponseShapeError.invalid_json(response.text) from exc
         return self._extract_content(data)
 
-    def _extract_content(self, data: dict[str, typ.Any]) -> str:
+    def _extract_content(self, data: dict[str, object]) -> str:
         """Extract assistant message content from API response.
 
         Parameters
@@ -228,15 +243,7 @@ class OpenAIStatusModel:
         if not isinstance(choices, list) or not choices:
             raise OpenAIResponseShapeError.missing("choices")
 
-        first_choice = choices[0]
-        if not isinstance(first_choice, dict):
-            raise OpenAIResponseShapeError.missing("choices[0]")
-
-        message = first_choice.get("message")
-        if not isinstance(message, dict):
-            raise OpenAIResponseShapeError.missing("choices[0].message")
-
-        content = message.get("content")
+        content = _get_nested(choices[0], "message", "content")
         if not isinstance(content, str):
             raise OpenAIResponseShapeError.missing("choices[0].message.content")
 

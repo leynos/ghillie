@@ -17,6 +17,8 @@ OpenAIStatusModel
     OpenAI-compatible LLM implementation.
 OpenAIStatusModelConfig
     Configuration dataclass for OpenAI client.
+OpenAIStatusError
+    Base exception for all OpenAI status errors.
 OpenAIAPIError
     Exception for API errors.
 OpenAIResponseShapeError
@@ -43,6 +45,7 @@ from ghillie.status.errors import (
     OpenAIAPIError,
     OpenAIConfigError,
     OpenAIResponseShapeError,
+    OpenAIStatusError,
 )
 from ghillie.status.mock import MockStatusModel
 from ghillie.status.models import RepositoryStatusResult, to_machine_summary
@@ -54,6 +57,7 @@ __all__ = [
     "OpenAIAPIError",
     "OpenAIConfigError",
     "OpenAIResponseShapeError",
+    "OpenAIStatusError",
     "OpenAIStatusModel",
     "OpenAIStatusModelConfig",
     "RepositoryStatusResult",
