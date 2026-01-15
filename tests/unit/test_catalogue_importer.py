@@ -420,9 +420,7 @@ def test_ensure_repository_updates_documentation_paths(  # noqa: D103
                 "docs/adr/",
             ]
             second_result = CatalogueImportResult("default", None)
-            importer._ensure_repository(
-                session, repo_index, component, second_result
-            )
+            importer._ensure_repository(session, repo_index, component, second_result)
             await session.flush()
 
             return first_result, second_result, repository.documentation_paths
