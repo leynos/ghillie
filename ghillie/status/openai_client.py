@@ -218,23 +218,85 @@ class OpenAIStatusModel:
             If the response is missing expected fields.
 
         """
-        choices = data.get("choices")
-        if not isinstance(choices, list) or not choices:
+        choices = self._validate_choices_list(data.get("choices"))
+        first_choice = self._validate_dict(choices[0], "choices[0]")
+        message = self._validate_dict(first_choice.get("message"), "choices[0].message")
+        return self._validate_string(
+            message.get("content"), "choices[0].message.content"
+        )
+
+    def _validate_choices_list(self, value: object) -> list[typ.Any]:
+        """Validate that choices is a non-empty list.
+
+        Parameters
+        ----------
+        value
+            Value to validate.
+
+        Returns
+        -------
+        list[Any]
+            The validated choices list.
+
+        Raises
+        ------
+        OpenAIResponseShapeError
+            If value is not a non-empty list.
+
+        """
+        if not isinstance(value, list) or not value:
             raise OpenAIResponseShapeError.missing("choices")
+        return value
 
-        first_choice = choices[0]
-        if not isinstance(first_choice, dict):
-            raise OpenAIResponseShapeError.missing("choices[0]")
+    def _validate_dict(self, value: object, path: str) -> dict[str, typ.Any]:
+        """Validate that a value is a dictionary.
 
-        message = first_choice.get("message")
-        if not isinstance(message, dict):
-            raise OpenAIResponseShapeError.missing("choices[0].message")
+        Parameters
+        ----------
+        value
+            Value to validate.
+        path
+            JSON path for error reporting.
 
-        content = message.get("content")
-        if not isinstance(content, str):
-            raise OpenAIResponseShapeError.missing("choices[0].message.content")
+        Returns
+        -------
+        dict[str, Any]
+            The validated dictionary.
 
-        return content
+        Raises
+        ------
+        OpenAIResponseShapeError
+            If value is not a dictionary.
+
+        """
+        if not isinstance(value, dict):
+            raise OpenAIResponseShapeError.missing(path)
+        return typ.cast("dict[str, typ.Any]", value)
+
+    def _validate_string(self, value: object, path: str) -> str:
+        """Validate that a value is a string.
+
+        Parameters
+        ----------
+        value
+            Value to validate.
+        path
+            JSON path for error reporting.
+
+        Returns
+        -------
+        str
+            The validated string.
+
+        Raises
+        ------
+        OpenAIResponseShapeError
+            If value is not a string.
+
+        """
+        if not isinstance(value, str):
+            raise OpenAIResponseShapeError.missing(path)
+        return value
 
     def _parse_response(self, content: str) -> LLMStatusResponse:
         """Parse JSON response content into typed structure.
