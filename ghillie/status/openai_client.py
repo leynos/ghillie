@@ -187,7 +187,26 @@ class OpenAIStatusModel:
             If the request fails or returns an error status.
 
         """
-        payload = {
+        payload = self._build_payload(user_prompt)
+        response = await self._send_request(payload)
+        self._check_response_errors(response)
+        return self._parse_json_response(response)
+
+    def _build_payload(self, user_prompt: str) -> dict[str, object]:
+        """Construct the request payload for chat completion.
+
+        Parameters
+        ----------
+        user_prompt
+            User message content for the completion request.
+
+        Returns
+        -------
+        dict[str, object]
+            Request payload dictionary for the API call.
+
+        """
+        return {
             "model": self._config.model,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
@@ -198,8 +217,30 @@ class OpenAIStatusModel:
             "response_format": {"type": "json_object"},
         }
 
+    async def _send_request(
+        self,
+        payload: dict[str, object],
+    ) -> httpx.Response:
+        """Perform HTTP POST request to the chat completions endpoint.
+
+        Parameters
+        ----------
+        payload
+            Request payload dictionary for the API call.
+
+        Returns
+        -------
+        httpx.Response
+            Raw HTTP response from the API.
+
+        Raises
+        ------
+        OpenAIAPIError
+            If a timeout or network error occurs.
+
+        """
         try:
-            response = await self._client.post(
+            return await self._client.post(
                 self._config.endpoint,
                 json=payload,
             )
@@ -208,12 +249,45 @@ class OpenAIStatusModel:
         except httpx.RequestError as exc:
             raise OpenAIAPIError.network_error(str(exc)) from exc
 
+    def _check_response_errors(self, response: httpx.Response) -> None:
+        """Validate HTTP response status code.
+
+        Parameters
+        ----------
+        response
+            HTTP response to validate.
+
+        Raises
+        ------
+        OpenAIAPIError
+            If the response indicates rate limiting or other HTTP error.
+
+        """
         if response.status_code == _HTTP_RATE_LIMITED:
             raise OpenAIAPIError.rate_limited(_get_retry_after(response))
 
         if response.status_code >= _HTTP_ERROR_STATUS_THRESHOLD:
             raise OpenAIAPIError.http_error(response.status_code)
 
+    def _parse_json_response(self, response: httpx.Response) -> str:
+        """Parse JSON response and extract assistant message content.
+
+        Parameters
+        ----------
+        response
+            HTTP response containing JSON body.
+
+        Returns
+        -------
+        str
+            Content string from the assistant message.
+
+        Raises
+        ------
+        OpenAIResponseShapeError
+            If the response is not valid JSON or missing expected fields.
+
+        """
         try:
             data = response.json()
         except json.JSONDecodeError as exc:

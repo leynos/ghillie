@@ -37,6 +37,56 @@ async def create_model_with_transport(
         await client.aclose()
 
 
+class _RateLimitWithRetryTransport(httpx.AsyncBaseTransport):
+    """Transport that returns 429 with Retry-After header."""
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        """Return rate limit response with retry-after."""
+        return httpx.Response(
+            status_code=429,
+            headers={"Retry-After": "30"},
+            json={"error": {"message": "Rate limit exceeded"}},
+        )
+
+
+class _RateLimitWithoutRetryTransport(httpx.AsyncBaseTransport):
+    """Transport that returns 429 without Retry-After header."""
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        """Return rate limit response without retry-after."""
+        return httpx.Response(
+            status_code=429,
+            json={"error": {"message": "Rate limit exceeded"}},
+        )
+
+
+class _BadGatewayTransport(httpx.AsyncBaseTransport):
+    """Transport that returns 502 Bad Gateway."""
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        """Return bad gateway response."""
+        return httpx.Response(
+            status_code=502,
+            json={"error": {"message": "Bad gateway"}},
+        )
+
+
+class _TimeoutTransport(httpx.AsyncBaseTransport):
+    """Transport that raises TimeoutException."""
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        """Raise timeout exception."""
+        raise httpx.TimeoutException("timeout", request=request)
+
+
+class _NetworkErrorTransport(httpx.AsyncBaseTransport):
+    """Transport that raises ConnectError."""
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        """Raise network connection error."""
+        raise httpx.ConnectError("refused")
+
+
 class TestLLMStatusResponseParsing:
     """Tests for parsing LLM JSON responses."""
 
@@ -205,95 +255,37 @@ class TestOpenAIHTTPErrorHandling:
         )
 
     @pytest.mark.asyncio
-    async def test_rate_limited_with_retry_after(
-        self, config: OpenAIStatusModelConfig
+    @pytest.mark.parametrize(
+        ("transport_factory", "expected_status_code", "expected_message_fragment"),
+        [
+            (_RateLimitWithRetryTransport, 429, "30"),
+            (_RateLimitWithoutRetryTransport, 429, "rate"),
+            (_BadGatewayTransport, 502, "502"),
+            (_TimeoutTransport, None, "timed out"),
+            (_NetworkErrorTransport, None, "network"),
+        ],
+        ids=[
+            "rate_limited_with_retry_after",
+            "rate_limited_without_retry_after",
+            "http_error_502",
+            "timeout_error",
+            "network_error",
+        ],
+    )
+    async def test_error_handling(
+        self,
+        config: OpenAIStatusModelConfig,
+        transport_factory: type[httpx.AsyncBaseTransport],
+        expected_status_code: int | None,
+        expected_message_fragment: str,
     ) -> None:
-        """429 with numeric Retry-After produces rate-limited OpenAIAPIError."""
-
-        class RateLimitTransport(httpx.AsyncBaseTransport):
-            async def handle_async_request(
-                self, request: httpx.Request
-            ) -> httpx.Response:
-                return httpx.Response(
-                    status_code=429,
-                    headers={"Retry-After": "30"},
-                    json={"error": {"message": "Rate limit exceeded"}},
-                )
-
-        async with create_model_with_transport(config, RateLimitTransport()) as model:
+        """Verify HTTP error scenarios raise appropriate OpenAIAPIError."""
+        transport = transport_factory()
+        async with create_model_with_transport(config, transport) as model:
             with pytest.raises(OpenAIAPIError) as exc_info:
                 await model._call_chat_completion("test prompt")
-            assert exc_info.value.status_code == 429
-            assert "30" in str(exc_info.value)
 
-    @pytest.mark.asyncio
-    async def test_rate_limited_without_retry_after(
-        self, config: OpenAIStatusModelConfig
-    ) -> None:
-        """429 without Retry-After still produces rate-limited OpenAIAPIError."""
+            if expected_status_code is not None:
+                assert exc_info.value.status_code == expected_status_code
 
-        class RateLimitTransport(httpx.AsyncBaseTransport):
-            async def handle_async_request(
-                self, request: httpx.Request
-            ) -> httpx.Response:
-                return httpx.Response(
-                    status_code=429,
-                    json={"error": {"message": "Rate limit exceeded"}},
-                )
-
-        async with create_model_with_transport(config, RateLimitTransport()) as model:
-            with pytest.raises(OpenAIAPIError) as exc_info:
-                await model._call_chat_completion("test prompt")
-            assert exc_info.value.status_code == 429
-            assert "rate" in str(exc_info.value).lower()
-
-    @pytest.mark.asyncio
-    async def test_http_error_502(self, config: OpenAIStatusModelConfig) -> None:
-        """Non-2xx (e.g. 502) produces HTTP error OpenAIAPIError."""
-
-        class BadGatewayTransport(httpx.AsyncBaseTransport):
-            async def handle_async_request(
-                self, request: httpx.Request
-            ) -> httpx.Response:
-                return httpx.Response(
-                    status_code=502,
-                    json={"error": {"message": "Bad gateway"}},
-                )
-
-        async with create_model_with_transport(config, BadGatewayTransport()) as model:
-            with pytest.raises(OpenAIAPIError) as exc_info:
-                await model._call_chat_completion("test prompt")
-            assert exc_info.value.status_code == 502
-            assert "502" in str(exc_info.value)
-
-    @pytest.mark.asyncio
-    async def test_timeout_error(self, config: OpenAIStatusModelConfig) -> None:
-        """Timeout raises OpenAIAPIError with timeout message."""
-
-        class TimeoutTransport(httpx.AsyncBaseTransport):
-            async def handle_async_request(
-                self, request: httpx.Request
-            ) -> httpx.Response:
-                raise httpx.TimeoutException("timeout", request=request)
-
-        async with create_model_with_transport(config, TimeoutTransport()) as model:
-            with pytest.raises(OpenAIAPIError) as exc_info:
-                await model._call_chat_completion("test prompt")
-            assert "timed out" in str(exc_info.value).lower()
-
-    @pytest.mark.asyncio
-    async def test_network_error(self, config: OpenAIStatusModelConfig) -> None:
-        """Network errors (DNS, connection) raise OpenAIAPIError."""
-
-        class NetworkErrorTransport(httpx.AsyncBaseTransport):
-            async def handle_async_request(
-                self, request: httpx.Request
-            ) -> httpx.Response:
-                raise httpx.ConnectError("refused")
-
-        async with create_model_with_transport(
-            config, NetworkErrorTransport()
-        ) as model:
-            with pytest.raises(OpenAIAPIError) as exc_info:
-                await model._call_chat_completion("test prompt")
-            assert "network" in str(exc_info.value).lower()
+            assert expected_message_fragment in str(exc_info.value).lower()
