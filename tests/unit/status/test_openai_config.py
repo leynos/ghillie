@@ -92,8 +92,8 @@ class TestOpenAIStatusModelConfigValidation:
         assert config.__dataclass_params__.frozen is True
 
         # Verify runtime mutation raises FrozenInstanceError.
-        # The type: ignore is required because mypy correctly warns about
-        # assignment to a frozen dataclass field. We intentionally trigger
-        # this to verify runtime immutability enforcement.
+        # Direct assignment is required to test frozen dataclass behaviour.
+        # Note: object.__setattr__ bypasses frozen protection and does not
+        # raise FrozenInstanceError, so we must use direct assignment here.
         with pytest.raises(dataclasses.FrozenInstanceError):
-            config.api_key = "new-key"  # type: ignore[misc]
+            config.api_key = "new-key"  # type: ignore[misc]  # intentional
