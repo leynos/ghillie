@@ -79,9 +79,21 @@ class TestOpenAIStatusModelConfigValidation:
             assert "non-empty" in str(exc_info.value).lower()
 
     def test_config_is_frozen(self) -> None:
-        """Configuration dataclass is frozen (immutable)."""
+        """Configuration dataclass is frozen (immutable).
+
+        Verifies that the dataclass is declared frozen and that
+        attempting to mutate a field raises FrozenInstanceError.
+        """
         import dataclasses
 
         config = OpenAIStatusModelConfig(api_key="test-key")
+
+        # Verify frozen flag is set in dataclass metadata
+        assert config.__dataclass_params__.frozen is True
+
+        # Verify runtime mutation raises FrozenInstanceError.
+        # The type: ignore is required because mypy correctly warns about
+        # assignment to a frozen dataclass field. We intentionally trigger
+        # this to verify runtime immutability enforcement.
         with pytest.raises(dataclasses.FrozenInstanceError):
             config.api_key = "new-key"  # type: ignore[misc]

@@ -201,21 +201,26 @@ def then_receive_structured_result(llm_context: LLMIntegrationContext) -> None:
 def then_result_contains_summary(llm_context: LLMIntegrationContext) -> None:
     """Verify result summary mentions repository."""
     result = llm_context["result"]
-    assert result.summary is not None
-    assert len(result.summary) > 0
+    assert result.summary is not None, "Expected summary to be present but was None"
+    assert len(result.summary) > 0, "Expected non-empty summary"
     # VidaiMock is configured to return summary mentioning octo/reef
-    assert "octo/reef" in result.summary or "reef" in result.summary.lower()
+    assert "octo/reef" in result.summary or "reef" in result.summary.lower(), (
+        f"Expected summary to mention repository, got: {result.summary}"
+    )
 
 
 @then("the result contains a valid status code")
 def then_result_contains_valid_status(llm_context: LLMIntegrationContext) -> None:
     """Verify result has valid status code."""
     result = llm_context["result"]
-    assert result.status in (
+    valid_statuses = (
         ReportStatus.ON_TRACK,
         ReportStatus.AT_RISK,
         ReportStatus.BLOCKED,
         ReportStatus.UNKNOWN,
+    )
+    assert result.status in valid_statuses, (
+        f"Expected status in {valid_statuses}, got: {result.status}"
     )
 
 
@@ -223,30 +228,38 @@ def then_result_contains_valid_status(llm_context: LLMIntegrationContext) -> Non
 def then_api_timeout_error(llm_context: LLMIntegrationContext) -> None:
     """Verify API timeout error was raised."""
     error = llm_context.get("error")
-    assert error is not None
-    assert isinstance(error, OpenAIAPIError)
+    assert error is not None, "Expected an error but none was raised"
+    assert isinstance(error, OpenAIAPIError), (
+        f"Expected OpenAIAPIError but got {type(error).__name__}: {error}"
+    )
 
 
 @then("the error message indicates a timeout occurred")
 def then_error_indicates_timeout(llm_context: LLMIntegrationContext) -> None:
     """Verify error message mentions timeout."""
     error = llm_context.get("error")
-    assert error is not None
-    assert "timeout" in str(error).lower()
+    assert error is not None, "Expected an error but none was raised"
+    assert "timeout" in str(error).lower(), (
+        f"Expected error message to mention 'timeout', got: {error}"
+    )
 
 
 @then("a response shape error is raised")
 def then_response_shape_error(llm_context: LLMIntegrationContext) -> None:
     """Verify response shape error was raised."""
     error = llm_context.get("error")
-    assert error is not None
-    assert isinstance(error, OpenAIResponseShapeError)
+    assert error is not None, "Expected an error but none was raised"
+    assert isinstance(error, OpenAIResponseShapeError), (
+        f"Expected OpenAIResponseShapeError but got {type(error).__name__}: {error}"
+    )
 
 
 @then("the error message indicates invalid JSON")
 def then_error_indicates_invalid_json(llm_context: LLMIntegrationContext) -> None:
     """Verify error message mentions JSON."""
     error = llm_context.get("error")
-    assert error is not None
+    assert error is not None, "Expected an error but none was raised"
     error_str = str(error).lower()
-    assert "json" in error_str or "parse" in error_str
+    assert "json" in error_str or "parse" in error_str, (
+        f"Expected error message to mention 'json' or 'parse', got: {error}"
+    )
