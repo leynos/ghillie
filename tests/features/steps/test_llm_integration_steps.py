@@ -169,19 +169,23 @@ def when_request_status_report(
         )
 
         http_client: httpx.AsyncClient | None = None
-        if llm_context.get("timeout_enabled"):
-            http_client = httpx.AsyncClient(transport=_create_timeout_transport())
-        elif llm_context.get("invalid_json_enabled"):
-            http_client = httpx.AsyncClient(transport=_create_invalid_json_transport())
-
-        model = OpenAIStatusModel(config, http_client=http_client)
+        model: OpenAIStatusModel | None = None
         try:
+            if llm_context.get("timeout_enabled"):
+                http_client = httpx.AsyncClient(transport=_create_timeout_transport())
+            elif llm_context.get("invalid_json_enabled"):
+                http_client = httpx.AsyncClient(
+                    transport=_create_invalid_json_transport()
+                )
+
+            model = OpenAIStatusModel(config, http_client=http_client)
             result = await model.summarize_repository(evidence)
             llm_context["result"] = result
         except (OpenAIAPIError, OpenAIResponseShapeError) as e:
             llm_context["error"] = e
         finally:
-            await model.aclose()
+            if model is not None:
+                await model.aclose()
             if http_client is not None:
                 await http_client.aclose()
 

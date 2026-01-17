@@ -54,7 +54,8 @@ ADR-002's updated format (nested `endpoints` within `providers` list).
    conventions)
 3. Prompt uses JSON mode with explicit schema in system prompt (reliable
    structured output)
-4. Error classes use factory classmethods for consistency with existing patterns.
+4. Error classes use factory classmethods for consistency with existing
+   patterns.
 
 ## Outcomes & Retrospective
 
