@@ -4,7 +4,7 @@ This execution plan (ExecPlan) is a living document. The sections `Progress`,
 `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must
 be kept up to date as work proceeds.
 
-## Purpose / Big Picture
+## Purpose / big picture
 
 Task 2.2.b implements the first real LLM integration in Ghillie, connecting the
 `StatusModel` protocol to an OpenAI-compatible API (GPT-5.1-thinking). This
@@ -22,7 +22,7 @@ Success is observable when:
 5. Error handling covers API failures, timeouts, and malformed responses
 
 The design aligns with ADR-002 (VidaiMock for LLM integration testing) and
-extends Section 9.4 of `docs/ghillie-design.md`.
+extends Section 9.5 of `docs/ghillie-design.md`.
 
 ## Progress
 
@@ -39,14 +39,15 @@ extends Section 9.4 of `docs/ghillie-design.md`.
 - [x] Update documentation in `ghillie-design.md` (Section 9.5)
 - [x] Update ADR-002 status from Proposed to Accepted
 - [x] Mark Task 2.2.b as done in `roadmap.md`
-- [ ] All quality gates passed (check-fmt, typecheck, lint, markdownlint, test, nixie)
+- [ ] All quality gates passed (check-fmt, typecheck, lint, markdownlint, test,
+  nixie)
 
-## Surprises & Discoveries
+## Surprises and discoveries
 
 No major surprises. The VidaiMock fixture configuration required alignment with
 ADR-002's updated format (nested `endpoints` within `providers` list).
 
-## Decision Log
+## Decision log
 
 1. Used `httpx.AsyncClient` for HTTP client (consistent with GitHub client
    pattern)
@@ -57,13 +58,13 @@ ADR-002's updated format (nested `endpoints` within `providers` list).
 4. Error classes use factory classmethods for consistency with existing
    patterns.
 
-## Outcomes & Retrospective
+## Outcomes and retrospective
 
 To be completed after quality gates pass.
 
-## Context and Orientation
+## Context and orientation
 
-### Existing Structures
+### Existing structures
 
 The StatusModel infrastructure is complete (Task 2.2.a):
 
@@ -85,7 +86,7 @@ The HTTP client pattern is established:
 - **Custom Exceptions** (`ghillie/github/errors.py`): `GitHubAPIError`,
   `GitHubResponseShapeError`, `GitHubConfigError` with classmethod constructors
 
-### Key Patterns to Follow
+### Key patterns to follow
 
 1. **Configuration dataclass**: Use `dataclasses.dataclass(frozen=True,
    slots=True)` with `from_env()` classmethod
@@ -97,7 +98,7 @@ The HTTP client pattern is established:
 5. **msgspec for data**: Use msgspec.Struct for response parsing
 6. **Environment variables**: Follow `GHILLIE_*` naming convention.
 
-### Files to Reference
+### Files to reference
 
 - `ghillie/github/client.py` - HTTP client and config pattern
 - `ghillie/github/errors.py` - Custom exception pattern
@@ -108,7 +109,7 @@ The HTTP client pattern is established:
 - `docs/ghillie-design.md` (Section 10) - LLM testing strategy
 - `tests/unit/status/conftest.py` - Evidence bundle fixtures
 
-## Plan of Work
+## Plan of work
 
 ### Phase 1: Write failing tests first (AGENTS.md requirement)
 
@@ -216,7 +217,7 @@ providers:
 - Update ADR-002 status from "Proposed" to "Accepted"
 - Mark Task 2.2.b as done in `docs/roadmap.md`
 
-## Concrete Steps
+## Concrete steps
 
 1. Create `tests/unit/status/test_openai_config.py` with failing tests:
    - `test_config_from_env_requires_api_key`
@@ -367,7 +368,7 @@ providers:
     set -o pipefail; make nixie 2>&1 | tee /tmp/ghillie-nixie.log
     ```
 
-## Validation and Acceptance
+## Validation and acceptance
 
 The change is accepted when:
 
@@ -400,7 +401,7 @@ $ pytest tests/features -k llm_integration
 ~3 passed
 ```
 
-## Idempotence and Recovery
+## Idempotence and recovery
 
 All steps are safe to rerun:
 
@@ -417,7 +418,7 @@ If tests fail:
 4. Review fixture scope (session vs function)
 5. Check httpx timeout configuration matches VidaiMock latency
 
-## Artefacts and Notes
+## Artefacts and notes
 
 **Key design decisions:**
 
@@ -444,7 +445,7 @@ If tests fail:
 4. Fall back to `UNKNOWN` status for unparseable values
 5. Truncate long content in error messages for readability
 
-## Interfaces and Dependencies
+## Interfaces and dependencies
 
 **New public API:**
 
@@ -472,7 +473,7 @@ If tests fail:
   based on configuration
 - Report storage unchanged (uses `to_machine_summary()`)
 
-## Critical Files
+## Critical files
 
 | File                                                 | Action | Purpose                           |
 | ---------------------------------------------------- | ------ | --------------------------------- |

@@ -20,7 +20,9 @@ class TestOpenAIStatusModelConfigFromEnv:
         with mock.patch.dict(os.environ, env, clear=True):
             with pytest.raises(OpenAIConfigError) as exc_info:
                 OpenAIStatusModelConfig.from_env()
-            assert "GHILLIE_OPENAI_API_KEY" in str(exc_info.value)
+            assert "GHILLIE_OPENAI_API_KEY" in str(exc_info.value), (
+                "Error message should reference missing env var"
+            )
 
     def test_from_env_uses_defaults(self) -> None:
         """Configuration uses default values when only API key is provided."""
@@ -28,12 +30,14 @@ class TestOpenAIStatusModelConfigFromEnv:
         with mock.patch.dict(os.environ, env, clear=True):
             config = OpenAIStatusModelConfig.from_env()
 
-        assert config.api_key == "test-key-123"
-        assert config.endpoint == "https://api.openai.com/v1/chat/completions"
-        assert config.model == "gpt-5.1-thinking"
-        assert config.timeout_s == 120.0
-        assert config.temperature == 0.3
-        assert config.max_tokens == 2048
+        assert config.api_key == "test-key-123", "Expected API key from env"
+        assert config.endpoint == "https://api.openai.com/v1/chat/completions", (
+            "Expected default OpenAI endpoint"
+        )
+        assert config.model == "gpt-5.1-thinking", "Expected default model"
+        assert config.timeout_s == 120.0, "Expected default timeout of 120s"
+        assert config.temperature == 0.3, "Expected default temperature of 0.3"
+        assert config.max_tokens == 2048, "Expected default max_tokens of 2048"
 
     def test_from_env_reads_custom_endpoint(self) -> None:
         """Configuration reads custom endpoint from environment."""
@@ -44,7 +48,9 @@ class TestOpenAIStatusModelConfigFromEnv:
         with mock.patch.dict(os.environ, env, clear=True):
             config = OpenAIStatusModelConfig.from_env()
 
-        assert config.endpoint == "http://localhost:8080/v1/chat/completions"
+        assert config.endpoint == "http://localhost:8080/v1/chat/completions", (
+            "Expected custom endpoint from env"
+        )
 
     def test_from_env_reads_custom_model(self) -> None:
         """Configuration reads custom model from environment."""
@@ -55,7 +61,7 @@ class TestOpenAIStatusModelConfigFromEnv:
         with mock.patch.dict(os.environ, env, clear=True):
             config = OpenAIStatusModelConfig.from_env()
 
-        assert config.model == "gpt-4-turbo"
+        assert config.model == "gpt-4-turbo", "Expected custom model from env"
 
 
 class TestOpenAIStatusModelConfigValidation:
@@ -76,7 +82,9 @@ class TestOpenAIStatusModelConfigValidation:
         with mock.patch.dict(os.environ, env, clear=True):
             with pytest.raises(OpenAIConfigError) as exc_info:
                 OpenAIStatusModelConfig.from_env()
-            assert "non-empty" in str(exc_info.value).lower()
+            assert "non-empty" in str(exc_info.value).lower(), (
+                "Error message should indicate API key must be non-empty"
+            )
 
     def test_config_is_frozen(self) -> None:
         """Configuration dataclass is frozen (immutable).
@@ -89,7 +97,9 @@ class TestOpenAIStatusModelConfigValidation:
         config = OpenAIStatusModelConfig(api_key="test-key")
 
         # Verify frozen flag is set in dataclass metadata
-        assert config.__dataclass_params__.frozen is True
+        assert config.__dataclass_params__.frozen is True, (
+            "Dataclass should be declared frozen"
+        )
 
         # Verify runtime mutation raises FrozenInstanceError.
         # Direct assignment is required to test frozen dataclass behaviour.
