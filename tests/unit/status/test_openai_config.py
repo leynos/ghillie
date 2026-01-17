@@ -62,16 +62,16 @@ class TestOpenAIStatusModelConfigValidation:
     """Tests for configuration validation."""
 
     @pytest.mark.parametrize(
-        ("api_key", "description"),
+        "api_key",
         [
-            ("", "empty string"),
-            ("   ", "whitespace only"),
-            ("\t\n", "whitespace with tab and newline"),
+            "",
+            "   ",
+            "\t\n",
         ],
         ids=["empty", "spaces", "mixed-whitespace"],
     )
-    def test_rejects_invalid_api_key(self, api_key: str, description: str) -> None:
-        """Configuration fails when API key is invalid ({description})."""
+    def test_rejects_invalid_api_key(self, api_key: str) -> None:
+        """Configuration fails when API key is invalid."""
         env = {"GHILLIE_OPENAI_API_KEY": api_key}
         with mock.patch.dict(os.environ, env, clear=True):
             with pytest.raises(OpenAIConfigError) as exc_info:

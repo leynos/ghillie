@@ -39,7 +39,7 @@ extends Section 9.4 of `docs/ghillie-design.md`.
 - [x] Update documentation in `ghillie-design.md` (Section 9.5)
 - [x] Update ADR-002 status from Proposed to Accepted
 - [x] Mark Task 2.2.b as done in `roadmap.md`
-- [ ] All quality gates passed (check-fmt, typecheck, lint, test, nixie)
+- [ ] All quality gates passed (check-fmt, typecheck, lint, markdownlint, test, nixie)
 
 ## Surprises & Discoveries
 
