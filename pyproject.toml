@@ -120,6 +120,10 @@ max-args = 4
 timeout = 30
 # Register cmd-mox plugin for external command mocking
 addopts = "-p cmd_mox.pytest_plugin"
+markers = [
+    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+    "llm: marks tests that require LLM mock infrastructure",
+]
 
 [tool.uv]
 package = true

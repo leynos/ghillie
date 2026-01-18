@@ -372,7 +372,7 @@ def test_ensure_repository_normalises_documentation_paths(  # noqa: D103
                 ),
             )
             result = CatalogueImportResult("default", None)
-            repository = importer._ensure_repository(  # type: ignore[attr-defined]
+            repository = importer._ensure_repository(
                 session, repo_index, component, result
             )
             assert repository is not None
@@ -408,7 +408,7 @@ def test_ensure_repository_updates_documentation_paths(  # noqa: D103
                 ),
             )
             first_result = CatalogueImportResult("default", None)
-            repository = importer._ensure_repository(  # type: ignore[attr-defined]
+            repository = importer._ensure_repository(
                 session, repo_index, component, first_result
             )
             assert repository is not None
@@ -420,9 +420,7 @@ def test_ensure_repository_updates_documentation_paths(  # noqa: D103
                 "docs/adr/",
             ]
             second_result = CatalogueImportResult("default", None)
-            importer._ensure_repository(  # type: ignore[attr-defined]
-                session, repo_index, component, second_result
-            )
+            importer._ensure_repository(session, repo_index, component, second_result)
             await session.flush()
 
             return first_result, second_result, repository.documentation_paths

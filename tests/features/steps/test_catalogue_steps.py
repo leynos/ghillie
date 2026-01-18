@@ -184,7 +184,7 @@ def schema_validation(context: StepContext, tmp_path: Path) -> None:
             capture_output=True,
             text=True,
             encoding="utf-8",
-        )  # type: ignore[arg-type]
+        )
     except subprocess.CalledProcessError as exc:
         message = (
             f"pajv rejected the catalogue: stdout={exc.stdout}\nstderr={exc.stderr}"

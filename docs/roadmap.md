@@ -274,7 +274,7 @@ context window sizes abstracted.
   *Completion criteria:* At least one implementation of the interface is
   available in code, with tests that mock model responses.
 
-- [ ] **Task 2.2.b – Implement initial LLM integration**  
+- [x] **Task 2.2.b – Implement initial LLM integration**
   Implement an integration with a chosen model (for example, GPT-5.1-thinking)
   using the status model interface. Include prompt templates that:
   - provide previous reports and new events,
