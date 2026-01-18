@@ -21,8 +21,8 @@ Success is observable when:
 4. Response parsing extracts both narrative and structured JSON output
 5. Error handling covers API failures, timeouts, and malformed responses
 
-The design aligns with ADR-002 (VidaiMock for LLM integration testing) and
-extends Section 9.5 of `docs/ghillie-design.md`.
+The design aligns with Architecture Decision Record (ADR) 002 (VidaiMock for LLM
+integration testing) and extends Section 9.5 of `docs/ghillie-design.md`.
 
 ## Progress
 
