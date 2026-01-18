@@ -118,25 +118,27 @@ class FailingGitHubClient:
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Raise the configured error."""
         del repo, since, after
+        if False:  # pragma: no cover - ensure async generator typing
+            yield typ.cast("GitHubIngestedEvent", None)
         raise self._error
-        # Unreachable but needed for type checker
-        yield  # pragma: no cover
 
     async def iter_pull_requests(
         self, repo: RepositoryInfo, *, since: dt.datetime, after: str | None = None
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Raise the configured error."""
         del repo, since, after
+        if False:  # pragma: no cover - ensure async generator typing
+            yield typ.cast("GitHubIngestedEvent", None)
         raise self._error
-        yield  # pragma: no cover
 
     async def iter_issues(
         self, repo: RepositoryInfo, *, since: dt.datetime, after: str | None = None
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Raise the configured error."""
         del repo, since, after
+        if False:  # pragma: no cover - ensure async generator typing
+            yield typ.cast("GitHubIngestedEvent", None)
         raise self._error
-        yield  # pragma: no cover
 
     async def iter_doc_changes(
         self,
@@ -148,8 +150,9 @@ class FailingGitHubClient:
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Raise the configured error."""
         del repo, since, documentation_paths, after
+        if False:  # pragma: no cover - ensure async generator typing
+            yield typ.cast("GitHubIngestedEvent", None)
         raise self._error
-        yield  # pragma: no cover
 
 
 def make_repo_info(*, estate_id: str | None = None) -> RepositoryInfo:
