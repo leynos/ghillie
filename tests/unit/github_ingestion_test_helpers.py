@@ -120,7 +120,7 @@ class FailingGitHubClient:
         del repo, since, after
         raise self._error
         # Unreachable but needed for type checker
-        yield  # type: ignore[misc]  # pragma: no cover
+        yield  # pragma: no cover
 
     async def iter_pull_requests(
         self, repo: RepositoryInfo, *, since: dt.datetime, after: str | None = None
@@ -128,7 +128,7 @@ class FailingGitHubClient:
         """Raise the configured error."""
         del repo, since, after
         raise self._error
-        yield  # type: ignore[misc]  # pragma: no cover
+        yield  # pragma: no cover
 
     async def iter_issues(
         self, repo: RepositoryInfo, *, since: dt.datetime, after: str | None = None
@@ -136,7 +136,7 @@ class FailingGitHubClient:
         """Raise the configured error."""
         del repo, since, after
         raise self._error
-        yield  # type: ignore[misc]  # pragma: no cover
+        yield  # pragma: no cover
 
     async def iter_doc_changes(
         self,
@@ -149,7 +149,7 @@ class FailingGitHubClient:
         """Raise the configured error."""
         del repo, since, documentation_paths, after
         raise self._error
-        yield  # type: ignore[misc]  # pragma: no cover
+        yield  # pragma: no cover
 
 
 def make_repo_info(*, estate_id: str | None = None) -> RepositoryInfo:
