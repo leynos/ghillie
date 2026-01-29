@@ -34,7 +34,7 @@ Success is observable when:
 - [x] Update `__init__.py` exports
 - [x] Update documentation in `docs/users-guide.md`
 - [x] Mark Task 2.2.c as done in `docs/roadmap.md`
-- [ ] All quality gates passed (check-fmt, typecheck, lint, markdownlint, test)
+- [x] All quality gates passed (check-fmt, typecheck, lint, markdownlint, test)
 
 ## Surprises and discoveries
 
@@ -186,8 +186,7 @@ The change is accepted when:
 | ---------------------------------------------------- | ------ | ------------------------------------- |
 | `ghillie/status/factory.py`                          | Create | Factory function for model selection  |
 | `ghillie/status/errors.py`                           | Modify | Add StatusModelConfigError            |
-| `ghillie/status/config.py`                           | Modify | Extend from_env() for temperature and |
-| max_tokens                                           |
+| `ghillie/status/config.py`                           | Modify | Extend from_env() for temperature/max_tokens |
 | `ghillie/status/__init__.py`                         | Modify | Add new exports                       |
 | `tests/unit/status/test_factory.py`                  | Create | Factory unit tests                    |
 | `tests/unit/status/test_openai_config.py`            | Modify | Extended config tests                 |

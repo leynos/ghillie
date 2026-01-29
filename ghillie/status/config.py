@@ -47,6 +47,64 @@ class OpenAIStatusModelConfig:
     temperature: float = _DEFAULT_TEMPERATURE
     max_tokens: int = _DEFAULT_MAX_TOKENS
 
+    @staticmethod
+    def _parse_temperature_from_env() -> float:
+        """Parse and validate temperature from environment.
+
+        Returns
+        -------
+        float
+            Validated temperature value or default.
+
+        Raises
+        ------
+        StatusModelConfigError
+            If temperature value is invalid.
+
+        """
+        raw_temperature = os.environ.get("GHILLIE_OPENAI_TEMPERATURE")
+        if raw_temperature is None:
+            return _DEFAULT_TEMPERATURE
+
+        try:
+            temperature = float(raw_temperature)
+        except ValueError as exc:
+            raise StatusModelConfigError.invalid_temperature(raw_temperature) from exc
+
+        if not _MIN_TEMPERATURE <= temperature <= _MAX_TEMPERATURE:
+            raise StatusModelConfigError.invalid_temperature(raw_temperature)
+
+        return temperature
+
+    @staticmethod
+    def _parse_max_tokens_from_env() -> int:
+        """Parse and validate max_tokens from environment.
+
+        Returns
+        -------
+        int
+            Validated max_tokens value or default.
+
+        Raises
+        ------
+        StatusModelConfigError
+            If max_tokens value is invalid.
+
+        """
+        raw_max_tokens = os.environ.get("GHILLIE_OPENAI_MAX_TOKENS")
+        if raw_max_tokens is None:
+            return _DEFAULT_MAX_TOKENS
+
+        try:
+            max_tokens = int(raw_max_tokens)
+        except ValueError as exc:
+            raise StatusModelConfigError.invalid_max_tokens(raw_max_tokens) from exc
+
+        if max_tokens <= 0:
+            raise StatusModelConfigError.invalid_max_tokens(raw_max_tokens)
+
+        return max_tokens
+
     @classmethod
     def from_env(cls) -> OpenAIStatusModelConfig:
         """Build configuration from environment variables.
@@ -82,33 +140,8 @@ class OpenAIStatusModelConfig:
         endpoint = os.environ.get("GHILLIE_OPENAI_ENDPOINT", _DEFAULT_ENDPOINT)
         model = os.environ.get("GHILLIE_OPENAI_MODEL", _DEFAULT_MODEL)
 
-        # Parse temperature from environment
-        raw_temperature = os.environ.get("GHILLIE_OPENAI_TEMPERATURE")
-        if raw_temperature is not None:
-            try:
-                temperature = float(raw_temperature)
-            except ValueError as exc:
-                raise StatusModelConfigError.invalid_temperature(
-                    raw_temperature
-                ) from exc
-            if not _MIN_TEMPERATURE <= temperature <= _MAX_TEMPERATURE:
-                raise StatusModelConfigError.invalid_temperature(raw_temperature)
-        else:
-            temperature = _DEFAULT_TEMPERATURE
-
-        # Parse max_tokens from environment
-        raw_max_tokens = os.environ.get("GHILLIE_OPENAI_MAX_TOKENS")
-        if raw_max_tokens is not None:
-            try:
-                max_tokens = int(raw_max_tokens)
-            except ValueError as exc:
-                raise StatusModelConfigError.invalid_max_tokens(
-                    raw_max_tokens
-                ) from exc
-            if max_tokens <= 0:
-                raise StatusModelConfigError.invalid_max_tokens(raw_max_tokens)
-        else:
-            max_tokens = _DEFAULT_MAX_TOKENS
+        temperature = cls._parse_temperature_from_env()
+        max_tokens = cls._parse_max_tokens_from_env()
 
         return cls(
             api_key=api_key,

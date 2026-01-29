@@ -103,36 +103,35 @@ class TestCreateStatusModelOpenAIBackend:
         assert model._config.temperature == 0.3, "Expected default temperature"
         assert model._config.max_tokens == 2048, "Expected default max_tokens"
 
-    def test_openai_model_uses_temperature_from_env(self) -> None:
-        """OpenAI model uses temperature from environment."""
+    @pytest.mark.parametrize(
+        ("env_var", "env_value", "config_attr", "expected_value"),
+        [
+            ("GHILLIE_OPENAI_TEMPERATURE", "0.7", "temperature", 0.7),
+            ("GHILLIE_OPENAI_MAX_TOKENS", "4096", "max_tokens", 4096),
+        ],
+        ids=["temperature", "max_tokens"],
+    )
+    def test_openai_model_uses_config_from_env(
+        self,
+        env_var: str,
+        env_value: str,
+        config_attr: str,
+        expected_value: float | int,
+    ) -> None:
+        """OpenAI model uses configuration parameters from environment."""
         from ghillie.status.openai_client import OpenAIStatusModel
 
         env = {
             "GHILLIE_STATUS_MODEL_BACKEND": "openai",
             "GHILLIE_OPENAI_API_KEY": "test-key",
-            "GHILLIE_OPENAI_TEMPERATURE": "0.7",
+            env_var: env_value,
         }
         with mock.patch.dict(os.environ, env, clear=True):
             model = create_status_model()
         assert isinstance(model, OpenAIStatusModel)
-        assert model._config.temperature == 0.7, (
-            "Expected temperature 0.7 from environment"
-        )
-
-    def test_openai_model_uses_max_tokens_from_env(self) -> None:
-        """OpenAI model uses max_tokens from environment."""
-        from ghillie.status.openai_client import OpenAIStatusModel
-
-        env = {
-            "GHILLIE_STATUS_MODEL_BACKEND": "openai",
-            "GHILLIE_OPENAI_API_KEY": "test-key",
-            "GHILLIE_OPENAI_MAX_TOKENS": "4096",
-        }
-        with mock.patch.dict(os.environ, env, clear=True):
-            model = create_status_model()
-        assert isinstance(model, OpenAIStatusModel)
-        assert model._config.max_tokens == 4096, (
-            "Expected max_tokens 4096 from environment"
+        actual_value = getattr(model._config, config_attr)
+        assert actual_value == expected_value, (
+            f"Expected {config_attr} {expected_value} from environment"
         )
 
     def test_openai_model_uses_all_config_from_env(self) -> None:

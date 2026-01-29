@@ -12,6 +12,7 @@ from pytest_bdd import given, parsers, scenarios, then, when
 from ghillie.status.errors import StatusModelConfigError
 
 if typ.TYPE_CHECKING:
+    from ghillie.status.openai_client import OpenAIStatusModel
     from ghillie.status.protocol import StatusModel
 
 # Register scenarios from the feature file
@@ -109,16 +110,41 @@ def then_model_is_openai(model_context: ModelSelectionContext) -> None:
     )
 
 
+def _verify_openai_model(model_context: ModelSelectionContext) -> OpenAIStatusModel:
+    """Verify and return the model as an OpenAIStatusModel.
+
+    Parameters
+    ----------
+    model_context
+        The BDD step context containing the model.
+
+    Returns
+    -------
+    OpenAIStatusModel
+        The validated OpenAI status model instance.
+
+    Raises
+    ------
+    AssertionError
+        If the model is None or not an OpenAIStatusModel instance.
+
+    """
+    from ghillie.status.openai_client import OpenAIStatusModel
+
+    model = model_context.get("model")
+    assert model is not None, "Expected a model but got None"
+    assert isinstance(model, OpenAIStatusModel), (
+        f"Expected OpenAIStatusModel but got {type(model).__name__}"
+    )
+    return model
+
+
 @then(parsers.parse("the model uses temperature {temperature:f}"))
 def then_model_uses_temperature(
     model_context: ModelSelectionContext, temperature: float
 ) -> None:
     """Verify the model uses the specified temperature."""
-    from ghillie.status.openai_client import OpenAIStatusModel
-
-    model = model_context.get("model")
-    assert model is not None, "Expected a model but got None"
-    assert isinstance(model, OpenAIStatusModel), "Expected OpenAIStatusModel"
+    model = _verify_openai_model(model_context)
     assert model._config.temperature == temperature, (
         f"Expected temperature {temperature}, got {model._config.temperature}"
     )
@@ -129,11 +155,7 @@ def then_model_uses_max_tokens(
     model_context: ModelSelectionContext, max_tokens: int
 ) -> None:
     """Verify the model uses the specified max_tokens."""
-    from ghillie.status.openai_client import OpenAIStatusModel
-
-    model = model_context.get("model")
-    assert model is not None, "Expected a model but got None"
-    assert isinstance(model, OpenAIStatusModel), "Expected OpenAIStatusModel"
+    model = _verify_openai_model(model_context)
     assert model._config.max_tokens == max_tokens, (
         f"Expected max_tokens {max_tokens}, got {model._config.max_tokens}"
     )
