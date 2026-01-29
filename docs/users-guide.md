@@ -836,3 +836,92 @@ The local preview environment installs the following components:
 
 Connection strings for the database and cache are automatically extracted from
 operator-managed secrets and injected into the application secret.
+
+## Status model configuration (Phase 2.2.c)
+
+Ghillie supports configurable LLM backends for status report generation. The
+same reporting job can run against different model backends without code
+changes, controlled entirely via environment variables.
+
+### Backend selection
+
+Set `GHILLIE_STATUS_MODEL_BACKEND` to choose the status model implementation:
+
+| Value    | Description                                         |
+| -------- | --------------------------------------------------- |
+| `mock`   | Deterministic heuristic-based model for testing     |
+| `openai` | OpenAI-compatible API (GPT models, local endpoints) |
+
+### Mock backend configuration
+
+The mock backend requires no additional configuration:
+
+```bash
+export GHILLIE_STATUS_MODEL_BACKEND=mock
+```
+
+This is useful for:
+
+- Local development without API costs
+- Testing infrastructure and pipelines
+- Deterministic output for regression testing
+
+### OpenAI backend configuration
+
+The OpenAI backend requires an API key and supports optional customization:
+
+| Variable                       | Required | Default                                      | Description                    |
+| ------------------------------ | -------- | -------------------------------------------- | ------------------------------ |
+| `GHILLIE_STATUS_MODEL_BACKEND` | Yes      | -                                            | Must be `openai`               |
+| `GHILLIE_OPENAI_API_KEY`       | Yes      | -                                            | API key for authentication     |
+| `GHILLIE_OPENAI_ENDPOINT`      | No       | `https://api.openai.com/v1/chat/completions` | Chat completions endpoint URL  |
+| `GHILLIE_OPENAI_MODEL`         | No       | `gpt-5.1-thinking`                           | Model identifier               |
+| `GHILLIE_OPENAI_TEMPERATURE`   | No       | `0.3`                                        | Sampling temperature (0.0-2.0) |
+| `GHILLIE_OPENAI_MAX_TOKENS`    | No       | `2048`                                       | Maximum tokens in response     |
+
+Example configuration for production:
+
+```bash
+export GHILLIE_STATUS_MODEL_BACKEND=openai
+export GHILLIE_OPENAI_API_KEY="sk-..."
+export GHILLIE_OPENAI_MODEL=gpt-4-turbo
+export GHILLIE_OPENAI_TEMPERATURE=0.3
+export GHILLIE_OPENAI_MAX_TOKENS=2048
+```
+
+Example configuration for local testing with VidaiMock:
+
+```bash
+export GHILLIE_STATUS_MODEL_BACKEND=openai
+export GHILLIE_OPENAI_API_KEY="test-key"
+export GHILLIE_OPENAI_ENDPOINT="http://localhost:8080/v1/chat/completions"
+```
+
+### Programmatic usage
+
+For programmatic configuration, use `create_status_model()`:
+
+```python
+from ghillie.status import create_status_model
+
+# Uses GHILLIE_STATUS_MODEL_BACKEND to select implementation
+model = create_status_model()
+result = await model.summarize_repository(evidence_bundle)
+```
+
+Or construct models directly for testing:
+
+```python
+from ghillie.status import MockStatusModel, OpenAIStatusModel, OpenAIStatusModelConfig
+
+# Mock model for testing
+mock_model = MockStatusModel()
+
+# OpenAI model with explicit configuration
+config = OpenAIStatusModelConfig(
+    api_key="sk-...",
+    temperature=0.5,
+    max_tokens=4096,
+)
+openai_model = OpenAIStatusModel(config)
+```

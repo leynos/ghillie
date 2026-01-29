@@ -177,3 +177,80 @@ class OpenAIConfigError(OpenAIStatusError):
 
         """
         return cls("OpenAI API key must be non-empty")
+
+
+class StatusModelConfigError(Exception):
+    """Raised when status model factory configuration is invalid.
+
+    This exception indicates issues with the environment configuration
+    for selecting and configuring status model backends.
+
+    """
+
+    @classmethod
+    def missing_backend(cls) -> StatusModelConfigError:
+        """Create error when GHILLIE_STATUS_MODEL_BACKEND is not set.
+
+        Returns
+        -------
+        StatusModelConfigError
+            Error indicating the backend environment variable is required.
+
+        """
+        return cls("GHILLIE_STATUS_MODEL_BACKEND environment variable is required")
+
+    @classmethod
+    def invalid_backend(cls, name: str) -> StatusModelConfigError:
+        """Create error for unrecognized backend name.
+
+        Parameters
+        ----------
+        name
+            The invalid backend name that was provided.
+
+        Returns
+        -------
+        StatusModelConfigError
+            Error listing valid backend options.
+
+        """
+        return cls(
+            f"Invalid status model backend '{name}'. "
+            "Valid options are: 'mock', 'openai'"
+        )
+
+    @classmethod
+    def invalid_temperature(cls, value: str) -> StatusModelConfigError:
+        """Create error for invalid temperature value.
+
+        Parameters
+        ----------
+        value
+            The invalid temperature string that was provided.
+
+        Returns
+        -------
+        StatusModelConfigError
+            Error indicating valid temperature range.
+
+        """
+        return cls(
+            f"Invalid temperature '{value}'. Must be a float between 0.0 and 2.0"
+        )
+
+    @classmethod
+    def invalid_max_tokens(cls, value: str) -> StatusModelConfigError:
+        """Create error for invalid max_tokens value.
+
+        Parameters
+        ----------
+        value
+            The invalid max_tokens string that was provided.
+
+        Returns
+        -------
+        StatusModelConfigError
+            Error indicating max_tokens must be a positive integer.
+
+        """
+        return cls(f"Invalid max_tokens '{value}'. Must be a positive integer")

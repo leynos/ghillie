@@ -17,6 +17,8 @@ OpenAIStatusModel
     OpenAI-compatible LLM implementation.
 OpenAIStatusModelConfig
     Configuration dataclass for OpenAI client.
+create_status_model
+    Factory function to create StatusModel from environment configuration.
 OpenAIStatusError
     Base exception for all OpenAI status errors.
 OpenAIAPIError
@@ -25,6 +27,8 @@ OpenAIResponseShapeError
     Exception for response parsing errors.
 OpenAIConfigError
     Exception for configuration errors.
+StatusModelConfigError
+    Exception for factory configuration errors.
 to_machine_summary
     Helper to convert results for Report.machine_summary storage.
 
@@ -36,6 +40,11 @@ Examples
 >>> result.status
 <ReportStatus.ON_TRACK: 'on_track'>
 
+>>> import os
+>>> os.environ["GHILLIE_STATUS_MODEL_BACKEND"] = "mock"
+>>> from ghillie.status import create_status_model
+>>> model = create_status_model()
+
 """
 
 from __future__ import annotations
@@ -46,7 +55,9 @@ from ghillie.status.errors import (
     OpenAIConfigError,
     OpenAIResponseShapeError,
     OpenAIStatusError,
+    StatusModelConfigError,
 )
+from ghillie.status.factory import create_status_model
 from ghillie.status.mock import MockStatusModel
 from ghillie.status.models import RepositoryStatusResult, to_machine_summary
 from ghillie.status.openai_client import OpenAIStatusModel
@@ -62,5 +73,7 @@ __all__ = [
     "OpenAIStatusModelConfig",
     "RepositoryStatusResult",
     "StatusModel",
+    "StatusModelConfigError",
+    "create_status_model",
     "to_machine_summary",
 ]

@@ -285,7 +285,7 @@ context window sizes abstracted.
   JSON and narrative text that passes basic quality checks (no hallucinated
   repositories, correct reflection of event counts).
 
-- [ ] **Task 2.2.c – Provide configuration for model selection**  
+- [x] **Task 2.2.c – Provide configuration for model selection**
   Allow operators to select the model backend and key configuration
   (temperature, maximum tokens) per environment.
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import os
 
-from ghillie.status.errors import OpenAIConfigError
+from ghillie.status.errors import OpenAIConfigError, StatusModelConfigError
 
 # Default configuration values - single source of truth
 _DEFAULT_ENDPOINT = "https://api.openai.com/v1/chat/completions"
@@ -13,6 +13,10 @@ _DEFAULT_MODEL = "gpt-5.1-thinking"
 _DEFAULT_TIMEOUT_S = 120.0
 _DEFAULT_TEMPERATURE = 0.3
 _DEFAULT_MAX_TOKENS = 2048
+
+# Validation bounds for temperature (OpenAI API range)
+_MIN_TEMPERATURE = 0.0
+_MAX_TEMPERATURE = 2.0
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -52,6 +56,8 @@ class OpenAIStatusModelConfig:
         - ``GHILLIE_OPENAI_API_KEY``: Required API key
         - ``GHILLIE_OPENAI_ENDPOINT``: Optional endpoint override
         - ``GHILLIE_OPENAI_MODEL``: Optional model override
+        - ``GHILLIE_OPENAI_TEMPERATURE``: Optional temperature (0.0 to 2.0)
+        - ``GHILLIE_OPENAI_MAX_TOKENS``: Optional max tokens (positive integer)
 
         Returns
         -------
@@ -62,6 +68,8 @@ class OpenAIStatusModelConfig:
         ------
         OpenAIConfigError
             If required environment variables are missing or invalid.
+        StatusModelConfigError
+            If temperature or max_tokens values are invalid.
 
         """
         raw_api_key = os.environ.get("GHILLIE_OPENAI_API_KEY")
@@ -74,4 +82,38 @@ class OpenAIStatusModelConfig:
         endpoint = os.environ.get("GHILLIE_OPENAI_ENDPOINT", _DEFAULT_ENDPOINT)
         model = os.environ.get("GHILLIE_OPENAI_MODEL", _DEFAULT_MODEL)
 
-        return cls(api_key=api_key, endpoint=endpoint, model=model)
+        # Parse temperature from environment
+        raw_temperature = os.environ.get("GHILLIE_OPENAI_TEMPERATURE")
+        if raw_temperature is not None:
+            try:
+                temperature = float(raw_temperature)
+            except ValueError as exc:
+                raise StatusModelConfigError.invalid_temperature(
+                    raw_temperature
+                ) from exc
+            if not _MIN_TEMPERATURE <= temperature <= _MAX_TEMPERATURE:
+                raise StatusModelConfigError.invalid_temperature(raw_temperature)
+        else:
+            temperature = _DEFAULT_TEMPERATURE
+
+        # Parse max_tokens from environment
+        raw_max_tokens = os.environ.get("GHILLIE_OPENAI_MAX_TOKENS")
+        if raw_max_tokens is not None:
+            try:
+                max_tokens = int(raw_max_tokens)
+            except ValueError as exc:
+                raise StatusModelConfigError.invalid_max_tokens(
+                    raw_max_tokens
+                ) from exc
+            if max_tokens <= 0:
+                raise StatusModelConfigError.invalid_max_tokens(raw_max_tokens)
+        else:
+            max_tokens = _DEFAULT_MAX_TOKENS
+
+        return cls(
+            api_key=api_key,
+            endpoint=endpoint,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
