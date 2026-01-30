@@ -135,7 +135,14 @@ class OpenAIStatusModel:
 
     @property
     def config(self) -> OpenAIStatusModelConfig:
-        """Read-only access to the client configuration."""
+        """Read-only access to the client configuration.
+
+        Returns
+        -------
+        OpenAIStatusModelConfig
+            The configuration used to initialise this client.
+
+        """
         return self._config
 
     async def aclose(self) -> None:

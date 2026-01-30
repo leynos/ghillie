@@ -1,4 +1,20 @@
-"""Factory for creating StatusModel implementations from environment configuration."""
+"""Factory for creating StatusModel implementations from environment configuration.
+
+This module provides the ``create_status_model`` factory function which reads
+environment variables to determine which status model backend to instantiate
+and how to configure it. It centralises backend selection logic and insulates
+calling code from backend-specific imports.
+
+Usage
+-----
+Set the required environment variable and call the factory::
+
+    import os
+    os.environ["GHILLIE_STATUS_MODEL_BACKEND"] = "mock"
+    from ghillie.status.factory import create_status_model
+    model = create_status_model()
+
+"""
 
 from __future__ import annotations
 

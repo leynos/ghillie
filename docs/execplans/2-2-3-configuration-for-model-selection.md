@@ -113,7 +113,7 @@ Added `StatusModelConfigError` to `ghillie/status/errors.py` with factory
 classmethods:
 
 - `missing_backend()` - when `GHILLIE_STATUS_MODEL_BACKEND` is not set
-- `invalid_backend(name)` - when an unrecognized backend name is provided
+- `invalid_backend(name)` - when an unrecognised backend name is provided
 - `invalid_temperature(value)` - when temperature cannot be parsed or is out of
   range (0.0-2.0)
 - `invalid_max_tokens(value)` - when max_tokens cannot be parsed or is

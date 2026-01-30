@@ -798,7 +798,7 @@ make local-k8s-down
 
 ### Configuration options
 
-The local preview script accepts environment variables for customisation:
+The local preview script accepts environment variables for customization:
 
 | Variable                | Default         | Description                               |
 | ----------------------- | --------------- | ----------------------------------------- |
@@ -839,7 +839,7 @@ operator-managed secrets and injected into the application secret.
 
 ## Status model configuration (Phase 2.2.c)
 
-Ghillie supports configurable LLM backends for status report generation. The
+Ghillie supports configurable large language model (LLM) backends for status report generation. The
 same reporting job can run against different model backends without code
 changes, controlled entirely via environment variables.
 
@@ -868,7 +868,7 @@ This is useful for:
 
 ### OpenAI backend configuration
 
-The OpenAI backend requires an API key and supports optional customisation:
+The OpenAI backend requires an API key and supports optional customization:
 
 | Variable                       | Required | Default                                      | Description                    |
 | ------------------------------ | -------- | -------------------------------------------- | ------------------------------ |

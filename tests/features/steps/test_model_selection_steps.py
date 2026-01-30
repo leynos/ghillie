@@ -1,4 +1,17 @@
-"""Step definitions for model selection feature tests."""
+"""Step definitions for model selection feature tests.
+
+This module implements pytest-bdd step definitions for the model_selection.feature
+file, which tests the behaviour of the status model factory across different
+backend configurations and environment variable combinations.
+
+Usage
+-----
+These steps are automatically registered by pytest-bdd via the ``scenarios()``
+call. Run the feature tests with::
+
+    pytest tests/features/steps/test_model_selection_steps.py
+
+"""
 
 from __future__ import annotations
 
@@ -24,7 +37,7 @@ class ModelSelectionContext(typ.TypedDict, total=False):
 
     env_vars: dict[str, str]
     model: StatusModel
-    error: Exception | None
+    error: StatusModelConfigError | None
 
 
 @pytest.fixture

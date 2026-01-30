@@ -17,25 +17,23 @@ class TestCreateStatusModelBackendSelection:
 
     def test_raises_when_backend_missing(self) -> None:
         """Factory raises error when GHILLIE_STATUS_MODEL_BACKEND missing."""
-        with mock.patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(StatusModelConfigError) as exc_info:
-                create_status_model()
-            assert "GHILLIE_STATUS_MODEL_BACKEND" in str(exc_info.value), (
-                "Error message should reference missing env var"
-            )
+        with (
+            mock.patch.dict(os.environ, {}, clear=True),
+            pytest.raises(StatusModelConfigError, match="GHILLIE_STATUS_MODEL_BACKEND"),
+        ):
+            create_status_model()
 
     def test_raises_on_invalid_backend(self) -> None:
-        """Factory raises StatusModelConfigError for unrecognized backend."""
+        """Factory raises StatusModelConfigError for unrecognised backend."""
         env = {"GHILLIE_STATUS_MODEL_BACKEND": "invalid-backend"}
-        with mock.patch.dict(os.environ, env, clear=True):
-            with pytest.raises(StatusModelConfigError) as exc_info:
-                create_status_model()
-            error_msg = str(exc_info.value)
-            assert "invalid-backend" in error_msg, (
-                "Error message should include the invalid backend name"
-            )
-            assert "mock" in error_msg, "Error message should list valid options"
-            assert "openai" in error_msg, "Error message should list valid options"
+        with (
+            mock.patch.dict(os.environ, env, clear=True),
+            pytest.raises(StatusModelConfigError, match="invalid-backend") as exc_info,
+        ):
+            create_status_model()
+        error_msg = str(exc_info.value)
+        assert "mock" in error_msg, "Error message should list valid options"
+        assert "openai" in error_msg, "Error message should list valid options"
 
     @pytest.mark.parametrize(
         "backend_value",
@@ -144,7 +142,8 @@ class TestCreateStatusModelOpenAIBackend:
         from ghillie.status.errors import OpenAIConfigError
 
         env = {"GHILLIE_STATUS_MODEL_BACKEND": "openai"}
-        with mock.patch.dict(os.environ, env, clear=True):
-            with pytest.raises(OpenAIConfigError) as exc_info:
-                create_status_model()
-            assert "GHILLIE_OPENAI_API_KEY" in str(exc_info.value)
+        with (
+            mock.patch.dict(os.environ, env, clear=True),
+            pytest.raises(OpenAIConfigError, match="GHILLIE_OPENAI_API_KEY"),
+        ):
+            create_status_model()
