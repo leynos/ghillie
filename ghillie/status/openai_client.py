@@ -321,7 +321,9 @@ class OpenAIStatusModel:
         if not isinstance(first_choice, dict):
             raise OpenAIResponseShapeError.missing("choices[0]")
 
-        content = _get_nested(first_choice, "message", "content")
+        content = _get_nested(
+            typ.cast("dict[str, object]", first_choice), "message", "content"
+        )
         if not isinstance(content, str):
             raise OpenAIResponseShapeError.missing("choices[0].message.content")
 
