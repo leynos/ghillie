@@ -133,6 +133,18 @@ class OpenAIStatusModel:
             },
         )
 
+    @property
+    def config(self) -> OpenAIStatusModelConfig:
+        """Read-only access to the client configuration.
+
+        Returns
+        -------
+        OpenAIStatusModelConfig
+            The configuration used to initialise this client.
+
+        """
+        return self._config
+
     async def aclose(self) -> None:
         """Close any owned HTTP resources."""
         if self._owns_client:
@@ -317,7 +329,12 @@ class OpenAIStatusModel:
         if not isinstance(choices, list) or not choices:
             raise OpenAIResponseShapeError.missing("choices")
 
-        content = _get_nested(choices[0], "message", "content")
+        first_choice = choices[0]
+        if not isinstance(first_choice, dict):
+            raise OpenAIResponseShapeError.missing("choices[0]")
+
+        first_choice_dict = typ.cast("dict[str, object]", first_choice)
+        content = _get_nested(first_choice_dict, "message", "content")
         if not isinstance(content, str):
             raise OpenAIResponseShapeError.missing("choices[0].message.content")
 

@@ -42,6 +42,7 @@ from ghillie.registry.models import SyncResult
 from ghillie.silver.storage import Repository
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
     import datetime as dt
 
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -111,7 +112,7 @@ async def _sync_catalogue_repositories_or_raise(
 
 
 def _catalogue_repository_map(
-    projects: typ.Iterable[ProjectRecord],
+    projects: cabc.Iterable[ProjectRecord],
 ) -> dict[str, RepositoryRecord]:
     """Build a slug-indexed repository map from catalogue projects."""
     repos: dict[str, RepositoryRecord] = {}

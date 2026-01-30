@@ -19,18 +19,20 @@ from ghillie.bronze.errors import (
 from ghillie.bronze.storage import RawEvent
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 type Payload = dict[str, typ.Any]
 type JSONValue = dict[str, typ.Any] | list[typ.Any] | str | int | float | bool | None
 
 
-def _convert_dict(value: dict, converter: typ.Callable[[object], object]) -> dict:
+def _convert_dict(value: dict, converter: cabc.Callable[[object], object]) -> dict:
     """Convert dict by recursively converting all values."""
     return {k: converter(v) for k, v in value.items()}
 
 
-def _convert_list(value: list, converter: typ.Callable[[object], object]) -> list:
+def _convert_list(value: list, converter: cabc.Callable[[object], object]) -> list:
     """Convert list by recursively converting all items."""
     return [converter(item) for item in value]
 

@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+import typing as typ
+
+from ghillie.status.constants import MAX_TEMPERATURE, MIN_TEMPERATURE
+
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
 # Content preview length for error messages
 _CONTENT_PREVIEW_LIMIT = 100
 
@@ -177,3 +184,88 @@ class OpenAIConfigError(OpenAIStatusError):
 
         """
         return cls("OpenAI API key must be non-empty")
+
+
+class StatusModelConfigError(OpenAIStatusError):
+    """Raised when status model factory configuration is invalid.
+
+    This exception indicates issues with the environment configuration
+    for selecting and configuring status model backends.
+
+    """
+
+    @classmethod
+    def missing_backend(cls) -> StatusModelConfigError:
+        """Create error when GHILLIE_STATUS_MODEL_BACKEND is not set.
+
+        Returns
+        -------
+        StatusModelConfigError
+            Error indicating the backend environment variable is required.
+
+        """
+        return cls("GHILLIE_STATUS_MODEL_BACKEND environment variable is required")
+
+    @classmethod
+    def invalid_backend(
+        cls, name: str, valid_backends: cabc.Iterable[str]
+    ) -> StatusModelConfigError:
+        """Create error for unrecognized backend name.
+
+        Parameters
+        ----------
+        name
+            The invalid backend name that was provided.
+        valid_backends
+            Iterable of valid backend names.
+
+        Returns
+        -------
+        StatusModelConfigError
+            Error listing valid backend options.
+
+        """
+        valid_backends_str = ", ".join(f"'{b}'" for b in sorted(valid_backends))
+        message = (
+            f"Invalid status model backend '{name}'. "
+            f"Valid options are: {valid_backends_str}"
+        )
+        return cls(message)
+
+    @classmethod
+    def invalid_parameter(
+        cls, parameter_name: str, value: str, constraint: str
+    ) -> StatusModelConfigError:
+        """Create error for an invalid configuration parameter value.
+
+        Parameters
+        ----------
+        parameter_name
+            The name of the parameter that failed validation.
+        value
+            The invalid value that was provided.
+        constraint
+            A description of the valid value requirements.
+
+        Returns
+        -------
+        StatusModelConfigError
+            Error with formatted message describing the invalid parameter.
+
+        """
+        message = f"Invalid {parameter_name} '{value}'. {constraint}"
+        return cls(message)
+
+    @classmethod
+    def invalid_temperature(cls, value: str) -> StatusModelConfigError:
+        """Create error for invalid temperature value."""
+        return cls.invalid_parameter(
+            "temperature",
+            value,
+            f"Must be a float between {MIN_TEMPERATURE} and {MAX_TEMPERATURE}",
+        )
+
+    @classmethod
+    def invalid_max_tokens(cls, value: str) -> StatusModelConfigError:
+        """Create error for invalid max_tokens value."""
+        return cls.invalid_parameter("max_tokens", value, "Must be a positive integer")

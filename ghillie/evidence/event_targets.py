@@ -6,6 +6,8 @@ import dataclasses as dc
 import typing as typ
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
     from ghillie.silver.storage import EventFact
 
 
@@ -63,7 +65,7 @@ class EventTargetExtractor:
     _EVENT_HANDLERS: typ.ClassVar[
         dict[
             str,
-            typ.Callable[
+            cabc.Callable[
                 [EventTargetExtractor, EventTargets, dict[str, typ.Any]], None
             ],
         ]

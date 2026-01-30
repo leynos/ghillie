@@ -61,6 +61,8 @@ from .storage import (
 )
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
     from .models import Catalogue, Component, ComponentLink
 
 SessionFactory = async_sessionmaker[AsyncSession]
@@ -134,7 +136,7 @@ class CatalogueImporter:
 
     def __init__(
         self,
-        session_factory: SessionFactory | typ.Callable[[], AsyncSession],
+        session_factory: SessionFactory | cabc.Callable[[], AsyncSession],
         *,
         estate_key: str = "default",
         estate_name: str | None = None,
