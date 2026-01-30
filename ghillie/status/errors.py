@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import typing as typ
 
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
 # Content preview length for error messages
 _CONTENT_PREVIEW_LIMIT = 100
 
@@ -203,7 +206,7 @@ class StatusModelConfigError(Exception):
 
     @classmethod
     def invalid_backend(
-        cls, name: str, valid_backends: typ.Iterable[str]
+        cls, name: str, valid_backends: cabc.Iterable[str]
     ) -> StatusModelConfigError:
         """Create error for unrecognized backend name.
 

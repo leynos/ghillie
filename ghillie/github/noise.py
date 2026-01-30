@@ -14,6 +14,8 @@ import typing as typ
 from pathlib import PurePosixPath
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
     from ghillie.catalogue.models import NoiseFilters
 
     from .models import GitHubIngestedEvent
@@ -32,7 +34,7 @@ def _normalise_text(value: str) -> str:
     return value.strip().lower()
 
 
-def _iter_author_candidates(payload: dict[str, typ.Any]) -> typ.Iterator[str]:
+def _iter_author_candidates(payload: dict[str, typ.Any]) -> cabc.Iterator[str]:
     for key in ("author_login", "author_name", "author_email"):
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
@@ -167,7 +169,7 @@ def _merge_title_prefix_filters(noise: NoiseFilters, target: list[str]) -> None:
 
 
 def compile_noise_filters(
-    project_filters: typ.Sequence[NoiseFilters],
+    project_filters: cabc.Sequence[NoiseFilters],
 ) -> CompiledNoiseFilters:
     """Compile project noise filter configs into a single predicate.
 

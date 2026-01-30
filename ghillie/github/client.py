@@ -43,7 +43,7 @@ class GitHubActivityClient(typ.Protocol):
         repo: RepositoryInfo,
         *,
         since: dt.datetime,
-        documentation_paths: typ.Sequence[str],
+        documentation_paths: cabc.Sequence[str],
         after: str | None = None,
     ) -> cabc.AsyncIterator[GitHubIngestedEvent]:
         """Yield documentation change events for configured paths since a timestamp."""
@@ -307,7 +307,7 @@ def _iter_commit_events(
     repo: RepositoryInfo,
     edges: list[dict[str, typ.Any]],
     since: dt.datetime,
-) -> typ.Iterator[GitHubIngestedEvent]:
+) -> cabc.Iterator[GitHubIngestedEvent]:
     for edge in edges:
         cursor = edge.get("cursor")
         node = edge.get("node")
@@ -408,7 +408,7 @@ def _iter_doc_change_events(
     *,
     since: dt.datetime,
     spec: _DocChangeSpec,
-) -> typ.Iterator[GitHubIngestedEvent]:
+) -> cabc.Iterator[GitHubIngestedEvent]:
     for edge in edges:
         event = _doc_change_event_from_edge(
             repo,
@@ -667,7 +667,7 @@ class GitHubGraphQLClient:
         *,
         since: dt.datetime,
         after: str | None = None,
-    ) -> typ.AsyncIterator[GitHubIngestedEvent]:
+    ) -> cabc.AsyncIterator[GitHubIngestedEvent]:
         """Yield commit snapshot events on the default branch."""
         since_utc = _ensure_tzaware(since, field="since")
         qualified_name = f"refs/heads/{repo.default_branch}"
@@ -704,7 +704,7 @@ class GitHubGraphQLClient:
         since: dt.datetime,
         entity_kind: typ.Literal["pull_request", "issue"],
         after: str | None = None,
-    ) -> typ.AsyncIterator[GitHubIngestedEvent]:
+    ) -> cabc.AsyncIterator[GitHubIngestedEvent]:
         """Yield entity snapshot events from a paginated GraphQL connection.
 
         This helper centralises the common pagination loop for connections
@@ -748,7 +748,7 @@ class GitHubGraphQLClient:
         *,
         since: dt.datetime,
         after: str | None = None,
-    ) -> typ.AsyncIterator[GitHubIngestedEvent]:
+    ) -> cabc.AsyncIterator[GitHubIngestedEvent]:
         """Yield pull request snapshot events updated since a timestamp."""
         since_utc = _ensure_tzaware(since, field="since")
         async for event in self._iter_paginated_entities(
@@ -765,7 +765,7 @@ class GitHubGraphQLClient:
         *,
         since: dt.datetime,
         after: str | None = None,
-    ) -> typ.AsyncIterator[GitHubIngestedEvent]:
+    ) -> cabc.AsyncIterator[GitHubIngestedEvent]:
         """Yield issue snapshot events updated since a timestamp."""
         since_utc = _ensure_tzaware(since, field="since")
         async for event in self._iter_paginated_entities(
@@ -778,7 +778,7 @@ class GitHubGraphQLClient:
 
     async def _iter_doc_changes_for_path(
         self, context: _DocChangePathContext
-    ) -> typ.AsyncIterator[GitHubIngestedEvent]:
+    ) -> cabc.AsyncIterator[GitHubIngestedEvent]:
         """Yield documentation change events for a single path with pagination."""
         path_cursor = context.cursor
         while True:
@@ -812,9 +812,9 @@ class GitHubGraphQLClient:
         repo: RepositoryInfo,
         *,
         since: dt.datetime,
-        documentation_paths: typ.Sequence[str],
+        documentation_paths: cabc.Sequence[str],
         after: str | None = None,
-    ) -> typ.AsyncIterator[GitHubIngestedEvent]:
+    ) -> cabc.AsyncIterator[GitHubIngestedEvent]:
         """Yield documentation change events for documentation path commits."""
         since_utc = _ensure_tzaware(since, field="since")
         qualified_name = f"refs/heads/{repo.default_branch}"

@@ -40,6 +40,8 @@ from .observability import (
 )
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from ghillie.registry.models import RepositoryInfo
@@ -354,7 +356,7 @@ class GitHubIngestionWorker:
         *,
         since: dt.datetime,
         after: str | None,
-    ) -> typ.AsyncIterator[GitHubIngestedEvent]:
+    ) -> cabc.AsyncIterator[GitHubIngestedEvent]:
         """Select the appropriate activity stream for the given kind."""
         if kind == "commit":
             return self._client.iter_commits(repo, since=since, after=after)
@@ -416,7 +418,7 @@ class GitHubIngestionWorker:
         self,
         repo: RepositoryInfo,
         writer: RawEventWriter,
-        events: typ.AsyncIterator[GitHubIngestedEvent],
+        events: cabc.AsyncIterator[GitHubIngestedEvent],
         *,
         noise: CompiledNoiseFilters,
     ) -> _StreamIngestionResult:

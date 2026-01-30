@@ -11,6 +11,8 @@ import msgspec
 from .models import WorkType
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
     from ghillie.silver.storage import Commit
 
 
@@ -22,7 +24,7 @@ class Classifiable(typ.Protocol):
     """
 
     @property
-    def labels(self) -> typ.Sequence[str]:
+    def labels(self) -> cabc.Sequence[str]:
         """Labels attached to the entity."""
         ...
 
@@ -157,7 +159,7 @@ def _normalise_label(label: str) -> str:
     return label.strip().lower()
 
 
-def _labels_match(labels: typ.Sequence[str], patterns: tuple[str, ...]) -> bool:
+def _labels_match(labels: cabc.Sequence[str], patterns: tuple[str, ...]) -> bool:
     """Check if any label matches the pattern set."""
     normalised_patterns = {_normalise_label(p) for p in patterns}
     return any(_normalise_label(label) in normalised_patterns for label in labels)
@@ -177,7 +179,7 @@ def _prefix_only_compiled(
 
 
 def classify_by_labels(
-    labels: typ.Sequence[str],
+    labels: cabc.Sequence[str],
     config: ClassificationConfig = DEFAULT_CLASSIFICATION_CONFIG,
 ) -> WorkType | None:
     """Classify work type by labels, returning None if no match.
@@ -283,7 +285,7 @@ def classify_by_title(
 
 
 def _classify_by_labels_then_title(
-    labels: typ.Sequence[str],
+    labels: cabc.Sequence[str],
     title: str | None,
     config: ClassificationConfig = DEFAULT_CLASSIFICATION_CONFIG,
 ) -> WorkType:

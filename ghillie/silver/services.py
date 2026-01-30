@@ -15,6 +15,8 @@ from ghillie.silver.storage import EventFact
 from ghillie.silver.transformers import get_entity_transformer
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 type ProcessedIds = list[int]
@@ -46,7 +48,7 @@ class RawEventTransformer:
             return processed
 
     async def process_raw_event_ids(
-        self, raw_event_ids: typ.Sequence[int]
+        self, raw_event_ids: cabc.Sequence[int]
     ) -> ProcessedIds:
         """Transform the given raw events, regardless of current state."""
         if not raw_event_ids:
@@ -66,7 +68,7 @@ class RawEventTransformer:
             return processed
 
     async def _process_events(
-        self, session: AsyncSession, events: typ.Sequence[RawEvent]
+        self, session: AsyncSession, events: cabc.Sequence[RawEvent]
     ) -> ProcessedIds:
         """Process a sequence of raw events, collecting successfully processed IDs."""
         processed: ProcessedIds = []

@@ -81,6 +81,7 @@ from .models import (
 )
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
     import datetime as dt
 
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -592,8 +593,8 @@ class EvidenceBundleService:
     def _populate_entity_bucket[E: _ClassifiableEvidence](
         self,
         buckets: dict[WorkType, _WorkTypeBucket],
-        entities: typ.Sequence[E],
-        get_bucket_list: typ.Callable[[_WorkTypeBucket], list[E]],
+        entities: cabc.Sequence[E],
+        get_bucket_list: cabc.Callable[[_WorkTypeBucket], list[E]],
     ) -> None:
         """Populate buckets with entities (PRs or issues).
 
