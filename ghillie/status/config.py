@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import os
 
+from ghillie.status.constants import MAX_TEMPERATURE, MIN_TEMPERATURE
 from ghillie.status.errors import OpenAIConfigError, StatusModelConfigError
 
 # Default configuration values - single source of truth
@@ -13,10 +14,6 @@ _DEFAULT_MODEL = "gpt-5.1-thinking"
 _DEFAULT_TIMEOUT_S = 120.0
 _DEFAULT_TEMPERATURE = 0.3
 _DEFAULT_MAX_TOKENS = 2048
-
-# Validation bounds for temperature (OpenAI API range)
-_MIN_TEMPERATURE = 0.0
-_MAX_TEMPERATURE = 2.0
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -71,7 +68,7 @@ class OpenAIStatusModelConfig:
         except ValueError as exc:
             raise StatusModelConfigError.invalid_temperature(raw_temperature) from exc
 
-        if not _MIN_TEMPERATURE <= temperature <= _MAX_TEMPERATURE:
+        if not MIN_TEMPERATURE <= temperature <= MAX_TEMPERATURE:
             raise StatusModelConfigError.invalid_temperature(raw_temperature)
 
         return temperature

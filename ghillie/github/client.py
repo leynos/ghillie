@@ -420,7 +420,7 @@ def _iter_doc_change_events(
             yield event
 
 
-NodeToEvent = cabc.Callable[
+type NodeToEvent = cabc.Callable[
     [RepositoryInfo, dict[str, typ.Any], dt.datetime],
     tuple[GitHubIngestedEvent | None, bool],
 ]

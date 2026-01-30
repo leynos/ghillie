@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import collections.abc as cabc
 import copy
 import datetime as dt
 import typing as typ
@@ -21,7 +20,10 @@ from ghillie.silver.storage import (
     Repository,
 )
 
-EntityTransformer = cabc.Callable[[AsyncSession, RawEvent], cabc.Awaitable[None]]
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
+type EntityTransformer = cabc.Callable[[AsyncSession, RawEvent], cabc.Awaitable[None]]
 _registry: dict[str, EntityTransformer] = {}
 
 

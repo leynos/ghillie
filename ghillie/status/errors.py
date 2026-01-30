@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import typing as typ
 
+from ghillie.status.constants import MAX_TEMPERATURE, MIN_TEMPERATURE
+
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
@@ -255,13 +257,10 @@ class StatusModelConfigError(Exception):
     @classmethod
     def invalid_temperature(cls, value: str) -> StatusModelConfigError:
         """Create error for invalid temperature value."""
-        # Import bounds from config to keep error message in sync with validation.
-        from ghillie.status.config import _MAX_TEMPERATURE, _MIN_TEMPERATURE
-
         return cls.invalid_parameter(
             "temperature",
             value,
-            f"Must be a float between {_MIN_TEMPERATURE} and {_MAX_TEMPERATURE}",
+            f"Must be a float between {MIN_TEMPERATURE} and {MAX_TEMPERATURE}",
         )
 
     @classmethod
