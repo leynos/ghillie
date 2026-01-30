@@ -112,150 +112,114 @@ class TestOpenAIStatusModelConfigValidation:
             config.api_key = "new-key"  # type: ignore[misc]  # intentional
 
 
-class TestOpenAIStatusModelConfigTemperatureFromEnv:
-    """Tests for temperature configuration from environment."""
+class TestOpenAIStatusModelConfigNumericParametersFromEnv:
+    """Tests for numeric parameter configuration from environment."""
 
     @pytest.mark.parametrize(
-        ("temp_value", "expected", "description"),
+        ("env_var", "attr_name", "param_value", "expected"),
         [
-            ("0.7", 0.7, "custom temperature"),
-            ("0.0", 0.0, "zero temperature"),
-            ("2.0", 2.0, "maximum temperature"),
+            ("GHILLIE_OPENAI_TEMPERATURE", "temperature", "0.7", 0.7),
+            ("GHILLIE_OPENAI_TEMPERATURE", "temperature", "0.0", 0.0),
+            ("GHILLIE_OPENAI_TEMPERATURE", "temperature", "2.0", 2.0),
+            ("GHILLIE_OPENAI_MAX_TOKENS", "max_tokens", "4096", 4096),
+            ("GHILLIE_OPENAI_MAX_TOKENS", "max_tokens", "1", 1),
         ],
-        ids=["custom", "zero", "maximum"],
+        ids=["temp-custom", "temp-zero", "temp-max", "tokens-custom", "tokens-small"],
     )
-    def test_from_env_reads_valid_temperature(
-        self, temp_value: str, expected: float, description: str
+    def test_from_env_reads_valid_numeric_parameters(
+        self,
+        env_var: str,
+        attr_name: str,
+        param_value: str,
+        expected: float | int,
     ) -> None:
-        """Configuration accepts valid temperature values from environment."""
+        """Configuration accepts valid numeric parameter values from environment."""
         env = {
             "GHILLIE_OPENAI_API_KEY": "test-key",
-            "GHILLIE_OPENAI_TEMPERATURE": temp_value,
+            env_var: param_value,
         }
         with mock.patch.dict(os.environ, env, clear=True):
             config = OpenAIStatusModelConfig.from_env()
-        assert config.temperature == expected, f"Expected {description} {expected}"
+        actual = getattr(config, attr_name)
+        assert actual == expected
 
-    def test_from_env_uses_default_temperature(self) -> None:
-        """Configuration uses default temperature when not specified."""
+    @pytest.mark.parametrize(
+        ("attr_name", "expected"),
+        [
+            ("temperature", 0.3),
+            ("max_tokens", 2048),
+        ],
+        ids=["temperature", "max_tokens"],
+    )
+    def test_from_env_uses_default_numeric_parameters(
+        self, attr_name: str, expected: float | int
+    ) -> None:
+        """Configuration uses defaults for numeric parameters when not set."""
         env = {"GHILLIE_OPENAI_API_KEY": "test-key"}
         with mock.patch.dict(os.environ, env, clear=True):
             config = OpenAIStatusModelConfig.from_env()
-        assert config.temperature == 0.3, "Expected default temperature 0.3"
+        actual = getattr(config, attr_name)
+        assert actual == expected, f"Expected default {attr_name} {expected}"
 
     @pytest.mark.parametrize(
-        "value",
-        ["not-a-number", "abc", "1.0.0"],
-        ids=["text", "letters", "invalid-format"],
+        ("env_var", "param_name", "value"),
+        [
+            ("GHILLIE_OPENAI_TEMPERATURE", "temperature", "not-a-number"),
+            ("GHILLIE_OPENAI_TEMPERATURE", "temperature", "abc"),
+            ("GHILLIE_OPENAI_TEMPERATURE", "temperature", "1.0.0"),
+            ("GHILLIE_OPENAI_MAX_TOKENS", "max_tokens", "not-a-number"),
+            ("GHILLIE_OPENAI_MAX_TOKENS", "max_tokens", "abc"),
+            ("GHILLIE_OPENAI_MAX_TOKENS", "max_tokens", "1.5"),
+        ],
+        ids=[
+            "temp-text",
+            "temp-letters",
+            "temp-invalid-format",
+            "tokens-text",
+            "tokens-letters",
+            "tokens-float",
+        ],
     )
-    def test_rejects_non_numeric_temperature(self, value: str) -> None:
-        """Configuration fails for non-numeric temperature values."""
+    def test_rejects_non_numeric_parameters(
+        self, env_var: str, param_name: str, value: str
+    ) -> None:
+        """Configuration fails for non-numeric parameter values."""
         from ghillie.status.errors import StatusModelConfigError
 
         env = {
             "GHILLIE_OPENAI_API_KEY": "test-key",
-            "GHILLIE_OPENAI_TEMPERATURE": value,
+            env_var: value,
         }
         with mock.patch.dict(os.environ, env, clear=True):
             with pytest.raises(StatusModelConfigError) as exc_info:
                 OpenAIStatusModelConfig.from_env()
-            assert "temperature" in str(exc_info.value).lower(), (
-                "Error should mention temperature"
+            assert param_name in str(exc_info.value).lower(), (
+                f"Error should mention {param_name}"
             )
 
     @pytest.mark.parametrize(
-        ("temp_value", "description"),
+        ("env_var", "param_name", "param_value"),
         [
-            ("2.5", "above maximum"),
-            ("-0.1", "negative"),
+            ("GHILLIE_OPENAI_TEMPERATURE", "temperature", "2.5"),
+            ("GHILLIE_OPENAI_TEMPERATURE", "temperature", "-0.1"),
+            ("GHILLIE_OPENAI_MAX_TOKENS", "max_tokens", "0"),
+            ("GHILLIE_OPENAI_MAX_TOKENS", "max_tokens", "-100"),
         ],
-        ids=["above-max", "negative"],
+        ids=["temp-above-max", "temp-negative", "tokens-zero", "tokens-negative"],
     )
-    def test_rejects_out_of_range_temperature(
-        self, temp_value: str, description: str
+    def test_rejects_out_of_range_numeric_parameters(
+        self, env_var: str, param_name: str, param_value: str
     ) -> None:
-        """Configuration fails for out-of-range temperature values."""
+        """Configuration fails for out-of-range numeric parameter values."""
         from ghillie.status.errors import StatusModelConfigError
 
         env = {
             "GHILLIE_OPENAI_API_KEY": "test-key",
-            "GHILLIE_OPENAI_TEMPERATURE": temp_value,
+            env_var: param_value,
         }
         with mock.patch.dict(os.environ, env, clear=True):
             with pytest.raises(StatusModelConfigError) as exc_info:
                 OpenAIStatusModelConfig.from_env()
-            assert "temperature" in str(exc_info.value).lower()
-
-
-class TestOpenAIStatusModelConfigMaxTokensFromEnv:
-    """Tests for max_tokens configuration from environment."""
-
-    @pytest.mark.parametrize(
-        ("tokens_value", "expected", "description"),
-        [
-            ("4096", 4096, "custom max_tokens"),
-            ("1", 1, "small max_tokens"),
-        ],
-        ids=["custom", "small"],
-    )
-    def test_from_env_reads_valid_max_tokens(
-        self, tokens_value: str, expected: int, description: str
-    ) -> None:
-        """Configuration accepts valid max_tokens values from environment."""
-        env = {
-            "GHILLIE_OPENAI_API_KEY": "test-key",
-            "GHILLIE_OPENAI_MAX_TOKENS": tokens_value,
-        }
-        with mock.patch.dict(os.environ, env, clear=True):
-            config = OpenAIStatusModelConfig.from_env()
-        assert config.max_tokens == expected, f"Expected {description} {expected}"
-
-    def test_from_env_uses_default_max_tokens(self) -> None:
-        """Configuration uses default max_tokens when not specified."""
-        env = {"GHILLIE_OPENAI_API_KEY": "test-key"}
-        with mock.patch.dict(os.environ, env, clear=True):
-            config = OpenAIStatusModelConfig.from_env()
-        assert config.max_tokens == 2048, "Expected default max_tokens 2048"
-
-    @pytest.mark.parametrize(
-        "value",
-        ["not-a-number", "abc", "1.5"],
-        ids=["text", "letters", "float"],
-    )
-    def test_rejects_non_integer_max_tokens(self, value: str) -> None:
-        """Configuration fails for non-integer max_tokens values."""
-        from ghillie.status.errors import StatusModelConfigError
-
-        env = {
-            "GHILLIE_OPENAI_API_KEY": "test-key",
-            "GHILLIE_OPENAI_MAX_TOKENS": value,
-        }
-        with mock.patch.dict(os.environ, env, clear=True):
-            with pytest.raises(StatusModelConfigError) as exc_info:
-                OpenAIStatusModelConfig.from_env()
-            assert "max_tokens" in str(exc_info.value).lower(), (
-                "Error should mention max_tokens"
+            assert param_name in str(exc_info.value).lower(), (
+                f"Error should mention {param_name}"
             )
-
-    @pytest.mark.parametrize(
-        ("tokens_value", "description"),
-        [
-            ("0", "zero"),
-            ("-100", "negative"),
-        ],
-        ids=["zero", "negative"],
-    )
-    def test_rejects_invalid_max_tokens(
-        self, tokens_value: str, description: str
-    ) -> None:
-        """Configuration fails for invalid max_tokens values."""
-        from ghillie.status.errors import StatusModelConfigError
-
-        env = {
-            "GHILLIE_OPENAI_API_KEY": "test-key",
-            "GHILLIE_OPENAI_MAX_TOKENS": tokens_value,
-        }
-        with mock.patch.dict(os.environ, env, clear=True):
-            with pytest.raises(StatusModelConfigError) as exc_info:
-                OpenAIStatusModelConfig.from_env()
-            assert "max_tokens" in str(exc_info.value).lower()
