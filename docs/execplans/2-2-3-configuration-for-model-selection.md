@@ -20,7 +20,8 @@ Success is observable when:
 4. Temperature and max_tokens are configurable via `GHILLIE_OPENAI_TEMPERATURE`
    and `GHILLIE_OPENAI_MAX_TOKENS`
 5. Invalid configurations raise `StatusModelConfigError` with clear messages
-6. Unit tests and BDD behavioral tests validate all scenarios
+6. Unit tests and Behaviour-Driven Development (BDD) behavioural tests validate
+   all scenarios
 7. Documentation in `docs/users-guide.md` covers the new configuration options
 
 ## Progress
@@ -90,7 +91,8 @@ The StatusModel infrastructure is complete (Tasks 2.2.a and 2.2.b):
 2. **Custom exceptions**: Use classmethod factory constructors (e.g.,
    `cls.missing_backend()`, `cls.invalid_temperature()`)
 3. **Environment variables**: Follow `GHILLIE_*` naming convention
-4. **TDD workflow**: Write tests BEFORE implementation per AGENTS.md
+4. **Test-Driven Development (TDD) workflow**: Write tests BEFORE implementation
+   per AGENTS.md
 5. **Documentation**: Update users' guide for new functionality
 
 ## Plan of work

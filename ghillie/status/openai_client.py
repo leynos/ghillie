@@ -133,6 +133,11 @@ class OpenAIStatusModel:
             },
         )
 
+    @property
+    def config(self) -> OpenAIStatusModelConfig:
+        """Read-only access to the client configuration."""
+        return self._config
+
     async def aclose(self) -> None:
         """Close any owned HTTP resources."""
         if self._owns_client:

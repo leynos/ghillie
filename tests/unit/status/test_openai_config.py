@@ -184,18 +184,21 @@ class TestOpenAIStatusModelConfigNumericParametersFromEnv:
         self, env_var: str, param_name: str, value: str
     ) -> None:
         """Configuration fails for non-numeric parameter values."""
+        import re
+
         from ghillie.status.errors import StatusModelConfigError
 
         env = {
             "GHILLIE_OPENAI_API_KEY": "test-key",
             env_var: value,
         }
-        with mock.patch.dict(os.environ, env, clear=True):
-            with pytest.raises(StatusModelConfigError) as exc_info:
-                OpenAIStatusModelConfig.from_env()
-            assert param_name in str(exc_info.value).lower(), (
-                f"Error should mention {param_name}"
-            )
+        with (
+            mock.patch.dict(os.environ, env, clear=True),
+            pytest.raises(
+                StatusModelConfigError, match=re.compile(param_name, re.IGNORECASE)
+            ),
+        ):
+            OpenAIStatusModelConfig.from_env()
 
     @pytest.mark.parametrize(
         ("env_var", "param_name", "param_value"),
@@ -211,15 +214,18 @@ class TestOpenAIStatusModelConfigNumericParametersFromEnv:
         self, env_var: str, param_name: str, param_value: str
     ) -> None:
         """Configuration fails for out-of-range numeric parameter values."""
+        import re
+
         from ghillie.status.errors import StatusModelConfigError
 
         env = {
             "GHILLIE_OPENAI_API_KEY": "test-key",
             env_var: param_value,
         }
-        with mock.patch.dict(os.environ, env, clear=True):
-            with pytest.raises(StatusModelConfigError) as exc_info:
-                OpenAIStatusModelConfig.from_env()
-            assert param_name in str(exc_info.value).lower(), (
-                f"Error should mention {param_name}"
-            )
+        with (
+            mock.patch.dict(os.environ, env, clear=True),
+            pytest.raises(
+                StatusModelConfigError, match=re.compile(param_name, re.IGNORECASE)
+            ),
+        ):
+            OpenAIStatusModelConfig.from_env()

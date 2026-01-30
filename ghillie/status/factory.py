@@ -56,7 +56,7 @@ def create_status_model() -> StatusModel:
 
     backend = raw_backend.strip().lower()
     if backend not in _VALID_BACKENDS:
-        raise StatusModelConfigError.invalid_backend(raw_backend)
+        raise StatusModelConfigError.invalid_backend(raw_backend, _VALID_BACKENDS)
 
     if backend == "mock":
         return MockStatusModel()

@@ -37,38 +37,23 @@ class TestCreateStatusModelBackendSelection:
             assert "mock" in error_msg, "Error message should list valid options"
             assert "openai" in error_msg, "Error message should list valid options"
 
-    def test_creates_mock_model(self) -> None:
-        """Factory creates MockStatusModel for 'mock' backend."""
-        env = {"GHILLIE_STATUS_MODEL_BACKEND": "mock"}
-        with mock.patch.dict(os.environ, env, clear=True):
-            model = create_status_model()
-        assert isinstance(model, MockStatusModel), "Expected MockStatusModel instance"
-
-    def test_creates_mock_model_case_insensitive(self) -> None:
-        """Factory handles case-insensitive backend names."""
-        env = {"GHILLIE_STATUS_MODEL_BACKEND": "MOCK"}
-        with mock.patch.dict(os.environ, env, clear=True):
-            model = create_status_model()
-        assert isinstance(model, MockStatusModel), (
-            "Expected MockStatusModel for uppercase 'MOCK'"
-        )
-
-    def test_creates_mock_model_mixed_case(self) -> None:
-        """Factory handles mixed case backend names."""
-        env = {"GHILLIE_STATUS_MODEL_BACKEND": "Mock"}
+    @pytest.mark.parametrize(
+        "backend_value",
+        [
+            "mock",
+            "MOCK",
+            "Mock",
+            "  mock  ",
+        ],
+        ids=["lowercase", "uppercase", "mixed-case", "with-whitespace"],
+    )
+    def test_creates_mock_model_normalised(self, backend_value: str) -> None:
+        """Factory creates MockStatusModel with case/whitespace normalisation."""
+        env = {"GHILLIE_STATUS_MODEL_BACKEND": backend_value}
         with mock.patch.dict(os.environ, env, clear=True):
             model = create_status_model()
         assert isinstance(model, MockStatusModel), (
-            "Expected MockStatusModel for mixed case 'Mock'"
-        )
-
-    def test_creates_mock_model_with_whitespace(self) -> None:
-        """Factory strips whitespace from backend name."""
-        env = {"GHILLIE_STATUS_MODEL_BACKEND": "  mock  "}
-        with mock.patch.dict(os.environ, env, clear=True):
-            model = create_status_model()
-        assert isinstance(model, MockStatusModel), (
-            "Expected MockStatusModel with surrounding whitespace"
+            f"Expected MockStatusModel for backend value '{backend_value}'"
         )
 
 
@@ -100,8 +85,8 @@ class TestCreateStatusModelOpenAIBackend:
         with mock.patch.dict(os.environ, env, clear=True):
             model = create_status_model()
         assert isinstance(model, OpenAIStatusModel)
-        assert model._config.temperature == 0.3, "Expected default temperature"
-        assert model._config.max_tokens == 2048, "Expected default max_tokens"
+        assert model.config.temperature == 0.3, "Expected default temperature"
+        assert model.config.max_tokens == 2048, "Expected default max_tokens"
 
     @pytest.mark.parametrize(
         ("env_var", "env_value", "config_attr", "expected_value"),
@@ -129,7 +114,7 @@ class TestCreateStatusModelOpenAIBackend:
         with mock.patch.dict(os.environ, env, clear=True):
             model = create_status_model()
         assert isinstance(model, OpenAIStatusModel)
-        actual_value = getattr(model._config, config_attr)
+        actual_value = getattr(model.config, config_attr)
         assert actual_value == expected_value, (
             f"Expected {config_attr} {expected_value} from environment"
         )
@@ -149,10 +134,10 @@ class TestCreateStatusModelOpenAIBackend:
         with mock.patch.dict(os.environ, env, clear=True):
             model = create_status_model()
         assert isinstance(model, OpenAIStatusModel)
-        assert model._config.endpoint == "http://localhost:8080/v1/chat/completions"
-        assert model._config.model == "gpt-4-turbo"
-        assert model._config.temperature == 0.5
-        assert model._config.max_tokens == 1024
+        assert model.config.endpoint == "http://localhost:8080/v1/chat/completions"
+        assert model.config.model == "gpt-4-turbo"
+        assert model.config.temperature == 0.5
+        assert model.config.max_tokens == 1024
 
     def test_openai_backend_requires_api_key(self) -> None:
         """OpenAI backend raises error when API key is missing."""

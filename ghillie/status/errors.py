@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import typing as typ
+
 # Content preview length for error messages
 _CONTENT_PREVIEW_LIMIT = 100
 
@@ -200,13 +202,17 @@ class StatusModelConfigError(Exception):
         return cls("GHILLIE_STATUS_MODEL_BACKEND environment variable is required")
 
     @classmethod
-    def invalid_backend(cls, name: str) -> StatusModelConfigError:
+    def invalid_backend(
+        cls, name: str, valid_backends: typ.Iterable[str]
+    ) -> StatusModelConfigError:
         """Create error for unrecognized backend name.
 
         Parameters
         ----------
         name
             The invalid backend name that was provided.
+        valid_backends
+            Iterable of valid backend names.
 
         Returns
         -------
@@ -214,9 +220,10 @@ class StatusModelConfigError(Exception):
             Error listing valid backend options.
 
         """
+        valid_backends_str = ", ".join(f"'{b}'" for b in sorted(valid_backends))
         return cls(
             f"Invalid status model backend '{name}'. "
-            "Valid options are: 'mock', 'openai'"
+            f"Valid options are: {valid_backends_str}"
         )
 
     @classmethod
@@ -245,8 +252,13 @@ class StatusModelConfigError(Exception):
     @classmethod
     def invalid_temperature(cls, value: str) -> StatusModelConfigError:
         """Create error for invalid temperature value."""
+        # Import bounds from config to keep error message in sync with validation.
+        from ghillie.status.config import _MAX_TEMPERATURE, _MIN_TEMPERATURE
+
         return cls.invalid_parameter(
-            "temperature", value, "Must be a float between 0.0 and 2.0"
+            "temperature",
+            value,
+            f"Must be a float between {_MIN_TEMPERATURE} and {_MAX_TEMPERATURE}",
         )
 
     @classmethod

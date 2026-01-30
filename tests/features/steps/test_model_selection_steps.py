@@ -25,7 +25,6 @@ class ModelSelectionContext(typ.TypedDict, total=False):
     env_vars: dict[str, str]
     model: StatusModel
     error: Exception | None
-    env_patcher: typ.Any  # mock._patch_dict type
 
 
 @pytest.fixture
@@ -101,13 +100,7 @@ def then_model_is_mock(model_context: ModelSelectionContext) -> None:
 @then("the model is an OpenAIStatusModel")
 def then_model_is_openai(model_context: ModelSelectionContext) -> None:
     """Verify the model is an OpenAIStatusModel instance."""
-    from ghillie.status.openai_client import OpenAIStatusModel
-
-    model = model_context.get("model")
-    assert model is not None, "Expected a model but got None"
-    assert isinstance(model, OpenAIStatusModel), (
-        f"Expected OpenAIStatusModel but got {type(model).__name__}"
-    )
+    _verify_openai_model(model_context)
 
 
 def _verify_openai_model(model_context: ModelSelectionContext) -> OpenAIStatusModel:
@@ -145,8 +138,8 @@ def then_model_uses_temperature(
 ) -> None:
     """Verify the model uses the specified temperature."""
     model = _verify_openai_model(model_context)
-    assert model._config.temperature == temperature, (
-        f"Expected temperature {temperature}, got {model._config.temperature}"
+    assert model.config.temperature == temperature, (
+        f"Expected temperature {temperature}, got {model.config.temperature}"
     )
 
 
@@ -156,8 +149,8 @@ def then_model_uses_max_tokens(
 ) -> None:
     """Verify the model uses the specified max_tokens."""
     model = _verify_openai_model(model_context)
-    assert model._config.max_tokens == max_tokens, (
-        f"Expected max_tokens {max_tokens}, got {model._config.max_tokens}"
+    assert model.config.max_tokens == max_tokens, (
+        f"Expected max_tokens {max_tokens}, got {model.config.max_tokens}"
     )
 
 

@@ -798,7 +798,7 @@ make local-k8s-down
 
 ### Configuration options
 
-The local preview script accepts environment variables for customization:
+The local preview script accepts environment variables for customisation:
 
 | Variable                | Default         | Description                               |
 | ----------------------- | --------------- | ----------------------------------------- |
@@ -868,7 +868,7 @@ This is useful for:
 
 ### OpenAI backend configuration
 
-The OpenAI backend requires an API key and supports optional customization:
+The OpenAI backend requires an API key and supports optional customisation:
 
 | Variable                       | Required | Default                                      | Description                    |
 | ------------------------------ | -------- | -------------------------------------------- | ------------------------------ |
