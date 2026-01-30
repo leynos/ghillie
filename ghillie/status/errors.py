@@ -244,36 +244,12 @@ class StatusModelConfigError(Exception):
 
     @classmethod
     def invalid_temperature(cls, value: str) -> StatusModelConfigError:
-        """Create error for invalid temperature value.
-
-        Parameters
-        ----------
-        value
-            The invalid temperature string that was provided.
-
-        Returns
-        -------
-        StatusModelConfigError
-            Error indicating valid temperature range.
-
-        """
+        """Create error for invalid temperature value."""
         return cls.invalid_parameter(
             "temperature", value, "Must be a float between 0.0 and 2.0"
         )
 
     @classmethod
     def invalid_max_tokens(cls, value: str) -> StatusModelConfigError:
-        """Create error for invalid max_tokens value.
-
-        Parameters
-        ----------
-        value
-            The invalid max_tokens string that was provided.
-
-        Returns
-        -------
-        StatusModelConfigError
-            Error indicating max_tokens must be a positive integer.
-
-        """
+        """Create error for invalid max_tokens value."""
         return cls.invalid_parameter("max_tokens", value, "Must be a positive integer")
