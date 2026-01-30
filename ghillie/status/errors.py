@@ -226,10 +226,11 @@ class StatusModelConfigError(Exception):
 
         """
         valid_backends_str = ", ".join(f"'{b}'" for b in sorted(valid_backends))
-        return cls(
+        message = (
             f"Invalid status model backend '{name}'. "
             f"Valid options are: {valid_backends_str}"
         )
+        return cls(message)
 
     @classmethod
     def invalid_parameter(
@@ -252,7 +253,8 @@ class StatusModelConfigError(Exception):
             Error with formatted message describing the invalid parameter.
 
         """
-        return cls(f"Invalid {parameter_name} '{value}'. {constraint}")
+        message = f"Invalid {parameter_name} '{value}'. {constraint}"
+        return cls(message)
 
     @classmethod
     def invalid_temperature(cls, value: str) -> StatusModelConfigError:
