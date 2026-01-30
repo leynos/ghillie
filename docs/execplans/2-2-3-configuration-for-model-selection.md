@@ -184,15 +184,15 @@ The change is accepted when:
 
 ## Critical files
 
-| File                                                 | Action | Purpose                               |
-| ---------------------------------------------------- | ------ | ------------------------------------- |
-| `ghillie/status/factory.py`                          | Create | Factory function for model selection  |
-| `ghillie/status/errors.py`                           | Modify | Add StatusModelConfigError            |
+| File                                                 | Action | Purpose                                      |
+| ---------------------------------------------------- | ------ | -------------------------------------------- |
+| `ghillie/status/factory.py`                          | Create | Factory function for model selection         |
+| `ghillie/status/errors.py`                           | Modify | Add StatusModelConfigError                   |
 | `ghillie/status/config.py`                           | Modify | Extend from_env() for temperature/max_tokens |
-| `ghillie/status/__init__.py`                         | Modify | Add new exports                       |
-| `tests/unit/status/test_factory.py`                  | Create | Factory unit tests                    |
-| `tests/unit/status/test_openai_config.py`            | Modify | Extended config tests                 |
-| `tests/features/model_selection.feature`             | Create | BDD scenarios                         |
-| `tests/features/steps/test_model_selection_steps.py` | Create | BDD step definitions                  |
-| `docs/users-guide.md`                                | Modify | Configuration documentation           |
-| `docs/roadmap.md`                                    | Modify | Mark Task 2.2.c done                  |
+| `ghillie/status/__init__.py`                         | Modify | Add new exports                              |
+| `tests/unit/status/test_factory.py`                  | Create | Factory unit tests                           |
+| `tests/unit/status/test_openai_config.py`            | Modify | Extended config tests                        |
+| `tests/features/model_selection.feature`             | Create | BDD scenarios                                |
+| `tests/features/steps/test_model_selection_steps.py` | Create | BDD step definitions                         |
+| `docs/users-guide.md`                                | Modify | Configuration documentation                  |
+| `docs/roadmap.md`                                    | Modify | Mark Task 2.2.c done                         |

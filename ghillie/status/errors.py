@@ -186,7 +186,7 @@ class OpenAIConfigError(OpenAIStatusError):
         return cls("OpenAI API key must be non-empty")
 
 
-class StatusModelConfigError(Exception):
+class StatusModelConfigError(OpenAIStatusError):
     """Raised when status model factory configuration is invalid.
 
     This exception indicates issues with the environment configuration

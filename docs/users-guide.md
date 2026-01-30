@@ -839,9 +839,9 @@ operator-managed secrets and injected into the application secret.
 
 ## Status model configuration (Phase 2.2.c)
 
-Ghillie supports configurable large language model (LLM) backends for status report generation. The
-same reporting job can run against different model backends without code
-changes, controlled entirely via environment variables.
+Ghillie supports configurable large language model (LLM) backends for status
+report generation. The same reporting job can run against different model
+backends without code changes, controlled entirely via environment variables.
 
 ### Backend selection
 
