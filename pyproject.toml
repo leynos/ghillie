@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
 dependencies = [
+    "femtologging @ git+https://github.com/leynos/femtologging@7c139fb7aca18f9277e00b88604b8bf5eb471be0",
     "msgspec>=0.18.6",
     "ruamel.yaml>=0.18.6",
     "sqlalchemy>=2.0.34",

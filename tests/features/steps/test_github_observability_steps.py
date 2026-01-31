@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import datetime as dt
-import logging
 import typing as typ
 
 import pytest
@@ -19,18 +18,23 @@ from sqlalchemy.ext.asyncio import (
 from ghillie.bronze import GithubIngestionOffset, init_bronze_storage
 from ghillie.common.slug import parse_repo_slug
 from ghillie.github import GitHubIngestionConfig, GitHubIngestionWorker
+from ghillie.github.errors import GitHubAPIError
 from ghillie.github.lag import IngestionHealthConfig, IngestionHealthService
 from ghillie.github.observability import IngestionEventType
 from ghillie.registry import RepositoryRegistryService
 from ghillie.silver import init_silver_storage
 from ghillie.silver.storage import Repository
+from tests.helpers.femtologging_capture import FemtoLogRecord, capture_femto_logs
 from tests.helpers.github_events import (
     create_commit_event,
     create_doc_change_event,
     create_issue_event,
     create_pr_event,
 )
-from tests.unit.github_ingestion_test_helpers import FakeGitHubClient
+from tests.unit.github_ingestion_test_helpers import (
+    FailingGitHubClient,
+    FakeGitHubClient,
+)
 
 if typ.TYPE_CHECKING:
     from pathlib import Path
@@ -51,9 +55,9 @@ class ObservabilityContext(typ.TypedDict, total=False):
 
     session_factory: async_sessionmaker[AsyncSession]
     registry_service: RepositoryRegistryService
-    github_client: FakeGitHubClient
+    github_client: FakeGitHubClient | FailingGitHubClient
     repo_slug: str
-    log_records: list[logging.LogRecord]
+    log_records: list[FemtoLogRecord]
 
 
 @scenario(
@@ -62,6 +66,14 @@ class ObservabilityContext(typ.TypedDict, total=False):
 )
 def test_successful_ingestion_emits_completion_metrics() -> None:
     """Behavioural test: successful ingestion logs completion event."""
+
+
+@scenario(
+    "../github_ingestion_observability.feature",
+    "Failed ingestion run emits error details",
+)
+def test_failed_ingestion_emits_error_details() -> None:
+    """Behavioural test: failed ingestion logs error details."""
 
 
 @scenario(
@@ -167,7 +179,7 @@ def _configure_github_client(
     )
 
 
-def _get_run_completed_record(context: ObservabilityContext) -> logging.LogRecord:
+def _get_run_completed_record(context: ObservabilityContext) -> FemtoLogRecord:
     """Get the single RUN_COMPLETED log record from the context."""
     records = context.get("log_records", [])
     completed_records = [
@@ -177,6 +189,16 @@ def _get_run_completed_record(context: ObservabilityContext) -> logging.LogRecor
         f"Expected exactly 1 RUN_COMPLETED record, found {len(completed_records)}"
     )
     return completed_records[0]
+
+
+def _get_run_failed_record(context: ObservabilityContext) -> FemtoLogRecord:
+    """Get the single RUN_FAILED log record from the context."""
+    records = context.get("log_records", [])
+    failed_records = [r for r in records if IngestionEventType.RUN_FAILED in r.message]
+    assert len(failed_records) == 1, (
+        f"Expected exactly 1 RUN_FAILED record, found {len(failed_records)}"
+    )
+    return failed_records[0]
 
 
 @given(parsers.parse('the GitHub API returns activity for "{slug}"'))
@@ -202,6 +224,17 @@ def github_api_returns_no_activity(
     _configure_github_client(observability_context)
 
 
+@given(parsers.parse('the GitHub API returns an error for "{slug}"'))
+def github_api_returns_error(
+    observability_context: ObservabilityContext, slug: str
+) -> None:
+    """Configure a fake GitHub client that raises an error."""
+    del slug
+    observability_context["github_client"] = FailingGitHubClient(
+        GitHubAPIError.http_error(502)
+    )
+
+
 @given(parsers.parse('the repository "{slug}" has never been successfully ingested'))
 def repository_never_ingested(
     observability_context: ObservabilityContext, slug: str
@@ -222,7 +255,6 @@ def repository_never_ingested(
 def run_worker(
     observability_context: ObservabilityContext,
     slug: str,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Run the ingestion worker once for the specified repository."""
 
@@ -241,9 +273,39 @@ def run_worker(
         )
         await worker.ingest_repository(repo)
 
-    with caplog.at_level(logging.INFO, logger="ghillie.github.observability"):
+    with capture_femto_logs("ghillie.github.observability") as capture:
         run_async(_run())
-    observability_context["log_records"] = list(caplog.records)
+        capture.wait_for_count(6)
+    observability_context["log_records"] = list(capture.records)
+
+
+@when(parsers.parse('the GitHub ingestion worker fails for "{slug}"'))
+def run_worker_failure(
+    observability_context: ObservabilityContext,
+    slug: str,
+) -> None:
+    """Run the ingestion worker once and expect a failure."""
+
+    async def _run() -> None:
+        service = observability_context["registry_service"]
+        repos = await service.list_active_repositories()
+        repo = next(repo for repo in repos if repo.slug == slug)
+        worker = GitHubIngestionWorker(
+            observability_context["session_factory"],
+            observability_context["github_client"],
+            config=GitHubIngestionConfig(
+                initial_lookback=dt.timedelta(days=1),
+                overlap=dt.timedelta(0),
+                max_events_per_kind=100,
+            ),
+        )
+        await worker.ingest_repository(repo)
+
+    with capture_femto_logs("ghillie.github.observability") as capture:
+        with pytest.raises(GitHubAPIError):
+            run_async(_run())
+        capture.wait_for_count(2)
+    observability_context["log_records"] = list(capture.records)
 
 
 @then(parsers.parse('an ingestion run completed log event is emitted for "{slug}"'))
@@ -262,6 +324,24 @@ def log_event_contains_total_events(
     """Verify that the completion log contains total_events."""
     record = _get_run_completed_record(observability_context)
     assert "total_events=" in record.message
+
+
+@then(parsers.parse('an ingestion run failed log event is emitted for "{slug}"'))
+def run_failed_event_emitted(
+    observability_context: ObservabilityContext, slug: str
+) -> None:
+    """Verify that a RUN_FAILED log event was emitted."""
+    record = _get_run_failed_record(observability_context)
+    assert slug in record.message
+
+
+@then(parsers.parse('the log event includes the error category "{category}"'))
+def log_event_includes_error_category(
+    observability_context: ObservabilityContext, category: str
+) -> None:
+    """Verify that the error category is present in the log."""
+    record = _get_run_failed_record(observability_context)
+    assert f"error_category={category}" in record.message
 
 
 @then(parsers.parse('ingestion lag metrics are available for "{slug}"'))

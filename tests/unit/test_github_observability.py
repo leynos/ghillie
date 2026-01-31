@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime as dt
-import logging
 
 import pytest
 from sqlalchemy.exc import IntegrityError, InterfaceError, OperationalError
@@ -22,6 +21,7 @@ from ghillie.github.observability import (
     StreamTruncationDetails,
     categorize_error,
 )
+from tests.helpers.femtologging_capture import capture_femto_logs
 
 
 class TestCategorizeError:
@@ -104,15 +104,15 @@ class TestIngestionEventLogger:
         self,
         logger_instance: IngestionEventLogger,
         context: IngestionRunContext,
-        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Run started events are logged at INFO level."""
-        with caplog.at_level(logging.INFO, logger="ghillie.github.observability"):
+        with capture_femto_logs("ghillie.github.observability") as capture:
             logger_instance.log_run_started(context)
 
-        assert len(caplog.records) == 1
-        record = caplog.records[0]
-        assert record.levelno == logging.INFO
+        capture.wait_for_count(1)
+        assert len(capture.records) == 1
+        record = capture.records[0]
+        assert record.level == "INFO"
         assert IngestionEventType.RUN_STARTED in record.message
         assert "octo/reef" in record.message
         assert "wildside" in record.message
@@ -121,7 +121,6 @@ class TestIngestionEventLogger:
         self,
         logger_instance: IngestionEventLogger,
         context: IngestionRunContext,
-        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Run completed events include all ingestion metrics."""
         result = GitHubIngestionResult(
@@ -133,12 +132,13 @@ class TestIngestionEventLogger:
         )
         duration = dt.timedelta(seconds=45.2)
 
-        with caplog.at_level(logging.INFO, logger="ghillie.github.observability"):
+        with capture_femto_logs("ghillie.github.observability") as capture:
             logger_instance.log_run_completed(context, result, duration)
 
-        assert len(caplog.records) == 1
-        record = caplog.records[0]
-        assert record.levelno == logging.INFO
+        capture.wait_for_count(1)
+        assert len(capture.records) == 1
+        record = capture.records[0]
+        assert record.level == "INFO"
         assert IngestionEventType.RUN_COMPLETED in record.message
         assert "commits_ingested=12" in record.message
         assert "pull_requests_ingested=3" in record.message
@@ -151,36 +151,37 @@ class TestIngestionEventLogger:
         self,
         logger_instance: IngestionEventLogger,
         context: IngestionRunContext,
-        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Run failed events include error type and category."""
         error = GitHubAPIError.http_error(502)
         duration = dt.timedelta(seconds=12.5)
 
-        with caplog.at_level(logging.ERROR, logger="ghillie.github.observability"):
+        with capture_femto_logs("ghillie.github.observability") as capture:
             logger_instance.log_run_failed(context, error, duration)
 
-        assert len(caplog.records) == 1
-        record = caplog.records[0]
-        assert record.levelno == logging.ERROR
+        capture.wait_for_count(1)
+        assert len(capture.records) == 1
+        record = capture.records[0]
+        assert record.level == "ERROR"
         assert IngestionEventType.RUN_FAILED in record.message
         assert "error_type=GitHubAPIError" in record.message
         assert "error_category=transient" in record.message
         assert "GitHub GraphQL HTTP 502" in record.message
+        assert record.exc_info is not None
 
     def test_log_stream_completed_emits_info(
         self,
         logger_instance: IngestionEventLogger,
         context: IngestionRunContext,
-        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Stream completed events are logged at INFO level."""
-        with caplog.at_level(logging.INFO, logger="ghillie.github.observability"):
+        with capture_femto_logs("ghillie.github.observability") as capture:
             logger_instance.log_stream_completed(context, "commit", 12)
 
-        assert len(caplog.records) == 1
-        record = caplog.records[0]
-        assert record.levelno == logging.INFO
+        capture.wait_for_count(1)
+        assert len(capture.records) == 1
+        record = capture.records[0]
+        assert record.level == "INFO"
         assert IngestionEventType.STREAM_COMPLETED in record.message
         assert "stream_kind=commit" in record.message
         assert "events_ingested=12" in record.message
@@ -189,21 +190,21 @@ class TestIngestionEventLogger:
         self,
         logger_instance: IngestionEventLogger,
         context: IngestionRunContext,
-        caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """Stream truncated events are logged at WARNING level."""
+        """Stream truncated events are logged at WARN level."""
         details = StreamTruncationDetails(
             kind="commit",
             events_processed=500,
             max_events=500,
             resume_cursor="Y3Vyc29yOjEyMzQ1",
         )
-        with caplog.at_level(logging.WARNING, logger="ghillie.github.observability"):
+        with capture_femto_logs("ghillie.github.observability") as capture:
             logger_instance.log_stream_truncated(context, details)
 
-        assert len(caplog.records) == 1
-        record = caplog.records[0]
-        assert record.levelno == logging.WARNING
+        capture.wait_for_count(1)
+        assert len(capture.records) == 1
+        record = capture.records[0]
+        assert record.level == "WARN"
         assert IngestionEventType.STREAM_TRUNCATED in record.message
         assert "stream_kind=commit" in record.message
         assert "events_processed=500" in record.message
@@ -214,7 +215,6 @@ class TestIngestionEventLogger:
         self,
         logger_instance: IngestionEventLogger,
         context: IngestionRunContext,
-        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Stream truncated events correctly report missing cursor."""
         details = StreamTruncationDetails(
@@ -223,11 +223,12 @@ class TestIngestionEventLogger:
             max_events=500,
             resume_cursor=None,
         )
-        with caplog.at_level(logging.WARNING, logger="ghillie.github.observability"):
+        with capture_femto_logs("ghillie.github.observability") as capture:
             logger_instance.log_stream_truncated(context, details)
 
-        assert len(caplog.records) == 1
-        record = caplog.records[0]
+        capture.wait_for_count(1)
+        assert len(capture.records) == 1
+        record = capture.records[0]
         assert "has_resume_cursor=False" in record.message
 
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime as dt
-import logging
 import typing as typ
 
 import pytest
@@ -12,6 +11,7 @@ from ghillie.github import GitHubIngestionConfig, GitHubIngestionWorker
 from ghillie.github.errors import GitHubAPIError
 from ghillie.github.models import GitHubIngestedEvent
 from ghillie.github.observability import IngestionEventType
+from tests.helpers.femtologging_capture import capture_femto_logs
 from tests.unit.github_ingestion_test_helpers import (
     FailingGitHubClient,
     FakeGitHubClient,
@@ -31,7 +31,6 @@ if typ.TYPE_CHECKING:
 @pytest.mark.asyncio
 async def test_worker_logs_run_started_and_completed(
     session_factory: async_sessionmaker[AsyncSession],
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Worker logs run started and completed events for successful ingestion."""
     repo = make_repo_info()
@@ -53,19 +52,20 @@ async def test_worker_logs_run_started_and_completed(
         ),
     )
 
-    with caplog.at_level(logging.INFO, logger="ghillie.github.observability"):
+    with capture_femto_logs("ghillie.github.observability") as capture:
         await worker.ingest_repository(repo)
+        capture.wait_for_count(6)
 
     # Check for RUN_STARTED event
     started_records = [
-        r for r in caplog.records if IngestionEventType.RUN_STARTED in r.message
+        r for r in capture.records if IngestionEventType.RUN_STARTED in r.message
     ]
     assert len(started_records) == 1
     assert repo.slug in started_records[0].message
 
     # Check for RUN_COMPLETED event
     completed_records = [
-        r for r in caplog.records if IngestionEventType.RUN_COMPLETED in r.message
+        r for r in capture.records if IngestionEventType.RUN_COMPLETED in r.message
     ]
     assert len(completed_records) == 1
     assert repo.slug in completed_records[0].message
@@ -76,7 +76,6 @@ async def test_worker_logs_run_started_and_completed(
 @pytest.mark.asyncio
 async def test_worker_logs_run_failed_on_exception(
     session_factory: async_sessionmaker[AsyncSession],
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Worker logs run failed event when ingestion raises an exception."""
     repo = make_repo_info()
@@ -91,26 +90,25 @@ async def test_worker_logs_run_failed_on_exception(
         ),
     )
 
-    with (
-        caplog.at_level(logging.ERROR, logger="ghillie.github.observability"),
-        pytest.raises(GitHubAPIError),
-    ):
-        await worker.ingest_repository(repo)
+    with capture_femto_logs("ghillie.github.observability") as capture:
+        with pytest.raises(GitHubAPIError):
+            await worker.ingest_repository(repo)
+        capture.wait_for_count(2)
 
     # Check for RUN_FAILED event
     failed_records = [
-        r for r in caplog.records if IngestionEventType.RUN_FAILED in r.message
+        r for r in capture.records if IngestionEventType.RUN_FAILED in r.message
     ]
     assert len(failed_records) == 1
     assert repo.slug in failed_records[0].message
     assert "error_type=GitHubAPIError" in failed_records[0].message
     assert "error_category=transient" in failed_records[0].message
+    assert failed_records[0].exc_info is not None
 
 
 @pytest.mark.asyncio
 async def test_worker_logs_stream_completed_for_each_kind(
     session_factory: async_sessionmaker[AsyncSession],
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Worker logs stream completed events for each ingested kind."""
     repo = make_repo_info()
@@ -131,11 +129,12 @@ async def test_worker_logs_stream_completed_for_each_kind(
         ),
     )
 
-    with caplog.at_level(logging.INFO, logger="ghillie.github.observability"):
+    with capture_femto_logs("ghillie.github.observability") as capture:
         await worker.ingest_repository(repo)
+        capture.wait_for_count(6)
 
     stream_records = [
-        r for r in caplog.records if IngestionEventType.STREAM_COMPLETED in r.message
+        r for r in capture.records if IngestionEventType.STREAM_COMPLETED in r.message
     ]
     # Should have 4 stream completed events: commit, pull_request, issue, doc_change
     assert len(stream_records) == 4
@@ -150,7 +149,6 @@ async def test_worker_logs_stream_completed_for_each_kind(
 @pytest.mark.asyncio
 async def test_disabled_repository_does_not_emit_observability_events(
     session_factory: async_sessionmaker[AsyncSession],
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Disabled repositories skip observability logging."""
     repo = make_disabled_repo_info()
@@ -163,13 +161,14 @@ async def test_disabled_repository_does_not_emit_observability_events(
     )
     worker = GitHubIngestionWorker(session_factory, client)
 
-    with caplog.at_level(logging.INFO, logger="ghillie.github.observability"):
+    with capture_femto_logs("ghillie.github.observability") as capture:
         await worker.ingest_repository(repo)
+        capture.wait_for_timeout()
 
     # No observability events should be logged for disabled repos
     obs_records = [
         r
-        for r in caplog.records
+        for r in capture.records
         if "ingestion.run" in r.message or "ingestion.stream" in r.message
     ]
     assert len(obs_records) == 0
@@ -178,7 +177,6 @@ async def test_disabled_repository_does_not_emit_observability_events(
 @pytest.mark.asyncio
 async def test_worker_logs_completed_with_zero_events(
     session_factory: async_sessionmaker[AsyncSession],
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Worker logs completion even when no events are ingested."""
     repo = make_repo_info()
@@ -198,11 +196,12 @@ async def test_worker_logs_completed_with_zero_events(
         ),
     )
 
-    with caplog.at_level(logging.INFO, logger="ghillie.github.observability"):
+    with capture_femto_logs("ghillie.github.observability") as capture:
         await worker.ingest_repository(repo)
+        capture.wait_for_count(6)
 
     completed_records = [
-        r for r in caplog.records if IngestionEventType.RUN_COMPLETED in r.message
+        r for r in capture.records if IngestionEventType.RUN_COMPLETED in r.message
     ]
     assert len(completed_records) == 1
     assert "total_events=0" in completed_records[0].message
@@ -211,7 +210,6 @@ async def test_worker_logs_completed_with_zero_events(
 @pytest.mark.asyncio
 async def test_worker_logs_estate_id_when_present(
     session_factory: async_sessionmaker[AsyncSession],
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Worker includes estate_id in observability logs when present."""
     repo = make_repo_info(estate_id="wildside")
@@ -224,11 +222,12 @@ async def test_worker_logs_estate_id_when_present(
     )
     worker = GitHubIngestionWorker(session_factory, client)
 
-    with caplog.at_level(logging.INFO, logger="ghillie.github.observability"):
+    with capture_femto_logs("ghillie.github.observability") as capture:
         await worker.ingest_repository(repo)
+        capture.wait_for_count(6)
 
     started_records = [
-        r for r in caplog.records if IngestionEventType.RUN_STARTED in r.message
+        r for r in capture.records if IngestionEventType.RUN_STARTED in r.message
     ]
     assert len(started_records) == 1
     assert "estate_id=wildside" in started_records[0].message
@@ -237,7 +236,6 @@ async def test_worker_logs_estate_id_when_present(
 @pytest.mark.asyncio
 async def test_worker_logs_stream_truncated_for_kind(
     session_factory: async_sessionmaker[AsyncSession],
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Worker logs STREAM_TRUNCATED when max_events_per_kind is exceeded."""
     repo = make_repo_info()
@@ -265,12 +263,13 @@ async def test_worker_logs_stream_truncated_for_kind(
         ),
     )
 
-    with caplog.at_level(logging.WARNING, logger="ghillie.github.observability"):
+    with capture_femto_logs("ghillie.github.observability") as capture:
         await worker.ingest_repository(repo)
+        capture.wait_for_count(6)
 
     # Check for STREAM_TRUNCATED event for commits
     truncated_records = [
-        r for r in caplog.records if IngestionEventType.STREAM_TRUNCATED in r.message
+        r for r in capture.records if IngestionEventType.STREAM_TRUNCATED in r.message
     ]
     assert len(truncated_records) >= 1, "Expected at least one STREAM_TRUNCATED event"
 
@@ -286,7 +285,6 @@ async def test_worker_logs_stream_truncated_for_kind(
 @pytest.mark.asyncio
 async def test_worker_logs_stream_truncated_for_doc_changes(
     session_factory: async_sessionmaker[AsyncSession],
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Worker logs STREAM_TRUNCATED for doc changes when truncated."""
     repo = make_repo_info()
@@ -327,12 +325,13 @@ async def test_worker_logs_stream_truncated_for_doc_changes(
         ),
     )
 
-    with caplog.at_level(logging.WARNING, logger="ghillie.github.observability"):
+    with capture_femto_logs("ghillie.github.observability") as capture:
         await worker.ingest_repository(repo)
+        capture.wait_for_count(6)
 
     # Check for STREAM_TRUNCATED event for doc_change
     truncated_records = [
-        r for r in caplog.records if IngestionEventType.STREAM_TRUNCATED in r.message
+        r for r in capture.records if IngestionEventType.STREAM_TRUNCATED in r.message
     ]
     doc_truncated = [
         r for r in truncated_records if "stream_kind=doc_change" in r.message
@@ -346,7 +345,6 @@ async def test_worker_logs_stream_truncated_for_doc_changes(
 @pytest.mark.asyncio
 async def test_worker_no_truncation_when_under_limit(
     session_factory: async_sessionmaker[AsyncSession],
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Worker does not log STREAM_TRUNCATED when events are under the limit."""
     repo = make_repo_info()
@@ -370,11 +368,12 @@ async def test_worker_no_truncation_when_under_limit(
         ),
     )
 
-    with caplog.at_level(logging.WARNING, logger="ghillie.github.observability"):
+    with capture_femto_logs("ghillie.github.observability") as capture:
         await worker.ingest_repository(repo)
+        capture.wait_for_count(6)
 
     # No STREAM_TRUNCATED events should be logged
     truncated_records = [
-        r for r in caplog.records if IngestionEventType.STREAM_TRUNCATED in r.message
+        r for r in capture.records if IngestionEventType.STREAM_TRUNCATED in r.message
     ]
     assert len(truncated_records) == 0, "Expected no STREAM_TRUNCATED events"

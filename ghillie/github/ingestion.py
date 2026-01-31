@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
-import logging
 import typing as typ
 
 import msgspec
@@ -31,6 +30,7 @@ from ghillie.bronze import (
 from ghillie.catalogue.models import NoiseFilters
 from ghillie.catalogue.storage import ComponentRecord, ProjectRecord, RepositoryRecord
 from ghillie.common.time import utcnow
+from ghillie.logging import format_log_message, get_logger
 
 from .noise import CompiledNoiseFilters, compile_noise_filters
 from .observability import (
@@ -51,7 +51,7 @@ if typ.TYPE_CHECKING:
 
     type SessionFactory = async_sessionmaker[AsyncSession]
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -521,22 +521,29 @@ class GitHubIngestionWorker:
                     query = query.where(ProjectRecord.estate_id == repo.estate_id)
                 rows = (await session.scalars(query)).all()
         except (OperationalError, InterfaceError) as exc:
-            logger.warning(
-                (
-                    "Failed to load noise filters for repo %s due to DB connectivity "
-                    "issue; defaulting to no noise filters."
+            logger.log(
+                "WARNING",
+                format_log_message(
+                    (
+                        "Failed to load noise filters for repo %s due to DB "
+                        "connectivity issue; defaulting to no noise filters."
+                    ),
+                    repo.slug,
                 ),
-                repo.slug,
                 exc_info=exc,
             )
             rows = []
-        except SQLAlchemyError:
-            logger.exception(
-                (
-                    "Failed to load noise filters for repo %s due to SQLAlchemy error; "
-                    "failing ingestion."
+        except SQLAlchemyError as exc:
+            logger.log(
+                "ERROR",
+                format_log_message(
+                    (
+                        "Failed to load noise filters for repo %s due to SQLAlchemy "
+                        "error; failing ingestion."
+                    ),
+                    repo.slug,
                 ),
-                repo.slug,
+                exc_info=exc,
             )
             raise
 

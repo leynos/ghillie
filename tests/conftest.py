@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import logging
 import os
 import socket
 import typing as typ
@@ -20,6 +19,7 @@ from sqlalchemy.ext.asyncio import (
 from ghillie.bronze import init_bronze_storage
 from ghillie.catalogue import init_catalogue_storage
 from ghillie.gold import init_gold_storage
+from ghillie.logging import format_log_message, get_logger
 from ghillie.silver import init_silver_storage
 
 if typ.TYPE_CHECKING:
@@ -32,7 +32,7 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     _PGLITE_AVAILABLE = False
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _should_use_pglite() -> bool:
@@ -96,7 +96,13 @@ async def _try_setup_pglite(
             await _init_all_storage(engine)
     except Exception as exc:  # noqa: BLE001
         # pragma: no cover - fall back when py-pglite fails at any stage
-        logger.warning("py-pglite unavailable, falling back to SQLite: %s", exc)
+        logger.log(
+            "WARNING",
+            format_log_message(
+                "py-pglite unavailable, falling back to SQLite: %s",
+                exc,
+            ),
+        )
         if engine_cm is not None:
             with contextlib.suppress(Exception):
                 await engine_cm.__aexit__(None, None, None)

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import dataclasses
 import enum
-import logging
 import typing as typ
 
 from sqlalchemy.exc import (
@@ -19,6 +18,8 @@ from sqlalchemy.exc import (
     SQLAlchemyError,
 )
 
+from ghillie.logging import format_log_message, get_logger
+
 from .errors import GitHubAPIError, GitHubConfigError, GitHubResponseShapeError
 
 if typ.TYPE_CHECKING:
@@ -26,7 +27,7 @@ if typ.TYPE_CHECKING:
 
     from .ingestion import GitHubIngestionResult
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # HTTP status code threshold for server errors (5xx)
 _HTTP_SERVER_ERROR_THRESHOLD = 500
@@ -110,21 +111,23 @@ def categorize_error(exc: BaseException) -> ErrorCategory:
 
 
 class IngestionEventLogger:
-    """Emit structured ingestion events via Python logging.
+    """Emit structured ingestion events via femtologging.
 
-    All log events use lazy interpolation per project conventions. Events are
-    emitted at INFO level for success, WARNING for truncation (backlog), and
-    ERROR for failures.
+    Events are emitted at INFO level for success, WARNING for truncation
+    (backlog), and ERROR for failures.
     """
 
     def log_run_started(self, context: IngestionRunContext) -> None:
         """Log ingestion run start."""
-        logger.info(
-            "[%s] repo_slug=%s estate_id=%s started_at=%s",
-            IngestionEventType.RUN_STARTED,
-            context.repo_slug,
-            context.estate_id,
-            context.started_at.isoformat(),
+        logger.log(
+            "INFO",
+            format_log_message(
+                "[%s] repo_slug=%s estate_id=%s started_at=%s",
+                IngestionEventType.RUN_STARTED,
+                context.repo_slug,
+                context.estate_id,
+                context.started_at.isoformat(),
+            ),
         )
 
     def log_run_completed(
@@ -140,19 +143,22 @@ class IngestionEventLogger:
             + result.issues_ingested
             + result.doc_changes_ingested
         )
-        logger.info(
-            "[%s] repo_slug=%s estate_id=%s duration_seconds=%.3f "
-            "commits_ingested=%d pull_requests_ingested=%d "
-            "issues_ingested=%d doc_changes_ingested=%d total_events=%d",
-            IngestionEventType.RUN_COMPLETED,
-            context.repo_slug,
-            context.estate_id,
-            duration.total_seconds(),
-            result.commits_ingested,
-            result.pull_requests_ingested,
-            result.issues_ingested,
-            result.doc_changes_ingested,
-            total_events,
+        logger.log(
+            "INFO",
+            format_log_message(
+                "[%s] repo_slug=%s estate_id=%s duration_seconds=%.3f "
+                "commits_ingested=%d pull_requests_ingested=%d "
+                "issues_ingested=%d doc_changes_ingested=%d total_events=%d",
+                IngestionEventType.RUN_COMPLETED,
+                context.repo_slug,
+                context.estate_id,
+                duration.total_seconds(),
+                result.commits_ingested,
+                result.pull_requests_ingested,
+                result.issues_ingested,
+                result.doc_changes_ingested,
+                total_events,
+            ),
         )
 
     def log_run_failed(
@@ -163,16 +169,19 @@ class IngestionEventLogger:
     ) -> None:
         """Log failed ingestion run with error categorization."""
         category = categorize_error(error)
-        logger.error(
-            "[%s] repo_slug=%s estate_id=%s duration_seconds=%.3f "
-            "error_type=%s error_category=%s error_message=%s",
-            IngestionEventType.RUN_FAILED,
-            context.repo_slug,
-            context.estate_id,
-            duration.total_seconds(),
-            type(error).__name__,
-            category,
-            str(error),
+        logger.log(
+            "ERROR",
+            format_log_message(
+                "[%s] repo_slug=%s estate_id=%s duration_seconds=%.3f "
+                "error_type=%s error_category=%s error_message=%s",
+                IngestionEventType.RUN_FAILED,
+                context.repo_slug,
+                context.estate_id,
+                duration.total_seconds(),
+                type(error).__name__,
+                category,
+                str(error),
+            ),
             exc_info=error,
         )
 
@@ -183,12 +192,15 @@ class IngestionEventLogger:
         events_ingested: int,
     ) -> None:
         """Log stream completion with ingested count."""
-        logger.info(
-            "[%s] repo_slug=%s stream_kind=%s events_ingested=%d",
-            IngestionEventType.STREAM_COMPLETED,
-            context.repo_slug,
-            kind,
-            events_ingested,
+        logger.log(
+            "INFO",
+            format_log_message(
+                "[%s] repo_slug=%s stream_kind=%s events_ingested=%d",
+                IngestionEventType.STREAM_COMPLETED,
+                context.repo_slug,
+                kind,
+                events_ingested,
+            ),
         )
 
     def log_stream_truncated(
@@ -197,13 +209,16 @@ class IngestionEventLogger:
         details: StreamTruncationDetails,
     ) -> None:
         """Log stream truncation (backlog warning)."""
-        logger.warning(
-            "[%s] repo_slug=%s stream_kind=%s events_processed=%d "
-            "max_events=%d has_resume_cursor=%s",
-            IngestionEventType.STREAM_TRUNCATED,
-            context.repo_slug,
-            details.kind,
-            details.events_processed,
-            details.max_events,
-            details.resume_cursor is not None,
+        logger.log(
+            "WARNING",
+            format_log_message(
+                "[%s] repo_slug=%s stream_kind=%s events_processed=%d "
+                "max_events=%d has_resume_cursor=%s",
+                IngestionEventType.STREAM_TRUNCATED,
+                context.repo_slug,
+                details.kind,
+                details.events_processed,
+                details.max_events,
+                details.resume_cursor is not None,
+            ),
         )
