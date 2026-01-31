@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
+import os
+import sys
 import threading
 import time
 import typing as typ
 
 from femtologging import get_logger
+
+_ORIGINAL_PID = os.getpid()
 
 
 @dataclasses.dataclass(slots=True)
@@ -83,6 +87,61 @@ class FemtoLogCapture:
                 self._condition.wait(timeout=remaining)
 
 
+class _SyncLogger:
+    """Synchronous logger used in forked test processes."""
+
+    def __init__(self, name: str, handler: FemtoLogCapture) -> None:
+        self._name = name
+        self._handler = handler
+
+    def log(
+        self,
+        level: object,
+        message: str,
+        /,
+        *,
+        exc_info: object | None = None,
+        stack_info: bool = False,
+    ) -> str:
+        """Capture the log record immediately for forked test runs."""
+        level_name = str(level).upper()
+        if level_name == "WARNING":
+            level_name = "WARN"
+        self._handler.handle_record(
+            {
+                "logger": self._name,
+                "level": level_name,
+                "message": message,
+                "exc_info": exc_info,
+                "stack_info": stack_info,
+            }
+        )
+        return message
+
+    def set_level(self, level: object) -> None:
+        """No-op for compatibility with femtologging API."""
+        del level
+
+    def set_propagate(self, *, flag: bool) -> None:
+        """No-op for compatibility with femtologging API."""
+        del flag
+
+    def add_handler(self, handler: object) -> None:
+        """No-op for compatibility with femtologging API."""
+        del handler
+
+    def remove_handler(self, handler: object) -> bool:
+        """No-op for compatibility with femtologging API."""
+        del handler
+        return True
+
+
+class _LoggerModule(typ.Protocol):
+    """Protocol for modules that expose a ``logger`` attribute."""
+
+    logger: object
+
+
 @contextlib.contextmanager
 def capture_femto_logs(
     logger_name: str,
@@ -99,9 +158,21 @@ def capture_femto_logs(
 
     handler = FemtoLogCapture()
     logger.add_handler(handler)
+    module_logger: object | None = None
+    module: object | None = None
+    if os.getpid() != _ORIGINAL_PID:
+        # Forked test processes inherit a dead worker thread; use sync capture.
+        module = sys.modules.get(logger_name)
+        if module is not None and hasattr(module, "logger"):
+            logger_module = typ.cast("_LoggerModule", module)
+            module_logger = logger_module.logger
+            logger_module.logger = _SyncLogger(logger_name, handler)
     try:
         yield handler
     finally:
+        if module is not None and module_logger is not None:
+            logger_module = typ.cast("_LoggerModule", module)
+            logger_module.logger = module_logger
         logger.remove_handler(handler)
         logger.set_level(previous_level)
         logger.set_propagate(previous_propagate)
