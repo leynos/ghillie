@@ -21,7 +21,13 @@ import typing as typ
 import falcon.asgi
 import falcon.media
 
-from ghillie.logging import configure_logging, format_log_message, get_logger
+from ghillie.logging import (
+    configure_logging,
+    get_logger,
+    log_error,
+    log_info,
+    log_warning,
+)
 
 if typ.TYPE_CHECKING:
     from falcon.asgi import Request, Response
@@ -51,15 +57,13 @@ def _parse_port(port_str: str) -> int:
             raise ValueError(msg)  # noqa: TRY301 - unify conversion and range errors
     except ValueError as exc:
         # Use error() not exception() - validation failures need no traceback
-        logger.log(
-            "ERROR",
-            format_log_message(
-                "Invalid GHILLIE_PORT value: %r (must be %d-%d): %s",
-                port_str,
-                _MIN_PORT,
-                _MAX_PORT,
-                exc,
-            ),
+        log_error(
+            logger,
+            "Invalid GHILLIE_PORT value: %r (must be %d-%d): %s",
+            port_str,
+            _MIN_PORT,
+            _MAX_PORT,
+            exc,
         )
         raise SystemExit(1) from exc
     return port
@@ -106,24 +110,21 @@ def main() -> None:
     log_level_str = os.environ.get("GHILLIE_LOG_LEVEL", "INFO")
 
     # Configure logging - validate log level and warn on invalid values
-    _, invalid_level = configure_logging(log_level_str)
+    normalized_level, invalid_level = configure_logging(log_level_str)
     if invalid_level:
-        logger.log(
-            "WARNING",
-            format_log_message(
-                "Invalid GHILLIE_LOG_LEVEL %r, falling back to INFO",
-                log_level_str,
-            ),
+        log_warning(
+            logger,
+            "Invalid GHILLIE_LOG_LEVEL %r, falling back to %s",
+            log_level_str,
+            normalized_level,
         )
 
-    logger.log(
-        "INFO",
-        format_log_message(
-            "Starting Ghillie runtime on %s:%d (log_level=%s)",
-            host,
-            port,
-            log_level_str,
-        ),
+    log_info(
+        logger,
+        "Starting Ghillie runtime on %s:%d (log_level=%s)",
+        host,
+        port,
+        normalized_level,
     )
 
     server = Granian(

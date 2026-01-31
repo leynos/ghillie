@@ -18,7 +18,7 @@ from sqlalchemy.exc import (
     SQLAlchemyError,
 )
 
-from ghillie.logging import format_log_message, get_logger
+from ghillie.logging import get_logger, log_error, log_info, log_warning
 
 from .errors import GitHubAPIError, GitHubConfigError, GitHubResponseShapeError
 
@@ -119,15 +119,13 @@ class IngestionEventLogger:
 
     def log_run_started(self, context: IngestionRunContext) -> None:
         """Log ingestion run start."""
-        logger.log(
-            "INFO",
-            format_log_message(
-                "[%s] repo_slug=%s estate_id=%s started_at=%s",
-                IngestionEventType.RUN_STARTED,
-                context.repo_slug,
-                context.estate_id,
-                context.started_at.isoformat(),
-            ),
+        log_info(
+            logger,
+            "[%s] repo_slug=%s estate_id=%s started_at=%s",
+            IngestionEventType.RUN_STARTED,
+            context.repo_slug,
+            context.estate_id,
+            context.started_at.isoformat(),
         )
 
     def log_run_completed(
@@ -143,22 +141,20 @@ class IngestionEventLogger:
             + result.issues_ingested
             + result.doc_changes_ingested
         )
-        logger.log(
-            "INFO",
-            format_log_message(
-                "[%s] repo_slug=%s estate_id=%s duration_seconds=%.3f "
-                "commits_ingested=%d pull_requests_ingested=%d "
-                "issues_ingested=%d doc_changes_ingested=%d total_events=%d",
-                IngestionEventType.RUN_COMPLETED,
-                context.repo_slug,
-                context.estate_id,
-                duration.total_seconds(),
-                result.commits_ingested,
-                result.pull_requests_ingested,
-                result.issues_ingested,
-                result.doc_changes_ingested,
-                total_events,
-            ),
+        log_info(
+            logger,
+            "[%s] repo_slug=%s estate_id=%s duration_seconds=%.3f "
+            "commits_ingested=%d pull_requests_ingested=%d "
+            "issues_ingested=%d doc_changes_ingested=%d total_events=%d",
+            IngestionEventType.RUN_COMPLETED,
+            context.repo_slug,
+            context.estate_id,
+            duration.total_seconds(),
+            result.commits_ingested,
+            result.pull_requests_ingested,
+            result.issues_ingested,
+            result.doc_changes_ingested,
+            total_events,
         )
 
     def log_run_failed(
@@ -169,19 +165,17 @@ class IngestionEventLogger:
     ) -> None:
         """Log failed ingestion run with error categorization."""
         category = categorize_error(error)
-        logger.log(
-            "ERROR",
-            format_log_message(
-                "[%s] repo_slug=%s estate_id=%s duration_seconds=%.3f "
-                "error_type=%s error_category=%s error_message=%s",
-                IngestionEventType.RUN_FAILED,
-                context.repo_slug,
-                context.estate_id,
-                duration.total_seconds(),
-                type(error).__name__,
-                category,
-                str(error),
-            ),
+        log_error(
+            logger,
+            "[%s] repo_slug=%s estate_id=%s duration_seconds=%.3f "
+            "error_type=%s error_category=%s error_message=%s",
+            IngestionEventType.RUN_FAILED,
+            context.repo_slug,
+            context.estate_id,
+            duration.total_seconds(),
+            type(error).__name__,
+            category,
+            str(error),
             exc_info=error,
         )
 
@@ -192,15 +186,13 @@ class IngestionEventLogger:
         events_ingested: int,
     ) -> None:
         """Log stream completion with ingested count."""
-        logger.log(
-            "INFO",
-            format_log_message(
-                "[%s] repo_slug=%s stream_kind=%s events_ingested=%d",
-                IngestionEventType.STREAM_COMPLETED,
-                context.repo_slug,
-                kind,
-                events_ingested,
-            ),
+        log_info(
+            logger,
+            "[%s] repo_slug=%s stream_kind=%s events_ingested=%d",
+            IngestionEventType.STREAM_COMPLETED,
+            context.repo_slug,
+            kind,
+            events_ingested,
         )
 
     def log_stream_truncated(
@@ -209,16 +201,14 @@ class IngestionEventLogger:
         details: StreamTruncationDetails,
     ) -> None:
         """Log stream truncation (backlog warning)."""
-        logger.log(
-            "WARNING",
-            format_log_message(
-                "[%s] repo_slug=%s stream_kind=%s events_processed=%d "
-                "max_events=%d has_resume_cursor=%s",
-                IngestionEventType.STREAM_TRUNCATED,
-                context.repo_slug,
-                details.kind,
-                details.events_processed,
-                details.max_events,
-                details.resume_cursor is not None,
-            ),
+        log_warning(
+            logger,
+            "[%s] repo_slug=%s stream_kind=%s events_processed=%d "
+            "max_events=%d has_resume_cursor=%s",
+            IngestionEventType.STREAM_TRUNCATED,
+            context.repo_slug,
+            details.kind,
+            details.events_processed,
+            details.max_events,
+            details.resume_cursor is not None,
         )

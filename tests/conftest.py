@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import (
 from ghillie.bronze import init_bronze_storage
 from ghillie.catalogue import init_catalogue_storage
 from ghillie.gold import init_gold_storage
-from ghillie.logging import format_log_message, get_logger
+from ghillie.logging import get_logger, log_warning
 from ghillie.silver import init_silver_storage
 
 if typ.TYPE_CHECKING:
@@ -96,12 +96,10 @@ async def _try_setup_pglite(
             await _init_all_storage(engine)
     except Exception as exc:  # noqa: BLE001
         # pragma: no cover - fall back when py-pglite fails at any stage
-        logger.log(
-            "WARNING",
-            format_log_message(
-                "py-pglite unavailable, falling back to SQLite: %s",
-                exc,
-            ),
+        log_warning(
+            logger,
+            "py-pglite unavailable, falling back to SQLite: %s",
+            exc,
         )
         if engine_cm is not None:
             with contextlib.suppress(Exception):

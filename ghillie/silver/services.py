@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from ghillie.bronze.storage import RawEvent, RawEventState
-from ghillie.logging import format_log_message, get_logger
+from ghillie.logging import get_logger, log_warning
 from ghillie.silver.errors import RawEventTransformError
 from ghillie.silver.storage import EventFact
 from ghillie.silver.transformers import get_entity_transformer
@@ -138,14 +138,12 @@ class RawEventTransformer:
         """Mark raw event as failed and log the error."""
         raw_event.transform_state = RawEventState.FAILED.value
         raw_event.transform_error = str(exc)
-        logger.log(
-            "WARNING",
-            format_log_message(
-                "RawEvent %s (%s) failed transform: %s",
-                raw_event.id,
-                raw_event.event_type,
-                exc,
-            ),
+        log_warning(
+            logger,
+            "RawEvent %s (%s) failed transform: %s",
+            raw_event.id,
+            raw_event.event_type,
+            exc,
         )
 
     @staticmethod

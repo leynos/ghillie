@@ -147,7 +147,7 @@ Silver layers with controlled noise and back-pressure.
 
   *Completion criteria:* All logging usage in ingestion, observability, runtime
   startup, and tests is migrated to femtologging. Logging configuration is
-  centralised at application entry points (runtime server, worker, and CLI).
+  centralized at application entry points (runtime server, worker, and CLI).
   The exception and logging guidelines in
   `.rules/python-exception-design-raising-handling-and-logging.md` are updated
   to reflect femtologging patterns.

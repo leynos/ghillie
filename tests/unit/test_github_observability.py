@@ -108,14 +108,13 @@ class TestIngestionEventLogger:
         """Run started events are logged at INFO level."""
         with capture_femto_logs("ghillie.github.observability") as capture:
             logger_instance.log_run_started(context)
-
-        capture.wait_for_count(1)
-        assert len(capture.records) == 1
-        record = capture.records[0]
-        assert record.level == "INFO"
-        assert IngestionEventType.RUN_STARTED in record.message
-        assert "octo/reef" in record.message
-        assert "wildside" in record.message
+            capture.wait_for_count(1)
+            assert len(capture.records) == 1
+            record = capture.records[0]
+            assert record.level == "INFO"
+            assert IngestionEventType.RUN_STARTED in record.message
+            assert "octo/reef" in record.message
+            assert "wildside" in record.message
 
     def test_log_run_completed_includes_metrics(
         self,
@@ -134,18 +133,17 @@ class TestIngestionEventLogger:
 
         with capture_femto_logs("ghillie.github.observability") as capture:
             logger_instance.log_run_completed(context, result, duration)
-
-        capture.wait_for_count(1)
-        assert len(capture.records) == 1
-        record = capture.records[0]
-        assert record.level == "INFO"
-        assert IngestionEventType.RUN_COMPLETED in record.message
-        assert "commits_ingested=12" in record.message
-        assert "pull_requests_ingested=3" in record.message
-        assert "issues_ingested=5" in record.message
-        assert "doc_changes_ingested=2" in record.message
-        assert "total_events=22" in record.message
-        assert "duration_seconds=45.200" in record.message
+            capture.wait_for_count(1)
+            assert len(capture.records) == 1
+            record = capture.records[0]
+            assert record.level == "INFO"
+            assert IngestionEventType.RUN_COMPLETED in record.message
+            assert "commits_ingested=12" in record.message
+            assert "pull_requests_ingested=3" in record.message
+            assert "issues_ingested=5" in record.message
+            assert "doc_changes_ingested=2" in record.message
+            assert "total_events=22" in record.message
+            assert "duration_seconds=45.200" in record.message
 
     def test_log_run_failed_includes_error_details(
         self,
@@ -158,16 +156,15 @@ class TestIngestionEventLogger:
 
         with capture_femto_logs("ghillie.github.observability") as capture:
             logger_instance.log_run_failed(context, error, duration)
-
-        capture.wait_for_count(1)
-        assert len(capture.records) == 1
-        record = capture.records[0]
-        assert record.level == "ERROR"
-        assert IngestionEventType.RUN_FAILED in record.message
-        assert "error_type=GitHubAPIError" in record.message
-        assert "error_category=transient" in record.message
-        assert "GitHub GraphQL HTTP 502" in record.message
-        assert record.exc_info is not None
+            capture.wait_for_count(1)
+            assert len(capture.records) == 1
+            record = capture.records[0]
+            assert record.level == "ERROR"
+            assert IngestionEventType.RUN_FAILED in record.message
+            assert "error_type=GitHubAPIError" in record.message
+            assert "error_category=transient" in record.message
+            assert "GitHub GraphQL HTTP 502" in record.message
+            assert record.exc_info is not None
 
     def test_log_stream_completed_emits_info(
         self,
@@ -177,14 +174,13 @@ class TestIngestionEventLogger:
         """Stream completed events are logged at INFO level."""
         with capture_femto_logs("ghillie.github.observability") as capture:
             logger_instance.log_stream_completed(context, "commit", 12)
-
-        capture.wait_for_count(1)
-        assert len(capture.records) == 1
-        record = capture.records[0]
-        assert record.level == "INFO"
-        assert IngestionEventType.STREAM_COMPLETED in record.message
-        assert "stream_kind=commit" in record.message
-        assert "events_ingested=12" in record.message
+            capture.wait_for_count(1)
+            assert len(capture.records) == 1
+            record = capture.records[0]
+            assert record.level == "INFO"
+            assert IngestionEventType.STREAM_COMPLETED in record.message
+            assert "stream_kind=commit" in record.message
+            assert "events_ingested=12" in record.message
 
     def test_log_stream_truncated_emits_warning(
         self,
@@ -200,16 +196,15 @@ class TestIngestionEventLogger:
         )
         with capture_femto_logs("ghillie.github.observability") as capture:
             logger_instance.log_stream_truncated(context, details)
-
-        capture.wait_for_count(1)
-        assert len(capture.records) == 1
-        record = capture.records[0]
-        assert record.level == "WARN"
-        assert IngestionEventType.STREAM_TRUNCATED in record.message
-        assert "stream_kind=commit" in record.message
-        assert "events_processed=500" in record.message
-        assert "max_events=500" in record.message
-        assert "has_resume_cursor=True" in record.message
+            capture.wait_for_count(1)
+            assert len(capture.records) == 1
+            record = capture.records[0]
+            assert record.level == "WARN"
+            assert IngestionEventType.STREAM_TRUNCATED in record.message
+            assert "stream_kind=commit" in record.message
+            assert "events_processed=500" in record.message
+            assert "max_events=500" in record.message
+            assert "has_resume_cursor=True" in record.message
 
     def test_log_stream_truncated_no_cursor(
         self,
@@ -225,11 +220,10 @@ class TestIngestionEventLogger:
         )
         with capture_femto_logs("ghillie.github.observability") as capture:
             logger_instance.log_stream_truncated(context, details)
-
-        capture.wait_for_count(1)
-        assert len(capture.records) == 1
-        record = capture.records[0]
-        assert "has_resume_cursor=False" in record.message
+            capture.wait_for_count(1)
+            assert len(capture.records) == 1
+            record = capture.records[0]
+            assert "has_resume_cursor=False" in record.message
 
 
 class TestIngestionEventType:

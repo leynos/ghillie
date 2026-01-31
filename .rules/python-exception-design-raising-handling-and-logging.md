@@ -141,8 +141,8 @@ except ValueError as exc:
 ```
 
 Pass `exc_info` explicitly so femtologging captures the traceback. Avoid
-duplicating the exception in the message unless you are adding context that is
-not already in the exception text (TRY401).
+duplicating the exception in the message unless adding context that is not
+already in the exception text (TRY401).
 
 **Operational note:** log once at a boundary (e.g., request or worker entry
 point). Inner layers should handle or re‑raise without logging to avoid

@@ -36,9 +36,13 @@ def configure_logging(level: str, *, force: bool = True) -> tuple[str, bool]:
     return (normalized, invalid)
 
 
+def _format_message(template: str, *args: object) -> str:
+    return template % args
+
+
 def format_log_message(template: str, *args: object) -> str:
     """Format a log message using percent-style interpolation."""
-    return template % args
+    return _format_message(template, *args)
 
 
 class _SupportsLog(typ.Protocol):
@@ -53,6 +57,54 @@ class _SupportsLog(typ.Protocol):
     ) -> str | None: ...
 
 
+def log_info(
+    logger: _SupportsLog,
+    template: str,
+    *args: object,
+    exc_info: object | None = None,
+    stack_info: bool = False,
+) -> None:
+    """Log an INFO message with percent-style formatting."""
+    logger.log(
+        "INFO",
+        _format_message(template, *args),
+        exc_info=exc_info,
+        stack_info=stack_info,
+    )
+
+
+def log_warning(
+    logger: _SupportsLog,
+    template: str,
+    *args: object,
+    exc_info: object | None = None,
+    stack_info: bool = False,
+) -> None:
+    """Log a WARNING message with percent-style formatting."""
+    logger.log(
+        "WARNING",
+        _format_message(template, *args),
+        exc_info=exc_info,
+        stack_info=stack_info,
+    )
+
+
+def log_error(
+    logger: _SupportsLog,
+    template: str,
+    *args: object,
+    exc_info: object | None = None,
+    stack_info: bool = False,
+) -> None:
+    """Log an ERROR message with percent-style formatting."""
+    logger.log(
+        "ERROR",
+        _format_message(template, *args),
+        exc_info=exc_info,
+        stack_info=stack_info,
+    )
+
+
 def log_exception(logger: _SupportsLog, message: str, exc: BaseException) -> None:
     """Log an exception with exc_info wired into femtologging."""
     logger.log("ERROR", message, exc_info=exc)
@@ -62,6 +114,9 @@ __all__ = [
     "configure_logging",
     "format_log_message",
     "get_logger",
+    "log_error",
     "log_exception",
+    "log_info",
+    "log_warning",
     "normalize_log_level",
 ]

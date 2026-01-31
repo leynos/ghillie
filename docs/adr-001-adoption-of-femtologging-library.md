@@ -67,7 +67,7 @@ The following must be in place before migration can proceed:
 
 1. Add femtologging to project dependencies in `pyproject.toml` using the
    snapshot commit.
-2. Introduce `ghillie/logging.py` to centralise `get_logger`, log formatting,
+2. Introduce `ghillie/logging.py` to centralize `get_logger`, log formatting,
    and `exc_info` usage.
 3. Update `ghillie/silver/services.py`, `ghillie/github/ingestion.py`,
    `ghillie/github/observability.py`, `ghillie/runtime.py`, and
@@ -76,8 +76,8 @@ The following must be in place before migration can proceed:
    - Replace `logger.warning/info/error(...)` calls with `logger.log(...)` and
      preformatted messages.
    - Pass `exc_info` for exception logging.
-4. Update tests and BDD steps to capture femtologging output instead of
-   stdlib `caplog`.
+4. Update tests and behaviour-driven development (BDD) steps to capture
+   femtologging output instead of stdlib `caplog`.
 5. Configure femtologging at application entry points (runtime server, worker,
    and CLI) using `configure_logging`.
 6. Update `.rules/python-exception-design-raising-handling-and-logging.md` to
