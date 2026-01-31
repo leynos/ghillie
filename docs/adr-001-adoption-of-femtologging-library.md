@@ -2,30 +2,34 @@
 
 ## Status
 
-Proposed (blocked on femtologging `exc_info` support)
+Accepted (implementation in progress; 2026-01-31)
 
 ## Context
 
-Ghillie currently uses Python's standard library `logging` module for
-application logging. The current logging footprint is minimal:
+Ghillie historically used Python's standard library `logging` module for
+application logging. The pre-migration logging footprint was minimal and
+concentrated around ingestion observability and runtime startup:
 
-- Four logging calls across three files
-- All follow the `logger = logging.getLogger(__name__)` pattern
-- No centralised logging configuration, handlers, or formatters
-- Ruff LOG rules already enforced via `pyproject.toml`
+- Logging calls live in a handful of modules (ingestion, observability,
+  runtime, and test fixtures).
+- All follow the `logger = logging.getLogger(__name__)` pattern.
+- Runtime logging is configured in the ASGI entry point.
+- Ruff LOG rules already enforced via `pyproject.toml`.
 
 The observability work planned in Task 1.3.d requires structured logging for
 ingestion health metrics. This ADR evaluates femtologging as a replacement for
 stdlib logging.
 
-### Current logging usage
+### Pre-migration logging usage
 
-| File                          | Line      | Call                 | Purpose                                                |
-| ----------------------------- | --------- | -------------------- | ------------------------------------------------------ |
-| `ghillie/silver/services.py`  | 139–144   | `logger.warning()`   | Log failed raw event transforms                        |
-| `ghillie/github/ingestion.py` | 422–429   | `logger.warning()`   | Log DB connectivity issues during noise filter loading |
-| `ghillie/github/ingestion.py` | 432–438   | `logger.exception()` | Log SQLAlchemy errors with traceback                   |
-| `tests/conftest.py`           | 99        | `logger.warning()`   | Log py-pglite fallback to SQLite                       |
+| File                              | Call(s)                     | Purpose                                                |
+| --------------------------------- | --------------------------- | ------------------------------------------------------ |
+| `ghillie/silver/services.py`      | `logger.warning()`          | Log failed raw event transforms                        |
+| `ghillie/github/ingestion.py`     | `logger.warning()`          | Log DB connectivity issues during noise filter loading |
+| `ghillie/github/ingestion.py`     | `logger.exception()`        | Log SQLAlchemy errors with traceback                   |
+| `ghillie/github/observability.py` | `logger.info/warning/error` | Emit ingestion observability events                    |
+| `ghillie/runtime.py`              | `logger.info/warning/error` | Log runtime startup and config validation              |
+| `tests/conftest.py`               | `logger.warning()`          | Log py-pglite fallback to SQLite                       |
 
 ### Femtologging features
 
@@ -39,49 +43,45 @@ the following characteristics:
   `FemtoRotatingFileHandler`, `FemtoSocketHandler`
 - Configuration via `basicConfig`, `ConfigBuilder`, or `dictConfig`/`fileConfig`
 
-### Critical limitation
+### Exception support update
 
-Femtologging does not currently support:
-
-- `exc_info` parameter on log methods
-- `stack_info` parameter on log methods
-- `extra` parameter for structured record fields
-- `logger.exception()` convenience method
-
-This is a **hard dependency** for Ghillie: the ingestion service uses
-`logger.exception()` to capture SQLAlchemy error tracebacks at
-`ghillie/github/ingestion.py:432–438`. The femtologging developers have been
-notified and are actively working on this feature as a priority.
+Femtologging now supports `exc_info` and `stack_info` on `logger.log()` in the
+snapshot commit used for dogfooding. The `logger.exception()` convenience
+method is still not implemented, but equivalent behaviour is achieved by
+calling `logger.log("ERROR", message, exc_info=exc)`. Structured `extra` fields
+remain unsupported.
 
 ## Decision
 
-Adopt femtologging as Ghillie's logging library once the `exc_info`/exception
-support is implemented. Until then, the migration is blocked.
+Adopt femtologging as Ghillie's logging library using the snapshot commit
+`7c139fb7aca18f9277e00b88604b8bf5eb471be0` while the library is pre-release.
 
 ### Hard dependencies
 
 The following must be in place before migration can proceed:
 
-1. Femtologging must implement `exc_info` support on `logger.log()`
-2. Femtologging must implement `logger.exception()` or equivalent
-3. A PyPI release must be published containing these features
+1. Femtologging provides `exc_info`/`stack_info` support on `logger.log()`
+2. The application can depend on the snapshot commit until a release lands
 
-### Migration approach (when unblocked)
+### Migration approach
 
-1. Add femtologging to project dependencies in `pyproject.toml`
-2. Update `ghillie/silver/services.py`:
-   - Replace `import logging` with `from femtologging import get_logger`
-   - Replace `logging.getLogger(__name__)` with `get_logger(__name__)`
-   - Replace `logger.warning(…)` with `logger.log("WARNING", …)`
-3. Update `ghillie/github/ingestion.py`:
-   - Same import changes
-   - Replace `logger.warning(…, exc_info=exc)` with femtologging equivalent
-   - Replace `logger.exception(…)` with femtologging equivalent
-4. Update `tests/conftest.py`:
-   - Same import and method changes
-5. Configure femtologging at application entry points (worker main, CLI)
+1. Add femtologging to project dependencies in `pyproject.toml` using the
+   snapshot commit.
+2. Introduce `ghillie/logging.py` to centralise `get_logger`, log formatting,
+   and `exc_info` usage.
+3. Update `ghillie/silver/services.py`, `ghillie/github/ingestion.py`,
+   `ghillie/github/observability.py`, `ghillie/runtime.py`, and
+   `tests/conftest.py`:
+   - Replace stdlib logging imports with `ghillie.logging`.
+   - Replace `logger.warning/info/error(...)` calls with `logger.log(...)` and
+     preformatted messages.
+   - Pass `exc_info` for exception logging.
+4. Update tests and BDD steps to capture femtologging output instead of
+   stdlib `caplog`.
+5. Configure femtologging at application entry points (runtime server, worker,
+   and CLI) using `configure_logging`.
 6. Update `.rules/python-exception-design-raising-handling-and-logging.md` to
-   reference femtologging patterns
+   reference femtologging patterns.
 
 ## Consequences
 
@@ -94,8 +94,7 @@ The following must be in place before migration can proceed:
 
 ### Negative
 
-- Migration blocked until femtologging implements exception support
-- New dependency to maintain and version
+- New dependency to maintain and version (pinned to a snapshot commit)
 - Team must learn femtologging API differences
 - Ruff LOG rules may need adjustment (femtologging uses different patterns)
 
@@ -131,6 +130,7 @@ worker threads is better aligned with Ghillie's architecture.
 - Task 1.3.e: Migrate to femtologging library (`docs/roadmap.md`)
 - Current logging guidelines:
   `.rules/python-exception-design-raising-handling-and-logging.md`
+- Femtologging user guide: `docs/femtologging-users-guide.md`
 
-[^femtologging]: Femtologging user guide:
+[^femtologging]: Femtologging repository:
     <https://github.com/leynos/femtologging/>

@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETED
 
 No PLANS.md exists in this repository.
 
@@ -21,7 +21,7 @@ pytest unit tests and pytest-bdd scenarios pass, and `make check-fmt`,
 
 - Use femtologging from the snapshot commit:
 
-    git+<https://github.com/leynos/femtologging@7c139fb7aca18f9277e00b88604b8bf5eb471be0>
+    <git+https://github.com/leynos/femtologging@7c139fb7aca18f9277e00b88604b8bf5eb471be0>
 - Preserve user-visible log schemas and ingestion observability event names
   unless the users guide and BDD tests are updated to match.
 - Keep Python compatibility at `requires-python = ">=3.12"`.
@@ -66,16 +66,26 @@ If any constraint cannot be met, stop and escalate.
 
 - [x] (2026-01-31 00:00Z) Draft ExecPlan in
   `docs/execplans/adopt-femtologging.md`.
-- [ ] (2026-01-31 00:00Z) Review logging usage and entry points, then confirm
+- [x] (2026-01-31 00:00Z) ExecPlan approved; status updated to IN PROGRESS.
+- [x] (2026-01-31 00:00Z) Review logging usage and entry points, then confirm
   femtologging exception API against the snapshot.
-- [ ] (2026-01-31 00:00Z) Add failing unit and BDD tests that describe the new
+- [x] (2026-01-31 00:00Z) Add failing unit and BDD tests that describe the new
   logging behaviour and exception handling.
-- [ ] (2026-01-31 00:00Z) Implement femtologging adoption and configuration,
+- [x] (2026-01-31 00:00Z) Implement femtologging adoption and configuration,
   update documentation, and pass all quality gates.
+- [x] (2026-01-31 00:00Z) Validate quality gates: `make check-fmt`,
+  `make typecheck`, `make lint`, `make test`, `make markdownlint`, and
+  `make nixie`.
 
 ## Surprises & Discoveries
 
-- None yet.
+- Observation: femtologging's `handle_record` hook exposes structured
+  `exc_info` and `stack_info` payloads in the record dict. Evidence: the
+  snapshot's `record_to_dict` helper adds `exc_info` and `stack_info` keys when
+  provided. Impact: tests can assert exception capture without stdlib `caplog`.
+- Observation: femtologging normalizes warning levels to `WARN` in emitted
+  records even when `WARNING` is passed. Impact: tests should assert `WARN` for
+  warning-level log records.
 
 ## Decision Log
 
@@ -83,10 +93,25 @@ If any constraint cannot be met, stop and escalate.
   `7c139fb7aca18f9277e00b88604b8bf5eb471be0` as the dependency source.
   Rationale: required for internal dogfooding before release. Date/Author:
   2026-01-31, Codex.
+- Decision: Introduce `ghillie/logging.py` to centralize log formatting,
+  femtologging configuration, and exception logging helpers. Rationale: keeps
+  call sites consistent and makes tests deterministic. Date/Author: 2026-01-31,
+  Codex.
+- Decision: Use a custom femtologging capture handler that implements
+  `handle_record` for unit/BDD tests. Rationale: enables assertions on
+  exception payloads without stdlib logging. Date/Author: 2026-01-31, Codex.
 
 ## Outcomes & Retrospective
 
-TBD after implementation.
+- Adopted femtologging via the snapshot dependency and centralized logging
+  helpers in `ghillie/logging.py` for formatting, configuration, and exception
+  logging.
+- Updated ingestion and runtime call sites plus tests to capture femtologging
+  records, including structured exception payloads.
+- Added unit and pytest-bdd coverage for failed ingestion logging and new
+  helpers; all quality gates passed with existing pytest warning noise
+  (pytest-bdd unknown marks and Python 3.13 deprecation warnings from
+  `exc_info` usage).
 
 ## Context and Orientation
 
@@ -257,3 +282,10 @@ Expected log shape (update if the snapshot emits a different format):
   sites stay consistent and tests have a stable seam.
 - Entry points: ensure femtologging initialization happens once in each
   runtime entry path (worker, CLI, API), and document the location.
+
+## Revision note (2026-01-31)
+
+Updated progress to reflect completed discovery and test scaffolding, and
+captured femtologging record payload behaviour plus key design decisions. The
+remaining work is focused on finishing the migration, updating documentation,
+and passing quality gates.

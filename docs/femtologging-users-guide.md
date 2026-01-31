@@ -40,9 +40,10 @@ your process exits.
   rate-limited warnings and maintains drop counters
   (`FemtoLogger.get_dropped()` and handler-specific warnings) so you can
   monitor pressure.
-- Record metadata currently only tracks the logger name, level, message text,
-  timestamps, and thread identity. The Python API does not yet expose rich
-  `LogRecord` attributes such as the calling module or exception info.
+- Record metadata tracks logger name, level, message text, timestamps, and
+  thread identity, with optional exception and stack payloads when `exc_info`
+  or `stack_info` are supplied. The Python API does not yet expose the full
+  stdlib `LogRecord` surface or arbitrary `extra` fields.
 
 ## Working with loggers
 
@@ -61,14 +62,17 @@ your process exits.
 
 - `logger.log(level, message)` accepts the case-insensitive names `"TRACE"`,
   `"DEBUG"`, `"INFO"`, `"WARN"`, `"WARNING"`, `"ERROR"`, and `"CRITICAL"`.
+- `logger.log(level, message, exc_info=..., stack_info=...)` captures
+  exception or stack details and exposes them to Python handlers via the
+  structured `handle_record` hook.
 - The method returns the formatted string when the record passes level checks
   (default format is `"{logger} [LEVEL] message"`), or `None` when the record
   is filtered out. This differs from `logging.Logger.log()`, which always
   returns `None`.
 - Convenience methods (`logger.info`, `logger.warning`, and so on) are not
   implemented yet; call `log()` directly or wrap it in a helper.
-- Currently, `FemtoLogger` sends only the text form of each record to handlers.
-  There is no equivalent to `extra`, `exc_info`, `stack_info`, or lazy
+- `FemtoLogger` sends the message text to handlers; structured payloads are
+  available through `handle_record`. There is no equivalent to `extra` or lazy
   formatting. Build the final message string yourself before calling `log()`.
 
 ### Managing handlers and custom sinks
@@ -395,10 +399,12 @@ stream = StreamHandlerBuilder.stdout().with_formatter(json_formatter).build()
 - No shorthand methods (`info`, `debug`, `warning`, …) or `LoggerAdapter`.
 - `log()` returns the formatted string instead of `None`, and there is no
   `Logger.isEnabledFor()` helper.
-- Records lack `extra`, `exc_info`, `stack_info`, and stack introspection.
-- Handlers expect `handle(logger, level, message)` rather than `emit(LogRecord)`
-  and run on dedicated worker threads, so Python `logging.Handler` subclasses
-  cannot be reused.
+- Records lack `extra` and stdlib-style `LogRecord` objects. Exception and
+  stack payloads are only available through the structured `handle_record`
+  interface.
+- Handlers expect `handle(logger, level, message)` or `handle_record(record)`
+  rather than `emit(LogRecord)`, and run on dedicated worker threads, so Python
+  `logging.Handler` subclasses cannot be reused.
 - The `dictConfig` schema lacks incremental updates, filters, handler levels,
   and formatter attachment. `fileConfig` is likewise cut down.
 - Queue capacity is capped (1 024 per logger/handler). The stdlib blocks the

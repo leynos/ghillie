@@ -1194,6 +1194,8 @@ A few practical constraints you’ll want to bake into the design up front:
 - Bronze: log ingestion failures, event sizes, and dedupe rates.
 - Silver: log transform failures per event type, and maintain a simple
   `transform_failures` dashboard.
+- Logging uses femtologging for async-safe emission, with exception payloads
+  captured via `exc_info` where errors occur.
 - **Timezone discipline and payload safety:** ingestion and hashing enforce
   timezone-aware datetimes. Naive values raise `TimezoneAwareRequiredError`,
   payload datetimes are normalised to UTC ISO strings before persistence, and
