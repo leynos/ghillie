@@ -30,7 +30,12 @@ from ghillie.bronze import (
 from ghillie.catalogue.models import NoiseFilters
 from ghillie.catalogue.storage import ComponentRecord, ProjectRecord, RepositoryRecord
 from ghillie.common.time import utcnow
-from ghillie.logging import get_logger, log_error, log_warning
+from ghillie.logging import (
+    format_log_message,
+    get_logger,
+    log_exception,
+    log_warning,
+)
 
 from .noise import CompiledNoiseFilters, compile_noise_filters
 from .observability import (
@@ -532,14 +537,16 @@ class GitHubIngestionWorker:
             )
             rows = []
         except SQLAlchemyError as exc:
-            log_error(
+            log_exception(
                 logger,
-                (
-                    "Failed to load noise filters for repo %s due to SQLAlchemy "
-                    "error; failing ingestion."
+                format_log_message(
+                    (
+                        "Failed to load noise filters for repo %s due to "
+                        "SQLAlchemy error; failing ingestion."
+                    ),
+                    repo.slug,
                 ),
-                repo.slug,
-                exc_info=exc,
+                exc,
             )
             raise
 

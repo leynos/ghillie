@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import datetime as dt
+import time
 import typing as typ
 
 import pytest
@@ -24,7 +25,11 @@ from ghillie.github.observability import IngestionEventType
 from ghillie.registry import RepositoryRegistryService
 from ghillie.silver import init_silver_storage
 from ghillie.silver.storage import Repository
-from tests.helpers.femtologging_capture import FemtoLogRecord, capture_femto_logs
+from tests.helpers.femtologging_capture import (
+    FemtoLogCapture,
+    FemtoLogRecord,
+    capture_femto_logs,
+)
 from tests.helpers.github_events import (
     create_commit_event,
     create_doc_change_event,
@@ -246,10 +251,35 @@ def repository_never_ingested(
 def _execute_worker(
     observability_context: ObservabilityContext,
     slug: str,
-    expected_log_count: int,
+    expected_event_types: typ.Sequence[IngestionEventType],
     expected_exception: type[Exception] | None = None,
 ) -> None:
     """Run the ingestion worker once and capture log records."""
+
+    def _wait_for_events(
+        capture: FemtoLogCapture,
+        expected_events: typ.Sequence[IngestionEventType],
+        timeout: float = 1.0,
+    ) -> None:
+        deadline = time.monotonic() + timeout
+        remaining_events = list(expected_events)
+        while remaining_events:
+            records = list(capture.records)
+            remaining_events = [
+                event
+                for event in expected_events
+                if not any(event in record.message for record in records)
+            ]
+            if not remaining_events:
+                return
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            capture.wait_for_timeout(min(0.05, remaining))
+
+        missing = ", ".join(event.name for event in remaining_events)
+        msg = f"Expected log events not emitted within {timeout:.1f}s: {missing}"
+        raise AssertionError(msg)
 
     async def _run() -> None:
         service = observability_context["registry_service"]
@@ -272,7 +302,8 @@ def _execute_worker(
         else:
             with pytest.raises(expected_exception):
                 run_async(_run())
-        capture.wait_for_count(expected_log_count)
+        if expected_event_types:
+            _wait_for_events(capture, expected_event_types)
     observability_context["log_records"] = list(capture.records)
 
 
@@ -282,7 +313,11 @@ def run_worker(
     slug: str,
 ) -> None:
     """Run the ingestion worker once for the specified repository."""
-    _execute_worker(observability_context, slug, expected_log_count=6)
+    _execute_worker(
+        observability_context,
+        slug,
+        expected_event_types=[IngestionEventType.RUN_COMPLETED],
+    )
 
 
 @when(parsers.parse('the GitHub ingestion worker fails for "{slug}"'))
@@ -294,7 +329,7 @@ def run_worker_failure(
     _execute_worker(
         observability_context,
         slug,
-        expected_log_count=2,
+        expected_event_types=[IngestionEventType.RUN_FAILED],
         expected_exception=GitHubAPIError,
     )
 
