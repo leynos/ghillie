@@ -54,12 +54,12 @@ def normalize_log_level(level: str | None) -> tuple[str, bool]:
     return ("INFO", True)
 
 
-def configure_logging(level: str, *, force: bool = False) -> tuple[str, bool]:
+def configure_logging(level: str | None, *, force: bool = False) -> tuple[str, bool]:
     """Configure femtologging and return the normalized level.
 
     Parameters
     ----------
-    level : str
+    level : str | None
         Raw log level string to normalize.
     force : bool, optional
         Whether to replace any existing handler configuration.
