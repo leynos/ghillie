@@ -98,8 +98,7 @@ async def _try_setup_pglite(
         # pragma: no cover - fall back when py-pglite fails at any stage
         log_warning(
             logger,
-            "py-pglite unavailable, falling back to SQLite: %s",
-            exc,
+            "py-pglite unavailable, falling back to SQLite",
             exc_info=exc,
         )
         if engine_cm is not None:
