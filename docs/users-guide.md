@@ -512,8 +512,9 @@ back to SQLite to keep the suite runnable. To force SQLite explicitly, set
 ## GitHub ingestion observability (Phase 1.3.d)
 
 Ghillie emits structured log events for ingestion health monitoring. All events
-use Python's standard logging module with consistent field schemas suitable for
-parsing by log aggregators (Datadog, Loki, CloudWatch Logs Insights, etc.).
+use femtologging with consistent field schemas suitable for parsing by log
+aggregators (Datadog, Loki, CloudWatch Logs Insights, etc.). Log levels accept
+`TRACE`, `DEBUG`, `INFO`, `WARN`/`WARNING`, `ERROR`, and `CRITICAL`.
 
 ### Log events
 
@@ -534,7 +535,7 @@ alert routing.
 Example log output:
 
 ```text
-INFO ghillie.github.observability [ingestion.run.completed]
+ghillie.github.observability [INFO] [ingestion.run.completed]
   repo_slug=octo/reef estate_id=wildside duration_seconds=45.200
   commits_ingested=12 pull_requests_ingested=3 issues_ingested=5
   doc_changes_ingested=2 total_events=22

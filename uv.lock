@@ -205,6 +205,11 @@ wheels = [
 ]
 
 [[package]]
+name = "femtologging"
+version = "0.1.0"
+source = { git = "https://github.com/leynos/femtologging?rev=7c139fb7aca18f9277e00b88604b8bf5eb471be0#7c139fb7aca18f9277e00b88604b8bf5eb471be0" }
+
+[[package]]
 name = "gherkin-official"
 version = "29.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -221,6 +226,7 @@ dependencies = [
     { name = "aiosqlite" },
     { name = "dramatiq" },
     { name = "falcon" },
+    { name = "femtologging" },
     { name = "granian" },
     { name = "httpx" },
     { name = "msgspec" },
@@ -250,6 +256,7 @@ requires-dist = [
     { name = "aiosqlite", specifier = ">=0.20.0" },
     { name = "dramatiq", specifier = ">=1.16.0" },
     { name = "falcon", specifier = ">=4.0.0,<5.0.0" },
+    { name = "femtologging", git = "https://github.com/leynos/femtologging?rev=7c139fb7aca18f9277e00b88604b8bf5eb471be0" },
     { name = "granian", specifier = ">=1.0.0,<2.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "msgspec", specifier = ">=0.18.6" },

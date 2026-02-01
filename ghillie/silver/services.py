@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import copy
-import logging
 import typing as typ
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from ghillie.bronze.storage import RawEvent, RawEventState
+from ghillie.logging import get_logger, log_warning
 from ghillie.silver.errors import RawEventTransformError
 from ghillie.silver.storage import EventFact
 from ghillie.silver.transformers import get_entity_transformer
@@ -20,7 +20,7 @@ if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 type ProcessedIds = list[int]
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class RawEventTransformer:
@@ -138,7 +138,8 @@ class RawEventTransformer:
         """Mark raw event as failed and log the error."""
         raw_event.transform_state = RawEventState.FAILED.value
         raw_event.transform_error = str(exc)
-        logger.warning(
+        log_warning(
+            logger,
             "RawEvent %s (%s) failed transform: %s",
             raw_event.id,
             raw_event.event_type,
