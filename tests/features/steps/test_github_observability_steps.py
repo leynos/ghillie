@@ -248,46 +248,42 @@ def repository_never_ingested(
     run_async(_create())
 
 
-def _execute_worker(
-    observability_context: ObservabilityContext,
-    slug: str,
-    expected_event_types: typ.Sequence[IngestionEventType],
-    expected_exception: type[Exception] | None = None,
+def _wait_for_ingestion_events(
+    capture: FemtoLogCapture,
+    expected_events: typ.Sequence[IngestionEventType],
+    timeout: float = 1.0,
 ) -> None:
-    """Run the ingestion worker once and capture log records."""
+    deadline = time.monotonic() + timeout
+    remaining_events = list(expected_events)
+    while remaining_events:
+        records = list(capture.records)
+        remaining_events = [
+            event
+            for event in expected_events
+            if not any(event in record.message for record in records)
+        ]
+        if not remaining_events:
+            return
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        capture.wait_for_timeout(min(0.05, remaining))
 
-    def _wait_for_events(
-        capture: FemtoLogCapture,
-        expected_events: typ.Sequence[IngestionEventType],
-        timeout: float = 1.0,
-    ) -> None:
-        deadline = time.monotonic() + timeout
-        remaining_events = list(expected_events)
-        while remaining_events:
-            records = list(capture.records)
-            remaining_events = [
-                event
-                for event in expected_events
-                if not any(event in record.message for record in records)
-            ]
-            if not remaining_events:
-                return
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                break
-            capture.wait_for_timeout(min(0.05, remaining))
+    missing = ", ".join(event.name for event in remaining_events)
+    msg = f"Expected log events not emitted within {timeout:.1f}s: {missing}"
+    raise AssertionError(msg)
 
-        missing = ", ".join(event.name for event in remaining_events)
-        msg = f"Expected log events not emitted within {timeout:.1f}s: {missing}"
-        raise AssertionError(msg)
 
-    async def _run() -> None:
-        service = observability_context["registry_service"]
+def _run_ingestion_worker(context: ObservabilityContext, slug: str) -> None:
+    """Execute the ingestion worker for the specified repository."""
+
+    async def _ingest() -> None:
+        service = context["registry_service"]
         repos = await service.list_active_repositories()
         repo = next(repo for repo in repos if repo.slug == slug)
         worker = GitHubIngestionWorker(
-            observability_context["session_factory"],
-            observability_context["github_client"],
+            context["session_factory"],
+            context["github_client"],
             config=GitHubIngestionConfig(
                 initial_lookback=dt.timedelta(days=1),
                 overlap=dt.timedelta(0),
@@ -296,14 +292,24 @@ def _execute_worker(
         )
         await worker.ingest_repository(repo)
 
+    run_async(_ingest())
+
+
+def _execute_worker(
+    observability_context: ObservabilityContext,
+    slug: str,
+    expected_event_types: typ.Sequence[IngestionEventType],
+    expected_exception: type[Exception] | None = None,
+) -> None:
+    """Run the ingestion worker once and capture log records."""
     with capture_femto_logs("ghillie.github.observability") as capture:
         if expected_exception is None:
-            run_async(_run())
+            _run_ingestion_worker(observability_context, slug)
         else:
             with pytest.raises(expected_exception):
-                run_async(_run())
+                _run_ingestion_worker(observability_context, slug)
         if expected_event_types:
-            _wait_for_events(capture, expected_event_types)
+            _wait_for_ingestion_events(capture, expected_event_types)
     observability_context["log_records"] = list(capture.records)
 
 
