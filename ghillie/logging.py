@@ -246,7 +246,7 @@ def log_exception(logger: _SupportsLog, message: str, exc: BaseException) -> Non
         No value is returned.
 
     """
-    logger.log("ERROR", message, exc_info=exc)
+    _log_at_level(logger, "ERROR", message, exc_info=exc)
 
 
 __all__ = [
