@@ -9,6 +9,13 @@ Feature: GitHub ingestion observability
     Then an ingestion run completed log event is emitted for "octo/reef"
     And the log event contains the total events ingested
 
+  Scenario: Failed ingestion run emits error details
+    Given a managed repository "octo/reef" is registered for ingestion
+    And the GitHub API returns an error for "octo/reef"
+    When the GitHub ingestion worker fails for "octo/reef"
+    Then an ingestion run failed log event is emitted for "octo/reef"
+    And the log event includes the error category "transient"
+
   Scenario: Ingestion lag is computable for tracked repositories
     Given a managed repository "octo/reef" is registered for ingestion
     And the GitHub API returns activity for "octo/reef"

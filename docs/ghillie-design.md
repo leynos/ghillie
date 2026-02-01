@@ -338,6 +338,9 @@ ingestion without inspecting database state directly.
 - `ingestion.stream.truncated`: Emitted when a stream hits `max_events_per_kind`
   and backlog exists.
 
+Events are emitted via femtologging to keep ingestion workers async-friendly
+and to capture exception payloads using `exc_info` where failures occur.
+
 All events include `repo_slug` and `estate_id` for log aggregator filtering.
 Failure events classify errors into categories (`transient`, `client_error`,
 `schema_drift`, `configuration`, `database_connectivity`, `data_integrity`,

@@ -110,34 +110,39 @@ raise RuntimeError(msg)
 EM101/EM102 prefer a single message object; this reduces duplication and
 clarifies intent.
 
-### Logging: parameterised messages, module loggers, correct APIs
+### Logging: preformatted messages, module loggers, correct APIs
 
 ```python
 import logging
-logger = logging.getLogger(__name__)
+
+from ghillie.logging import format_log_message, get_logger
+
+logger = get_logger(__name__)
 
 # ❌ LOG issues
-logging.warning(f"failed for {user_id}")        # f-string (LOG004/LOG014)
-logging.warning("failed for %s" % user_id)      # %-formatting (LOG007)
 logging.warn("deprecated")                       # warn() (LOG009)
 logging.error("bad root logger")                 # root logger usage (LOG015)
 
 # ✅ Correct
-logger.warning("Failed for user_id=%s", user_id)  # lazy interpolation
-logger.error("Task %s crashed", task_id)
+logger.log("WARNING", format_log_message("Failed for user_id=%s", user_id))
+logger.log("ERROR", format_log_message("Task %s crashed", task_id))
 ```
+
+Femtologging does not support lazy interpolation, so build the message string
+before calling `logger.log(...)`.
 
 ### Logging exceptions: no duplication
 
 ```python
 try:
     risky()
-except ValueError:
-    logger.exception("Risky operation failed")  # ✅ includes traceback; no %s with exc
+except ValueError as exc:
+    logger.log("ERROR", "Risky operation failed", exc_info=exc)
 ```
 
-`logger.exception` records the active exception and traceback; appending the
-exception object to the format arguments is redundant (TRY401).
+Pass `exc_info` explicitly so femtologging captures the traceback. Avoid
+duplicating the exception in the message unless adding context that is not
+already in the exception text (TRY401).
 
 **Operational note:** log once at a boundary (e.g., request or worker entry
 point). Inner layers should handle or re‑raise without logging to avoid

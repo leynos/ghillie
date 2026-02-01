@@ -15,19 +15,26 @@ Run the service directly with ``python -m ghillie.runtime``.
 
 from __future__ import annotations
 
-import logging
 import os
 import typing as typ
 
 import falcon.asgi
 import falcon.media
 
+from ghillie.logging import (
+    configure_logging,
+    get_logger,
+    log_error,
+    log_info,
+    log_warning,
+)
+
 if typ.TYPE_CHECKING:
     from falcon.asgi import Request, Response
 
 __all__ = ["HealthResource", "ReadyResource", "create_app", "main"]
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # TCP port number range limits
 _MIN_PORT = 1
@@ -50,7 +57,8 @@ def _parse_port(port_str: str) -> int:
             raise ValueError(msg)  # noqa: TRY301 - unify conversion and range errors
     except ValueError as exc:
         # Use error() not exception() - validation failures need no traceback
-        logger.error(  # noqa: TRY400 - no traceback for config validation
+        log_error(
+            logger,
             "Invalid GHILLIE_PORT value: %r (must be %d-%d): %s",
             port_str,
             _MIN_PORT,
@@ -102,25 +110,21 @@ def main() -> None:
     log_level_str = os.environ.get("GHILLIE_LOG_LEVEL", "INFO")
 
     # Configure logging - validate log level and warn on invalid values
-    log_level = getattr(logging, log_level_str.upper(), None)
-    invalid_level = log_level is None
+    normalized_level, invalid_level = configure_logging(log_level_str)
     if invalid_level:
-        log_level = logging.INFO
-    logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
-    if invalid_level:
-        logger.warning(
-            "Invalid GHILLIE_LOG_LEVEL %r, falling back to INFO",
+        log_warning(
+            logger,
+            "Invalid GHILLIE_LOG_LEVEL %r, falling back to %s",
             log_level_str,
+            normalized_level,
         )
 
-    logger.info(
+    log_info(
+        logger,
         "Starting Ghillie runtime on %s:%d (log_level=%s)",
         host,
         port,
-        log_level_str,
+        normalized_level,
     )
 
     server = Granian(
