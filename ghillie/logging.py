@@ -12,19 +12,22 @@ Example:
 
 from __future__ import annotations
 
+import enum
 import typing as typ
 
 from femtologging import basicConfig, get_logger
 
-_LOG_LEVELS = {
-    "TRACE",
-    "DEBUG",
-    "INFO",
-    "WARN",
-    "WARNING",
-    "ERROR",
-    "CRITICAL",
-}
+
+class LogLevel(enum.StrEnum):
+    """Supported log levels for femtologging."""
+
+    TRACE = "TRACE"
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARN = "WARN"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    CRITICAL = "CRITICAL"
 
 
 def normalize_log_level(level: str | None) -> tuple[str, bool]:
@@ -45,7 +48,7 @@ def normalize_log_level(level: str | None) -> tuple[str, bool]:
         return ("INFO", True)
 
     normalized = level.strip().upper()
-    if normalized in _LOG_LEVELS:
+    if normalized in LogLevel.__members__:
         return (normalized, False)
 
     return ("INFO", True)
