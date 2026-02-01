@@ -346,7 +346,9 @@ def run_completed_event_emitted(
 ) -> None:
     """Verify that a RUN_COMPLETED log event was emitted."""
     record = _get_event_record(observability_context, IngestionEventType.RUN_COMPLETED)
-    assert slug in record.message
+    assert slug in record.message, (
+        f"Expected slug '{slug}' in message: {record.message}"
+    )
 
 
 @then("the log event contains the total events ingested")
@@ -355,7 +357,9 @@ def log_event_contains_total_events(
 ) -> None:
     """Verify that the completion log contains total_events."""
     record = _get_event_record(observability_context, IngestionEventType.RUN_COMPLETED)
-    assert "total_events=" in record.message
+    assert "total_events=" in record.message, (
+        f"Missing total_events in: {record.message}"
+    )
 
 
 @then(parsers.parse('an ingestion run failed log event is emitted for "{slug}"'))
