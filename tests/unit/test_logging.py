@@ -89,14 +89,14 @@ def test_log_warning_forwards_exc_info() -> None:
     )
 
 
-def test_log_error_forwards_stack_info() -> None:
-    """log_error forwards stack_info to the logger."""
+def test_log_error_defaults_stack_info_false() -> None:
+    """log_error defaults stack_info to False."""
     logger = _FakeLogger()
 
-    log_error(logger, "error: %s", "oops", stack_info=True)
+    log_error(logger, "error: %s", "oops")
 
-    assert logger.calls == [("ERROR", "error: oops", None, True)], (
-        "Expected ERROR log entry with stack_info."
+    assert logger.calls == [("ERROR", "error: oops", None, False)], (
+        "Expected ERROR log entry with stack_info disabled."
     )
 
 

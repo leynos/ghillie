@@ -57,19 +57,19 @@ class _SupportsLog(typ.Protocol):
     ) -> str | None: ...
 
 
-def _log_at_level(  # noqa: PLR0913 - shared helper requires full logging context
+def _log_at_level(
     logger: _SupportsLog,
     level: str,
-    template: str,
-    *args: object,
+    message: str,
+    *,
     exc_info: object | None = None,
-    stack_info: bool = False,
 ) -> None:
+    """Log a pre-formatted message at the specified level."""
     logger.log(
         level,
-        _format_message(template, *args),
+        message,
         exc_info=exc_info,
-        stack_info=stack_info,
+        stack_info=False,
     )
 
 
@@ -78,16 +78,13 @@ def log_info(
     template: str,
     *args: object,
     exc_info: object | None = None,
-    stack_info: bool = False,
 ) -> None:
     """Log an INFO message with percent-style formatting."""
     _log_at_level(
         logger,
         "INFO",
-        template,
-        *args,
+        _format_message(template, *args),
         exc_info=exc_info,
-        stack_info=stack_info,
     )
 
 
@@ -96,16 +93,13 @@ def log_warning(
     template: str,
     *args: object,
     exc_info: object | None = None,
-    stack_info: bool = False,
 ) -> None:
     """Log a WARNING message with percent-style formatting."""
     _log_at_level(
         logger,
         "WARNING",
-        template,
-        *args,
+        _format_message(template, *args),
         exc_info=exc_info,
-        stack_info=stack_info,
     )
 
 
@@ -114,16 +108,13 @@ def log_error(
     template: str,
     *args: object,
     exc_info: object | None = None,
-    stack_info: bool = False,
 ) -> None:
     """Log an ERROR message with percent-style formatting."""
     _log_at_level(
         logger,
         "ERROR",
-        template,
-        *args,
+        _format_message(template, *args),
         exc_info=exc_info,
-        stack_info=stack_info,
     )
 
 
