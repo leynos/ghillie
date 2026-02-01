@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import typing as typ
-
-if typ.TYPE_CHECKING:
-    import pytest
+import pytest
 
 from ghillie.logging import (
     configure_logging,
@@ -115,10 +112,20 @@ def test_log_exception_passes_exc_info() -> None:
     )
 
 
-def test_configure_logging_with_valid_level(
+@pytest.mark.parametrize(
+    ("input_level", "expected_normalized", "expected_invalid"),
+    [
+        ("DEBUG", "DEBUG", False),
+        ("nope", "INFO", True),
+    ],
+)
+def test_configure_logging(
     monkeypatch: pytest.MonkeyPatch,
+    input_level: str,
+    expected_normalized: str,
+    expected_invalid: bool,  # noqa: FBT001 - asserted explicitly in parametrized tests
 ) -> None:
-    """configure_logging passes valid levels to basicConfig."""
+    """configure_logging normalizes input levels and flags invalid values."""
     captured: dict[str, object] = {}
 
     def fake_basic_config(**kwargs: object) -> None:
@@ -126,26 +133,14 @@ def test_configure_logging_with_valid_level(
 
     monkeypatch.setattr("ghillie.logging.basicConfig", fake_basic_config)
 
-    normalized, invalid = configure_logging("DEBUG")
+    normalized, invalid = configure_logging(input_level)
 
-    assert normalized == "DEBUG", "Expected DEBUG to remain normalized."
-    assert invalid is False, "Expected valid level to be marked valid."
-    assert captured.get("level") == "DEBUG", "Expected basicConfig level to match."
-
-
-def test_configure_logging_with_invalid_level(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """configure_logging defaults invalid levels to INFO."""
-    captured: dict[str, object] = {}
-
-    def fake_basic_config(**kwargs: object) -> None:
-        captured.update(kwargs)
-
-    monkeypatch.setattr("ghillie.logging.basicConfig", fake_basic_config)
-
-    normalized, invalid = configure_logging("nope")
-
-    assert normalized == "INFO", "Expected invalid level to normalize to INFO."
-    assert invalid is True, "Expected invalid level to be marked invalid."
-    assert captured.get("level") == "INFO", "Expected basicConfig to use INFO."
+    assert normalized == expected_normalized, (
+        f"Expected {input_level} to normalize to {expected_normalized}."
+    )
+    assert invalid is expected_invalid, (
+        f"Expected invalid flag to be {expected_invalid} for {input_level}."
+    )
+    assert captured.get("level") == expected_normalized, (
+        f"Expected basicConfig to use {expected_normalized}."
+    )

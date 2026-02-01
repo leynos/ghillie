@@ -57,6 +57,22 @@ class _SupportsLog(typ.Protocol):
     ) -> str | None: ...
 
 
+def _log_at_level(  # noqa: PLR0913 - shared helper requires full logging context
+    logger: _SupportsLog,
+    level: str,
+    template: str,
+    *args: object,
+    exc_info: object | None = None,
+    stack_info: bool = False,
+) -> None:
+    logger.log(
+        level,
+        _format_message(template, *args),
+        exc_info=exc_info,
+        stack_info=stack_info,
+    )
+
+
 def log_info(
     logger: _SupportsLog,
     template: str,
@@ -65,9 +81,11 @@ def log_info(
     stack_info: bool = False,
 ) -> None:
     """Log an INFO message with percent-style formatting."""
-    logger.log(
+    _log_at_level(
+        logger,
         "INFO",
-        _format_message(template, *args),
+        template,
+        *args,
         exc_info=exc_info,
         stack_info=stack_info,
     )
@@ -81,9 +99,11 @@ def log_warning(
     stack_info: bool = False,
 ) -> None:
     """Log a WARNING message with percent-style formatting."""
-    logger.log(
+    _log_at_level(
+        logger,
         "WARNING",
-        _format_message(template, *args),
+        template,
+        *args,
         exc_info=exc_info,
         stack_info=stack_info,
     )
@@ -97,9 +117,11 @@ def log_error(
     stack_info: bool = False,
 ) -> None:
     """Log an ERROR message with percent-style formatting."""
-    logger.log(
+    _log_at_level(
+        logger,
         "ERROR",
-        _format_message(template, *args),
+        template,
+        *args,
         exc_info=exc_info,
         stack_info=stack_info,
     )
