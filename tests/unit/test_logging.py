@@ -1,4 +1,8 @@
-"""Unit tests for femtologging integration helpers."""
+"""Unit tests for femtologging integration helpers.
+
+Run with:
+    pytest tests/unit/test_logging.py
+"""
 
 from __future__ import annotations
 
@@ -16,6 +20,8 @@ from ghillie.logging import (
 
 
 class _FakeLogger:
+    """Collects log calls for assertions."""
+
     def __init__(self) -> None:
         self.calls: list[tuple[str, str, object | None, bool]] = []
 
@@ -32,32 +38,33 @@ class _FakeLogger:
         return message
 
 
-def test_normalize_log_level_accepts_known_level() -> None:
-    """Valid log levels are normalized without error."""
-    level, invalid = normalize_log_level("warning")
-    assert level == "WARNING", "Expected warning level to normalize to WARNING."
-    assert invalid is False, "Expected known log level to be marked valid."
+class TestNormalizeLogLevel:
+    """Tests for normalize_log_level."""
 
-
-def test_normalize_log_level_with_none_defaults_to_info() -> None:
-    """None log levels fall back to INFO and flag invalid."""
-    level, invalid = normalize_log_level(None)
-    assert level == "INFO", "Expected None log level to default to INFO."
-    assert invalid is True, "Expected None log level to be marked invalid."
-
-
-def test_normalize_log_level_with_empty_string_defaults_to_info() -> None:
-    """Empty string log levels fall back to INFO and flag invalid."""
-    level, invalid = normalize_log_level("")
-    assert level == "INFO", "Expected empty log level to default to INFO."
-    assert invalid is True, "Expected empty log level to be marked invalid."
-
-
-def test_normalize_log_level_falls_back_on_invalid() -> None:
-    """Invalid log levels fall back to INFO and flag invalid."""
-    level, invalid = normalize_log_level("nope")
-    assert level == "INFO", "Expected invalid log level to default to INFO."
-    assert invalid is True, "Expected invalid log level to be marked invalid."
+    @pytest.mark.parametrize(
+        ("input_level", "expected_level", "invalid_label"),
+        [
+            ("warning", "WARNING", "valid"),
+            (None, "INFO", "invalid"),
+            ("", "INFO", "invalid"),
+            ("nope", "INFO", "invalid"),
+        ],
+    )
+    def test_normalize_log_level(
+        self,
+        input_level: str | None,
+        expected_level: str,
+        invalid_label: str,
+    ) -> None:
+        """Normalize log levels and flag invalid inputs."""
+        expected_invalid = invalid_label == "invalid"
+        level, invalid = normalize_log_level(input_level)
+        assert level == expected_level, (
+            f"Expected {input_level!r} to normalize to {expected_level}."
+        )
+        assert invalid is expected_invalid, (
+            f"Expected invalid flag to be {expected_invalid} for {input_level!r}."
+        )
 
 
 def test_format_log_message_uses_percent_formatting() -> None:
@@ -113,17 +120,17 @@ def test_log_exception_passes_exc_info() -> None:
 
 
 @pytest.mark.parametrize(
-    ("input_level", "expected_normalized", "expected_invalid"),
+    ("input_level", "expected_normalized", "invalid_label"),
     [
-        ("DEBUG", "DEBUG", False),
-        ("nope", "INFO", True),
+        ("DEBUG", "DEBUG", "valid"),
+        ("nope", "INFO", "invalid"),
     ],
 )
 def test_configure_logging(
     monkeypatch: pytest.MonkeyPatch,
     input_level: str,
     expected_normalized: str,
-    expected_invalid: bool,  # noqa: FBT001 - asserted explicitly in parametrized tests
+    invalid_label: str,
 ) -> None:
     """configure_logging normalizes input levels and flags invalid values."""
     captured: dict[str, object] = {}
@@ -134,6 +141,7 @@ def test_configure_logging(
     monkeypatch.setattr("ghillie.logging.basicConfig", fake_basic_config)
 
     normalized, invalid = configure_logging(input_level)
+    expected_invalid = invalid_label == "invalid"
 
     assert normalized == expected_normalized, (
         f"Expected {input_level} to normalize to {expected_normalized}."
@@ -144,3 +152,4 @@ def test_configure_logging(
     assert captured.get("level") == expected_normalized, (
         f"Expected basicConfig to use {expected_normalized}."
     )
+    assert captured.get("force") is False, "Expected basicConfig to keep handlers."

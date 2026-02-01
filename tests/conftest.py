@@ -100,6 +100,7 @@ async def _try_setup_pglite(
             logger,
             "py-pglite unavailable, falling back to SQLite: %s",
             exc,
+            exc_info=exc,
         )
         if engine_cm is not None:
             with contextlib.suppress(Exception):
