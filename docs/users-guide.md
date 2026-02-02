@@ -926,3 +926,133 @@ config = OpenAIStatusModelConfig(
 )
 openai_model = OpenAIStatusModel(config)
 ```
+
+## Scheduled reporting workflow (Phase 2.3.a)
+
+Ghillie provides a scheduled reporting workflow that orchestrates evidence
+bundle construction, status model invocation, and report persistence. The
+workflow can be invoked programmatically or via Dramatiq actors for background
+execution.
+
+### Generating a repository report
+
+Use `ReportingService` to generate reports for repositories:
+
+```python
+import asyncio
+import datetime as dt
+
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from ghillie.bronze import init_bronze_storage
+from ghillie.evidence import EvidenceBundleService
+from ghillie.gold import init_gold_storage
+from ghillie.reporting import ReportingConfig, ReportingService
+from ghillie.silver import init_silver_storage
+from ghillie.status import create_status_model
+
+
+async def main() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///ghillie.db")
+    await init_bronze_storage(engine)
+    await init_silver_storage(engine)
+    await init_gold_storage(engine)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    # Create the reporting service with dependencies
+    evidence_service = EvidenceBundleService(session_factory)
+    status_model = create_status_model()  # Uses GHILLIE_STATUS_MODEL_BACKEND
+    config = ReportingConfig()
+
+    service = ReportingService(
+        session_factory=session_factory,
+        evidence_service=evidence_service,
+        status_model=status_model,
+        config=config,
+    )
+
+    # Generate a report for a specific repository
+    repository_id = "..."  # Silver repository ID
+    report = await service.run_for_repository(repository_id)
+
+    if report:
+        print(f"Report generated: {report.id}")
+        print(f"Window: {report.window_start} to {report.window_end}")
+        print(f"Summary: {report.human_text}")
+    else:
+        print("No events in reporting window")
+
+
+asyncio.run(main())
+```
+
+### Window computation
+
+The service automatically computes the reporting window:
+
+- If a previous report exists for the repository, the new window starts where
+  the previous report ended (continuous coverage).
+- If no previous report exists, the window starts `window_days` before the
+  current time (default: 7 days).
+
+```python
+# Compute the next window without generating a report
+window = await service.compute_next_window(repository_id)
+print(f"Next window: {window.start} to {window.end}")
+```
+
+### Configuration
+
+Configure the reporting workflow via `ReportingConfig`:
+
+| Parameter     | Default | Description                               |
+| ------------- | ------- | ----------------------------------------- |
+| `window_days` | 7       | Default window size when no prior reports |
+
+Configuration can be loaded from environment variables:
+
+```bash
+export GHILLIE_REPORTING_WINDOW_DAYS=14
+```
+
+```python
+from ghillie.reporting import ReportingConfig
+
+config = ReportingConfig.from_env()  # Reads GHILLIE_REPORTING_WINDOW_DAYS
+```
+
+### Background execution with Dramatiq
+
+For scheduled/background execution, use the Dramatiq actors:
+
+```python
+from ghillie.reporting import generate_report_job, generate_reports_for_estate_job
+
+# Generate a single repository report
+generate_report_job.send(
+    database_url="postgresql+asyncpg://...",
+    repository_id="...",
+)
+
+# Generate reports for all active repositories in an estate
+generate_reports_for_estate_job.send(
+    database_url="postgresql+asyncpg://...",
+    estate_id="wildside",
+)
+```
+
+The estate job iterates over all repositories with `ingestion_enabled=True` and
+generates reports for each. Repositories without events in their window are
+skipped.
+
+### Scheduling with cron
+
+Example cron configuration for weekly reports:
+
+```bash
+# Generate reports for all estates every Monday at 6am UTC
+0 6 * * 1 python -c "from ghillie.reporting import generate_reports_for_estate_job; generate_reports_for_estate_job.send('postgresql+asyncpg://...', 'wildside')"
+```
+
+For Kubernetes deployments, use a CronJob resource with the Dramatiq worker
+container.

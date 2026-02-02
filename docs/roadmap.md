@@ -296,7 +296,7 @@ context window sizes abstracted.
 **Goal:** Produce and persist repository-level reports on a regular schedule,
 using the evidence and model integrations.
 
-- [ ] **Task 2.3.a – Implement reporting scheduler and workflow**  
+- [x] **Task 2.3.a – Implement reporting scheduler and workflow**
   Add a scheduled job that, for each managed repository, determines the next
   reporting window, constructs an evidence bundle, invokes the status model,
   and writes a report record and associated report coverage records.
@@ -304,6 +304,12 @@ using the evidence and model integrations.
   *Completion criteria:* For pilot repositories, a full reporting run creates
   one report per repository within the configured window and marks all events
   in that window as covered.
+
+  *Implemented:* `ghillie.reporting` module with `ReportingService`,
+  `ReportingConfig`, and Dramatiq actors (`generate_report_job`,
+  `generate_reports_for_estate_job`). Window computation continues from
+  previous report's end time. BDD and unit tests cover report generation,
+  window computation, and estate-wide scheduling.
 
 - [ ] **Task 2.3.b – Define report Markdown and storage**  
   Define a Markdown format for repository reports, including status summary,
