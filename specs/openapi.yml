@@ -1,0 +1,65 @@
+openapi: 3.1.0
+info:
+  title: Ghillie Runtime API
+  version: 0.1.0
+  description: >-
+    Minimal HTTP surface for Kubernetes probes. The runtime only exposes
+    liveness and readiness endpoints.
+servers:
+  - url: http://localhost:8080
+    description: Local runtime default
+paths:
+  /health:
+    get:
+      summary: Liveness probe
+      description: Returns ok when the process is alive.
+      tags:
+        - Health
+      responses:
+        "200":
+          description: Service is alive.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+              examples:
+                ok:
+                  value:
+                    status: ok
+  /ready:
+    get:
+      summary: Readiness probe
+      description: Returns ready when the service is ready to accept traffic.
+      tags:
+        - Health
+      responses:
+        "200":
+          description: Service is ready.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadyStatus"
+              examples:
+                ready:
+                  value:
+                    status: ready
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          const: ok
+    ReadyStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          const: ready
