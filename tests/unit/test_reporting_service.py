@@ -95,6 +95,41 @@ async def get_repo_id(
         return repo.id
 
 
+@pytest.fixture
+async def generated_report(
+    session_factory: async_sessionmaker[AsyncSession],
+    reporting_service: ReportingService,
+    writer: RawEventWriter,
+    transformer: RawEventTransformer,
+) -> tuple[Report, str]:
+    """Generate a standard test report and return (report, repo_id).
+
+    Sets up standard test data:
+    - repo_slug: acme/widget
+    - window: 2024-07-01 to 2024-07-08
+    - commit at 2024-07-05 10:00 UTC with hash "abc123"
+    """
+    repo_slug = "acme/widget"
+    window_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
+    window_end = dt.datetime(2024, 7, 8, tzinfo=dt.UTC)
+    commit_time = dt.datetime(2024, 7, 5, 10, 0, tzinfo=dt.UTC)
+
+    await writer.ingest(
+        commit_envelope(repo_slug, "abc123", commit_time, "feat: new feature")
+    )
+    await transformer.process_pending()
+
+    repo_id = await get_repo_id(session_factory)
+
+    report = await reporting_service.generate_report(
+        repository_id=repo_id,
+        window_start=window_start,
+        window_end=window_end,
+    )
+
+    return report, repo_id
+
+
 class TestReportingConfig:
     """Tests for ReportingConfig dataclass."""
 
@@ -175,30 +210,12 @@ class TestReportingServiceGenerateReport:
     @pytest.mark.asyncio
     async def test_generates_report_for_repository(
         self,
-        session_factory: async_sessionmaker[AsyncSession],
-        reporting_service: ReportingService,
-        writer: RawEventWriter,
-        transformer: RawEventTransformer,
+        generated_report: tuple[Report, str],
     ) -> None:
         """Generates a report and persists it to the Gold layer."""
-        repo_slug = "acme/widget"
+        report, repo_id = generated_report
         window_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
         window_end = dt.datetime(2024, 7, 8, tzinfo=dt.UTC)
-        commit_time = dt.datetime(2024, 7, 5, 10, 0, tzinfo=dt.UTC)
-
-        # Ingest test data
-        await writer.ingest(
-            commit_envelope(repo_slug, "abc123", commit_time, "feat: new feature")
-        )
-        await transformer.process_pending()
-
-        repo_id = await get_repo_id(session_factory)
-
-        report = await reporting_service.generate_report(
-            repository_id=repo_id,
-            window_start=window_start,
-            window_end=window_end,
-        )
 
         assert report.scope == ReportScope.REPOSITORY
         assert report.repository_id == repo_id
@@ -212,30 +229,11 @@ class TestReportingServiceGenerateReport:
     async def test_creates_coverage_records(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        reporting_service: ReportingService,
-        writer: RawEventWriter,
-        transformer: RawEventTransformer,
+        generated_report: tuple[Report, str],
     ) -> None:
         """Report generation creates coverage records linking events to report."""
-        repo_slug = "acme/widget"
-        window_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
-        window_end = dt.datetime(2024, 7, 8, tzinfo=dt.UTC)
-        commit_time = dt.datetime(2024, 7, 5, 10, 0, tzinfo=dt.UTC)
+        report, _repo_id = generated_report
 
-        await writer.ingest(
-            commit_envelope(repo_slug, "def456", commit_time, "fix: bug fix")
-        )
-        await transformer.process_pending()
-
-        repo_id = await get_repo_id(session_factory)
-
-        report = await reporting_service.generate_report(
-            repository_id=repo_id,
-            window_start=window_start,
-            window_end=window_end,
-        )
-
-        # Verify coverage records exist
         from sqlalchemy import select
 
         async with session_factory() as session:
@@ -254,29 +252,11 @@ class TestReportingServiceGenerateReport:
     async def test_report_persisted_to_database(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        reporting_service: ReportingService,
-        writer: RawEventWriter,
-        transformer: RawEventTransformer,
+        generated_report: tuple[Report, str],
     ) -> None:
         """Generated report is persisted and can be queried."""
-        repo_slug = "acme/widget"
-        window_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
-        window_end = dt.datetime(2024, 7, 8, tzinfo=dt.UTC)
-        commit_time = dt.datetime(2024, 7, 5, 10, 0, tzinfo=dt.UTC)
+        report, repo_id = generated_report
 
-        await writer.ingest(
-            commit_envelope(repo_slug, "ghi789", commit_time, "chore: maintenance")
-        )
-        await transformer.process_pending()
-
-        repo_id = await get_repo_id(session_factory)
-        report = await reporting_service.generate_report(
-            repository_id=repo_id,
-            window_start=window_start,
-            window_end=window_end,
-        )
-
-        # Fetch from database
         async with session_factory() as session:
             fetched = await session.get(Report, report.id)
             assert fetched is not None

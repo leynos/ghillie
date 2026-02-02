@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import typing as typ
 
@@ -17,22 +18,29 @@ if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
-async def create_repository_with_estate(  # noqa: PLR0913
+@dataclasses.dataclass
+class RepositoryConfig:
+    """Configuration for creating a test repository."""
+
+    owner: str
+    name: str
+    estate_id: str
+    ingestion_enabled: bool = True
+    default_branch: str = "main"
+
+
+async def create_repository_with_estate(
     session_factory: async_sessionmaker[AsyncSession],
-    owner: str,
-    name: str,
-    estate_id: str,
-    *,
-    ingestion_enabled: bool = True,
+    config: RepositoryConfig,
 ) -> str:
     """Create a test repository and return its ID."""
     async with session_factory() as session, session.begin():
         repo = Repository(
-            github_owner=owner,
-            github_name=name,
-            default_branch="main",
-            ingestion_enabled=ingestion_enabled,
-            estate_id=estate_id,
+            github_owner=config.owner,
+            github_name=config.name,
+            default_branch=config.default_branch,
+            ingestion_enabled=config.ingestion_enabled,
+            estate_id=config.estate_id,
         )
         session.add(repo)
         await session.flush()
@@ -117,7 +125,8 @@ class TestGenerateReportJob:
     ) -> None:
         """Actor returns None when no events exist in window."""
         repo_id = await create_repository_with_estate(
-            session_factory, "empty", "repo", "estate-1"
+            session_factory,
+            RepositoryConfig(owner="empty", name="repo", estate_id="estate-1"),
         )
         now = dt.datetime(2024, 7, 14, tzinfo=dt.UTC)
 
