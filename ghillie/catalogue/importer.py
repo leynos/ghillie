@@ -716,7 +716,7 @@ def import_catalogue_job(
     :func:`build_importer_from_url` which must run in synchronous contexts.
 
     """
-    estate_key, estate_name = estate if estate else ("default", None)
+    estate_key, estate_name = estate or ("default", None)
     cache_key = (database_url, estate_key, estate_name)
     importer = _IMPORTER_CACHE.get(cache_key)
     if importer is None:
