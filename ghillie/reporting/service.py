@@ -132,7 +132,9 @@ class ReportingService:
             last_report = await self._fetch_last_report(session, repository_id)
 
         if last_report is not None:
-            window_start = last_report.window_end
+            # Guard against as_of predating the last report's end to avoid
+            # inverted windows (start > end)
+            window_start = min(window_end, last_report.window_end)
         else:
             window_start = window_end - dt.timedelta(days=self._config.window_days)
 
@@ -160,11 +162,13 @@ class ReportingService:
         repository_id: str,
         window_start: dt.datetime,
         window_end: dt.datetime,
+        *,
+        bundle: RepositoryEvidenceBundle | None = None,
     ) -> Report:
         """Generate a repository report for the given window.
 
-        Builds an evidence bundle, invokes the status model, and persists
-        the report with coverage records.
+        Builds an evidence bundle (unless provided), invokes the status model,
+        and persists the report with coverage records.
 
         Parameters
         ----------
@@ -174,18 +178,34 @@ class ReportingService:
             Start of the reporting window (inclusive).
         window_end
             End of the reporting window (exclusive).
+        bundle
+            Optional pre-built evidence bundle. If not provided, one will be
+            built from the evidence service.
 
         Returns
         -------
         Report
             The persisted report record.
 
+        Raises
+        ------
+        ValueError
+            If window_end is not after window_start.
+
         """
-        bundle = await self._evidence_service.build_bundle(
-            repository_id=repository_id,
-            window_start=window_start,
-            window_end=window_end,
-        )
+        if window_end <= window_start:
+            msg = (
+                f"window_end must be after window_start, got "
+                f"start={window_start.isoformat()}, end={window_end.isoformat()}"
+            )
+            raise ValueError(msg)
+
+        if bundle is None:
+            bundle = await self._evidence_service.build_bundle(
+                repository_id=repository_id,
+                window_start=window_start,
+                window_end=window_end,
+            )
 
         status_result = await self._status_model.summarize_repository(bundle)
         machine_summary = to_machine_summary(status_result)
@@ -276,8 +296,10 @@ class ReportingService:
         if bundle.total_event_count == 0:
             return None
 
+        # Pass the pre-built bundle to avoid rebuilding it
         return await self.generate_report(
             repository_id=repository_id,
             window_start=window.start,
             window_end=window.end,
+            bundle=bundle,
         )

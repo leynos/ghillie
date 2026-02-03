@@ -18,7 +18,7 @@ if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(slots=True)
 class RepositoryConfig:
     """Configuration for creating a test repository."""
 
@@ -29,7 +29,7 @@ class RepositoryConfig:
     default_branch: str = "main"
 
 
-async def create_repository_with_estate(
+async def _create_repository_with_estate(
     session_factory: async_sessionmaker[AsyncSession],
     config: RepositoryConfig,
 ) -> str:
@@ -47,7 +47,7 @@ async def create_repository_with_estate(
         return repo.id
 
 
-async def get_repo_id(
+async def _get_repo_id(
     session_factory: async_sessionmaker[AsyncSession],
     owner: str,
     name: str,
@@ -62,11 +62,11 @@ async def get_repo_id(
                 Repository.github_name == name,
             )
         )
-        assert repo is not None
+        assert repo is not None, f"Repository {owner}/{name} not found"
         return repo.id
 
 
-async def count_reports(
+async def _count_reports(
     session_factory: async_sessionmaker[AsyncSession],
     repository_id: str,
 ) -> int:
@@ -91,6 +91,11 @@ class TestGenerateReportJob:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Actor generates a report for a repository with events."""
+        from ghillie.evidence import EvidenceBundleService
+        from ghillie.reporting.actor import _generate_report_async
+        from ghillie.reporting.config import ReportingConfig
+        from ghillie.reporting.service import ReportingService
+
         repo_slug = "test/repo"
         now = dt.datetime(2024, 7, 14, tzinfo=dt.UTC)
         commit_time = dt.datetime(2024, 7, 10, 10, 0, tzinfo=dt.UTC)
@@ -103,20 +108,24 @@ class TestGenerateReportJob:
         )
         await transformer.process_pending()
 
-        repo_id = await get_repo_id(session_factory, "test", "repo")
+        repo_id = await _get_repo_id(session_factory, "test", "repo")
 
-        # For testing, we call the underlying async function with MockStatusModel
-        from ghillie.reporting.actor import _generate_report_async
-
-        result = await _generate_report_async(
+        # Create service with MockStatusModel for testing
+        service = ReportingService(
             session_factory=session_factory,
-            repository_id=repo_id,
-            as_of=now,
+            evidence_service=EvidenceBundleService(session_factory),
             status_model=MockStatusModel(),
+            config=ReportingConfig(),
         )
 
-        assert result is not None
-        assert result.repository_id == repo_id
+        result = await _generate_report_async(
+            service=service,
+            repository_id=repo_id,
+            as_of=now,
+        )
+
+        assert result is not None, "Report should be generated"
+        assert result.repository_id == repo_id, "Report should reference correct repo"
 
     @pytest.mark.asyncio
     async def test_skips_repository_with_no_events(
@@ -124,22 +133,31 @@ class TestGenerateReportJob:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Actor returns None when no events exist in window."""
-        repo_id = await create_repository_with_estate(
+        from ghillie.evidence import EvidenceBundleService
+        from ghillie.reporting.actor import _generate_report_async
+        from ghillie.reporting.config import ReportingConfig
+        from ghillie.reporting.service import ReportingService
+
+        repo_id = await _create_repository_with_estate(
             session_factory,
             RepositoryConfig(owner="empty", name="repo", estate_id="estate-1"),
         )
         now = dt.datetime(2024, 7, 14, tzinfo=dt.UTC)
 
-        from ghillie.reporting.actor import _generate_report_async
-
-        result = await _generate_report_async(
+        service = ReportingService(
             session_factory=session_factory,
-            repository_id=repo_id,
-            as_of=now,
+            evidence_service=EvidenceBundleService(session_factory),
             status_model=MockStatusModel(),
+            config=ReportingConfig(),
         )
 
-        assert result is None
+        result = await _generate_report_async(
+            service=service,
+            repository_id=repo_id,
+            as_of=now,
+        )
+
+        assert result is None, "Should return None when no events in window"
 
 
 class TestGenerateReportsForEstateJob:
@@ -151,6 +169,13 @@ class TestGenerateReportsForEstateJob:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Actor generates reports for all active repositories in estate."""
+        from sqlalchemy import select
+
+        from ghillie.evidence import EvidenceBundleService
+        from ghillie.reporting.actor import _generate_reports_for_estate_async
+        from ghillie.reporting.config import ReportingConfig
+        from ghillie.reporting.service import ReportingService
+
         estate_id = "estate-alpha"
         now = dt.datetime(2024, 7, 14, tzinfo=dt.UTC)
         commit_time = dt.datetime(2024, 7, 10, 10, 0, tzinfo=dt.UTC)
@@ -168,25 +193,28 @@ class TestGenerateReportsForEstateJob:
         await transformer.process_pending()
 
         # Set estate_id on both repos
-        from sqlalchemy import select
-
         async with session_factory() as session, session.begin():
             repos = (await session.scalars(select(Repository))).all()
             for repo in repos:
                 repo.estate_id = estate_id
                 repo.ingestion_enabled = True
 
-        from ghillie.reporting.actor import _generate_reports_for_estate_async
+        service = ReportingService(
+            session_factory=session_factory,
+            evidence_service=EvidenceBundleService(session_factory),
+            status_model=MockStatusModel(),
+            config=ReportingConfig(),
+        )
 
         results = await _generate_reports_for_estate_async(
+            service=service,
             session_factory=session_factory,
             estate_id=estate_id,
             as_of=now,
-            status_model=MockStatusModel(),
         )
 
-        assert len(results) == 2
-        assert all(r is not None for r in results)
+        assert len(results) == 2, "Should generate reports for both repositories"
+        assert all(r is not None for r in results), "All reports should be non-None"
 
     @pytest.mark.asyncio
     async def test_skips_inactive_repositories(
@@ -194,6 +222,13 @@ class TestGenerateReportsForEstateJob:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Actor skips repositories with ingestion_enabled=False."""
+        from sqlalchemy import select
+
+        from ghillie.evidence import EvidenceBundleService
+        from ghillie.reporting.actor import _generate_reports_for_estate_async
+        from ghillie.reporting.config import ReportingConfig
+        from ghillie.reporting.service import ReportingService
+
         estate_id = "estate-beta"
         now = dt.datetime(2024, 7, 14, tzinfo=dt.UTC)
         commit_time = dt.datetime(2024, 7, 10, 10, 0, tzinfo=dt.UTC)
@@ -210,8 +245,6 @@ class TestGenerateReportsForEstateJob:
         await transformer.process_pending()
 
         async with session_factory() as session, session.begin():
-            from sqlalchemy import select
-
             repos = (await session.scalars(select(Repository))).all()
             for repo in repos:
                 repo.estate_id = estate_id
@@ -220,15 +253,20 @@ class TestGenerateReportsForEstateJob:
                 else:
                     repo.ingestion_enabled = True
 
-        from ghillie.reporting.actor import _generate_reports_for_estate_async
+        service = ReportingService(
+            session_factory=session_factory,
+            evidence_service=EvidenceBundleService(session_factory),
+            status_model=MockStatusModel(),
+            config=ReportingConfig(),
+        )
 
         results = await _generate_reports_for_estate_async(
+            service=service,
             session_factory=session_factory,
             estate_id=estate_id,
             as_of=now,
-            status_model=MockStatusModel(),
         )
 
         # Only the active repository should have a report
         non_none_results = [r for r in results if r is not None]
-        assert len(non_none_results) == 1
+        assert len(non_none_results) == 1, "Only active repo should have report"

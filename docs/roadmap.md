@@ -308,7 +308,8 @@ using the evidence and model integrations.
   *Implemented:* `ghillie.reporting` module with `ReportingService`,
   `ReportingConfig`, and Dramatiq actors (`generate_report_job`,
   `generate_reports_for_estate_job`). Window computation continues from
-  previous report's end time. BDD and unit tests cover report generation,
+  previous report's end time. Behaviour-Driven Development (BDD) and unit
+  tests cover report generation,
   window computation, and estate-wide scheduling.
 
 - [ ] **Task 2.3.b – Define report Markdown and storage**  

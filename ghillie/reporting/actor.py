@@ -27,6 +27,7 @@ import asyncio
 import datetime as dt
 import os
 import sys
+import threading
 import typing as typ
 
 import dramatiq
@@ -47,59 +48,63 @@ from ghillie.status.factory import create_status_model
 
 if typ.TYPE_CHECKING:
     from ghillie.gold.storage import Report
-    from ghillie.status.protocol import StatusModel
 
-SessionFactory = async_sessionmaker[AsyncSession]
+type SessionFactory = async_sessionmaker[AsyncSession]
 
 # Module-level caches for reusing expensive resources across actor invocations
 _ENGINE_CACHE: dict[str, AsyncEngine] = {}
 _SERVICE_CACHE: dict[str, ReportingService] = {}
+_CACHE_LOCK = threading.Lock()
 
 
 def _get_or_create_engine(database_url: str) -> AsyncEngine:
-    """Get or create an async engine for the given database URL."""
-    if database_url not in _ENGINE_CACHE:
-        _ENGINE_CACHE[database_url] = create_async_engine(database_url, future=True)
-    return _ENGINE_CACHE[database_url]
+    """Get or create an async engine for the given database URL.
+
+    Thread-safe: uses a lock to prevent race conditions in Dramatiq workers.
+    """
+    with _CACHE_LOCK:
+        if database_url not in _ENGINE_CACHE:
+            _ENGINE_CACHE[database_url] = create_async_engine(database_url, future=True)
+        return _ENGINE_CACHE[database_url]
 
 
 def _get_or_create_service(
     session_factory: SessionFactory,
     database_url: str,
 ) -> ReportingService:
-    """Get or create a ReportingService with cached dependencies."""
-    if database_url not in _SERVICE_CACHE:
-        evidence_service = EvidenceBundleService(session_factory)
-        status_model = create_status_model()
-        config = ReportingConfig.from_env()
-        _SERVICE_CACHE[database_url] = ReportingService(
-            session_factory=session_factory,
-            evidence_service=evidence_service,
-            status_model=status_model,
-            config=config,
-        )
-    return _SERVICE_CACHE[database_url]
+    """Get or create a ReportingService with cached dependencies.
+
+    Thread-safe: uses a lock to prevent race conditions in Dramatiq workers.
+    """
+    with _CACHE_LOCK:
+        if database_url not in _SERVICE_CACHE:
+            evidence_service = EvidenceBundleService(session_factory)
+            status_model = create_status_model()
+            config = ReportingConfig.from_env()
+            _SERVICE_CACHE[database_url] = ReportingService(
+                session_factory=session_factory,
+                evidence_service=evidence_service,
+                status_model=status_model,
+                config=config,
+            )
+        return _SERVICE_CACHE[database_url]
 
 
 async def _generate_report_async(
-    session_factory: SessionFactory,
+    service: ReportingService,
     repository_id: str,
     as_of: dt.datetime | None = None,
-    *,
-    status_model: StatusModel | None = None,
 ) -> Report | None:
     """Generate a report for a single repository (async implementation).
 
     Parameters
     ----------
-    session_factory
-        Async session factory for database access.
+    service
+        The ReportingService to use for report generation.
     repository_id
         The Silver layer repository ID.
     as_of
         Reference time for window computation; defaults to now.
-    status_model
-        Optional status model; uses factory if not provided.
 
     Returns
     -------
@@ -107,38 +112,27 @@ async def _generate_report_async(
         The generated report, or None if no events in window.
 
     """
-    evidence_service = EvidenceBundleService(session_factory)
-    if status_model is None:
-        status_model = create_status_model()
-    config = ReportingConfig.from_env()
-    service = ReportingService(
-        session_factory=session_factory,
-        evidence_service=evidence_service,
-        status_model=status_model,
-        config=config,
-    )
     return await service.run_for_repository(repository_id, as_of=as_of)
 
 
 async def _generate_reports_for_estate_async(
+    service: ReportingService,
     session_factory: SessionFactory,
     estate_id: str,
     as_of: dt.datetime | None = None,
-    *,
-    status_model: StatusModel | None = None,
 ) -> list[Report | None]:
     """Generate reports for all active repositories in an estate.
 
     Parameters
     ----------
+    service
+        The ReportingService to use for report generation.
     session_factory
         Async session factory for database access.
     estate_id
         The estate ID to scope repository selection.
     as_of
         Reference time for window computation; defaults to now.
-    status_model
-        Optional status model; uses factory if not provided.
 
     Returns
     -------
@@ -158,24 +152,52 @@ async def _generate_reports_for_estate_async(
         ).all()
         repo_ids = [repo.id for repo in repos]
 
-    # Generate reports for each repository
+    # Generate reports for each repository using the shared service
     results: list[Report | None] = []
     for repo_id in repo_ids:
-        report = await _generate_report_async(
-            session_factory=session_factory,
-            repository_id=repo_id,
-            as_of=as_of,
-            status_model=status_model,
-        )
+        report = await service.run_for_repository(repo_id, as_of=as_of)
         results.append(report)
 
     return results
 
 
+def _parse_as_of_iso(as_of_iso: str | None) -> dt.datetime | None:
+    """Parse ISO timestamp string, requiring timezone information.
+
+    Parameters
+    ----------
+    as_of_iso
+        ISO format timestamp string, or None.
+
+    Returns
+    -------
+    dt.datetime | None
+        Parsed datetime with timezone, or None if input was None.
+
+    Raises
+    ------
+    ValueError
+        If the timestamp lacks timezone information.
+
+    """
+    if as_of_iso is None:
+        return None
+    parsed = dt.datetime.fromisoformat(as_of_iso)
+    if parsed.tzinfo is None:
+        msg = (
+            f"as_of_iso must include timezone information, got naive datetime: "
+            f"{as_of_iso!r}. Use ISO format with offset (e.g., '2024-07-14T10:00:00Z' "
+            f"or '2024-07-14T10:00:00+00:00')."
+        )
+        raise ValueError(msg)
+    return parsed
+
+
 # Ensure Dramatiq broker is configured (following catalogue/importer.py pattern)
 try:  # pragma: no cover - exercised in tests and CLI usage
     _current_broker = dramatiq.get_broker()
-except ModuleNotFoundError:
+except ImportError:
+    # Raised when broker dependencies (RabbitMQ/Redis) are not installed
     _current_broker = None
 
 if _current_broker is None:
@@ -210,22 +232,28 @@ def generate_report_job(
     repository_id
         The Silver layer repository ID.
     as_of_iso
-        Optional ISO format timestamp for window computation.
+        Optional ISO format timestamp for window computation. Must include
+        timezone information (e.g., '2024-07-14T10:00:00Z').
 
     Returns
     -------
     str | None
         The report ID if generated, or None if no events in window.
 
+    Raises
+    ------
+    ValueError
+        If as_of_iso is provided without timezone information.
+
     """
-    as_of = dt.datetime.fromisoformat(as_of_iso) if as_of_iso else None
+    as_of = _parse_as_of_iso(as_of_iso)
 
     engine = _get_or_create_engine(database_url)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
     async def run() -> str | None:
         service = _get_or_create_service(session_factory, database_url)
-        report = await service.run_for_repository(repository_id, as_of=as_of)
+        report = await _generate_report_async(service, repository_id, as_of=as_of)
         return report.id if report else None
 
     return asyncio.run(run())
@@ -247,21 +275,29 @@ def generate_reports_for_estate_job(
     estate_id
         The estate ID to scope repository selection.
     as_of_iso
-        Optional ISO format timestamp for window computation.
+        Optional ISO format timestamp for window computation. Must include
+        timezone information (e.g., '2024-07-14T10:00:00Z').
 
     Returns
     -------
     list[str | None]
         List of report IDs generated; None entries for repos with no events.
 
+    Raises
+    ------
+    ValueError
+        If as_of_iso is provided without timezone information.
+
     """
-    as_of = dt.datetime.fromisoformat(as_of_iso) if as_of_iso else None
+    as_of = _parse_as_of_iso(as_of_iso)
 
     engine = _get_or_create_engine(database_url)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
     async def run() -> list[str | None]:
+        service = _get_or_create_service(session_factory, database_url)
         reports = await _generate_reports_for_estate_async(
+            service=service,
             session_factory=session_factory,
             estate_id=estate_id,
             as_of=as_of,

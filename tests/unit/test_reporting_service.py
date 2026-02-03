@@ -58,7 +58,7 @@ def transformer(
     return RawEventTransformer(session_factory)
 
 
-async def create_repository(
+async def _create_repository(
     session_factory: async_sessionmaker[AsyncSession],
     owner: str = "acme",
     name: str = "widget",
@@ -77,7 +77,7 @@ async def create_repository(
         return repo.id
 
 
-async def get_repo_id(
+async def _get_repo_id(
     session_factory: async_sessionmaker[AsyncSession],
     owner: str = "acme",
     name: str = "widget",
@@ -92,7 +92,7 @@ async def get_repo_id(
                 Repository.github_name == name,
             )
         )
-        assert repo is not None
+        assert repo is not None, f"Repository {owner}/{name} not found"
         return repo.id
 
 
@@ -120,7 +120,7 @@ async def generated_report(
     )
     await transformer.process_pending()
 
-    repo_id = await get_repo_id(session_factory)
+    repo_id = await _get_repo_id(session_factory)
 
     report = await reporting_service.generate_report(
         repository_id=repo_id,
@@ -137,12 +137,12 @@ class TestReportingConfig:
     def test_default_window_days(self) -> None:
         """Default window is 7 days."""
         config = ReportingConfig()
-        assert config.window_days == 7
+        assert config.window_days == 7, "Default window should be 7 days"
 
     def test_custom_window_days(self) -> None:
-        """Window days can be customised."""
+        """Window days can be customized."""
         config = ReportingConfig(window_days=14)
-        assert config.window_days == 14
+        assert config.window_days == 14, "Custom window days not applied"
 
     def test_from_env_uses_defaults_when_empty(
         self, monkeypatch: pytest.MonkeyPatch
@@ -150,13 +150,13 @@ class TestReportingConfig:
         """from_env returns defaults when env vars are unset."""
         monkeypatch.delenv("GHILLIE_REPORTING_WINDOW_DAYS", raising=False)
         config = ReportingConfig.from_env()
-        assert config.window_days == 7
+        assert config.window_days == 7, "Default window should be 7 when env unset"
 
     def test_from_env_reads_window_days(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """from_env reads GHILLIE_REPORTING_WINDOW_DAYS."""
         monkeypatch.setenv("GHILLIE_REPORTING_WINDOW_DAYS", "30")
         config = ReportingConfig.from_env()
-        assert config.window_days == 30
+        assert config.window_days == 30, "Window days should read from env"
 
 
 class TestReportingServiceWindowComputation:
@@ -169,7 +169,7 @@ class TestReportingServiceWindowComputation:
         reporting_service: ReportingService,
     ) -> None:
         """Next window starts where last report ended."""
-        repo_id = await create_repository(session_factory)
+        repo_id = await _create_repository(session_factory)
 
         # Create a previous report
         previous_end = dt.datetime(2024, 7, 7, tzinfo=dt.UTC)
@@ -185,8 +185,10 @@ class TestReportingServiceWindowComputation:
         now = dt.datetime(2024, 7, 14, tzinfo=dt.UTC)
         window = await reporting_service.compute_next_window(repo_id, as_of=now)
 
-        assert window.start == previous_end
-        assert window.end == now
+        assert window.start == previous_end, (
+            "Window should start at previous report end"
+        )
+        assert window.end == now, "Window should end at as_of time"
 
     @pytest.mark.asyncio
     async def test_computes_window_with_no_previous_report(
@@ -195,14 +197,14 @@ class TestReportingServiceWindowComputation:
         reporting_service: ReportingService,
     ) -> None:
         """When no previous report exists, window starts window_days ago."""
-        repo_id = await create_repository(session_factory)
+        repo_id = await _create_repository(session_factory)
         now = dt.datetime(2024, 7, 14, tzinfo=dt.UTC)
 
         window = await reporting_service.compute_next_window(repo_id, as_of=now)
 
         expected_start = now - dt.timedelta(days=7)
-        assert window.start == expected_start
-        assert window.end == now
+        assert window.start == expected_start, "Window should start 7 days before as_of"
+        assert window.end == now, "Window should end at as_of time"
 
 
 class TestReportingServiceGenerateReport:
@@ -218,13 +220,19 @@ class TestReportingServiceGenerateReport:
         window_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
         window_end = dt.datetime(2024, 7, 8, tzinfo=dt.UTC)
 
-        assert report.scope == ReportScope.REPOSITORY
-        assert report.repository_id == repo_id
-        assert report.window_start == window_start
-        assert report.window_end == window_end
-        assert report.model == "mock-v1"
-        assert report.human_text is not None
-        assert "status" in report.machine_summary
+        assert report.scope == ReportScope.REPOSITORY, (
+            "Report scope should be REPOSITORY"
+        )
+        assert report.repository_id == repo_id, (
+            "Report should reference correct repository"
+        )
+        assert report.window_start == window_start, "Report window_start mismatch"
+        assert report.window_end == window_end, "Report window_end mismatch"
+        assert report.model == "mock-v1", "Report model should be mock-v1"
+        assert report.human_text is not None, "Report should have human text"
+        assert "status" in report.machine_summary, (
+            "Machine summary should contain status"
+        )
 
     @pytest.mark.asyncio
     async def test_creates_coverage_records(
@@ -247,7 +255,7 @@ class TestReportingServiceGenerateReport:
                     )
                 ).all()
             )
-        assert coverage_count >= 1
+        assert coverage_count >= 1, "At least one coverage record should exist"
 
     @pytest.mark.asyncio
     async def test_report_persisted_to_database(
@@ -260,8 +268,10 @@ class TestReportingServiceGenerateReport:
 
         async with session_factory() as session:
             fetched = await session.get(Report, report.id)
-            assert fetched is not None
-            assert fetched.repository_id == repo_id
+            assert fetched is not None, "Report should be persisted to database"
+            assert fetched.repository_id == repo_id, (
+                "Persisted report should match repo"
+            )
 
 
 class TestReportingServiceRunForRepository:
@@ -286,13 +296,15 @@ class TestReportingServiceRunForRepository:
         )
         await transformer.process_pending()
 
-        repo_id = await get_repo_id(session_factory)
+        repo_id = await _get_repo_id(session_factory)
 
         report = await reporting_service.run_for_repository(repo_id, as_of=now)
 
-        assert report is not None
-        assert report.repository_id == repo_id
-        assert report.window_end == now
+        assert report is not None, "Report should be generated"
+        assert report.repository_id == repo_id, (
+            "Report should reference correct repository"
+        )
+        assert report.window_end == now, "Report window_end should match as_of"
 
     @pytest.mark.asyncio
     async def test_run_skips_empty_window(
@@ -301,11 +313,11 @@ class TestReportingServiceRunForRepository:
         reporting_service: ReportingService,
     ) -> None:
         """run_for_repository returns None when no events exist in window."""
-        repo_id = await create_repository(session_factory)
+        repo_id = await _create_repository(session_factory)
         now = dt.datetime(2024, 7, 14, tzinfo=dt.UTC)
 
         result = await reporting_service.run_for_repository(repo_id, as_of=now)
 
         # May return None or a report with empty bundle - implementation choice
         # For now, expect None when there are no events
-        assert result is None
+        assert result is None, "Should return None when no events in window"

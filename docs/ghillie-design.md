@@ -1041,6 +1041,9 @@ execution. The service coordinates three core operations:
 3. **Estate-wide scheduling**: Generates reports for all active repositories
    in an estate.
 
+The following flowchart shows the interaction between trigger sources,
+Dramatiq actors, the ReportingService, and the Gold layer persistence:
+
 ```mermaid
 flowchart TB
     subgraph Trigger["Trigger Layer"]

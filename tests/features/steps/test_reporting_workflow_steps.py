@@ -88,7 +88,7 @@ def given_repo_with_events(
 
         async with session_factory() as session:
             repo = await session.scalar(select(Repository))
-            assert repo is not None
+            assert repo is not None, "Repository should exist after event ingestion"
             return repo.id
 
     repo_id = asyncio.run(_setup())
@@ -223,11 +223,13 @@ def when_compute_window(reporting_context: ReportingContext) -> None:
 def then_report_created(reporting_context: ReportingContext) -> None:
     """Assert that a report was created."""
     report = reporting_context["report"]
-    assert report is not None
-    assert report.scope == ReportScope.REPOSITORY
-    assert report.repository_id == reporting_context["repo_id"]
-    assert report.human_text is not None
-    assert report.machine_summary is not None
+    assert report is not None, "Report should be created"
+    assert report.scope == ReportScope.REPOSITORY, "Report scope should be REPOSITORY"
+    assert report.repository_id == reporting_context["repo_id"], (
+        "Report repo ID mismatch"
+    )
+    assert report.human_text is not None, "Report should have human text"
+    assert report.machine_summary is not None, "Report should have machine summary"
 
 
 @then("the report links to the consumed event facts")
@@ -239,7 +241,7 @@ def then_report_links_events(reporting_context: ReportingContext) -> None:
 
         session_factory = reporting_context["session_factory"]
         report = reporting_context["report"]
-        assert report is not None
+        assert report is not None, "Report should exist before checking coverage"
 
         async with session_factory() as session:
             coverage = (
@@ -247,7 +249,7 @@ def then_report_links_events(reporting_context: ReportingContext) -> None:
                     select(ReportCoverage).where(ReportCoverage.report_id == report.id)
                 )
             ).all()
-            assert len(coverage) >= 1
+            assert len(coverage) >= 1, "Report should have at least one coverage record"
 
     asyncio.run(_assert())
 
@@ -256,13 +258,17 @@ def then_report_links_events(reporting_context: ReportingContext) -> None:
 def then_window_correct(reporting_context: ReportingContext) -> None:
     """Assert the window computation is correct."""
     window = reporting_context["window"]
-    assert window is not None
-    assert window.start == dt.datetime(2024, 7, 7, tzinfo=dt.UTC)
-    assert window.end == dt.datetime(2024, 7, 14, tzinfo=dt.UTC)
+    assert window is not None, "Window should be computed"
+    assert window.start == dt.datetime(2024, 7, 7, tzinfo=dt.UTC), (
+        "Window should start July 7th"
+    )
+    assert window.end == dt.datetime(2024, 7, 14, tzinfo=dt.UTC), (
+        "Window should end July 14th"
+    )
 
 
 @then("no report is generated")
 def then_no_report(reporting_context: ReportingContext) -> None:
     """Assert that no report was generated."""
     report = reporting_context["report"]
-    assert report is None
+    assert report is None, "No report should be generated when no events exist"

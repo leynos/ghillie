@@ -49,14 +49,36 @@ class ReportingConfig:
         Reads the following environment variables:
 
         - ``GHILLIE_REPORTING_WINDOW_DAYS``: Default window size in days.
+          Must be a positive integer.
 
         Returns
         -------
         ReportingConfig
             Configuration instance with values from environment or defaults.
 
+        Raises
+        ------
+        ValueError
+            If GHILLIE_REPORTING_WINDOW_DAYS is not a positive integer.
+
         """
         window_days_str = os.environ.get("GHILLIE_REPORTING_WINDOW_DAYS", "")
-        window_days = int(window_days_str) if window_days_str.strip() else 7
+        if window_days_str.strip():
+            try:
+                window_days = int(window_days_str)
+            except ValueError as exc:
+                msg = (
+                    f"GHILLIE_REPORTING_WINDOW_DAYS must be an integer, "
+                    f"got: {window_days_str!r}"
+                )
+                raise ValueError(msg) from exc
+            if window_days < 1:
+                msg = (
+                    f"GHILLIE_REPORTING_WINDOW_DAYS must be positive, "
+                    f"got: {window_days}"
+                )
+                raise ValueError(msg)
+        else:
+            window_days = 7
 
         return cls(window_days=window_days)
