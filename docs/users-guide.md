@@ -700,6 +700,12 @@ The runtime exposes two health endpoints for Kubernetes probes:
 
 Both endpoints return HTTP 200 with JSON content type.
 
+### OpenAPI specification
+
+The runtime health endpoints are documented in the OpenAPI specification:
+
+- [`specs/openapi.yml`](../specs/openapi.yml)
+
 ### Kubernetes deployment
 
 For Kubernetes deployment, use the Ghillie Helm chart in `charts/ghillie/`.
