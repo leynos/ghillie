@@ -242,8 +242,9 @@ def _ensure_broker_configured() -> None:
     """
     try:  # pragma: no cover - exercised in tests and CLI usage
         current_broker = dramatiq.get_broker()
-    except ImportError:
-        # Raised when broker dependencies (RabbitMQ/Redis) are not installed
+    except (ImportError, LookupError):
+        # ImportError: broker dependencies (RabbitMQ/Redis) are not installed
+        # LookupError: no broker has been configured yet
         current_broker = None
 
     if current_broker is None:
