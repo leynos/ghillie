@@ -6,6 +6,7 @@ import datetime as dt
 import typing as typ
 
 import pytest
+import pytest_asyncio
 
 from ghillie.bronze import RawEventWriter
 from ghillie.evidence import EvidenceBundleService
@@ -95,7 +96,7 @@ async def get_repo_id(
         return repo.id
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def generated_report(
     session_factory: async_sessionmaker[AsyncSession],
     reporting_service: ReportingService,
