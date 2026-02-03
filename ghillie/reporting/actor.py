@@ -193,6 +193,40 @@ def _parse_as_of_iso(as_of_iso: str | None) -> dt.datetime | None:
     return parsed
 
 
+def _is_running_tests() -> bool:
+    """Check if the current process is running in a test environment.
+
+    Detects pytest by checking for the pytest module in sys.modules or
+    pytest-specific environment variables set by pytest and pytest-xdist.
+
+    Returns
+    -------
+    bool
+        True if running under pytest, False otherwise.
+
+    """
+    return "pytest" in sys.modules or any(
+        key in os.environ
+        for key in ["PYTEST_CURRENT_TEST", "PYTEST_XDIST_WORKER", "PYTEST_ADDOPTS"]
+    )
+
+
+def _should_use_stub_broker() -> bool:
+    """Determine whether to use a StubBroker instead of a real broker.
+
+    Returns True if either the GHILLIE_ALLOW_STUB_BROKER environment variable
+    is set to a truthy value, or if we're running in a test environment.
+
+    Returns
+    -------
+    bool
+        True if a StubBroker should be used, False otherwise.
+
+    """
+    allow_stub = os.environ.get("GHILLIE_ALLOW_STUB_BROKER", "")
+    return allow_stub.lower() in {"1", "true", "yes"} or _is_running_tests()
+
+
 def _ensure_broker_configured() -> None:
     """Ensure a Dramatiq broker is configured before actor execution.
 
@@ -213,12 +247,7 @@ def _ensure_broker_configured() -> None:
         current_broker = None
 
     if current_broker is None:
-        allow_stub = os.environ.get("GHILLIE_ALLOW_STUB_BROKER", "")
-        running_tests = "pytest" in sys.modules or any(
-            key in os.environ
-            for key in ["PYTEST_CURRENT_TEST", "PYTEST_XDIST_WORKER", "PYTEST_ADDOPTS"]
-        )
-        if allow_stub.lower() in {"1", "true", "yes"} or running_tests:
+        if _should_use_stub_broker():
             dramatiq.set_broker(StubBroker())
         else:  # pragma: no cover - guard for prod misconfigurations
             message = (
