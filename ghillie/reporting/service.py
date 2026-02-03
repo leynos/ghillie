@@ -132,9 +132,14 @@ class ReportingService:
             last_report = await self._fetch_last_report(session, repository_id)
 
         if last_report is not None:
-            # Guard against as_of predating the last report's end to avoid
-            # inverted windows (start > end)
-            window_start = min(window_end, last_report.window_end)
+            if last_report.window_end > window_end:
+                msg = (
+                    f"Cannot compute window for repository {repository_id}: "
+                    f"as_of ({window_end.isoformat()}) predates the last report's "
+                    f"window_end ({last_report.window_end.isoformat()})"
+                )
+                raise ValueError(msg)
+            window_start = last_report.window_end
         else:
             window_start = window_end - dt.timedelta(days=self._config.window_days)
 

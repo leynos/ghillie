@@ -193,27 +193,77 @@ def _parse_as_of_iso(as_of_iso: str | None) -> dt.datetime | None:
     return parsed
 
 
-# Ensure Dramatiq broker is configured (following catalogue/importer.py pattern)
-try:  # pragma: no cover - exercised in tests and CLI usage
-    _current_broker = dramatiq.get_broker()
-except ImportError:
-    # Raised when broker dependencies (RabbitMQ/Redis) are not installed
-    _current_broker = None
+def _ensure_broker_configured() -> None:
+    """Ensure a Dramatiq broker is configured before actor execution.
 
-if _current_broker is None:
-    allow_stub = os.environ.get("GHILLIE_ALLOW_STUB_BROKER", "")
-    running_tests = "pytest" in sys.modules or any(
-        key in os.environ
-        for key in ["PYTEST_CURRENT_TEST", "PYTEST_XDIST_WORKER", "PYTEST_ADDOPTS"]
-    )
-    if allow_stub.lower() in {"1", "true", "yes"} or running_tests:
-        dramatiq.set_broker(StubBroker())
-    else:  # pragma: no cover - guard for prod misconfigurations
-        message = (
-            "No Dramatiq broker configured. Set GHILLIE_ALLOW_STUB_BROKER=1 for "
-            "local/test runs or configure a real broker."
+    This function checks for an existing broker and sets up a StubBroker
+    in test environments. It is called at the start of each actor function
+    rather than at import time to avoid premature global state mutation.
+
+    Raises
+    ------
+    RuntimeError
+        If no broker is configured and we're not in a test/stub-allowed context.
+
+    """
+    try:  # pragma: no cover - exercised in tests and CLI usage
+        current_broker = dramatiq.get_broker()
+    except ImportError:
+        # Raised when broker dependencies (RabbitMQ/Redis) are not installed
+        current_broker = None
+
+    if current_broker is None:
+        allow_stub = os.environ.get("GHILLIE_ALLOW_STUB_BROKER", "")
+        running_tests = "pytest" in sys.modules or any(
+            key in os.environ
+            for key in ["PYTEST_CURRENT_TEST", "PYTEST_XDIST_WORKER", "PYTEST_ADDOPTS"]
         )
-        raise RuntimeError(message)
+        if allow_stub.lower() in {"1", "true", "yes"} or running_tests:
+            dramatiq.set_broker(StubBroker())
+        else:  # pragma: no cover - guard for prod misconfigurations
+            message = (
+                "No Dramatiq broker configured. Set GHILLIE_ALLOW_STUB_BROKER=1 for "
+                "local/test runs or configure a real broker."
+            )
+            raise RuntimeError(message)
+
+
+def _run_actor_async[T](
+    database_url: str,
+    as_of_iso: str | None,
+    async_fn: typ.Callable[
+        [ReportingService, SessionFactory, dt.datetime | None],
+        typ.Awaitable[T],
+    ],
+) -> T:
+    """Execute common async scaffolding for Dramatiq actors.
+
+    Parameters
+    ----------
+    database_url
+        SQLAlchemy URL for the database.
+    as_of_iso
+        Optional ISO format timestamp for window computation.
+    async_fn
+        Async function to execute with (service, session_factory, as_of) args.
+
+    Returns
+    -------
+    T
+        The result of async_fn.
+
+    """
+    _ensure_broker_configured()
+    as_of = _parse_as_of_iso(as_of_iso)
+
+    engine = _get_or_create_engine(database_url)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def run() -> T:
+        service = _get_or_create_service(session_factory, database_url)
+        return await async_fn(service, session_factory, as_of)
+
+    return asyncio.run(run())
 
 
 @dramatiq.actor
@@ -246,17 +296,16 @@ def generate_report_job(
         If as_of_iso is provided without timezone information.
 
     """
-    as_of = _parse_as_of_iso(as_of_iso)
 
-    engine = _get_or_create_engine(database_url)
-    session_factory = async_sessionmaker(engine, expire_on_commit=False)
-
-    async def run() -> str | None:
-        service = _get_or_create_service(session_factory, database_url)
+    async def execute(
+        service: ReportingService,
+        session_factory: SessionFactory,
+        as_of: dt.datetime | None,
+    ) -> str | None:
         report = await _generate_report_async(service, repository_id, as_of=as_of)
         return report.id if report else None
 
-    return asyncio.run(run())
+    return _run_actor_async(database_url, as_of_iso, execute)
 
 
 @dramatiq.actor
@@ -289,13 +338,12 @@ def generate_reports_for_estate_job(
         If as_of_iso is provided without timezone information.
 
     """
-    as_of = _parse_as_of_iso(as_of_iso)
 
-    engine = _get_or_create_engine(database_url)
-    session_factory = async_sessionmaker(engine, expire_on_commit=False)
-
-    async def run() -> list[str | None]:
-        service = _get_or_create_service(session_factory, database_url)
+    async def execute(
+        service: ReportingService,
+        session_factory: SessionFactory,
+        as_of: dt.datetime | None,
+    ) -> list[str | None]:
         reports = await _generate_reports_for_estate_async(
             service=service,
             session_factory=session_factory,
@@ -304,4 +352,4 @@ def generate_reports_for_estate_job(
         )
         return [r.id if r else None for r in reports]
 
-    return asyncio.run(run())
+    return _run_actor_async(database_url, as_of_iso, execute)

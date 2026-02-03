@@ -9,7 +9,6 @@ import typing as typ
 import pytest
 
 from ghillie.bronze import RawEventWriter
-from ghillie.gold import Report
 from ghillie.silver import RawEventTransformer, Repository
 from ghillie.status import MockStatusModel
 from tests.helpers.event_builders import commit_envelope
@@ -66,20 +65,39 @@ async def _get_repo_id(
         return repo.id
 
 
-async def _count_reports(
+@pytest.fixture
+def estate_reporting_setup(
     session_factory: async_sessionmaker[AsyncSession],
-    repository_id: str,
-) -> int:
-    """Count reports for a repository."""
-    from sqlalchemy import func, select
+) -> tuple[ReportingService, RawEventWriter, RawEventTransformer]:
+    """Provide common test dependencies for estate reporting tests.
 
-    async with session_factory() as session:
-        count = await session.scalar(
-            select(func.count())
-            .select_from(Report)
-            .where(Report.repository_id == repository_id)
-        )
-        return count or 0
+    Returns
+    -------
+    tuple
+        (ReportingService, RawEventWriter, RawEventTransformer) for test use.
+
+    """
+    from ghillie.evidence import EvidenceBundleService
+    from ghillie.reporting.config import ReportingConfig
+    from ghillie.reporting.service import ReportingService
+
+    service = ReportingService(
+        session_factory=session_factory,
+        evidence_service=EvidenceBundleService(session_factory),
+        status_model=MockStatusModel(),
+        config=ReportingConfig(),
+    )
+    writer = RawEventWriter(session_factory)
+    transformer = RawEventTransformer(session_factory)
+    return service, writer, transformer
+
+
+# Import ReportingService for type annotation in fixture return
+if typ.TYPE_CHECKING:
+    from ghillie.reporting.service import ReportingService
+
+# Type alias for the estate reporting fixture return type
+type EstateReportingSetup = tuple[ReportingService, RawEventWriter, RawEventTransformer]
 
 
 class TestGenerateReportJob:
@@ -167,21 +185,18 @@ class TestGenerateReportsForEstateJob:
     async def test_generates_reports_for_all_active_repositories(
         self,
         session_factory: async_sessionmaker[AsyncSession],
+        estate_reporting_setup: EstateReportingSetup,
     ) -> None:
         """Actor generates reports for all active repositories in estate."""
         from sqlalchemy import select
 
-        from ghillie.evidence import EvidenceBundleService
         from ghillie.reporting.actor import _generate_reports_for_estate_async
-        from ghillie.reporting.config import ReportingConfig
-        from ghillie.reporting.service import ReportingService
+
+        service, writer, transformer = estate_reporting_setup
 
         estate_id = "estate-alpha"
         now = dt.datetime(2024, 7, 14, tzinfo=dt.UTC)
         commit_time = dt.datetime(2024, 7, 10, 10, 0, tzinfo=dt.UTC)
-
-        writer = RawEventWriter(session_factory)
-        transformer = RawEventTransformer(session_factory)
 
         # Create two repositories in the same estate
         await writer.ingest(
@@ -199,13 +214,6 @@ class TestGenerateReportsForEstateJob:
                 repo.estate_id = estate_id
                 repo.ingestion_enabled = True
 
-        service = ReportingService(
-            session_factory=session_factory,
-            evidence_service=EvidenceBundleService(session_factory),
-            status_model=MockStatusModel(),
-            config=ReportingConfig(),
-        )
-
         results = await _generate_reports_for_estate_async(
             service=service,
             session_factory=session_factory,
@@ -220,21 +228,18 @@ class TestGenerateReportsForEstateJob:
     async def test_skips_inactive_repositories(
         self,
         session_factory: async_sessionmaker[AsyncSession],
+        estate_reporting_setup: EstateReportingSetup,
     ) -> None:
         """Actor skips repositories with ingestion_enabled=False."""
         from sqlalchemy import select
 
-        from ghillie.evidence import EvidenceBundleService
         from ghillie.reporting.actor import _generate_reports_for_estate_async
-        from ghillie.reporting.config import ReportingConfig
-        from ghillie.reporting.service import ReportingService
+
+        service, writer, transformer = estate_reporting_setup
 
         estate_id = "estate-beta"
         now = dt.datetime(2024, 7, 14, tzinfo=dt.UTC)
         commit_time = dt.datetime(2024, 7, 10, 10, 0, tzinfo=dt.UTC)
-
-        writer = RawEventWriter(session_factory)
-        transformer = RawEventTransformer(session_factory)
 
         await writer.ingest(
             commit_envelope("beta/active", "sha1", commit_time, "feat: active")
@@ -252,13 +257,6 @@ class TestGenerateReportsForEstateJob:
                     repo.ingestion_enabled = False
                 else:
                     repo.ingestion_enabled = True
-
-        service = ReportingService(
-            session_factory=session_factory,
-            evidence_service=EvidenceBundleService(session_factory),
-            status_model=MockStatusModel(),
-            config=ReportingConfig(),
-        )
 
         results = await _generate_reports_for_estate_async(
             service=service,

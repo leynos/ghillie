@@ -20,6 +20,34 @@ if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
+def _build_reporting_service(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> ReportingService:
+    """Build a configured ReportingService for tests.
+
+    Parameters
+    ----------
+    session_factory
+        Async session factory for database access.
+
+    Returns
+    -------
+    ReportingService
+        Configured service with EvidenceBundleService, MockStatusModel,
+        and default test configuration.
+
+    """
+    evidence_service = EvidenceBundleService(session_factory)
+    status_model = MockStatusModel()
+    config = ReportingConfig(window_days=7)
+    return ReportingService(
+        session_factory=session_factory,
+        evidence_service=evidence_service,
+        status_model=status_model,
+        config=config,
+    )
+
+
 class ReportingContext(typ.TypedDict, total=False):
     """Mutable context shared between steps."""
 
@@ -57,15 +85,7 @@ def given_repo_with_events(
     """Set up a repository with events for reporting."""
     writer = RawEventWriter(session_factory)
     transformer = RawEventTransformer(session_factory)
-    evidence_service = EvidenceBundleService(session_factory)
-    status_model = MockStatusModel()
-    config = ReportingConfig(window_days=7)
-    service = ReportingService(
-        session_factory=session_factory,
-        evidence_service=evidence_service,
-        status_model=status_model,
-        config=config,
-    )
+    service = _build_reporting_service(session_factory)
 
     context: ReportingContext = {
         "session_factory": session_factory,
@@ -104,15 +124,7 @@ def given_repo_with_previous_report(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> ReportingContext:
     """Set up a repository with a previous report."""
-    evidence_service = EvidenceBundleService(session_factory)
-    status_model = MockStatusModel()
-    config = ReportingConfig(window_days=7)
-    service = ReportingService(
-        session_factory=session_factory,
-        evidence_service=evidence_service,
-        status_model=status_model,
-        config=config,
-    )
+    service = _build_reporting_service(session_factory)
 
     context: ReportingContext = {
         "session_factory": session_factory,
@@ -159,15 +171,7 @@ def given_repo_without_events(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> ReportingContext:
     """Set up a repository without any events."""
-    evidence_service = EvidenceBundleService(session_factory)
-    status_model = MockStatusModel()
-    config = ReportingConfig(window_days=7)
-    service = ReportingService(
-        session_factory=session_factory,
-        evidence_service=evidence_service,
-        status_model=status_model,
-        config=config,
-    )
+    service = _build_reporting_service(session_factory)
 
     context: ReportingContext = {
         "session_factory": session_factory,
