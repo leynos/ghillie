@@ -152,11 +152,18 @@ async def _generate_reports_for_estate_async(
         ).all()
         repo_ids = [repo.id for repo in repos]
 
-    # Generate reports for each repository using the shared service
+    # Generate reports for all repositories concurrently
+    coroutines = [
+        service.run_for_repository(repo_id, as_of=as_of) for repo_id in repo_ids
+    ]
+    gathered = await asyncio.gather(*coroutines, return_exceptions=True)
+
+    # Process results, re-raising any exceptions
     results: list[Report | None] = []
-    for repo_id in repo_ids:
-        report = await service.run_for_repository(repo_id, as_of=as_of)
-        results.append(report)
+    for result in gathered:
+        if isinstance(result, BaseException):
+            raise result
+        results.append(result)
 
     return results
 
