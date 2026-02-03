@@ -6,8 +6,17 @@ info:
     Minimal HTTP surface for Kubernetes probes. The runtime only exposes
     liveness and readiness endpoints.
 servers:
-  - url: http://localhost:8080
-    description: Local runtime default
+  - url: http://{host}:{port}
+    description: Runtime server
+    variables:
+      host:
+        default: localhost
+        description: Hostname or IP for the runtime server.
+      port:
+        default: "8080"
+        description: TCP port for the runtime server.
+security:
+  - ApiKeyAuth: []
 paths:
   /health:
     get:
@@ -15,6 +24,7 @@ paths:
       description: Returns ok when the process is alive.
       tags:
         - Health
+      security: []
       responses:
         "200":
           description: Service is alive.
@@ -32,6 +42,7 @@ paths:
       description: Returns ready when the service is ready to accept traffic.
       tags:
         - Health
+      security: []
       responses:
         "200":
           description: Service is ready.
@@ -44,22 +55,34 @@ paths:
                   value:
                     status: ready
 components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: >-
+        Placeholder authentication scheme for future endpoints. Health and
+        readiness endpoints explicitly opt out of authentication.
   schemas:
+    BaseStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+      properties:
+        status:
+          type: string
     HealthStatus:
-      type: object
-      additionalProperties: false
-      required:
-        - status
-      properties:
-        status:
-          type: string
-          const: ok
+      allOf:
+        - $ref: "#/components/schemas/BaseStatus"
+        - type: object
+          properties:
+            status:
+              const: ok
     ReadyStatus:
-      type: object
-      additionalProperties: false
-      required:
-        - status
-      properties:
-        status:
-          type: string
-          const: ready
+      allOf:
+        - $ref: "#/components/schemas/BaseStatus"
+        - type: object
+          properties:
+            status:
+              const: ready
