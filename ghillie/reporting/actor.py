@@ -56,6 +56,9 @@ _ENGINE_CACHE: dict[str, AsyncEngine] = {}
 _SERVICE_CACHE: dict[str, ReportingService] = {}
 _CACHE_LOCK = threading.Lock()
 
+# Maximum concurrent report generations to prevent database connection exhaustion
+_MAX_CONCURRENT_REPORTS = 10
+
 
 def _get_or_create_engine(database_url: str) -> AsyncEngine:
     """Get or create an async engine for the given database URL.
@@ -115,6 +118,46 @@ async def _generate_report_async(
     return await service.run_for_repository(repository_id, as_of=as_of)
 
 
+def _process_gathered_results(
+    gathered: list[Report | None | BaseException],
+) -> list[Report | None]:
+    """Process results from asyncio.gather, handling exceptions appropriately.
+
+    Parameters
+    ----------
+    gathered
+        List of results from asyncio.gather with return_exceptions=True.
+
+    Returns
+    -------
+    list[Report | None]
+        Successfully generated reports (None for repos with no events).
+
+    Raises
+    ------
+    BaseException
+        Re-raised immediately for system-level exceptions (e.g., KeyboardInterrupt).
+    ExceptionGroup
+        Aggregates all regular Exception instances to preserve diagnostic info.
+
+    """
+    results: list[Report | None] = []
+    exceptions: list[Exception] = []
+    for result in gathered:
+        if isinstance(result, Exception):
+            exceptions.append(result)
+        elif isinstance(result, BaseException):
+            # Re-raise system-level exceptions (e.g., KeyboardInterrupt) immediately
+            raise result
+        else:
+            results.append(result)
+
+    if exceptions:
+        raise ExceptionGroup("estate report errors", exceptions)  # noqa: TRY003
+
+    return results
+
+
 async def _generate_reports_for_estate_async(
     service: ReportingService,
     session_factory: SessionFactory,
@@ -152,28 +195,17 @@ async def _generate_reports_for_estate_async(
         ).all()
         repo_ids = [repo.id for repo in repos]
 
-    # Generate reports for all repositories concurrently
-    coroutines = [
-        service.run_for_repository(repo_id, as_of=as_of) for repo_id in repo_ids
-    ]
+    # Generate reports concurrently with bounded concurrency to protect DB connections
+    semaphore = asyncio.Semaphore(_MAX_CONCURRENT_REPORTS)
+
+    async def bounded_report(repo_id: str) -> Report | None:
+        async with semaphore:
+            return await service.run_for_repository(repo_id, as_of=as_of)
+
+    coroutines = [bounded_report(repo_id) for repo_id in repo_ids]
     gathered = await asyncio.gather(*coroutines, return_exceptions=True)
 
-    # Process results, aggregating any exceptions
-    results: list[Report | None] = []
-    exceptions: list[Exception] = []
-    for result in gathered:
-        if isinstance(result, Exception):
-            exceptions.append(result)
-        elif isinstance(result, BaseException):
-            # Re-raise system-level exceptions (e.g., KeyboardInterrupt) immediately
-            raise result
-        else:
-            results.append(result)
-
-    if exceptions:
-        raise ExceptionGroup("estate report errors", exceptions)  # noqa: TRY003
-
-    return results
+    return _process_gathered_results(gathered)
 
 
 def _parse_as_of_iso(as_of_iso: str | None) -> dt.datetime | None:
