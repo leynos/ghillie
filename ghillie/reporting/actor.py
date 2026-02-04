@@ -158,12 +158,20 @@ async def _generate_reports_for_estate_async(
     ]
     gathered = await asyncio.gather(*coroutines, return_exceptions=True)
 
-    # Process results, re-raising any exceptions
+    # Process results, aggregating any exceptions
     results: list[Report | None] = []
+    exceptions: list[Exception] = []
     for result in gathered:
-        if isinstance(result, BaseException):
+        if isinstance(result, Exception):
+            exceptions.append(result)
+        elif isinstance(result, BaseException):
+            # Re-raise system-level exceptions (e.g., KeyboardInterrupt) immediately
             raise result
-        results.append(result)
+        else:
+            results.append(result)
+
+    if exceptions:
+        raise ExceptionGroup("estate report errors", exceptions)  # noqa: TRY003
 
     return results
 
