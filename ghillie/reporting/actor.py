@@ -67,7 +67,7 @@ def _get_or_create_engine(database_url: str) -> AsyncEngine:
     """
     with _CACHE_LOCK:
         if database_url not in _ENGINE_CACHE:
-            _ENGINE_CACHE[database_url] = create_async_engine(database_url, future=True)
+            _ENGINE_CACHE[database_url] = create_async_engine(database_url)
         return _ENGINE_CACHE[database_url]
 
 
@@ -376,7 +376,7 @@ def generate_report_job(
 
     async def execute(
         service: ReportingService,
-        session_factory: SessionFactory,
+        _session_factory: SessionFactory,
         as_of: dt.datetime | None,
     ) -> str | None:
         report = await _generate_report_async(service, repository_id, as_of=as_of)
