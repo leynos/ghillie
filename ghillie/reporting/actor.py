@@ -46,6 +46,8 @@ from ghillie.silver.storage import Repository
 from ghillie.status.factory import create_status_model
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
     from ghillie.gold.storage import Report
 
 type SessionFactory = async_sessionmaker[AsyncSession]
@@ -83,15 +85,6 @@ def _ensure_session_factory_locked(database_url: str) -> SessionFactory:
             engine, expire_on_commit=False
         )
     return _SESSION_FACTORY_CACHE[database_url]
-
-
-def _get_or_create_engine(database_url: str) -> AsyncEngine:
-    """Get or create an async engine for the given database URL.
-
-    Thread-safe: uses a lock to prevent race conditions in Dramatiq workers.
-    """
-    with _CACHE_LOCK:
-        return _ensure_engine(database_url)
 
 
 def _get_or_create_session_factory(database_url: str) -> SessionFactory:
@@ -274,9 +267,9 @@ def _parse_as_of_iso(as_of_iso: str | None) -> dt.datetime | None:
 def _run_actor_async[T](
     database_url: str,
     as_of_iso: str | None,
-    async_fn: typ.Callable[
+    async_fn: cabc.Callable[
         [ReportingService, SessionFactory, dt.datetime | None],
-        typ.Awaitable[T],
+        cabc.Awaitable[T],
     ],
 ) -> T:
     """Execute common async scaffolding for Dramatiq actors.
