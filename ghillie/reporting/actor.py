@@ -55,7 +55,6 @@ type SessionFactory = async_sessionmaker[AsyncSession]
 # Module-level caches for reusing expensive resources across actor invocations
 _ENGINE_CACHE: dict[str, AsyncEngine] = {}
 _SESSION_FACTORY_CACHE: dict[str, SessionFactory] = {}
-_SERVICE_CACHE: dict[str, ReportingService] = {}
 _CACHE_LOCK = threading.Lock()
 
 # Maximum concurrent report generations to prevent database connection exhaustion
@@ -96,25 +95,24 @@ def _get_or_create_session_factory(database_url: str) -> SessionFactory:
         return _ensure_session_factory_locked(database_url)
 
 
-def _get_or_create_service(database_url: str) -> ReportingService:
-    """Get or create a ReportingService with cached dependencies.
+def _build_service(database_url: str) -> ReportingService:
+    """Build a fresh ReportingService for *database_url*.
 
-    Thread-safe: uses a lock to prevent race conditions in Dramatiq workers.
-    Self-contained — ensures the session factory exists before use.
+    A new service is created on every call because the status model may
+    hold event-loop-bound resources (e.g. ``httpx.AsyncClient``) that
+    cannot be reused across ``asyncio.run()`` boundaries.  The session
+    factory and engine underneath are still cached and safe to share.
     """
-    with _CACHE_LOCK:
-        if database_url not in _SERVICE_CACHE:
-            session_factory = _ensure_session_factory_locked(database_url)
-            evidence_service = EvidenceBundleService(session_factory)
-            status_model = create_status_model()
-            config = ReportingConfig.from_env()
-            _SERVICE_CACHE[database_url] = ReportingService(
-                session_factory=session_factory,
-                evidence_service=evidence_service,
-                status_model=status_model,
-                config=config,
-            )
-        return _SERVICE_CACHE[database_url]
+    session_factory = _get_or_create_session_factory(database_url)
+    evidence_service = EvidenceBundleService(session_factory)
+    status_model = create_status_model()
+    config = ReportingConfig.from_env()
+    return ReportingService(
+        session_factory=session_factory,
+        evidence_service=evidence_service,
+        status_model=status_model,
+        config=config,
+    )
 
 
 async def _generate_report_async(
@@ -168,13 +166,14 @@ def _process_gathered_results(
     results: list[Report | None] = []
     exceptions: list[Exception] = []
     for result in gathered:
-        if isinstance(result, Exception):
-            exceptions.append(result)
-        elif isinstance(result, BaseException):
-            # Re-raise system-level exceptions (e.g., KeyboardInterrupt) immediately
-            raise result
-        else:
-            results.append(result)
+        match result:
+            case Exception() as exc:
+                exceptions.append(exc)
+            case BaseException() as fatal:
+                # Re-raise system-level exceptions (e.g., KeyboardInterrupt) immediately
+                raise fatal
+            case _:
+                results.append(result)
 
     if exceptions:
         raise EstateReportError(exceptions)
@@ -295,7 +294,7 @@ def _run_actor_async[T](
     session_factory = _get_or_create_session_factory(database_url)
 
     async def run() -> T:
-        service = _get_or_create_service(database_url)
+        service = _build_service(database_url)
         return await async_fn(service, session_factory, as_of)
 
     return asyncio.run(run())
