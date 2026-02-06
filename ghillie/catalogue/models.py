@@ -191,12 +191,12 @@ class Project(msgspec.Struct, kw_only=True):
         Project slug.
     name
         Human-readable project name.
+    components
+        Component definitions for the project.
     description
         Optional description.
     programme
         Optional programme key if the project rolls up to a programme.
-    components
-        Component definitions for the project.
     noise
         Noise filters that apply to this project.
     status
@@ -208,9 +208,9 @@ class Project(msgspec.Struct, kw_only=True):
 
     key: str
     name: str
+    components: list[Component]
     description: str | None = None
     programme: str | None = None
-    components: list[Component]
     noise: NoiseFilters = msgspec.field(default_factory=NoiseFilters)
     status: StatusSettings = msgspec.field(default_factory=StatusSettings)
     documentation_paths: list[str] = msgspec.field(default_factory=list)
