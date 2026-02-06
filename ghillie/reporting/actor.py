@@ -60,43 +60,58 @@ _CACHE_LOCK = threading.Lock()
 _MAX_CONCURRENT_REPORTS = 10
 
 
+def _ensure_engine(database_url: str) -> AsyncEngine:
+    """Return the cached engine for *database_url*, creating it if absent.
+
+    Precondition: the caller **must** hold ``_CACHE_LOCK``.
+    """
+    if database_url not in _ENGINE_CACHE:
+        _ENGINE_CACHE[database_url] = create_async_engine(database_url)
+    return _ENGINE_CACHE[database_url]
+
+
+def _ensure_session_factory_locked(database_url: str) -> SessionFactory:
+    """Return the cached session factory for *database_url*, creating it if absent.
+
+    Precondition: the caller **must** hold ``_CACHE_LOCK``.  The session
+    factory is cached alongside its engine so a single instance is shared
+    across service construction and direct session usage.
+    """
+    if database_url not in _SESSION_FACTORY_CACHE:
+        engine = _ensure_engine(database_url)
+        _SESSION_FACTORY_CACHE[database_url] = async_sessionmaker(
+            engine, expire_on_commit=False
+        )
+    return _SESSION_FACTORY_CACHE[database_url]
+
+
 def _get_or_create_engine(database_url: str) -> AsyncEngine:
     """Get or create an async engine for the given database URL.
 
     Thread-safe: uses a lock to prevent race conditions in Dramatiq workers.
     """
     with _CACHE_LOCK:
-        if database_url not in _ENGINE_CACHE:
-            _ENGINE_CACHE[database_url] = create_async_engine(database_url)
-        return _ENGINE_CACHE[database_url]
+        return _ensure_engine(database_url)
 
 
 def _get_or_create_session_factory(database_url: str) -> SessionFactory:
     """Get or create an async session factory for the given database URL.
 
     Thread-safe: uses a lock to prevent race conditions in Dramatiq workers.
-    The session factory is cached alongside its engine so a single instance
-    is shared across service construction and direct session usage.
     """
     with _CACHE_LOCK:
-        if database_url not in _SESSION_FACTORY_CACHE:
-            if database_url not in _ENGINE_CACHE:
-                _ENGINE_CACHE[database_url] = create_async_engine(database_url)
-            engine = _ENGINE_CACHE[database_url]
-            _SESSION_FACTORY_CACHE[database_url] = async_sessionmaker(
-                engine, expire_on_commit=False
-            )
-        return _SESSION_FACTORY_CACHE[database_url]
+        return _ensure_session_factory_locked(database_url)
 
 
 def _get_or_create_service(database_url: str) -> ReportingService:
     """Get or create a ReportingService with cached dependencies.
 
     Thread-safe: uses a lock to prevent race conditions in Dramatiq workers.
+    Self-contained — ensures the session factory exists before use.
     """
     with _CACHE_LOCK:
         if database_url not in _SERVICE_CACHE:
-            session_factory = _SESSION_FACTORY_CACHE[database_url]
+            session_factory = _ensure_session_factory_locked(database_url)
             evidence_service = EvidenceBundleService(session_factory)
             status_model = create_status_model()
             config = ReportingConfig.from_env()

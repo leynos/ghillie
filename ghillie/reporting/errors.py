@@ -17,18 +17,20 @@ class EstateReportError(ReportingError):
     Parameters
     ----------
     exceptions
-        List of exceptions that occurred during estate-wide report generation.
+        Sequence of exceptions that occurred during estate-wide report generation.
 
     Attributes
     ----------
     exceptions
-        The underlying exceptions that caused the failures.
+        Immutable tuple of the underlying exceptions that caused the failures.
 
     """
 
+    exceptions: tuple[Exception, ...]
+
     def __init__(self, exceptions: list[Exception]) -> None:
         """Initialize with the list of exceptions that occurred during generation."""
-        self.exceptions = exceptions
-        count = len(exceptions)
+        self.exceptions = tuple(exceptions)
+        count = len(self.exceptions)
         message = f"Estate report generation failed: {count} error(s) occurred"
         super().__init__(message)
