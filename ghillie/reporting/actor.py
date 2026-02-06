@@ -25,13 +25,10 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
-import os
-import sys
 import threading
 import typing as typ
 
 import dramatiq
-from dramatiq.brokers.stub import StubBroker
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -41,7 +38,9 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from ghillie.evidence import EvidenceBundleService
+from ghillie.reporting._broker import ensure_broker_configured
 from ghillie.reporting.config import ReportingConfig
+from ghillie.reporting.errors import EstateReportError
 from ghillie.reporting.service import ReportingService
 from ghillie.silver.storage import Repository
 from ghillie.status.factory import create_status_model
@@ -49,38 +48,11 @@ from ghillie.status.factory import create_status_model
 if typ.TYPE_CHECKING:
     from ghillie.gold.storage import Report
 
-
-class EstateReportError(Exception):
-    """Raised when report generation fails for one or more repositories in an estate.
-
-    This exception wraps multiple underlying exceptions that occurred during
-    concurrent report generation, preserving diagnostic information for each
-    failure.
-
-    Parameters
-    ----------
-    exceptions
-        List of exceptions that occurred during estate-wide report generation.
-
-    Attributes
-    ----------
-    exceptions
-        The underlying exceptions that caused the failures.
-
-    """
-
-    def __init__(self, exceptions: list[Exception]) -> None:
-        """Initialize with the list of exceptions that occurred during generation."""
-        self.exceptions = exceptions
-        count = len(exceptions)
-        message = f"Estate report generation failed: {count} error(s) occurred"
-        super().__init__(message)
-
-
 type SessionFactory = async_sessionmaker[AsyncSession]
 
 # Module-level caches for reusing expensive resources across actor invocations
 _ENGINE_CACHE: dict[str, AsyncEngine] = {}
+_SESSION_FACTORY_CACHE: dict[str, SessionFactory] = {}
 _SERVICE_CACHE: dict[str, ReportingService] = {}
 _CACHE_LOCK = threading.Lock()
 
@@ -99,16 +71,32 @@ def _get_or_create_engine(database_url: str) -> AsyncEngine:
         return _ENGINE_CACHE[database_url]
 
 
-def _get_or_create_service(
-    session_factory: SessionFactory,
-    database_url: str,
-) -> ReportingService:
+def _get_or_create_session_factory(database_url: str) -> SessionFactory:
+    """Get or create an async session factory for the given database URL.
+
+    Thread-safe: uses a lock to prevent race conditions in Dramatiq workers.
+    The session factory is cached alongside its engine so a single instance
+    is shared across service construction and direct session usage.
+    """
+    with _CACHE_LOCK:
+        if database_url not in _SESSION_FACTORY_CACHE:
+            if database_url not in _ENGINE_CACHE:
+                _ENGINE_CACHE[database_url] = create_async_engine(database_url)
+            engine = _ENGINE_CACHE[database_url]
+            _SESSION_FACTORY_CACHE[database_url] = async_sessionmaker(
+                engine, expire_on_commit=False
+            )
+        return _SESSION_FACTORY_CACHE[database_url]
+
+
+def _get_or_create_service(database_url: str) -> ReportingService:
     """Get or create a ReportingService with cached dependencies.
 
     Thread-safe: uses a lock to prevent race conditions in Dramatiq workers.
     """
     with _CACHE_LOCK:
         if database_url not in _SERVICE_CACHE:
+            session_factory = _SESSION_FACTORY_CACHE[database_url]
             evidence_service = EvidenceBundleService(session_factory)
             status_model = create_status_model()
             config = ReportingConfig.from_env()
@@ -268,71 +256,6 @@ def _parse_as_of_iso(as_of_iso: str | None) -> dt.datetime | None:
     return parsed
 
 
-def _is_running_tests() -> bool:
-    """Check if the current process is running in a test environment.
-
-    Detects pytest by checking for the pytest module in sys.modules or
-    pytest-specific environment variables set by pytest and pytest-xdist.
-
-    Returns
-    -------
-    bool
-        True if running under pytest, False otherwise.
-
-    """
-    return "pytest" in sys.modules or any(
-        key in os.environ
-        for key in ["PYTEST_CURRENT_TEST", "PYTEST_XDIST_WORKER", "PYTEST_ADDOPTS"]
-    )
-
-
-def _should_use_stub_broker() -> bool:
-    """Determine whether to use a StubBroker instead of a real broker.
-
-    Returns True if either the GHILLIE_ALLOW_STUB_BROKER environment variable
-    is set to a truthy value, or if we're running in a test environment.
-
-    Returns
-    -------
-    bool
-        True if a StubBroker should be used, False otherwise.
-
-    """
-    allow_stub = os.environ.get("GHILLIE_ALLOW_STUB_BROKER", "")
-    return allow_stub.lower() in {"1", "true", "yes"} or _is_running_tests()
-
-
-def _ensure_broker_configured() -> None:
-    """Ensure a Dramatiq broker is configured before actor execution.
-
-    This function checks for an existing broker and sets up a StubBroker
-    in test environments. It is called at the start of each actor function
-    rather than at import time to avoid premature global state mutation.
-
-    Raises
-    ------
-    RuntimeError
-        If no broker is configured and we're not in a test/stub-allowed context.
-
-    """
-    try:  # pragma: no cover - exercised in tests and CLI usage
-        current_broker = dramatiq.get_broker()
-    except (ImportError, LookupError):
-        # ImportError: broker dependencies (RabbitMQ/Redis) are not installed
-        # LookupError: no broker has been configured yet
-        current_broker = None
-
-    if current_broker is None:
-        if _should_use_stub_broker():
-            dramatiq.set_broker(StubBroker())
-        else:  # pragma: no cover - guard for prod misconfigurations
-            message = (
-                "No Dramatiq broker configured. Set GHILLIE_ALLOW_STUB_BROKER=1 for "
-                "local/test runs or configure a real broker."
-            )
-            raise RuntimeError(message)
-
-
 def _run_actor_async[T](
     database_url: str,
     as_of_iso: str | None,
@@ -358,14 +281,13 @@ def _run_actor_async[T](
         The result of async_fn.
 
     """
-    _ensure_broker_configured()
+    ensure_broker_configured()
     as_of = _parse_as_of_iso(as_of_iso)
 
-    engine = _get_or_create_engine(database_url)
-    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    session_factory = _get_or_create_session_factory(database_url)
 
     async def run() -> T:
-        service = _get_or_create_service(session_factory, database_url)
+        service = _get_or_create_service(database_url)
         return await async_fn(service, session_factory, as_of)
 
     return asyncio.run(run())
