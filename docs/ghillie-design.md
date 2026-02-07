@@ -1022,6 +1022,133 @@ falls back to `UNKNOWN` for unrecognized values.
 This satisfies the Phase 2.2.b completion criteria: round-trip inference
 demonstrating the integration using VidaiMock.
 
+### 9.6 Scheduled reporting workflow (Phase 2.3.a)
+
+The reporting workflow orchestrates the end-to-end generation of repository
+status reports by coordinating evidence bundle construction, status model
+invocation, and report persistence to the Gold layer.
+
+**Architecture overview:**
+
+The workflow is implemented as a service (`ReportingService`) that can be
+invoked synchronously or via Dramatiq actors for scheduled/background
+execution. The service coordinates three core operations:
+
+1. **Window computation**: Determines the reporting period based on previous
+   report end times or a configurable default window.
+2. **Report generation**: Builds an evidence bundle, invokes the status model,
+   and persists the report with coverage records.
+3. **Estate-wide scheduling**: Generates reports for all active repositories
+   in an estate.
+
+The following flowchart shows the interaction between trigger sources,
+Dramatiq actors, the ReportingService, and the Gold layer persistence:
+
+```mermaid
+flowchart TB
+    subgraph Trigger["Trigger Layer"]
+        CRON["Cron/Scheduler"]
+        API["API Endpoint"]
+    end
+
+    subgraph Actor["Dramatiq Actor Layer"]
+        GRJ["generate_report_job"]
+        GREJ["generate_reports_for_estate_job"]
+    end
+
+    subgraph Service["Service Layer"]
+        RS["ReportingService"]
+        CW["compute_next_window()"]
+        GR["generate_report()"]
+        RFR["run_for_repository()"]
+    end
+
+    subgraph Dependencies["Dependencies"]
+        EBS["EvidenceBundleService"]
+        SM["StatusModel"]
+        SF["session_factory"]
+    end
+
+    subgraph Persistence["Gold Layer"]
+        REP["Report"]
+        COV["ReportCoverage"]
+    end
+
+    CRON --> GREJ
+    API --> GRJ
+    GREJ --> GRJ
+    GRJ --> RS
+    RS --> CW
+    RS --> GR
+    RS --> RFR
+    RFR --> CW
+    RFR --> GR
+    GR --> EBS
+    GR --> SM
+    GR --> SF
+    SF --> REP
+    SF --> COV
+```
+
+**Window computation semantics:**
+
+The `compute_next_window()` method determines the reporting window as follows:
+
+- If a previous repository report exists, the new window starts where that
+  report's `window_end` ended, ensuring continuous coverage with no gaps.
+- If no previous report exists, the window starts `config.window_days` before
+  the reference time (default: 7 days).
+- The window always ends at the reference time (`as_of` parameter or current
+  time).
+
+This design ensures:
+
+- **Continuous coverage**: Each report picks up exactly where the previous one
+  left off.
+- **No duplicate reporting**: Events covered by previous reports are not
+  re-summarized.
+- **Flexible scheduling**: Reports can be generated at any cadence without
+  missing activity.
+
+**ReportingConfig dataclass:**
+
+Configuration is centralized in `ReportingConfig`:
+
+```python
+@dataclass(frozen=True, slots=True)
+class ReportingConfig:
+    window_days: int = 7  # Default window when no prior report exists
+
+    @classmethod
+    def from_env(cls) -> ReportingConfig:
+        # Reads GHILLIE_REPORTING_WINDOW_DAYS
+```
+
+**Dramatiq actor pattern:**
+
+The actors follow the pattern established by `import_catalogue_job`:
+
+- **`generate_report_job`**: Generates a single repository report. Accepts
+  `database_url`, `repository_id`, and optional `as_of_iso` timestamp.
+- **`generate_reports_for_estate_job`**: Iterates over all active repositories
+  (`ingestion_enabled=True`) in an estate and generates reports for each.
+
+Both actors use module-level caching for expensive resources (database engines,
+service instances) to minimize overhead across invocations.
+
+**Empty window handling:**
+
+When a repository has no events in the computed window, `run_for_repository()`
+returns `None` rather than generating an empty report. This prevents report
+table pollution and makes the "no activity" state explicit to callers.
+
+**Coverage tracking:**
+
+Each generated report creates `ReportCoverage` records linking the report to
+the `EventFact` IDs from the evidence bundle. This preserves the Bronze→Silver→
+Gold audit trail and enables downstream queries to identify which events
+contributed to which reports.
+
 ## 10. Integration testing strategy for LLM backends
 
 The Intelligence Engine's reliance on external LLM providers introduces testing
