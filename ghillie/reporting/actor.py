@@ -49,6 +49,7 @@ if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
     from ghillie.gold.storage import Report
+    from ghillie.reporting.sink import ReportSink
 
 type SessionFactory = async_sessionmaker[AsyncSession]
 
@@ -102,16 +103,29 @@ def _build_service(database_url: str) -> ReportingService:
     hold event-loop-bound resources (e.g. ``httpx.AsyncClient``) that
     cannot be reused across ``asyncio.run()`` boundaries.  The session
     factory and engine underneath are still cached and safe to share.
+
+    When ``GHILLIE_REPORT_SINK_PATH`` is set, a
+    :class:`~ghillie.reporting.filesystem_sink.FilesystemReportSink` is
+    injected so that each generated report is also written to the
+    filesystem as Markdown.
     """
     session_factory = _get_or_create_session_factory(database_url)
     evidence_service = EvidenceBundleService(session_factory)
     status_model = create_status_model()
     config = ReportingConfig.from_env()
+
+    report_sink: ReportSink | None = None
+    if config.report_sink_path is not None:
+        from ghillie.reporting.filesystem_sink import FilesystemReportSink
+
+        report_sink = FilesystemReportSink(config.report_sink_path)
+
     return ReportingService(
         session_factory=session_factory,
         evidence_service=evidence_service,
         status_model=status_model,
         config=config,
+        report_sink=report_sink,
     )
 
 

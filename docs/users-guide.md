@@ -1057,8 +1057,140 @@ Example cron configuration for weekly reports:
 
 ```bash
 # Generate reports for all estates every Monday at 6am UTC
-0 6 * * 1 python -c "from ghillie.reporting import generate_reports_for_estate_job; generate_reports_for_estate_job.send('postgresql+asyncpg://...', 'wildside')"
+0 6 * * 1 python -c "
+from ghillie.reporting import generate_reports_for_estate_job
+generate_reports_for_estate_job.send(
+    'postgresql+asyncpg://...', 'wildside'
+)
+"
 ```
 
 For Kubernetes deployments, use a CronJob resource with the Dramatiq worker
 container.
+
+## Report Markdown and storage (Phase 2.3.b)
+
+Ghillie can render repository status reports as Markdown documents and write
+them to the filesystem at predictable paths, making reports navigable by
+operators and version-controllable.
+
+### Enabling filesystem report storage
+
+Set the `GHILLIE_REPORT_SINK_PATH` environment variable to a directory path.
+When configured, each report generation run writes two files per repository:
+
+- `{base_path}/{owner}/{name}/latest.md` — always overwritten with the most
+  recent report.
+- `{base_path}/{owner}/{name}/{date}-{report_id}.md` — a dated archive that
+  accumulates over time.
+
+```bash
+export GHILLIE_REPORT_SINK_PATH=/var/lib/ghillie/reports
+```
+
+When the variable is unset, report generation works as before without writing
+any Markdown files.
+
+### Markdown format
+
+The rendered Markdown document follows this structure:
+
+```markdown
+# acme/widget — Status report (2024-07-07 to 2024-07-14)
+
+**Status:** On Track
+
+## Summary
+
+The repository saw steady feature work and documentation improvements.
+
+## Highlights
+
+- Implemented new authentication flow
+- Added comprehensive API documentation
+
+## Risks
+
+- CI pipeline flakiness increasing
+
+## Next steps
+
+- Address CI stability
+- Begin database migration planning
+
+---
+
+*Generated at 2024-07-14 12:00 UTC by gpt-5.1-thinking
+ | Window: 2024-07-07 to 2024-07-14 | Report ID: abc-123*
+```
+
+Sections with no content (empty highlights, risks, or next steps) are omitted
+entirely. The renderer reads from the structured `machine_summary` field on the
+Gold layer report, so the Markdown content always matches the database.
+
+### Report sink configuration
+
+| Variable                   | Default | Description                                                                        |
+| -------------------------- | ------- | ---------------------------------------------------------------------------------- |
+| `GHILLIE_REPORT_SINK_PATH` | (unset) | Filesystem directory for Markdown report output. When unset, no files are written. |
+
+### Rendering and sink usage
+
+To render a report as Markdown without writing to disk:
+
+```python
+from ghillie.reporting import render_report_markdown
+
+md = render_report_markdown(report, owner="acme", name="widget")
+```
+
+To use the filesystem sink directly:
+
+```python
+from pathlib import Path
+
+from ghillie.reporting import FilesystemReportSink
+
+sink = FilesystemReportSink(Path("/var/lib/ghillie/reports"))
+await sink.write_report(
+    markdown,
+    owner="acme",
+    name="widget",
+    report_id="abc-123",
+    window_end="2024-07-14",
+)
+```
+
+The `ReportSink` protocol supports future storage backends (for example, S3 or
+a dedicated Git repository) without changes to the reporting service.
+
+### Integration with the reporting service
+
+When a `FilesystemReportSink` is provided, the `ReportingService` automatically
+renders and writes Markdown after each report is persisted to the Gold layer.
+The Dramatiq actors (`generate_report_job`, `generate_reports_for_estate_job`)
+create the sink automatically when `GHILLIE_REPORT_SINK_PATH` is set.
+
+```python
+from pathlib import Path
+
+from ghillie.reporting import (
+    FilesystemReportSink,
+    ReportingConfig,
+    ReportingService,
+)
+
+config = ReportingConfig.from_env()
+sink = FilesystemReportSink(Path("/var/lib/ghillie/reports"))
+
+service = ReportingService(
+    session_factory=session_factory,
+    evidence_service=evidence_service,
+    status_model=status_model,
+    config=config,
+    report_sink=sink,
+)
+
+# Reports are now rendered and stored as Markdown automatically
+report = await service.run_for_repository(repository_id)
+```

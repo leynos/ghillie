@@ -6,12 +6,18 @@ in the Gold layer.
 
 Public API
 ----------
+FilesystemReportSink
+    Filesystem adapter for the ``ReportSink`` protocol.
+ReportSink
+    Protocol (port) for writing rendered Markdown reports to storage.
 ReportingConfig
     Configuration for reporting window computation and scheduling.
 ReportingService
     Service that orchestrates report generation workflow.
 ReportingWindow
     Dataclass representing a time window for reporting.
+render_report_markdown
+    Pure function to render a ``Report`` as a Markdown document.
 
 Example:
 Generate a report for a repository:
@@ -35,12 +41,18 @@ from ghillie.reporting.actor import (
     generate_reports_for_estate_job,
 )
 from ghillie.reporting.config import ReportingConfig
+from ghillie.reporting.filesystem_sink import FilesystemReportSink
+from ghillie.reporting.markdown import render_report_markdown
 from ghillie.reporting.service import ReportingService, ReportingWindow
+from ghillie.reporting.sink import ReportSink
 
 __all__ = [
+    "FilesystemReportSink",
+    "ReportSink",
     "ReportingConfig",
     "ReportingService",
     "ReportingWindow",
     "generate_report_job",
     "generate_reports_for_estate_job",
+    "render_report_markdown",
 ]
