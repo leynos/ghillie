@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import typing as typ
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -12,6 +13,7 @@ from ghillie.bronze import RawEventWriter
 from ghillie.evidence import EvidenceBundleService
 from ghillie.gold import Report, ReportCoverage, ReportScope
 from ghillie.reporting.config import ReportingConfig
+from ghillie.reporting.filesystem_sink import FilesystemReportSink
 from ghillie.reporting.service import ReportingService
 from ghillie.silver import RawEventTransformer, Repository
 from ghillie.status import MockStatusModel
@@ -149,14 +151,45 @@ class TestReportingConfig:
     ) -> None:
         """from_env returns defaults when env vars are unset."""
         monkeypatch.delenv("GHILLIE_REPORTING_WINDOW_DAYS", raising=False)
+        monkeypatch.delenv("GHILLIE_REPORT_SINK_PATH", raising=False)
         config = ReportingConfig.from_env()
         assert config.window_days == 7, "Default window should be 7 when env unset"
 
     def test_from_env_reads_window_days(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """from_env reads GHILLIE_REPORTING_WINDOW_DAYS."""
         monkeypatch.setenv("GHILLIE_REPORTING_WINDOW_DAYS", "30")
+        monkeypatch.delenv("GHILLIE_REPORT_SINK_PATH", raising=False)
         config = ReportingConfig.from_env()
         assert config.window_days == 30, "Window days should read from env"
+
+    def test_config_report_sink_path_defaults_to_none(self) -> None:
+        """The report_sink_path field defaults to None."""
+        config = ReportingConfig()
+        assert config.report_sink_path is None, (
+            "report_sink_path should default to None"
+        )
+
+    def test_config_from_env_reads_report_sink_path(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """GHILLIE_REPORT_SINK_PATH is read and stored as a Path."""
+        monkeypatch.delenv("GHILLIE_REPORTING_WINDOW_DAYS", raising=False)
+        monkeypatch.setenv("GHILLIE_REPORT_SINK_PATH", "/var/lib/ghillie/reports")
+        config = ReportingConfig.from_env()
+        assert config.report_sink_path == Path("/var/lib/ghillie/reports"), (
+            "report_sink_path should be parsed from environment"
+        )
+
+    def test_config_from_env_report_sink_path_unset_yields_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When GHILLIE_REPORT_SINK_PATH is unset, report_sink_path is None."""
+        monkeypatch.delenv("GHILLIE_REPORTING_WINDOW_DAYS", raising=False)
+        monkeypatch.delenv("GHILLIE_REPORT_SINK_PATH", raising=False)
+        config = ReportingConfig.from_env()
+        assert config.report_sink_path is None, (
+            "report_sink_path should be None when env var unset"
+        )
 
 
 class TestReportingServiceWindowComputation:
@@ -321,3 +354,108 @@ class TestReportingServiceRunForRepository:
         # May return None or a report with empty bundle - implementation choice
         # For now, expect None when there are no events
         assert result is None, "Should return None when no events in window"
+
+
+class TestReportingServiceSinkIntegration:
+    """Tests for ReportSink integration in ReportingService."""
+
+    @pytest.mark.asyncio
+    async def test_generate_report_calls_sink_when_provided(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        writer: RawEventWriter,
+        transformer: RawEventTransformer,
+        tmp_path: Path,
+    ) -> None:
+        """When a ReportSink is injected, write_report is called."""
+        sink = FilesystemReportSink(tmp_path / "reports")
+        evidence_service = EvidenceBundleService(session_factory)
+        service = ReportingService(
+            session_factory=session_factory,
+            evidence_service=evidence_service,
+            status_model=MockStatusModel(),
+            report_sink=sink,
+        )
+
+        repo_slug = "acme/widget"
+        commit_time = dt.datetime(2024, 7, 5, 10, 0, tzinfo=dt.UTC)
+        await writer.ingest(
+            commit_envelope(repo_slug, "sink001", commit_time, "feat: sink test")
+        )
+        await transformer.process_pending()
+
+        repo_id = await _get_repo_id(session_factory)
+
+        await service.generate_report(
+            repository_id=repo_id,
+            window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+            window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+        )
+
+        latest = tmp_path / "reports" / "acme" / "widget" / "latest.md"
+        assert latest.is_file(), "Sink should write latest.md after report generation"
+
+    @pytest.mark.asyncio
+    async def test_generate_report_works_without_sink(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        writer: RawEventWriter,
+        transformer: RawEventTransformer,
+        tmp_path: Path,
+    ) -> None:
+        """When no sink is provided, report generation succeeds."""
+        evidence_service = EvidenceBundleService(session_factory)
+        service = ReportingService(
+            session_factory=session_factory,
+            evidence_service=evidence_service,
+            status_model=MockStatusModel(),
+        )
+
+        repo_slug = "acme/widget"
+        commit_time = dt.datetime(2024, 7, 5, 10, 0, tzinfo=dt.UTC)
+        await writer.ingest(
+            commit_envelope(repo_slug, "nosink1", commit_time, "feat: no sink")
+        )
+        await transformer.process_pending()
+
+        repo_id = await _get_repo_id(session_factory)
+
+        report = await service.generate_report(
+            repository_id=repo_id,
+            window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+            window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+        )
+        assert report is not None, "Report should be generated without a sink"
+
+    @pytest.mark.asyncio
+    async def test_run_for_repository_calls_sink_when_provided(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        writer: RawEventWriter,
+        transformer: RawEventTransformer,
+        tmp_path: Path,
+    ) -> None:
+        """run_for_repository also invokes the sink."""
+        sink = FilesystemReportSink(tmp_path / "reports")
+        evidence_service = EvidenceBundleService(session_factory)
+        service = ReportingService(
+            session_factory=session_factory,
+            evidence_service=evidence_service,
+            status_model=MockStatusModel(),
+            report_sink=sink,
+        )
+
+        repo_slug = "acme/widget"
+        now = dt.datetime(2024, 7, 14, tzinfo=dt.UTC)
+        commit_time = dt.datetime(2024, 7, 10, 10, 0, tzinfo=dt.UTC)
+        await writer.ingest(
+            commit_envelope(repo_slug, "run001", commit_time, "feat: run sink")
+        )
+        await transformer.process_pending()
+
+        repo_id = await _get_repo_id(session_factory)
+        report = await service.run_for_repository(repo_id, as_of=now)
+
+        assert report is not None, "Report should be generated"
+        latest = tmp_path / "reports" / "acme" / "widget" / "latest.md"
+        assert latest.is_file(), "Sink should write latest.md via run_for_repository"

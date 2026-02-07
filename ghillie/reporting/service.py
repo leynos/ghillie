@@ -35,6 +35,7 @@ from sqlalchemy import select
 
 from ghillie.common.time import utcnow
 from ghillie.gold.storage import Report, ReportCoverage, ReportScope
+from ghillie.reporting.markdown import render_report_markdown
 from ghillie.status.models import to_machine_summary
 
 from .config import ReportingConfig
@@ -44,6 +45,8 @@ if typ.TYPE_CHECKING:
 
     from ghillie.evidence.models import RepositoryEvidenceBundle
     from ghillie.evidence.service import EvidenceBundleService
+    from ghillie.reporting.sink import ReportSink
+    from ghillie.silver.storage import Repository
     from ghillie.status.protocol import StatusModel
 
 
@@ -76,12 +79,13 @@ class ReportingService:
 
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         session_factory: async_sessionmaker[AsyncSession],
         evidence_service: EvidenceBundleService,
         status_model: StatusModel,
         config: ReportingConfig | None = None,
+        report_sink: ReportSink | None = None,
     ) -> None:
         """Configure the service with dependencies.
 
@@ -95,12 +99,18 @@ class ReportingService:
             Model for generating status summaries.
         config
             Optional reporting configuration; uses defaults if not provided.
+        report_sink
+            Optional sink for writing rendered Markdown reports. When
+            provided, each generated report is rendered to Markdown and
+            written via the sink. When ``None``, no Markdown output is
+            produced.
 
         """
         self._session_factory = session_factory
         self._evidence_service = evidence_service
         self._status_model = status_model
         self._config = config or ReportingConfig()
+        self._report_sink = report_sink
 
     async def compute_next_window(
         self,
@@ -238,7 +248,11 @@ class ReportingService:
             if persisted is None:  # pragma: no cover - defensive check
                 msg = f"Report {report_id} not found after commit"
                 raise RuntimeError(msg)
-            return persisted
+
+        if self._report_sink is not None:
+            await self._write_to_sink(persisted, repository_id)
+
+        return persisted
 
     def _get_model_identifier(self) -> str:
         """Return the model identifier for report metadata."""
@@ -265,6 +279,44 @@ class ReportingService:
                 event_fact_id=event_fact_id,
             )
             session.add(coverage)
+
+    async def _write_to_sink(
+        self,
+        report: Report,
+        repository_id: str,
+    ) -> None:
+        """Render a report to Markdown and write it via the sink.
+
+        Parameters
+        ----------
+        report
+            The persisted Gold layer report.
+        repository_id
+            The Silver layer repository ID, used to fetch owner/name.
+
+        """
+        from ghillie.silver.storage import Repository as _Repository
+
+        async with self._session_factory() as session:
+            repo: Repository | None = await session.get(_Repository, repository_id)
+
+        if repo is None:
+            return
+
+        markdown = render_report_markdown(
+            report, owner=repo.github_owner, name=repo.github_name
+        )
+
+        # Caller guarantees _report_sink is not None; guard defensively.
+        if self._report_sink is None:  # pragma: no cover
+            return
+        await self._report_sink.write_report(
+            markdown,
+            owner=repo.github_owner,
+            name=repo.github_name,
+            report_id=str(report.id),
+            window_end=report.window_end.strftime("%Y-%m-%d"),
+        )
 
     async def run_for_repository(
         self,
