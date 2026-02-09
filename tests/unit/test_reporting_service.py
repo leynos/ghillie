@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses as dc
 import datetime as dt
 import typing as typ
 from pathlib import Path
@@ -76,6 +77,24 @@ async def _create_repository(
         return repo.id
 
 
+@dc.dataclass(frozen=True, slots=True)
+class RepositoryEventSpec:
+    """Encapsulates test repository and event data for helper functions.
+
+    Groups the four test-data parameters that are always passed together
+    when setting up a repository with a commit event, reducing the
+    parameter count of ``_setup_test_repository_with_event``.
+
+    .. note:: The name avoids the ``Test`` prefix so pytest does not
+       attempt to collect this dataclass as a test class.
+    """
+
+    owner: str = "acme"
+    name: str = "widget"
+    commit_hash: str = "test001"
+    commit_time: dt.datetime | None = None
+
+
 async def _get_repo_id(
     session_factory: async_sessionmaker[AsyncSession],
     owner: str = "acme",
@@ -95,14 +114,11 @@ async def _get_repo_id(
         return repo.id
 
 
-async def _setup_test_repository_with_event(  # noqa: PLR0913
+async def _setup_test_repository_with_event(
     writer: RawEventWriter,
     transformer: RawEventTransformer,
     session_factory: async_sessionmaker[AsyncSession],
-    owner: str = "acme",
-    name: str = "widget",
-    commit_hash: str = "test001",
-    commit_time: dt.datetime | None = None,
+    spec: RepositoryEventSpec | None = None,
 ) -> str:
     """Ingest a commit event and return the repository ID.
 
@@ -118,14 +134,9 @@ async def _setup_test_repository_with_event(  # noqa: PLR0913
         Raw event transformer for processing pending events.
     session_factory
         Async session factory for querying the repository.
-    owner
-        GitHub repository owner. Default ``"acme"``.
-    name
-        GitHub repository name. Default ``"widget"``.
-    commit_hash
-        Unique commit hash for the event. Default ``"test001"``.
-    commit_time
-        Commit timestamp. Defaults to 2024-07-05 10:00 UTC.
+    spec
+        Test repository and event data.  Uses defaults (``acme/widget``,
+        hash ``"test001"``, commit at 2024-07-05 10:00 UTC) when *None*.
 
     Returns
     -------
@@ -133,13 +144,18 @@ async def _setup_test_repository_with_event(  # noqa: PLR0913
         The Silver layer repository ID.
 
     """
-    effective_time = commit_time or dt.datetime(2024, 7, 5, 10, 0, tzinfo=dt.UTC)
-    repo_slug = f"{owner}/{name}"
+    test_spec = spec or RepositoryEventSpec()
+    effective_time = test_spec.commit_time or dt.datetime(
+        2024, 7, 5, 10, 0, tzinfo=dt.UTC
+    )
+    repo_slug = f"{test_spec.owner}/{test_spec.name}"
     await writer.ingest(
-        commit_envelope(repo_slug, commit_hash, effective_time, "feat: test event")
+        commit_envelope(
+            repo_slug, test_spec.commit_hash, effective_time, "feat: test event"
+        )
     )
     await transformer.process_pending()
-    return await _get_repo_id(session_factory, owner, name)
+    return await _get_repo_id(session_factory, test_spec.owner, test_spec.name)
 
 
 @pytest_asyncio.fixture
@@ -429,7 +445,10 @@ class TestReportingServiceSinkIntegration:
         service = ReportingService(deps, report_sink=sink)
 
         repo_id = await _setup_test_repository_with_event(
-            writer, transformer, session_factory, commit_hash="sink001"
+            writer,
+            transformer,
+            session_factory,
+            spec=RepositoryEventSpec(commit_hash="sink001"),
         )
 
         await service.generate_report(
@@ -458,7 +477,10 @@ class TestReportingServiceSinkIntegration:
         service = ReportingService(deps)
 
         repo_id = await _setup_test_repository_with_event(
-            writer, transformer, session_factory, commit_hash="nosink1"
+            writer,
+            transformer,
+            session_factory,
+            spec=RepositoryEventSpec(commit_hash="nosink1"),
         )
 
         report = await service.generate_report(
@@ -490,8 +512,10 @@ class TestReportingServiceSinkIntegration:
             writer,
             transformer,
             session_factory,
-            commit_hash="run001",
-            commit_time=dt.datetime(2024, 7, 10, 10, 0, tzinfo=dt.UTC),
+            spec=RepositoryEventSpec(
+                commit_hash="run001",
+                commit_time=dt.datetime(2024, 7, 10, 10, 0, tzinfo=dt.UTC),
+            ),
         )
         report = await service.run_for_repository(repo_id, as_of=now)
 

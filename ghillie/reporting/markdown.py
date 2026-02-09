@@ -44,15 +44,24 @@ def _format_generated_at(value: dt.datetime) -> str:
     return value.strftime("%Y-%m-%d %H:%M UTC")
 
 
-def _render_title(  # noqa: PLR0913
+def _render_title(
     lines: list[str],
-    owner: str,
-    name: str,
-    start: str,
-    end: str,
+    repo_slug: str,
+    date_range: str,
 ) -> None:
-    """Append the level-1 heading with repository slug and date range."""
-    lines.append(f"# {owner}/{name} — Status report ({start} to {end})")
+    """Append the level-1 heading with repository slug and date range.
+
+    Parameters
+    ----------
+    lines
+        Accumulator for rendered Markdown lines.
+    repo_slug
+        Repository identifier in ``"owner/name"`` format.
+    date_range
+        Date range in ``"YYYY-MM-DD to YYYY-MM-DD"`` format.
+
+    """
+    lines.append(f"# {repo_slug} — Status report ({date_range})")
     lines.append("")
 
 
@@ -136,8 +145,10 @@ def render_report_markdown(
 
     window_start_str = _format_date(report.window_start)
     window_end_str = _format_date(report.window_end)
+    repo_slug = f"{owner}/{name}"
+    date_range = f"{window_start_str} to {window_end_str}"
 
-    _render_title(lines, owner, name, window_start_str, window_end_str)
+    _render_title(lines, repo_slug, date_range)
     _render_status(lines, ms)
     _render_summary_section(lines, ms)
     _render_bullet_section(lines, "Highlights", ms.get("highlights", []))

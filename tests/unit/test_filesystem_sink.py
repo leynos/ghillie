@@ -27,24 +27,34 @@ class TestFilesystemReportSink:
         """Return a FilesystemReportSink writing to the temp directory."""
         return FilesystemReportSink(base_path)
 
-    def _write(  # noqa: PLR0913
+    def _write(
         self,
         sink: FilesystemReportSink,
         *,
         markdown: str = "# Test Report\n\nContent here.",
-        owner: str = "acme",
-        name: str = "widget",
-        report_id: str = "rpt-001",
-        window_end: str = "2024-07-08",
+        metadata: ReportMetadata | None = None,
     ) -> None:
-        """Run the async write_report synchronously."""
-        metadata = ReportMetadata(
-            owner=owner,
-            name=name,
-            report_id=report_id,
-            window_end=window_end,
+        """Run the async write_report synchronously.
+
+        Parameters
+        ----------
+        sink
+            The filesystem sink under test.
+        markdown
+            Rendered Markdown content to write.
+        metadata
+            Report metadata.  Defaults to standard test values
+            (``acme/widget``, report ``rpt-001``, window end
+            ``2024-07-08``).
+
+        """
+        effective = metadata or ReportMetadata(
+            owner="acme",
+            name="widget",
+            report_id="rpt-001",
+            window_end="2024-07-08",
         )
-        asyncio.run(sink.write_report(markdown, metadata=metadata))
+        asyncio.run(sink.write_report(markdown, metadata=effective))
 
     def test_write_creates_owner_name_directory(
         self, sink: FilesystemReportSink, base_path: Path
@@ -68,7 +78,7 @@ class TestFilesystemReportSink:
         self, sink: FilesystemReportSink, base_path: Path
     ) -> None:
         """A dated file is written alongside latest.md."""
-        self._write(sink, report_id="rpt-001", window_end="2024-07-08")
+        self._write(sink)
 
         dated = base_path / "acme" / "widget" / "2024-07-08-rpt-001.md"
         assert dated.is_file(), "Dated report file should be created"
@@ -87,8 +97,17 @@ class TestFilesystemReportSink:
         self, sink: FilesystemReportSink, base_path: Path
     ) -> None:
         """Writing a new report replaces the existing latest.md."""
-        self._write(sink, markdown="Old report", report_id="rpt-001")
-        self._write(sink, markdown="New report", report_id="rpt-002")
+        self._write(sink, markdown="Old report")
+        self._write(
+            sink,
+            markdown="New report",
+            metadata=ReportMetadata(
+                owner="acme",
+                name="widget",
+                report_id="rpt-002",
+                window_end="2024-07-08",
+            ),
+        )
 
         latest = base_path / "acme" / "widget" / "latest.md"
         assert latest.read_text(encoding="utf-8") == "New report"
@@ -100,14 +119,22 @@ class TestFilesystemReportSink:
         self._write(
             sink,
             markdown="First",
-            report_id="rpt-001",
-            window_end="2024-07-01",
+            metadata=ReportMetadata(
+                owner="acme",
+                name="widget",
+                report_id="rpt-001",
+                window_end="2024-07-01",
+            ),
         )
         self._write(
             sink,
             markdown="Second",
-            report_id="rpt-002",
-            window_end="2024-07-08",
+            metadata=ReportMetadata(
+                owner="acme",
+                name="widget",
+                report_id="rpt-002",
+                window_end="2024-07-08",
+            ),
         )
 
         repo_dir = base_path / "acme" / "widget"
