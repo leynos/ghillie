@@ -14,6 +14,8 @@ from ghillie.status import MockStatusModel
 from tests.helpers.event_builders import commit_envelope
 
 if typ.TYPE_CHECKING:
+    from pathlib import Path
+
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
@@ -277,3 +279,64 @@ class TestGenerateReportsForEstateJob:
         # Only the active repository should have a report
         non_none_results = [r for r in results if r is not None]
         assert len(non_none_results) == 1, "Only active repo should have report"
+
+
+class TestBuildServiceWiring:
+    """Tests for _build_service actor-level wiring."""
+
+    def test_build_service_creates_sink_when_env_set(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """Sink is injected when GHILLIE_REPORT_SINK_PATH is set."""
+        from pathlib import Path as _Path
+
+        from ghillie.reporting.actor import (
+            _ENGINE_CACHE,
+            _SESSION_FACTORY_CACHE,
+            _build_service,
+        )
+        from ghillie.reporting.filesystem_sink import FilesystemReportSink
+
+        sink_path = tmp_path / "reports"
+        db_url = "sqlite+aiosqlite://"
+
+        monkeypatch.setenv("GHILLIE_REPORT_SINK_PATH", str(sink_path))
+        monkeypatch.setenv("GHILLIE_STATUS_MODEL_BACKEND", "mock")
+        monkeypatch.delenv("GHILLIE_REPORTING_WINDOW_DAYS", raising=False)
+
+        try:
+            service = _build_service(db_url)
+
+            assert isinstance(service._report_sink, FilesystemReportSink)
+            assert service._report_sink._base_path == _Path(str(sink_path))
+        finally:
+            # Clean up module-level caches to avoid polluting other tests.
+            _ENGINE_CACHE.pop(db_url, None)
+            _SESSION_FACTORY_CACHE.pop(db_url, None)
+
+    def test_build_service_no_sink_when_env_unset(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """_build_service leaves report_sink as None when env var is absent."""
+        from ghillie.reporting.actor import (
+            _ENGINE_CACHE,
+            _SESSION_FACTORY_CACHE,
+            _build_service,
+        )
+
+        db_url = "sqlite+aiosqlite://"
+
+        monkeypatch.delenv("GHILLIE_REPORT_SINK_PATH", raising=False)
+        monkeypatch.setenv("GHILLIE_STATUS_MODEL_BACKEND", "mock")
+        monkeypatch.delenv("GHILLIE_REPORTING_WINDOW_DAYS", raising=False)
+
+        try:
+            service = _build_service(db_url)
+
+            assert service._report_sink is None
+        finally:
+            _ENGINE_CACHE.pop(db_url, None)
+            _SESSION_FACTORY_CACHE.pop(db_url, None)

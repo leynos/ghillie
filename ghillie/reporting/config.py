@@ -25,10 +25,7 @@ from __future__ import annotations
 
 import dataclasses as dc
 import os
-import typing as typ
-
-if typ.TYPE_CHECKING:
-    from pathlib import Path
+from pathlib import Path
 
 
 @dc.dataclass(frozen=True, slots=True)
@@ -96,8 +93,6 @@ class ReportingConfig:
         report_sink_path: Path | None = None
         raw_sink_path = os.environ.get("GHILLIE_REPORT_SINK_PATH", "")
         if raw_sink_path.strip():
-            from pathlib import Path as _Path
-
-            report_sink_path = _Path(raw_sink_path.strip())
+            report_sink_path = Path(raw_sink_path.strip())
 
         return cls(window_days=window_days, report_sink_path=report_sink_path)

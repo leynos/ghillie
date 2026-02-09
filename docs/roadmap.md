@@ -311,10 +311,10 @@ using the evidence and model integrations.
   previous report's end time. Behaviour-Driven Development (BDD) and unit tests
   cover report generation, window computation, and estate-wide scheduling.
 
-- [x] **Task 2.3.b – Define report Markdown and storage**
-  Define a Markdown format for repository reports, including status summary,
-  highlights, risks, and next steps. Store the rendered Markdown either in a
-  dedicated status repository or object storage bucket.
+- [x] **Task 2.3.b – Implement report Markdown rendering and filesystem
+  storage** Implement a Markdown renderer for repository reports covering
+  status summary, highlights, risks, and next steps. Provide a filesystem
+  storage adapter that writes rendered reports to a configurable base directory.
 
   *Completion criteria:* Operators can navigate to a repository's latest report
   via a predictable path or URL, and the report content matches the data stored
@@ -327,8 +327,8 @@ using the evidence and model integrations.
   `{base_path}/{owner}/{name}/latest.md` and dated archive files.
   `ReportingService` optionally invokes the sink after report persistence.
   `GHILLIE_REPORT_SINK_PATH` environment variable controls filesystem sink
-  creation in Dramatiq actors. Unit tests (9 renderer, 6 sink, 6
-  config/integration) and BDD scenarios (2) validate the implementation.
+  creation in Dramatiq actors. Unit tests (nine renderer, six sink, six
+  config/integration) and BDD scenarios (two) validate the implementation.
 
 - [ ] **Task 2.3.c – Provide an on-demand reporting entry-point**  
   Implement a CLI command or API endpoint that regenerates a repository’s

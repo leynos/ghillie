@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import typing as typ
 
+from ghillie.common.slug import repo_slug as _repo_slug
+
 if typ.TYPE_CHECKING:
     import datetime as dt
 
@@ -145,10 +147,10 @@ def render_report_markdown(
 
     window_start_str = _format_date(report.window_start)
     window_end_str = _format_date(report.window_end)
-    repo_slug = f"{owner}/{name}"
+    slug = _repo_slug(owner, name)
     date_range = f"{window_start_str} to {window_end_str}"
 
-    _render_title(lines, repo_slug, date_range)
+    _render_title(lines, slug, date_range)
     _render_status(lines, ms)
     _render_summary_section(lines, ms)
     _render_bullet_section(lines, "Highlights", ms.get("highlights", []))

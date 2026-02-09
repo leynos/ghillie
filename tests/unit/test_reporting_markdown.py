@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses as dc
 import datetime as dt
+import typing as typ
 import uuid
 
 from ghillie.gold.storage import Report, ReportScope
@@ -27,9 +28,20 @@ class ReportTestMetadata:
     report_id: str | None = None
 
 
+_SENTINEL: typ.Final = object()
+
+_DEFAULT_MACHINE_SUMMARY: dict[str, typ.Any] = {
+    "summary": "Repository is progressing well.",
+    "status": "on_track",
+    "highlights": ["Feature A shipped", "Test coverage improved"],
+    "risks": ["Dependency upgrade pending"],
+    "next_steps": ["Review open PRs", "Plan next sprint"],
+}
+
+
 def _build_report(
     *,
-    machine_summary: dict | None = None,
+    machine_summary: dict[str, typ.Any] | None | object = _SENTINEL,
     metadata: ReportTestMetadata | None = None,
 ) -> Report:
     """Create a Report instance for testing the Markdown renderer.
@@ -37,14 +49,18 @@ def _build_report(
     Parameters
     ----------
     machine_summary
-        Optional machine summary dict. Defaults to a representative
-        on-track report with highlights, risks, and next steps.
+        Machine summary dict.  Defaults to a representative on-track
+        report with highlights, risks, and next steps.  Pass ``None``
+        or ``{}`` explicitly to test edge cases.
     metadata
         Optional metadata overrides for model, window dates,
         generated_at, and report_id.
 
     """
     meta = metadata or ReportTestMetadata()
+    effective_summary = (
+        _DEFAULT_MACHINE_SUMMARY if machine_summary is _SENTINEL else machine_summary
+    )
     return Report(
         id=meta.report_id or str(uuid.uuid4()),
         scope=ReportScope.REPOSITORY,
@@ -54,14 +70,7 @@ def _build_report(
         generated_at=meta.generated_at or dt.datetime(2024, 7, 8, 12, 0, tzinfo=dt.UTC),
         model=meta.model,
         human_text="Raw LLM summary",
-        machine_summary=machine_summary
-        or {
-            "summary": "Repository is progressing well.",
-            "status": "on_track",
-            "highlights": ["Feature A shipped", "Test coverage improved"],
-            "risks": ["Dependency upgrade pending"],
-            "next_steps": ["Review open PRs", "Plan next sprint"],
-        },
+        machine_summary=effective_summary,
     )
 
 
@@ -172,3 +181,27 @@ class TestRenderReportMarkdown:
         assert "Unknown" in md
         assert "## Summary" not in md
         assert "## Highlights" not in md
+
+    def test_render_handles_none_machine_summary(self) -> None:
+        """None machine_summary produces a well-formed report."""
+        report = _build_report(machine_summary=None)
+        md = render_report_markdown(report, owner="acme", name="widget")
+
+        assert "acme/widget" in md
+        assert "Unknown" in md
+        assert "## Summary" not in md
+        assert "## Highlights" not in md
+        assert "## Risks" not in md
+        assert "## Next steps" not in md
+
+    def test_render_handles_empty_machine_summary(self) -> None:
+        """Completely empty machine_summary produces a well-formed report."""
+        report = _build_report(machine_summary={})
+        md = render_report_markdown(report, owner="acme", name="widget")
+
+        assert "acme/widget" in md
+        assert "Unknown" in md
+        assert "## Summary" not in md
+        assert "## Highlights" not in md
+        assert "## Risks" not in md
+        assert "## Next steps" not in md

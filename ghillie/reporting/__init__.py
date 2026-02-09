@@ -30,12 +30,12 @@ Generate a report for a repository:
 >>> from ghillie.reporting import ReportingConfig, ReportingService
 >>> from ghillie.status import MockStatusModel
 >>>
->>> deps = ReportingServiceDependencies(
+>>> service = ReportingService.create(
 ...     session_factory=session_factory,
 ...     evidence_service=EvidenceBundleService(session_factory),
 ...     status_model=MockStatusModel(),
+...     config=ReportingConfig(),
 ... )
->>> service = ReportingService(deps, config=ReportingConfig())
 >>> report = await service.run_for_repository(repository_id)
 
 """

@@ -36,7 +36,7 @@ Success is observable when:
 - [x] Write unit tests for `ReportingConfig` extension
 - [x] Write unit tests for filesystem sink adapter
 - [x] Write unit tests for `ReportingService` sink integration
-- [x] Write BDD feature and step definitions
+- [x] Write Behaviour-Driven Development (BDD) feature and step definitions
 - [x] Implement `ReportingConfig` extension (`report_sink_path`)
 - [x] Implement Markdown renderer module
 - [x] Implement `ReportSink` protocol
@@ -66,7 +66,7 @@ Success is observable when:
    use `extend()` with generator expressions.
 
 4. **`S101` in production code:** `assert` statements in production code
-   are flagged by ruff. Replaced with defensive `if ... return` guards in
+   are flagged by ruff. Replaced with defensive `if \u2026 return` guards in
    `_write_to_sink()`.
 
 ## Decision log
@@ -89,7 +89,7 @@ Success is observable when:
 5. **Renderer reads from `machine_summary`, not `human_text`:** The
    `machine_summary` is the structured data produced by `to_machine_summary()`
    from the `RepositoryStatusResult`. By rendering from this structured data,
-   we guarantee the Markdown content matches the database exactly, satisfying
+   the Markdown content is guaranteed to match the database exactly, satisfying
    the completion criteria. The `human_text` field remains untouched and
    continues to store the raw LLM summary string.
 

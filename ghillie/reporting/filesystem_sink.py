@@ -75,5 +75,7 @@ class FilesystemReportSink:
         latest_path = repo_dir / "latest.md"
         dated_path = repo_dir / f"{metadata.window_end}-{metadata.report_id}.md"
 
-        await asyncio.to_thread(latest_path.write_text, markdown, "utf-8")
-        await asyncio.to_thread(dated_path.write_text, markdown, "utf-8")
+        await asyncio.gather(
+            asyncio.to_thread(latest_path.write_text, markdown, "utf-8"),
+            asyncio.to_thread(dated_path.write_text, markdown, "utf-8"),
+        )

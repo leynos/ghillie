@@ -184,9 +184,8 @@ def given_repo_with_events_no_sink(
     return _build_markdown_context(session_factory, tmp_path, with_sink=False)
 
 
-@when("I generate a report with the sink")
-def when_generate_with_sink(markdown_context: MarkdownContext) -> None:
-    """Generate a report using the service with a sink configured."""
+def _generate_report(markdown_context: MarkdownContext) -> None:
+    """Run the reporting service and store the result in context."""
 
     async def _run() -> Report | None:
         service = markdown_context["service"]
@@ -194,29 +193,30 @@ def when_generate_with_sink(markdown_context: MarkdownContext) -> None:
         now = dt.datetime(2024, 7, 14, tzinfo=dt.UTC)
         return await service.run_for_repository(repo_id, as_of=now)
 
-    report = asyncio.run(_run())
-    markdown_context["report"] = report
+    markdown_context["report"] = asyncio.run(_run())
+
+
+@when("I generate a report with the sink")
+def when_generate_with_sink(markdown_context: MarkdownContext) -> None:
+    """Generate a report using the service with a sink configured."""
+    _generate_report(markdown_context)
 
 
 @when("I generate a report without a sink")
 def when_generate_without_sink(markdown_context: MarkdownContext) -> None:
     """Generate a report using the service without a sink."""
+    _generate_report(markdown_context)
 
-    async def _run() -> Report | None:
-        service = markdown_context["service"]
-        repo_id = markdown_context["repo_id"]
-        now = dt.datetime(2024, 7, 14, tzinfo=dt.UTC)
-        return await service.run_for_repository(repo_id, as_of=now)
 
-    report = asyncio.run(_run())
-    markdown_context["report"] = report
+def _repo_dir(markdown_context: MarkdownContext) -> Path:
+    """Return the sink output directory for the test repository."""
+    return markdown_context["sink_path"] / "acme" / "widget"
 
 
 @then("a latest.md file exists at the predictable path")
 def then_latest_md_exists(markdown_context: MarkdownContext) -> None:
     """Assert that latest.md was created at the expected path."""
-    sink_path = markdown_context["sink_path"]
-    latest = sink_path / "acme" / "widget" / "latest.md"
+    latest = _repo_dir(markdown_context) / "latest.md"
     assert latest.is_file(), f"latest.md should exist at {latest}"
 
 
@@ -225,8 +225,7 @@ def then_markdown_includes_repo_name(
     markdown_context: MarkdownContext,
 ) -> None:
     """Assert that the Markdown contains the repository name."""
-    sink_path = markdown_context["sink_path"]
-    latest = sink_path / "acme" / "widget" / "latest.md"
+    latest = _repo_dir(markdown_context) / "latest.md"
     content = latest.read_text(encoding="utf-8")
     assert "acme/widget" in content, "Markdown should contain the repository slug"
 
@@ -236,8 +235,7 @@ def then_markdown_includes_status(
     markdown_context: MarkdownContext,
 ) -> None:
     """Assert that the Markdown contains the status summary."""
-    sink_path = markdown_context["sink_path"]
-    latest = sink_path / "acme" / "widget" / "latest.md"
+    latest = _repo_dir(markdown_context) / "latest.md"
     content = latest.read_text(encoding="utf-8")
     assert "**Status:**" in content, "Markdown should contain the status indicator"
 
@@ -245,8 +243,7 @@ def then_markdown_includes_status(
 @then("a dated report file also exists")
 def then_dated_report_exists(markdown_context: MarkdownContext) -> None:
     """Assert that a dated report file was created."""
-    sink_path = markdown_context["sink_path"]
-    repo_dir = sink_path / "acme" / "widget"
+    repo_dir = _repo_dir(markdown_context)
     dated_files = [f for f in repo_dir.iterdir() if f.name != "latest.md"]
     assert len(dated_files) == 1, "Exactly one dated report file should exist"
     assert dated_files[0].name.endswith(".md"), "Dated file should have .md extension"
