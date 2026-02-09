@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses as dc
 import datetime as dt
 import uuid
 
@@ -9,24 +10,49 @@ from ghillie.gold.storage import Report, ReportScope
 from ghillie.reporting.markdown import render_report_markdown
 
 
-def _build_report(  # noqa: PLR0913
+@dc.dataclass(frozen=True, slots=True)
+class ReportTestMetadata:
+    """Optional metadata overrides for test report creation.
+
+    Encapsulates the five metadata fields that callers may wish to
+    override when constructing reports for testing. Fields left as
+    ``None`` receive sensible defaults in ``_build_report``.
+
+    """
+
+    model: str = "mock-v1"
+    window_start: dt.datetime | None = None
+    window_end: dt.datetime | None = None
+    generated_at: dt.datetime | None = None
+    report_id: str | None = None
+
+
+def _build_report(
     *,
     machine_summary: dict | None = None,
-    model: str = "mock-v1",
-    window_start: dt.datetime | None = None,
-    window_end: dt.datetime | None = None,
-    generated_at: dt.datetime | None = None,
-    report_id: str | None = None,
+    metadata: ReportTestMetadata | None = None,
 ) -> Report:
-    """Create a Report instance for testing the Markdown renderer."""
+    """Create a Report instance for testing the Markdown renderer.
+
+    Parameters
+    ----------
+    machine_summary
+        Optional machine summary dict. Defaults to a representative
+        on-track report with highlights, risks, and next steps.
+    metadata
+        Optional metadata overrides for model, window dates,
+        generated_at, and report_id.
+
+    """
+    meta = metadata or ReportTestMetadata()
     return Report(
-        id=report_id or str(uuid.uuid4()),
+        id=meta.report_id or str(uuid.uuid4()),
         scope=ReportScope.REPOSITORY,
         repository_id=str(uuid.uuid4()),
-        window_start=window_start or dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
-        window_end=window_end or dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
-        generated_at=generated_at or dt.datetime(2024, 7, 8, 12, 0, tzinfo=dt.UTC),
-        model=model,
+        window_start=meta.window_start or dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+        window_end=meta.window_end or dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+        generated_at=meta.generated_at or dt.datetime(2024, 7, 8, 12, 0, tzinfo=dt.UTC),
+        model=meta.model,
         human_text="Raw LLM summary",
         machine_summary=machine_summary
         or {
@@ -107,8 +133,10 @@ class TestRenderReportMarkdown:
         """Footer includes model, generated_at, window, and report ID."""
         report_id = str(uuid.uuid4())
         report = _build_report(
-            model="gpt-5.1-thinking",
-            report_id=report_id,
+            metadata=ReportTestMetadata(
+                model="gpt-5.1-thinking",
+                report_id=report_id,
+            ),
         )
         md = render_report_markdown(report, owner="acme", name="widget")
 

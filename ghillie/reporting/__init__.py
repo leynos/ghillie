@@ -8,12 +8,16 @@ Public API
 ----------
 FilesystemReportSink
     Filesystem adapter for the ``ReportSink`` protocol.
+ReportMetadata
+    Frozen dataclass grouping report identification parameters.
 ReportSink
     Protocol (port) for writing rendered Markdown reports to storage.
 ReportingConfig
     Configuration for reporting window computation and scheduling.
 ReportingService
     Service that orchestrates report generation workflow.
+ReportingServiceDependencies
+    Frozen dataclass grouping core dependencies for ``ReportingService``.
 ReportingWindow
     Dataclass representing a time window for reporting.
 render_report_markdown
@@ -26,12 +30,12 @@ Generate a report for a repository:
 >>> from ghillie.reporting import ReportingConfig, ReportingService
 >>> from ghillie.status import MockStatusModel
 >>>
->>> service = ReportingService(
+>>> deps = ReportingServiceDependencies(
 ...     session_factory=session_factory,
 ...     evidence_service=EvidenceBundleService(session_factory),
 ...     status_model=MockStatusModel(),
-...     config=ReportingConfig(),
 ... )
+>>> service = ReportingService(deps, config=ReportingConfig())
 >>> report = await service.run_for_repository(repository_id)
 
 """
@@ -43,14 +47,20 @@ from ghillie.reporting.actor import (
 from ghillie.reporting.config import ReportingConfig
 from ghillie.reporting.filesystem_sink import FilesystemReportSink
 from ghillie.reporting.markdown import render_report_markdown
-from ghillie.reporting.service import ReportingService, ReportingWindow
-from ghillie.reporting.sink import ReportSink
+from ghillie.reporting.service import (
+    ReportingService,
+    ReportingServiceDependencies,
+    ReportingWindow,
+)
+from ghillie.reporting.sink import ReportMetadata, ReportSink
 
 __all__ = [
     "FilesystemReportSink",
+    "ReportMetadata",
     "ReportSink",
     "ReportingConfig",
     "ReportingService",
+    "ReportingServiceDependencies",
     "ReportingWindow",
     "generate_report_job",
     "generate_reports_for_estate_job",

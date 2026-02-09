@@ -8,6 +8,7 @@ import typing as typ
 import pytest
 
 from ghillie.reporting.filesystem_sink import FilesystemReportSink
+from ghillie.reporting.sink import ReportMetadata
 
 if typ.TYPE_CHECKING:
     from pathlib import Path
@@ -37,15 +38,13 @@ class TestFilesystemReportSink:
         window_end: str = "2024-07-08",
     ) -> None:
         """Run the async write_report synchronously."""
-        asyncio.run(
-            sink.write_report(
-                markdown,
-                owner=owner,
-                name=name,
-                report_id=report_id,
-                window_end=window_end,
-            )
+        metadata = ReportMetadata(
+            owner=owner,
+            name=name,
+            report_id=report_id,
+            window_end=window_end,
         )
+        asyncio.run(sink.write_report(markdown, metadata=metadata))
 
     def test_write_creates_owner_name_directory(
         self, sink: FilesystemReportSink, base_path: Path

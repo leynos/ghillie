@@ -44,6 +44,68 @@ def _format_generated_at(value: dt.datetime) -> str:
     return value.strftime("%Y-%m-%d %H:%M UTC")
 
 
+def _render_title(  # noqa: PLR0913
+    lines: list[str],
+    owner: str,
+    name: str,
+    start: str,
+    end: str,
+) -> None:
+    """Append the level-1 heading with repository slug and date range."""
+    lines.append(f"# {owner}/{name} — Status report ({start} to {end})")
+    lines.append("")
+
+
+def _render_status(lines: list[str], ms: dict[str, typ.Any]) -> None:
+    """Append the bold status indicator line."""
+    status_raw = str(ms.get("status", "unknown"))
+    status_label = _STATUS_LABELS.get(status_raw, status_raw)
+    lines.append(f"**Status:** {status_label}")
+    lines.append("")
+
+
+def _render_summary_section(lines: list[str], ms: dict[str, typ.Any]) -> None:
+    """Append the summary section if present."""
+    summary = ms.get("summary", "")
+    if summary:
+        lines.append("## Summary")
+        lines.append("")
+        lines.append(str(summary))
+        lines.append("")
+
+
+def _render_bullet_section(
+    lines: list[str],
+    heading: str,
+    items: list[str],
+) -> None:
+    """Append a bulleted section if items are non-empty."""
+    if items:
+        lines.append(f"## {heading}")
+        lines.append("")
+        lines.extend(f"- {item}" for item in items)
+        lines.append("")
+
+
+def _render_metadata_footer(
+    lines: list[str],
+    report: Report,
+    start: str,
+    end: str,
+) -> None:
+    """Append the horizontal rule and metadata footer."""
+    lines.append("---")
+    lines.append("")
+    generated_str = _format_generated_at(report.generated_at)
+    model = report.model or "unknown"
+    lines.append(
+        f"*Generated at {generated_str} by {model}"
+        f" | Window: {start} to {end}"
+        f" | Report ID: {report.id}*"
+    )
+    lines.append("")
+
+
 def render_report_markdown(
     report: Report,
     *,
@@ -72,62 +134,15 @@ def render_report_markdown(
     ms: dict[str, typ.Any] = report.machine_summary or {}
     lines: list[str] = []
 
-    # Title
     window_start_str = _format_date(report.window_start)
     window_end_str = _format_date(report.window_end)
-    lines.append(
-        f"# {owner}/{name} — Status report ({window_start_str} to {window_end_str})"
-    )
-    lines.append("")
 
-    # Status
-    status_raw = str(ms.get("status", "unknown"))
-    status_label = _STATUS_LABELS.get(status_raw, status_raw)
-    lines.append(f"**Status:** {status_label}")
-    lines.append("")
-
-    # Summary
-    summary = ms.get("summary", "")
-    if summary:
-        lines.append("## Summary")
-        lines.append("")
-        lines.append(str(summary))
-        lines.append("")
-
-    # Highlights
-    highlights: list[str] = ms.get("highlights", [])
-    if highlights:
-        lines.append("## Highlights")
-        lines.append("")
-        lines.extend(f"- {item}" for item in highlights)
-        lines.append("")
-
-    # Risks
-    risks: list[str] = ms.get("risks", [])
-    if risks:
-        lines.append("## Risks")
-        lines.append("")
-        lines.extend(f"- {item}" for item in risks)
-        lines.append("")
-
-    # Next steps
-    next_steps: list[str] = ms.get("next_steps", [])
-    if next_steps:
-        lines.append("## Next steps")
-        lines.append("")
-        lines.extend(f"- {item}" for item in next_steps)
-        lines.append("")
-
-    # Metadata footer
-    lines.append("---")
-    lines.append("")
-    generated_str = _format_generated_at(report.generated_at)
-    model = report.model or "unknown"
-    lines.append(
-        f"*Generated at {generated_str} by {model}"
-        f" | Window: {window_start_str} to {window_end_str}"
-        f" | Report ID: {report.id}*"
-    )
-    lines.append("")
+    _render_title(lines, owner, name, window_start_str, window_end_str)
+    _render_status(lines, ms)
+    _render_summary_section(lines, ms)
+    _render_bullet_section(lines, "Highlights", ms.get("highlights", []))
+    _render_bullet_section(lines, "Risks", ms.get("risks", []))
+    _render_bullet_section(lines, "Next steps", ms.get("next_steps", []))
+    _render_metadata_footer(lines, report, window_start_str, window_end_str)
 
     return "\n".join(lines)

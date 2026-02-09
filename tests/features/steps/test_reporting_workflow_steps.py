@@ -11,7 +11,12 @@ from pytest_bdd import given, scenario, then, when
 from ghillie.bronze import RawEventWriter
 from ghillie.evidence import EvidenceBundleService
 from ghillie.gold import Report, ReportCoverage, ReportScope
-from ghillie.reporting import ReportingConfig, ReportingService, ReportingWindow
+from ghillie.reporting import (
+    ReportingConfig,
+    ReportingService,
+    ReportingServiceDependencies,
+    ReportingWindow,
+)
 from ghillie.silver import RawEventTransformer, Repository
 from ghillie.status import MockStatusModel
 from tests.helpers.event_builders import commit_envelope
@@ -37,15 +42,12 @@ def _build_reporting_service(
         and default test configuration.
 
     """
-    evidence_service = EvidenceBundleService(session_factory)
-    status_model = MockStatusModel()
-    config = ReportingConfig(window_days=7)
-    return ReportingService(
+    deps = ReportingServiceDependencies(
         session_factory=session_factory,
-        evidence_service=evidence_service,
-        status_model=status_model,
-        config=config,
+        evidence_service=EvidenceBundleService(session_factory),
+        status_model=MockStatusModel(),
     )
+    return ReportingService(deps, config=ReportingConfig(window_days=7))
 
 
 class ReportingContext(typ.TypedDict, total=False):

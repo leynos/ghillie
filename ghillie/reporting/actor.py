@@ -41,7 +41,7 @@ from ghillie.evidence import EvidenceBundleService
 from ghillie.reporting._broker import ensure_broker_configured
 from ghillie.reporting.config import ReportingConfig
 from ghillie.reporting.errors import EstateReportError
-from ghillie.reporting.service import ReportingService
+from ghillie.reporting.service import ReportingService, ReportingServiceDependencies
 from ghillie.silver.storage import Repository
 from ghillie.status.factory import create_status_model
 
@@ -120,10 +120,13 @@ def _build_service(database_url: str) -> ReportingService:
 
         report_sink = FilesystemReportSink(config.report_sink_path)
 
-    return ReportingService(
+    dependencies = ReportingServiceDependencies(
         session_factory=session_factory,
         evidence_service=evidence_service,
         status_model=status_model,
+    )
+    return ReportingService(
+        dependencies,
         config=config,
         report_sink=report_sink,
     )

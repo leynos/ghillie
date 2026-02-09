@@ -11,7 +11,11 @@ from pytest_bdd import given, scenario, then, when
 from ghillie.bronze import RawEventWriter
 from ghillie.evidence import EvidenceBundleService
 from ghillie.gold import Report, ReportScope
-from ghillie.reporting import ReportingConfig, ReportingService
+from ghillie.reporting import (
+    ReportingConfig,
+    ReportingService,
+    ReportingServiceDependencies,
+)
 from ghillie.reporting.filesystem_sink import FilesystemReportSink
 from ghillie.silver import RawEventTransformer, Repository
 from ghillie.status import MockStatusModel
@@ -44,14 +48,14 @@ def _build_reporting_service(
         and default test configuration.
 
     """
-    evidence_service = EvidenceBundleService(session_factory)
-    status_model = MockStatusModel()
-    config = ReportingConfig(window_days=7)
-    return ReportingService(
+    deps = ReportingServiceDependencies(
         session_factory=session_factory,
-        evidence_service=evidence_service,
-        status_model=status_model,
-        config=config,
+        evidence_service=EvidenceBundleService(session_factory),
+        status_model=MockStatusModel(),
+    )
+    return ReportingService(
+        deps,
+        config=ReportingConfig(window_days=7),
         report_sink=report_sink,
     )
 
@@ -82,6 +86,80 @@ def test_no_sink_scenario() -> None:
     """Wrapper for pytest-bdd scenario."""
 
 
+async def _setup_repository_with_events(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> str:
+    """Create a repository with events and return its ID.
+
+    Ingests a commit event for ``acme/widget`` and processes it through
+    the raw event transformer, returning the resulting repository ID.
+
+    Parameters
+    ----------
+    session_factory
+        Async session factory for database access.
+
+    Returns
+    -------
+    str
+        The Silver layer repository ID.
+
+    """
+    writer = RawEventWriter(session_factory)
+    transformer = RawEventTransformer(session_factory)
+    commit_time = dt.datetime(2024, 7, 10, 10, 0, tzinfo=dt.UTC)
+    await writer.ingest(
+        commit_envelope("acme/widget", "abc123", commit_time, "feat: new feature")
+    )
+    await transformer.process_pending()
+
+    from sqlalchemy import select
+
+    async with session_factory() as session:
+        repo = await session.scalar(select(Repository))
+        assert repo is not None, "Repository should exist after event ingestion"
+        return repo.id
+
+
+def _build_markdown_context(
+    session_factory: async_sessionmaker[AsyncSession],
+    tmp_path: Path,
+    *,
+    with_sink: bool,
+) -> MarkdownContext:
+    """Build a MarkdownContext with or without a filesystem sink.
+
+    Parameters
+    ----------
+    session_factory
+        Async session factory for database access.
+    tmp_path
+        Temporary directory for report storage.
+    with_sink
+        When ``True``, create a ``FilesystemReportSink`` and inject it
+        into the reporting service.
+
+    Returns
+    -------
+    MarkdownContext
+        Populated context with service, repo_id, and sink_path.
+
+    """
+    sink_path = tmp_path / "reports"
+    sink = FilesystemReportSink(sink_path) if with_sink else None
+    service = _build_reporting_service(session_factory, report_sink=sink)
+
+    context: MarkdownContext = {
+        "session_factory": session_factory,
+        "service": service,
+        "sink_path": sink_path,
+    }
+
+    repo_id = asyncio.run(_setup_repository_with_events(session_factory))
+    context["repo_id"] = repo_id
+    return context
+
+
 @given(
     "a repository with events and a filesystem sink",
     target_fixture="markdown_context",
@@ -91,36 +169,7 @@ def given_repo_with_events_and_sink(
     tmp_path: Path,
 ) -> MarkdownContext:
     """Set up a repository with events and a filesystem sink."""
-    sink_path = tmp_path / "reports"
-    sink = FilesystemReportSink(sink_path)
-    service = _build_reporting_service(session_factory, report_sink=sink)
-
-    context: MarkdownContext = {
-        "session_factory": session_factory,
-        "service": service,
-        "sink_path": sink_path,
-    }
-
-    async def _setup() -> str:
-        repo_slug = "acme/widget"
-        commit_time = dt.datetime(2024, 7, 10, 10, 0, tzinfo=dt.UTC)
-        writer = RawEventWriter(session_factory)
-        transformer = RawEventTransformer(session_factory)
-        await writer.ingest(
-            commit_envelope(repo_slug, "abc123", commit_time, "feat: new feature")
-        )
-        await transformer.process_pending()
-
-        from sqlalchemy import select
-
-        async with session_factory() as session:
-            repo = await session.scalar(select(Repository))
-            assert repo is not None, "Repository should exist after event ingestion"
-            return repo.id
-
-    repo_id = asyncio.run(_setup())
-    context["repo_id"] = repo_id
-    return context
+    return _build_markdown_context(session_factory, tmp_path, with_sink=True)
 
 
 @given(
@@ -132,35 +181,7 @@ def given_repo_with_events_no_sink(
     tmp_path: Path,
 ) -> MarkdownContext:
     """Set up a repository with events but no sink configured."""
-    sink_path = tmp_path / "reports"
-    service = _build_reporting_service(session_factory)
-
-    context: MarkdownContext = {
-        "session_factory": session_factory,
-        "service": service,
-        "sink_path": sink_path,
-    }
-
-    async def _setup() -> str:
-        repo_slug = "acme/widget"
-        commit_time = dt.datetime(2024, 7, 10, 10, 0, tzinfo=dt.UTC)
-        writer = RawEventWriter(session_factory)
-        transformer = RawEventTransformer(session_factory)
-        await writer.ingest(
-            commit_envelope(repo_slug, "abc123", commit_time, "feat: new feature")
-        )
-        await transformer.process_pending()
-
-        from sqlalchemy import select
-
-        async with session_factory() as session:
-            repo = await session.scalar(select(Repository))
-            assert repo is not None, "Repository should exist after event ingestion"
-            return repo.id
-
-    repo_id = asyncio.run(_setup())
-    context["repo_id"] = repo_id
-    return context
+    return _build_markdown_context(session_factory, tmp_path, with_sink=False)
 
 
 @when("I generate a report with the sink")

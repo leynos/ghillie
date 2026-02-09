@@ -953,7 +953,11 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from ghillie.bronze import init_bronze_storage
 from ghillie.evidence import EvidenceBundleService
 from ghillie.gold import init_gold_storage
-from ghillie.reporting import ReportingConfig, ReportingService
+from ghillie.reporting import (
+    ReportingConfig,
+    ReportingService,
+    ReportingServiceDependencies,
+)
 from ghillie.silver import init_silver_storage
 from ghillie.status import create_status_model
 
@@ -966,16 +970,12 @@ async def main() -> None:
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
     # Create the reporting service with dependencies
-    evidence_service = EvidenceBundleService(session_factory)
-    status_model = create_status_model()  # Uses GHILLIE_STATUS_MODEL_BACKEND
-    config = ReportingConfig()
-
-    service = ReportingService(
+    deps = ReportingServiceDependencies(
         session_factory=session_factory,
-        evidence_service=evidence_service,
-        status_model=status_model,
-        config=config,
+        evidence_service=EvidenceBundleService(session_factory),
+        status_model=create_status_model(),  # Uses GHILLIE_STATUS_MODEL_BACKEND
     )
+    service = ReportingService(deps, config=ReportingConfig())
 
     # Generate a report for a specific repository
     repository_id = "..."  # Silver repository ID
@@ -1178,18 +1178,18 @@ from ghillie.reporting import (
     FilesystemReportSink,
     ReportingConfig,
     ReportingService,
+    ReportingServiceDependencies,
 )
 
-config = ReportingConfig.from_env()
-sink = FilesystemReportSink(Path("/var/lib/ghillie/reports"))
-
-service = ReportingService(
+deps = ReportingServiceDependencies(
     session_factory=session_factory,
     evidence_service=evidence_service,
     status_model=status_model,
-    config=config,
-    report_sink=sink,
 )
+config = ReportingConfig.from_env()
+sink = FilesystemReportSink(Path("/var/lib/ghillie/reports"))
+
+service = ReportingService(deps, config=config, report_sink=sink)
 
 # Reports are now rendered and stored as Markdown automatically
 report = await service.run_for_repository(repository_id)

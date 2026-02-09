@@ -14,7 +14,7 @@ from ghillie.evidence import EvidenceBundleService
 from ghillie.gold import Report, ReportCoverage, ReportScope
 from ghillie.reporting.config import ReportingConfig
 from ghillie.reporting.filesystem_sink import FilesystemReportSink
-from ghillie.reporting.service import ReportingService
+from ghillie.reporting.service import ReportingService, ReportingServiceDependencies
 from ghillie.silver import RawEventTransformer, Repository
 from ghillie.status import MockStatusModel
 from tests.helpers.event_builders import commit_envelope
@@ -33,15 +33,12 @@ def reporting_service(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> ReportingService:
     """Return a configured ReportingService for testing."""
-    evidence_service = EvidenceBundleService(session_factory)
-    status_model = MockStatusModel()
-    config = ReportingConfig()
-    return ReportingService(
+    deps = ReportingServiceDependencies(
         session_factory=session_factory,
-        evidence_service=evidence_service,
-        status_model=status_model,
-        config=config,
+        evidence_service=EvidenceBundleService(session_factory),
+        status_model=MockStatusModel(),
     )
+    return ReportingService(deps, config=ReportingConfig())
 
 
 @pytest.fixture
@@ -98,6 +95,53 @@ async def _get_repo_id(
         return repo.id
 
 
+async def _setup_test_repository_with_event(  # noqa: PLR0913
+    writer: RawEventWriter,
+    transformer: RawEventTransformer,
+    session_factory: async_sessionmaker[AsyncSession],
+    owner: str = "acme",
+    name: str = "widget",
+    commit_hash: str = "test001",
+    commit_time: dt.datetime | None = None,
+) -> str:
+    """Ingest a commit event and return the repository ID.
+
+    Creates a repository (via ingestion) with a single commit event,
+    processes it through the transformer, and returns the resulting
+    repository ID.
+
+    Parameters
+    ----------
+    writer
+        Raw event writer for ingesting the commit.
+    transformer
+        Raw event transformer for processing pending events.
+    session_factory
+        Async session factory for querying the repository.
+    owner
+        GitHub repository owner. Default ``"acme"``.
+    name
+        GitHub repository name. Default ``"widget"``.
+    commit_hash
+        Unique commit hash for the event. Default ``"test001"``.
+    commit_time
+        Commit timestamp. Defaults to 2024-07-05 10:00 UTC.
+
+    Returns
+    -------
+    str
+        The Silver layer repository ID.
+
+    """
+    effective_time = commit_time or dt.datetime(2024, 7, 5, 10, 0, tzinfo=dt.UTC)
+    repo_slug = f"{owner}/{name}"
+    await writer.ingest(
+        commit_envelope(repo_slug, commit_hash, effective_time, "feat: test event")
+    )
+    await transformer.process_pending()
+    return await _get_repo_id(session_factory, owner, name)
+
+
 @pytest_asyncio.fixture
 async def generated_report(
     session_factory: async_sessionmaker[AsyncSession],
@@ -146,22 +190,6 @@ class TestReportingConfig:
         config = ReportingConfig(window_days=14)
         assert config.window_days == 14, "Custom window days not applied"
 
-    def test_from_env_uses_defaults_when_empty(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """from_env returns defaults when env vars are unset."""
-        monkeypatch.delenv("GHILLIE_REPORTING_WINDOW_DAYS", raising=False)
-        monkeypatch.delenv("GHILLIE_REPORT_SINK_PATH", raising=False)
-        config = ReportingConfig.from_env()
-        assert config.window_days == 7, "Default window should be 7 when env unset"
-
-    def test_from_env_reads_window_days(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """from_env reads GHILLIE_REPORTING_WINDOW_DAYS."""
-        monkeypatch.setenv("GHILLIE_REPORTING_WINDOW_DAYS", "30")
-        monkeypatch.delenv("GHILLIE_REPORT_SINK_PATH", raising=False)
-        config = ReportingConfig.from_env()
-        assert config.window_days == 30, "Window days should read from env"
-
     def test_config_report_sink_path_defaults_to_none(self) -> None:
         """The report_sink_path field defaults to None."""
         config = ReportingConfig()
@@ -169,26 +197,50 @@ class TestReportingConfig:
             "report_sink_path should default to None"
         )
 
-    def test_config_from_env_reads_report_sink_path(
-        self, monkeypatch: pytest.MonkeyPatch
+    @pytest.mark.parametrize(
+        ("env_vars", "expected_window_days", "expected_sink_path"),
+        [
+            pytest.param({}, 7, None, id="defaults"),
+            pytest.param(
+                {"GHILLIE_REPORTING_WINDOW_DAYS": "30"}, 30, None, id="window_days"
+            ),
+            pytest.param(
+                {"GHILLIE_REPORT_SINK_PATH": "/var/lib/ghillie/reports"},
+                7,
+                Path("/var/lib/ghillie/reports"),
+                id="sink_path",
+            ),
+            pytest.param(
+                {
+                    "GHILLIE_REPORTING_WINDOW_DAYS": "14",
+                    "GHILLIE_REPORT_SINK_PATH": "/var/lib/ghillie/output",
+                },
+                14,
+                Path("/var/lib/ghillie/output"),
+                id="both",
+            ),
+        ],
+    )
+    def test_from_env_configuration(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        env_vars: dict[str, str],
+        expected_window_days: int,
+        expected_sink_path: Path | None,
     ) -> None:
-        """GHILLIE_REPORT_SINK_PATH is read and stored as a Path."""
-        monkeypatch.delenv("GHILLIE_REPORTING_WINDOW_DAYS", raising=False)
-        monkeypatch.setenv("GHILLIE_REPORT_SINK_PATH", "/var/lib/ghillie/reports")
-        config = ReportingConfig.from_env()
-        assert config.report_sink_path == Path("/var/lib/ghillie/reports"), (
-            "report_sink_path should be parsed from environment"
-        )
-
-    def test_config_from_env_report_sink_path_unset_yields_none(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """When GHILLIE_REPORT_SINK_PATH is unset, report_sink_path is None."""
+        """from_env reads environment variables correctly."""
         monkeypatch.delenv("GHILLIE_REPORTING_WINDOW_DAYS", raising=False)
         monkeypatch.delenv("GHILLIE_REPORT_SINK_PATH", raising=False)
+        for key, value in env_vars.items():
+            monkeypatch.setenv(key, value)
+
         config = ReportingConfig.from_env()
-        assert config.report_sink_path is None, (
-            "report_sink_path should be None when env var unset"
+
+        assert config.window_days == expected_window_days, (
+            f"Expected window_days={expected_window_days}, got {config.window_days}"
+        )
+        assert config.report_sink_path == expected_sink_path, (
+            f"Expected sink_path={expected_sink_path}, got {config.report_sink_path}"
         )
 
 
@@ -369,22 +421,16 @@ class TestReportingServiceSinkIntegration:
     ) -> None:
         """When a ReportSink is injected, write_report is called."""
         sink = FilesystemReportSink(tmp_path / "reports")
-        evidence_service = EvidenceBundleService(session_factory)
-        service = ReportingService(
+        deps = ReportingServiceDependencies(
             session_factory=session_factory,
-            evidence_service=evidence_service,
+            evidence_service=EvidenceBundleService(session_factory),
             status_model=MockStatusModel(),
-            report_sink=sink,
         )
+        service = ReportingService(deps, report_sink=sink)
 
-        repo_slug = "acme/widget"
-        commit_time = dt.datetime(2024, 7, 5, 10, 0, tzinfo=dt.UTC)
-        await writer.ingest(
-            commit_envelope(repo_slug, "sink001", commit_time, "feat: sink test")
+        repo_id = await _setup_test_repository_with_event(
+            writer, transformer, session_factory, commit_hash="sink001"
         )
-        await transformer.process_pending()
-
-        repo_id = await _get_repo_id(session_factory)
 
         await service.generate_report(
             repository_id=repo_id,
@@ -404,21 +450,16 @@ class TestReportingServiceSinkIntegration:
         tmp_path: Path,
     ) -> None:
         """When no sink is provided, report generation succeeds."""
-        evidence_service = EvidenceBundleService(session_factory)
-        service = ReportingService(
+        deps = ReportingServiceDependencies(
             session_factory=session_factory,
-            evidence_service=evidence_service,
+            evidence_service=EvidenceBundleService(session_factory),
             status_model=MockStatusModel(),
         )
+        service = ReportingService(deps)
 
-        repo_slug = "acme/widget"
-        commit_time = dt.datetime(2024, 7, 5, 10, 0, tzinfo=dt.UTC)
-        await writer.ingest(
-            commit_envelope(repo_slug, "nosink1", commit_time, "feat: no sink")
+        repo_id = await _setup_test_repository_with_event(
+            writer, transformer, session_factory, commit_hash="nosink1"
         )
-        await transformer.process_pending()
-
-        repo_id = await _get_repo_id(session_factory)
 
         report = await service.generate_report(
             repository_id=repo_id,
@@ -437,23 +478,21 @@ class TestReportingServiceSinkIntegration:
     ) -> None:
         """run_for_repository also invokes the sink."""
         sink = FilesystemReportSink(tmp_path / "reports")
-        evidence_service = EvidenceBundleService(session_factory)
-        service = ReportingService(
+        deps = ReportingServiceDependencies(
             session_factory=session_factory,
-            evidence_service=evidence_service,
+            evidence_service=EvidenceBundleService(session_factory),
             status_model=MockStatusModel(),
-            report_sink=sink,
         )
+        service = ReportingService(deps, report_sink=sink)
 
-        repo_slug = "acme/widget"
         now = dt.datetime(2024, 7, 14, tzinfo=dt.UTC)
-        commit_time = dt.datetime(2024, 7, 10, 10, 0, tzinfo=dt.UTC)
-        await writer.ingest(
-            commit_envelope(repo_slug, "run001", commit_time, "feat: run sink")
+        repo_id = await _setup_test_repository_with_event(
+            writer,
+            transformer,
+            session_factory,
+            commit_hash="run001",
+            commit_time=dt.datetime(2024, 7, 10, 10, 0, tzinfo=dt.UTC),
         )
-        await transformer.process_pending()
-
-        repo_id = await _get_repo_id(session_factory)
         report = await service.run_for_repository(repo_id, as_of=now)
 
         assert report is not None, "Report should be generated"

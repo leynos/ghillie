@@ -20,7 +20,36 @@ True
 
 from __future__ import annotations
 
+import dataclasses as dc
 import typing as typ
+
+
+@dc.dataclass(frozen=True, slots=True)
+class ReportMetadata:
+    """Identifying metadata for a rendered report.
+
+    Groups the report identification parameters into a single
+    reusable object, reducing parameter counts on protocol methods
+    and adapter implementations.
+
+    Attributes
+    ----------
+    owner
+        GitHub repository owner (organisation or user).
+    name
+        GitHub repository name.
+    report_id
+        Unique report identifier (UUID string).
+    window_end
+        ISO date string (YYYY-MM-DD) of the window end, used for
+        the dated filename.
+
+    """
+
+    owner: str
+    name: str
+    report_id: str
+    window_end: str
 
 
 @typ.runtime_checkable
@@ -33,14 +62,11 @@ class ReportSink(typ.Protocol):
 
     """
 
-    async def write_report(  # noqa: PLR0913
+    async def write_report(
         self,
         markdown: str,
         *,
-        owner: str,
-        name: str,
-        report_id: str,
-        window_end: str,
+        metadata: ReportMetadata,
     ) -> None:
         """Write a rendered Markdown report to storage.
 
@@ -48,15 +74,9 @@ class ReportSink(typ.Protocol):
         ----------
         markdown
             The rendered Markdown content.
-        owner
-            GitHub repository owner.
-        name
-            GitHub repository name.
-        report_id
-            Unique report identifier (UUID string).
-        window_end
-            ISO date string (YYYY-MM-DD) of the window end, used for
-            the dated filename.
+        metadata
+            Report identification metadata (owner, name, report_id,
+            window_end).
 
         """
         ...

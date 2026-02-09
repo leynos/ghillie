@@ -15,12 +15,12 @@ Create a service and generate a report:
 >>>
 >>> engine = create_async_engine("sqlite+aiosqlite:///ghillie.db")
 >>> session_factory = async_sessionmaker(engine, expire_on_commit=False)
->>> service = ReportingService(
+>>> deps = ReportingServiceDependencies(
 ...     session_factory=session_factory,
 ...     evidence_service=EvidenceBundleService(session_factory),
 ...     status_model=MockStatusModel(),
-...     config=ReportingConfig(),
 ... )
+>>> service = ReportingService(deps, config=ReportingConfig())
 >>> report = await service.run_for_repository(repository_id, as_of=now)
 
 """
@@ -39,6 +39,7 @@ from ghillie.reporting.markdown import render_report_markdown
 from ghillie.status.models import to_machine_summary
 
 from .config import ReportingConfig
+from .sink import ReportMetadata
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -48,6 +49,29 @@ if typ.TYPE_CHECKING:
     from ghillie.reporting.sink import ReportSink
     from ghillie.silver.storage import Repository
     from ghillie.status.protocol import StatusModel
+
+
+@dc.dataclass(frozen=True, slots=True)
+class ReportingServiceDependencies:
+    """Core dependencies for ReportingService.
+
+    Groups the mandatory collaborators into a single parameter object,
+    reducing the constructor argument count and improving cohesion.
+
+    Attributes
+    ----------
+    session_factory
+        Async session factory for database access.
+    evidence_service
+        Service for building evidence bundles.
+    status_model
+        Model for generating status summaries.
+
+    """
+
+    session_factory: async_sessionmaker[AsyncSession]
+    evidence_service: EvidenceBundleService
+    status_model: StatusModel
 
 
 @dc.dataclass(frozen=True, slots=True)
@@ -79,11 +103,9 @@ class ReportingService:
 
     """
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
-        session_factory: async_sessionmaker[AsyncSession],
-        evidence_service: EvidenceBundleService,
-        status_model: StatusModel,
+        dependencies: ReportingServiceDependencies,
         config: ReportingConfig | None = None,
         report_sink: ReportSink | None = None,
     ) -> None:
@@ -91,12 +113,9 @@ class ReportingService:
 
         Parameters
         ----------
-        session_factory
-            Async session factory for database access.
-        evidence_service
-            Service for building evidence bundles.
-        status_model
-            Model for generating status summaries.
+        dependencies
+            Core collaborators (session factory, evidence service, and
+            status model) grouped into a single parameter object.
         config
             Optional reporting configuration; uses defaults if not provided.
         report_sink
@@ -106,9 +125,9 @@ class ReportingService:
             produced.
 
         """
-        self._session_factory = session_factory
-        self._evidence_service = evidence_service
-        self._status_model = status_model
+        self._session_factory = dependencies.session_factory
+        self._evidence_service = dependencies.evidence_service
+        self._status_model = dependencies.status_model
         self._config = config or ReportingConfig()
         self._report_sink = report_sink
 
@@ -310,13 +329,14 @@ class ReportingService:
         # Caller guarantees _report_sink is not None; guard defensively.
         if self._report_sink is None:  # pragma: no cover
             return
-        await self._report_sink.write_report(
-            markdown,
+
+        metadata: ReportMetadata = ReportMetadata(
             owner=repo.github_owner,
             name=repo.github_name,
             report_id=str(report.id),
             window_end=report.window_end.strftime("%Y-%m-%d"),
         )
+        await self._report_sink.write_report(markdown, metadata=metadata)
 
     async def run_for_repository(
         self,

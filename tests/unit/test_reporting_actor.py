@@ -79,14 +79,17 @@ def estate_reporting_setup(
     """
     from ghillie.evidence import EvidenceBundleService
     from ghillie.reporting.config import ReportingConfig
-    from ghillie.reporting.service import ReportingService
+    from ghillie.reporting.service import (
+        ReportingService,
+        ReportingServiceDependencies,
+    )
 
-    service = ReportingService(
+    deps = ReportingServiceDependencies(
         session_factory=session_factory,
         evidence_service=EvidenceBundleService(session_factory),
         status_model=MockStatusModel(),
-        config=ReportingConfig(),
     )
+    service = ReportingService(deps, config=ReportingConfig())
     writer = RawEventWriter(session_factory)
     transformer = RawEventTransformer(session_factory)
     return service, writer, transformer
@@ -112,7 +115,10 @@ class TestGenerateReportJob:
         from ghillie.evidence import EvidenceBundleService
         from ghillie.reporting.actor import _generate_report_async
         from ghillie.reporting.config import ReportingConfig
-        from ghillie.reporting.service import ReportingService
+        from ghillie.reporting.service import (
+            ReportingService,
+            ReportingServiceDependencies,
+        )
 
         repo_slug = "test/repo"
         now = dt.datetime(2024, 7, 14, tzinfo=dt.UTC)
@@ -129,12 +135,12 @@ class TestGenerateReportJob:
         repo_id = await _get_repo_id(session_factory, "test", "repo")
 
         # Create service with MockStatusModel for testing
-        service = ReportingService(
+        deps = ReportingServiceDependencies(
             session_factory=session_factory,
             evidence_service=EvidenceBundleService(session_factory),
             status_model=MockStatusModel(),
-            config=ReportingConfig(),
         )
+        service = ReportingService(deps, config=ReportingConfig())
 
         result = await _generate_report_async(
             service=service,
@@ -154,7 +160,10 @@ class TestGenerateReportJob:
         from ghillie.evidence import EvidenceBundleService
         from ghillie.reporting.actor import _generate_report_async
         from ghillie.reporting.config import ReportingConfig
-        from ghillie.reporting.service import ReportingService
+        from ghillie.reporting.service import (
+            ReportingService,
+            ReportingServiceDependencies,
+        )
 
         repo_id = await _create_repository_with_estate(
             session_factory,
@@ -162,12 +171,12 @@ class TestGenerateReportJob:
         )
         now = dt.datetime(2024, 7, 14, tzinfo=dt.UTC)
 
-        service = ReportingService(
+        deps = ReportingServiceDependencies(
             session_factory=session_factory,
             evidence_service=EvidenceBundleService(session_factory),
             status_model=MockStatusModel(),
-            config=ReportingConfig(),
         )
+        service = ReportingService(deps, config=ReportingConfig())
 
         result = await _generate_report_async(
             service=service,
