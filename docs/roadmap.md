@@ -327,7 +327,7 @@ using the evidence and model integrations.
   `{base_path}/{owner}/{name}/latest.md` and dated archive files.
   `ReportingService` optionally invokes the sink after report persistence.
   `GHILLIE_REPORT_SINK_PATH` environment variable controls filesystem sink
-  creation in Dramatiq actors. Unit tests (nine renderer, six sink, six
+  creation in Dramatiq actors. Unit tests (nine renderer tests, six sink, six
   config/integration) and BDD scenarios (two) validate the implementation.
 
 - [ ] **Task 2.3.c – Provide an on-demand reporting entry-point**  
