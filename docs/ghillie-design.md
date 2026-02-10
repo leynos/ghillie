@@ -1041,8 +1041,8 @@ execution. The service coordinates three core operations:
 3. **Estate-wide scheduling**: Generates reports for all active repositories
    in an estate.
 
-The following flowchart shows the interaction between trigger sources,
-Dramatiq actors, the ReportingService, and the Gold layer persistence:
+The following flowchart shows the interaction between trigger sources, Dramatiq
+actors, the ReportingService, and the Gold layer persistence:
 
 ```mermaid
 flowchart TB
@@ -1148,6 +1148,110 @@ Each generated report creates `ReportCoverage` records linking the report to
 the `EventFact` IDs from the evidence bundle. This preserves the Bronze→Silver→
 Gold audit trail and enables downstream queries to identify which events
 contributed to which reports.
+
+### 9.7 Report Markdown rendering and filesystem storage (Phase 2.3.b)
+
+The reporting pipeline persists Gold layer report records in the database, but
+operators also need human-readable reports at predictable filesystem paths for
+browsing and version control. This section describes the Markdown renderer and
+the pluggable storage interface that bridge the gap.
+
+**Markdown renderer:**
+
+The `render_report_markdown()` function is a pure transformation with no I/O or
+database access. It accepts a `Report` record and repository metadata (`owner`,
+`name`) and returns a structured Markdown string.
+
+The renderer reads exclusively from `Report.machine_summary` (the structured
+dict produced by `to_machine_summary()`) rather than `Report.human_text`. This
+guarantees that the rendered Markdown content matches the database exactly,
+satisfying the completion criteria for Task 2.3.b. The `human_text` field
+continues to store the raw LLM summary string and is not consumed by the
+renderer.
+
+The rendered document includes:
+
+- Title line with `owner/name` and window date range
+- Status indicator (`On Track`, `At Risk`, `Blocked`, `Unknown`)
+- Summary section (from `machine_summary["summary"]`)
+- Highlights, Risks, and Next Steps as bulleted lists
+- Metadata footer with model identifier, generation timestamp, window, and
+  report ID
+
+Sections with empty lists are omitted entirely. Missing `machine_summary` keys
+are handled gracefully (section omitted, no exception raised).
+
+**ReportSink protocol (port):**
+
+The `ReportSink` protocol follows the hexagonal architecture pattern
+established by `StatusModel`. It is defined as a `@runtime_checkable`
+`Protocol` with a single async method:
+
+```python
+@runtime_checkable
+class ReportSink(Protocol):
+    async def write_report(
+        self,
+        markdown: str,
+        *,
+        metadata: ReportMetadata,
+    ) -> None: ...
+```
+
+This abstraction enables pluggable storage backends without coupling the
+reporting service to any specific output mechanism.
+
+**Filesystem sink adapter:**
+
+`FilesystemReportSink` implements `ReportSink` for local or mounted filesystem
+output. It writes two files per invocation:
+
+- `{base_path}/{owner}/{name}/latest.md` — overwritten with each new report,
+  providing a stable entry point for operators.
+- `{base_path}/{owner}/{name}/{window_end}-{report_id}.md` — accumulates
+  over time, preserving report history.
+
+Directory creation and file writes use `asyncio.to_thread()` to avoid blocking
+the event loop without introducing an `aiofiles` dependency. For the small
+Markdown files involved, this approach is efficient.
+
+**Service integration:**
+
+`ReportingService` accepts a `ReportingServiceDependencies` parameter object
+grouping its three core collaborators (session factory, evidence service,
+status model), plus optional `config` and `report_sink` parameters. The
+`ReportMetadata` frozen dataclass groups the four report identification
+parameters passed to `ReportSink.write_report()`. When a sink is provided, the
+service renders Markdown and invokes the sink after each report is persisted to
+the Gold layer. The private `_write_to_sink()` method fetches the `Repository`
+record for `github_owner` and `github_name`, calls `render_report_markdown()`,
+and delegates to the sink.
+
+The Dramatiq actors (`_build_service()` in `ghillie/reporting/actor.py`)
+conditionally create a `FilesystemReportSink` when the
+`GHILLIE_REPORT_SINK_PATH` environment variable is set via
+`ReportingConfig.report_sink_path`.
+
+**Design decisions:**
+
+1. **Renderer reads `machine_summary`, not `human_text`:** Guarantees
+   database-Markdown consistency. The `human_text` field stores the raw LLM
+   output and may contain formatting that does not match the structured data.
+
+2. **No schema migration required:** This change adds no database columns.
+   It only adds application-level Markdown rendering and filesystem output.
+
+3. **`asyncio.to_thread()` over `aiofiles`:** Avoids a new dependency while
+   keeping the event loop responsive. Future high-throughput adapters can use
+   native async I/O.
+
+4. **Optional sink dependency:** When no sink is provided, report generation
+   works exactly as before. This ensures zero-risk adoption and makes testing
+   straightforward.
+
+5. **Protocol-based extensibility:** The `ReportSink` protocol supports
+   future adapters for S3, Git push, or notification channels (Slack, email)
+   without modifying the reporting service.
 
 ## 10. Integration testing strategy for LLM backends
 

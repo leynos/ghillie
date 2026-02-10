@@ -308,18 +308,27 @@ using the evidence and model integrations.
   *Implemented:* `ghillie.reporting` module with `ReportingService`,
   `ReportingConfig`, and Dramatiq actors (`generate_report_job`,
   `generate_reports_for_estate_job`). Window computation continues from
-  previous report's end time. Behaviour-Driven Development (BDD) and unit
-  tests cover report generation,
-  window computation, and estate-wide scheduling.
+  previous report's end time. Behaviour-Driven Development (BDD) and unit tests
+  cover report generation, window computation, and estate-wide scheduling.
 
-- [ ] **Task 2.3.b – Define report Markdown and storage**  
-  Define a Markdown format for repository reports, including status summary,
-  highlights, risks, and next steps. Store the rendered Markdown either in a
-  dedicated status repository or object storage bucket.
+- [x] **Task 2.3.b – Implement report Markdown rendering and filesystem
+  storage** Implement a Markdown renderer for repository reports covering
+  status summary, highlights, risks, and next steps. Provide a filesystem
+  storage adapter that writes rendered reports to a configurable base directory.
 
-  *Completion criteria:* Operators can navigate to a repository’s latest report
+  *Completion criteria:* Operators can navigate to a repository's latest report
   via a predictable path or URL, and the report content matches the data stored
   in the database.
+
+  *Implemented:* `ghillie.reporting.markdown` module with
+  `render_report_markdown()` pure function rendering from
+  `Report.machine_summary`. `ReportSink` protocol (port) with
+  `FilesystemReportSink` adapter writing to
+  `{base_path}/{owner}/{name}/latest.md` and dated archive files.
+  `ReportingService` optionally invokes the sink after report persistence.
+  `GHILLIE_REPORT_SINK_PATH` environment variable controls filesystem sink
+  creation in Dramatiq actors. Unit tests (nine renderer tests, six sink, six
+  config/integration) and BDD scenarios (two) validate the implementation.
 
 - [ ] **Task 2.3.c – Provide an on-demand reporting entry-point**  
   Implement a CLI command or API endpoint that regenerates a repository’s

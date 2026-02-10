@@ -11,16 +11,20 @@ Create a service and generate a report:
 >>> from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 >>> from ghillie.evidence import EvidenceBundleService
 >>> from ghillie.status import MockStatusModel
->>> from ghillie.reporting import ReportingConfig, ReportingService
+>>> from ghillie.reporting import (
+...     ReportingConfig,
+...     ReportingService,
+...     ReportingServiceDependencies,
+... )
 >>>
 >>> engine = create_async_engine("sqlite+aiosqlite:///ghillie.db")
 >>> session_factory = async_sessionmaker(engine, expire_on_commit=False)
->>> service = ReportingService(
+>>> dependencies = ReportingServiceDependencies(
 ...     session_factory=session_factory,
 ...     evidence_service=EvidenceBundleService(session_factory),
 ...     status_model=MockStatusModel(),
-...     config=ReportingConfig(),
 ... )
+>>> service = ReportingService(dependencies, config=ReportingConfig())
 >>> report = await service.run_for_repository(repository_id, as_of=now)
 
 """
@@ -35,16 +39,46 @@ from sqlalchemy import select
 
 from ghillie.common.time import utcnow
 from ghillie.gold.storage import Report, ReportCoverage, ReportScope
+from ghillie.logging import get_logger, log_warning
+from ghillie.reporting.markdown import render_report_markdown
 from ghillie.status.models import to_machine_summary
 
 from .config import ReportingConfig
+from .sink import ReportMetadata
+
+logger = get_logger(__name__)
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from ghillie.evidence.models import RepositoryEvidenceBundle
     from ghillie.evidence.service import EvidenceBundleService
+    from ghillie.reporting.sink import ReportSink
+    from ghillie.silver.storage import Repository
     from ghillie.status.protocol import StatusModel
+
+
+@dc.dataclass(frozen=True, slots=True)
+class ReportingServiceDependencies:
+    """Core dependencies for ReportingService.
+
+    Groups the mandatory collaborators into a single parameter object,
+    reducing the constructor argument count and improving cohesion.
+
+    Attributes
+    ----------
+    session_factory
+        Async session factory for database access.
+    evidence_service
+        Service for building evidence bundles.
+    status_model
+        Model for generating status summaries.
+
+    """
+
+    session_factory: async_sessionmaker[AsyncSession]
+    evidence_service: EvidenceBundleService
+    status_model: StatusModel
 
 
 @dc.dataclass(frozen=True, slots=True)
@@ -78,29 +112,31 @@ class ReportingService:
 
     def __init__(
         self,
-        session_factory: async_sessionmaker[AsyncSession],
-        evidence_service: EvidenceBundleService,
-        status_model: StatusModel,
+        dependencies: ReportingServiceDependencies,
         config: ReportingConfig | None = None,
+        report_sink: ReportSink | None = None,
     ) -> None:
         """Configure the service with dependencies.
 
         Parameters
         ----------
-        session_factory
-            Async session factory for database access.
-        evidence_service
-            Service for building evidence bundles.
-        status_model
-            Model for generating status summaries.
+        dependencies
+            Core collaborators (session factory, evidence service, and
+            status model) grouped into a single parameter object.
         config
             Optional reporting configuration; uses defaults if not provided.
+        report_sink
+            Optional sink for writing rendered Markdown reports. When
+            provided, each generated report is rendered to Markdown and
+            written via the sink. When ``None``, no Markdown output is
+            produced.
 
         """
-        self._session_factory = session_factory
-        self._evidence_service = evidence_service
-        self._status_model = status_model
+        self._session_factory = dependencies.session_factory
+        self._evidence_service = dependencies.evidence_service
+        self._status_model = dependencies.status_model
         self._config = config or ReportingConfig()
+        self._report_sink = report_sink
 
     async def compute_next_window(
         self,
@@ -238,7 +274,11 @@ class ReportingService:
             if persisted is None:  # pragma: no cover - defensive check
                 msg = f"Report {report_id} not found after commit"
                 raise RuntimeError(msg)
-            return persisted
+
+        if self._report_sink is not None:
+            await self._write_to_sink(persisted, repository_id)
+
+        return persisted
 
     def _get_model_identifier(self) -> str:
         """Return the model identifier for report metadata."""
@@ -265,6 +305,51 @@ class ReportingService:
                 event_fact_id=event_fact_id,
             )
             session.add(coverage)
+
+    async def _write_to_sink(
+        self,
+        report: Report,
+        repository_id: str,
+    ) -> None:
+        """Render a report to Markdown and write it via the sink.
+
+        Parameters
+        ----------
+        report
+            The persisted Gold layer report.
+        repository_id
+            The Silver layer repository ID, used to fetch owner/name.
+
+        """
+        from ghillie.silver.storage import Repository as _Repository
+
+        async with self._session_factory() as session:
+            repo: Repository | None = await session.get(_Repository, repository_id)
+
+        if repo is None:
+            log_warning(
+                logger,
+                "Skipping sink write for report %s: repository %s not found",
+                report.id,
+                repository_id,
+            )
+            return
+
+        markdown = render_report_markdown(
+            report, owner=repo.github_owner, name=repo.github_name
+        )
+
+        # Caller guarantees _report_sink is not None; guard defensively.
+        if self._report_sink is None:  # pragma: no cover
+            return
+
+        metadata: ReportMetadata = ReportMetadata(
+            owner=repo.github_owner,
+            name=repo.github_name,
+            report_id=str(report.id),
+            window_end=report.window_end.strftime("%Y-%m-%d"),
+        )
+        await self._report_sink.write_report(markdown, metadata=metadata)
 
     async def run_for_repository(
         self,

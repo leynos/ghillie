@@ -1,7 +1,7 @@
 """Configuration for the reporting scheduler and workflow.
 
 This module provides the ReportingConfig dataclass which controls reporting
-window computation and scheduling behaviour.
+window computation, scheduling behaviour, and report sink configuration.
 
 Usage
 -----
@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import dataclasses as dc
 import os
+from pathlib import Path
 
 
 @dc.dataclass(frozen=True, slots=True)
@@ -37,10 +38,16 @@ class ReportingConfig:
         Default number of days for a reporting window when no previous report
         exists. Subsequent windows start from the previous report's window_end.
         Default is 7 days.
+    report_sink_path
+        Optional filesystem path for writing rendered Markdown reports. When
+        set, reports are written to ``{path}/{owner}/{name}/latest.md`` and
+        ``{path}/{owner}/{name}/{date}-{report_id}.md``. When ``None``, no
+        Markdown files are produced.
 
     """
 
     window_days: int = 7
+    report_sink_path: Path | None = None
 
     @classmethod
     def from_env(cls) -> ReportingConfig:
@@ -50,6 +57,8 @@ class ReportingConfig:
 
         - ``GHILLIE_REPORTING_WINDOW_DAYS``: Default window size in days.
           Must be a positive integer.
+        - ``GHILLIE_REPORT_SINK_PATH``: Optional filesystem path for report
+          Markdown output.
 
         Returns
         -------
@@ -81,4 +90,9 @@ class ReportingConfig:
         else:
             window_days = 7
 
-        return cls(window_days=window_days)
+        report_sink_path: Path | None = None
+        raw_sink_path = os.environ.get("GHILLIE_REPORT_SINK_PATH", "")
+        if raw_sink_path.strip():
+            report_sink_path = Path(raw_sink_path.strip())
+
+        return cls(window_days=window_days, report_sink_path=report_sink_path)
