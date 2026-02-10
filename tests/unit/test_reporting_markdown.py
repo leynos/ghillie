@@ -84,12 +84,11 @@ class TestRenderReportMarkdown:
         report = _build_report()
         md = render_report_markdown(report, owner="acme", name="widget")
 
-        assert "acme/widget" in md
-        assert "2024-07-01" in md
-        assert "2024-07-08" in md
-        # Title should be a level-1 heading
+        assert "acme/widget" in md, "Title should contain repo slug"
+        assert "2024-07-01" in md, "Title should contain window start date"
+        assert "2024-07-08" in md, "Title should contain window end date"
         lines = md.splitlines()
-        assert lines[0].startswith("# ")
+        assert lines[0].startswith("# "), "First line should be a level-1 heading"
 
     def test_render_includes_status_indicator(self) -> None:
         """The status section shows the correct status value."""
@@ -104,41 +103,43 @@ class TestRenderReportMarkdown:
         )
         md = render_report_markdown(report, owner="acme", name="widget")
 
-        assert "At Risk" in md
+        assert "At Risk" in md, "Status indicator should show 'At Risk'"
 
     def test_render_includes_summary_section(self) -> None:
         """The summary section contains text from machine_summary."""
         report = _build_report()
         md = render_report_markdown(report, owner="acme", name="widget")
 
-        assert "## Summary" in md
-        assert "Repository is progressing well." in md
+        assert "## Summary" in md, "Summary heading should be present"
+        assert "Repository is progressing well." in md, (
+            "Summary text should appear in output"
+        )
 
     def test_render_includes_highlights_as_bullets(self) -> None:
         """Each highlight appears as a bullet point."""
         report = _build_report()
         md = render_report_markdown(report, owner="acme", name="widget")
 
-        assert "## Highlights" in md
-        assert "- Feature A shipped" in md
-        assert "- Test coverage improved" in md
+        assert "## Highlights" in md, "Highlights heading should be present"
+        assert "- Feature A shipped" in md, "First highlight should be a bullet"
+        assert "- Test coverage improved" in md, "Second highlight should be a bullet"
 
     def test_render_includes_risks_as_bullets(self) -> None:
         """Each risk appears as a bullet point."""
         report = _build_report()
         md = render_report_markdown(report, owner="acme", name="widget")
 
-        assert "## Risks" in md
-        assert "- Dependency upgrade pending" in md
+        assert "## Risks" in md, "Risks heading should be present"
+        assert "- Dependency upgrade pending" in md, "Risk item should be a bullet"
 
     def test_render_includes_next_steps_as_bullets(self) -> None:
         """Each next step appears as a bullet point."""
         report = _build_report()
         md = render_report_markdown(report, owner="acme", name="widget")
 
-        assert "## Next steps" in md
-        assert "- Review open PRs" in md
-        assert "- Plan next sprint" in md
+        assert "## Next steps" in md, "Next steps heading should be present"
+        assert "- Review open PRs" in md, "First next step should be a bullet"
+        assert "- Plan next sprint" in md, "Second next step should be a bullet"
 
     def test_render_includes_metadata_footer(self) -> None:
         """Footer includes model, generated_at, window, and report ID."""
@@ -151,9 +152,9 @@ class TestRenderReportMarkdown:
         )
         md = render_report_markdown(report, owner="acme", name="widget")
 
-        assert "---" in md
-        assert "gpt-5.1-thinking" in md
-        assert report_id in md
+        assert "---" in md, "Footer should contain horizontal rule"
+        assert "gpt-5.1-thinking" in md, "Footer should contain model name"
+        assert report_id in md, "Footer should contain report ID"
 
     def test_render_omits_empty_sections(self) -> None:
         """Sections with empty lists are omitted entirely."""
@@ -168,10 +169,10 @@ class TestRenderReportMarkdown:
         )
         md = render_report_markdown(report, owner="acme", name="widget")
 
-        assert "## Summary" in md
-        assert "## Highlights" not in md
-        assert "## Risks" not in md
-        assert "## Next steps" not in md
+        assert "## Summary" in md, "Summary should still be present"
+        assert "## Highlights" not in md, "Empty highlights should be omitted"
+        assert "## Risks" not in md, "Empty risks should be omitted"
+        assert "## Next steps" not in md, "Empty next steps should be omitted"
 
     def test_render_handles_missing_machine_summary_keys(self) -> None:
         """Missing machine_summary keys are handled gracefully."""
@@ -179,10 +180,10 @@ class TestRenderReportMarkdown:
         md = render_report_markdown(report, owner="acme", name="widget")
 
         # Should not raise and should still produce valid Markdown
-        assert "acme/widget" in md
-        assert "Unknown" in md
-        assert "## Summary" not in md
-        assert "## Highlights" not in md
+        assert "acme/widget" in md, "Repo slug should be present"
+        assert "Unknown" in md, "Status should fall back to Unknown"
+        assert "## Summary" not in md, "Missing summary key should omit section"
+        assert "## Highlights" not in md, "Missing highlights key should omit section"
 
     @pytest.mark.parametrize(
         ("machine_summary", "description"),
@@ -201,9 +202,13 @@ class TestRenderReportMarkdown:
         report = _build_report(machine_summary=machine_summary)
         md = render_report_markdown(report, owner="acme", name="widget")
 
-        assert "acme/widget" in md
-        assert "Unknown" in md
-        assert "## Summary" not in md
-        assert "## Highlights" not in md
-        assert "## Risks" not in md
-        assert "## Next steps" not in md
+        assert "acme/widget" in md, f"Repo slug should be present ({description})"
+        assert "Unknown" in md, f"Status should fall back to Unknown ({description})"
+        assert "## Summary" not in md, f"Summary should be omitted ({description})"
+        assert "## Highlights" not in md, (
+            f"Highlights should be omitted ({description})"
+        )
+        assert "## Risks" not in md, f"Risks should be omitted ({description})"
+        assert "## Next steps" not in md, (
+            f"Next steps should be omitted ({description})"
+        )

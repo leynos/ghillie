@@ -51,25 +51,14 @@ def _render_title(
     repo_slug: str,
     date_range: str,
 ) -> None:
-    """Append the level-1 heading with repository slug and date range.
-
-    Parameters
-    ----------
-    lines
-        Accumulator for rendered Markdown lines.
-    repo_slug
-        Repository identifier in ``"owner/name"`` format.
-    date_range
-        Date range in ``"YYYY-MM-DD to YYYY-MM-DD"`` format.
-
-    """
+    """Append the level-1 heading with repository slug and date range."""
     lines.append(f"# {repo_slug} — Status report ({date_range})")
     lines.append("")
 
 
 def _render_status(lines: list[str], ms: dict[str, typ.Any]) -> None:
     """Append the bold status indicator line."""
-    status_raw = str(ms.get("status", "unknown"))
+    status_raw = str(ms.get("status") or "unknown")
     status_label = _STATUS_LABELS.get(status_raw, status_raw)
     lines.append(f"**Status:** {status_label}")
     lines.append("")

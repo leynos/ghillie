@@ -38,18 +38,18 @@ if typ.TYPE_CHECKING:
 
 
 class FilesystemReportSink:
-    """Write reports to the local filesystem.
-
-    Parameters
-    ----------
-    base_path
-        Root directory for report storage. Subdirectories are created
-        per ``{owner}/{name}``.
-
-    """
+    """Write reports to the local filesystem."""
 
     def __init__(self, base_path: Path) -> None:
-        """Initialise the sink with a base directory path."""
+        """Initialise the sink with a base directory path.
+
+        Parameters
+        ----------
+        base_path
+            Root directory for report storage.  Subdirectories are
+            created per ``{owner}/{name}``.
+
+        """
         self._base_path = base_path
 
     async def write_report(

@@ -57,9 +57,9 @@ Success is observable when:
    specifying `--python 3.12` for `uv venv` and `uv sync`.
 
 2. **Lint strictness:** The project configures `max-args = 4` for
-   `PLR0913`, which triggered on several of our new functions that necessarily
-   have more than four parameters (Protocol methods, constructors with
-   dependency injection). Addressed with targeted `# noqa: PLR0913` annotations.
+   `PLR0913`, which triggered on several new functions that necessarily have
+   more than four parameters (Protocol methods, constructors with dependency
+   injection). Addressed with targeted `# noqa: PLR0913` annotations.
 
 3. **`PERF401` preference:** Ruff prefers `lines.extend(generator)` over
    `for item in list: lines.append(f"- {item}")`. Refactored the renderer to
@@ -117,8 +117,8 @@ All implementation tasks are complete and all quality gates pass.
   (`tests/unit/test_reporting_markdown.py`)
 - 6 unit tests for filesystem sink
   (`tests/unit/test_filesystem_sink.py`)
-- 6 new tests in `tests/unit/test_reporting_service.py` (3 config, 3 sink
-  integration)
+- 6 new tests across `tests/unit/test_reporting_config.py` and
+  `tests/unit/test_reporting_sink_integration.py` (3 config, 3 sink integration)
 - 2 BDD scenarios in `tests/features/report_markdown.feature`
 - Full suite: 558 passed, 35 skipped (pre-existing helm/integration/LLM
   skips)
@@ -200,7 +200,8 @@ The reporting module (`ghillie/reporting/`) already provides:
 - `ghillie/status/models.py` -- `to_machine_summary()` for understanding
   machine_summary structure
 - `ghillie/evidence/models.py` -- `ReportStatus` enum
-- `tests/unit/test_reporting_service.py` -- Existing unit tests to extend
+- `tests/unit/test_reporting_config.py` -- Config unit tests
+- `tests/unit/test_reporting_sink_integration.py` -- Sink integration tests
 - `tests/features/reporting_workflow.feature` -- Existing BDD to reference
 - `tests/features/steps/test_reporting_workflow_steps.py` -- BDD step
   pattern
@@ -238,7 +239,7 @@ Test the `render_report_markdown()` function in isolation:
 
 #### 1b. Unit tests for ReportingConfig extension
 
-Extend existing tests in `tests/unit/test_reporting_service.py` within the
+Add tests in `tests/unit/test_reporting_config.py` within the
 `TestReportingConfig` class:
 
 - `test_config_report_sink_path_defaults_to_none` -- The new
@@ -267,8 +268,8 @@ File: `tests/unit/test_filesystem_sink.py`
 
 #### 1d. Unit tests for ReportingService sink integration
 
-Add new `TestReportingServiceSinkIntegration` class to
-`tests/unit/test_reporting_service.py`:
+Add `TestReportingServiceSinkIntegration` class in
+`tests/unit/test_reporting_sink_integration.py`:
 
 - `test_generate_report_calls_sink_when_provided` -- When a `ReportSink` is
   injected, `write_report` is called after report generation.
@@ -381,8 +382,9 @@ Rules:
 Create: `ghillie/reporting/sink.py`
 
 Define `ReportSink` as a `@typ.runtime_checkable` Protocol with a single async
-method `write_report()`. Parameters: `markdown` (str), `owner`, `name`,
-`report_id`, `window_end` (all keyword-only strings).
+method `write_report()`. Parameters: `markdown` (str) and a keyword-only
+`metadata` parameter of type `ReportMetadata` (a frozen dataclass grouping
+`owner`, `name`, `report_id`, and `window_end`).
 
 ### Phase 5: Implement filesystem sink adapter
 
@@ -436,8 +438,9 @@ if config.report_sink_path is not None:
 1. Create `tests/unit/test_reporting_markdown.py` with 9 failing tests for
    the Markdown renderer (see Phase 1a).
 
-2. Extend `tests/unit/test_reporting_service.py` with 3 config tests and 3
-   sink integration tests (see Phase 1b and 1d).
+2. Create `tests/unit/test_reporting_config.py` with 3 config tests and
+   `tests/unit/test_reporting_sink_integration.py` with 3 sink integration
+   tests (see Phase 1b and 1d).
 
 3. Create `tests/unit/test_filesystem_sink.py` with 6 failing tests (see
    Phase 1c).
@@ -521,8 +524,8 @@ $ pytest tests/unit/test_reporting_markdown.py -v
 $ pytest tests/unit/test_filesystem_sink.py -v
 ~6 passed
 
-$ pytest tests/unit/test_reporting_service.py -v
-~13 passed  (existing + 6 new)
+$ pytest tests/unit/test_reporting_config.py tests/unit/test_reporting_sink_integration.py -v
+~6 passed
 
 $ pytest tests/features -k report_markdown
 ~2 passed
@@ -639,20 +642,21 @@ Task 2.3.c (on-demand reporting) will use the same sink infrastructure.
 
 ## Critical files
 
-| File                                                 | Action | Purpose                         |
-| ---------------------------------------------------- | ------ | ------------------------------- |
-| `ghillie/reporting/markdown.py`                      | Create | Markdown renderer function      |
-| `ghillie/reporting/sink.py`                          | Create | ReportSink protocol definition  |
-| `ghillie/reporting/filesystem_sink.py`               | Create | Filesystem adapter              |
-| `ghillie/reporting/service.py`                       | Modify | Optional sink integration       |
-| `ghillie/reporting/config.py`                        | Modify | Add report_sink_path config     |
-| `ghillie/reporting/actor.py`                         | Modify | Wire sink into service builder  |
-| `ghillie/reporting/__init__.py`                      | Modify | Export new public API           |
-| `tests/unit/test_reporting_markdown.py`              | Create | Renderer unit tests             |
-| `tests/unit/test_filesystem_sink.py`                 | Create | Sink adapter unit tests         |
-| `tests/unit/test_reporting_service.py`               | Modify | Sink integration tests + config |
-| `tests/features/report_markdown.feature`             | Create | BDD scenarios                   |
-| `tests/features/steps/test_report_markdown_steps.py` | Create | BDD step definitions            |
-| `docs/users-guide.md`                                | Modify | Usage documentation             |
-| `docs/ghillie-design.md`                             | Modify | Design section                  |
-| `docs/roadmap.md`                                    | Modify | Mark task complete              |
+| File                                                 | Action | Purpose                        |
+| ---------------------------------------------------- | ------ | ------------------------------ |
+| `ghillie/reporting/markdown.py`                      | Create | Markdown renderer function     |
+| `ghillie/reporting/sink.py`                          | Create | ReportSink protocol definition |
+| `ghillie/reporting/filesystem_sink.py`               | Create | Filesystem adapter             |
+| `ghillie/reporting/service.py`                       | Modify | Optional sink integration      |
+| `ghillie/reporting/config.py`                        | Modify | Add report_sink_path config    |
+| `ghillie/reporting/actor.py`                         | Modify | Wire sink into service builder |
+| `ghillie/reporting/__init__.py`                      | Modify | Export new public API          |
+| `tests/unit/test_reporting_markdown.py`              | Create | Renderer unit tests            |
+| `tests/unit/test_filesystem_sink.py`                 | Create | Sink adapter unit tests        |
+| `tests/unit/test_reporting_config.py`                | Create | Config unit tests              |
+| `tests/unit/test_reporting_sink_integration.py`      | Create | Sink integration tests         |
+| `tests/features/report_markdown.feature`             | Create | BDD scenarios                  |
+| `tests/features/steps/test_report_markdown_steps.py` | Create | BDD step definitions           |
+| `docs/users-guide.md`                                | Modify | Usage documentation            |
+| `docs/ghillie-design.md`                             | Modify | Design section                 |
+| `docs/roadmap.md`                                    | Modify | Mark task complete             |

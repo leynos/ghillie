@@ -1149,16 +1149,16 @@ To use the filesystem sink directly:
 ```python
 from pathlib import Path
 
-from ghillie.reporting import FilesystemReportSink
+from ghillie.reporting import FilesystemReportSink, ReportMetadata
 
 sink = FilesystemReportSink(Path("/var/lib/ghillie/reports"))
-await sink.write_report(
-    markdown,
+metadata = ReportMetadata(
     owner="acme",
     name="widget",
     report_id="abc-123",
     window_end="2024-07-14",
 )
+await sink.write_report(markdown, metadata=metadata)
 ```
 
 The `ReportSink` protocol supports future storage backends (for example, S3 or

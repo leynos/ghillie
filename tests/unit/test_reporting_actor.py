@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import datetime as dt
 import typing as typ
@@ -281,6 +282,20 @@ class TestGenerateReportsForEstateJob:
         assert len(non_none_results) == 1, "Only active repo should have report"
 
 
+@contextlib.contextmanager
+def _build_service_caches(
+    db_url: str,
+) -> typ.Generator[None]:
+    """Context manager that cleans up module-level engine and session caches."""
+    from ghillie.reporting.actor import _ENGINE_CACHE, _SESSION_FACTORY_CACHE
+
+    try:
+        yield
+    finally:
+        _ENGINE_CACHE.pop(db_url, None)
+        _SESSION_FACTORY_CACHE.pop(db_url, None)
+
+
 class TestBuildServiceWiring:
     """Tests for _build_service actor-level wiring."""
 
@@ -292,11 +307,7 @@ class TestBuildServiceWiring:
         """Sink is injected when GHILLIE_REPORT_SINK_PATH is set."""
         from pathlib import Path as _Path
 
-        from ghillie.reporting.actor import (
-            _ENGINE_CACHE,
-            _SESSION_FACTORY_CACHE,
-            _build_service,
-        )
+        from ghillie.reporting.actor import _build_service
         from ghillie.reporting.filesystem_sink import FilesystemReportSink
 
         sink_path = tmp_path / "reports"
@@ -306,26 +317,22 @@ class TestBuildServiceWiring:
         monkeypatch.setenv("GHILLIE_STATUS_MODEL_BACKEND", "mock")
         monkeypatch.delenv("GHILLIE_REPORTING_WINDOW_DAYS", raising=False)
 
-        try:
+        with _build_service_caches(db_url):
             service = _build_service(db_url)
 
-            assert isinstance(service._report_sink, FilesystemReportSink)
-            assert service._report_sink._base_path == _Path(str(sink_path))
-        finally:
-            # Clean up module-level caches to avoid polluting other tests.
-            _ENGINE_CACHE.pop(db_url, None)
-            _SESSION_FACTORY_CACHE.pop(db_url, None)
+            assert isinstance(service._report_sink, FilesystemReportSink), (
+                "Sink should be a FilesystemReportSink"
+            )
+            assert service._report_sink._base_path == _Path(str(sink_path)), (
+                "Sink base_path should match GHILLIE_REPORT_SINK_PATH"
+            )
 
     def test_build_service_no_sink_when_env_unset(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """_build_service leaves report_sink as None when env var is absent."""
-        from ghillie.reporting.actor import (
-            _ENGINE_CACHE,
-            _SESSION_FACTORY_CACHE,
-            _build_service,
-        )
+        """No sink is created when env var is absent."""
+        from ghillie.reporting.actor import _build_service
 
         db_url = "sqlite+aiosqlite://"
 
@@ -333,10 +340,9 @@ class TestBuildServiceWiring:
         monkeypatch.setenv("GHILLIE_STATUS_MODEL_BACKEND", "mock")
         monkeypatch.delenv("GHILLIE_REPORTING_WINDOW_DAYS", raising=False)
 
-        try:
+        with _build_service_caches(db_url):
             service = _build_service(db_url)
 
-            assert service._report_sink is None
-        finally:
-            _ENGINE_CACHE.pop(db_url, None)
-            _SESSION_FACTORY_CACHE.pop(db_url, None)
+            assert service._report_sink is None, (
+                "Sink should be None when GHILLIE_REPORT_SINK_PATH is unset"
+            )
