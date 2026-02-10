@@ -285,9 +285,23 @@ class TestGenerateReportsForEstateJob:
 @contextlib.contextmanager
 def _build_service_caches(
     db_url: str,
+    *,
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
 ) -> typ.Generator[None]:
-    """Context manager that cleans up module-level engine and session caches."""
+    """Context manager that cleans up module-level engine and session caches.
+
+    When *session_factory* is provided, pre-seeds the actor caches so that
+    ``_build_service`` reuses the test database rather than creating a new
+    in-memory one.
+    """
     from ghillie.reporting.actor import _ENGINE_CACHE, _SESSION_FACTORY_CACHE
+
+    if session_factory is not None:
+        _SESSION_FACTORY_CACHE[db_url] = session_factory
+        # The engine cache entry is not strictly needed when the session
+        # factory is already cached, but we populate it to keep the two
+        # caches consistent.
+        _ENGINE_CACHE[db_url] = session_factory.kw["bind"]
 
     try:
         yield
@@ -296,53 +310,108 @@ def _build_service_caches(
         _SESSION_FACTORY_CACHE.pop(db_url, None)
 
 
-class TestBuildServiceWiring:
-    """Tests for _build_service actor-level wiring."""
+# Synthetic URL used as the cache key in TestBuildServiceWiring tests.
+# The value does not matter because the test pre-seeds the session cache.
+_TEST_DB_URL = "sqlite+aiosqlite:///test-wiring"
 
-    def test_build_service_creates_sink_when_env_set(
+
+class TestBuildServiceWiring:
+    """Tests for _build_service actor-level wiring.
+
+    Both tests exercise the service through its public API
+    (``run_for_repository``) to verify that the sink wiring produces
+    the expected filesystem effects rather than inspecting private
+    attributes.
+    """
+
+    @pytest.mark.asyncio
+    async def test_build_service_creates_sink_when_env_set(
         self,
         monkeypatch: pytest.MonkeyPatch,
+        session_factory: async_sessionmaker[AsyncSession],
         tmp_path: Path,
     ) -> None:
-        """Sink is injected when GHILLIE_REPORT_SINK_PATH is set."""
-        from pathlib import Path as _Path
-
+        """Sink writes Markdown files when GHILLIE_REPORT_SINK_PATH is set."""
         from ghillie.reporting.actor import _build_service
-        from ghillie.reporting.filesystem_sink import FilesystemReportSink
 
         sink_path = tmp_path / "reports"
-        db_url = "sqlite+aiosqlite://"
 
         monkeypatch.setenv("GHILLIE_REPORT_SINK_PATH", str(sink_path))
         monkeypatch.setenv("GHILLIE_STATUS_MODEL_BACKEND", "mock")
         monkeypatch.delenv("GHILLIE_REPORTING_WINDOW_DAYS", raising=False)
 
-        with _build_service_caches(db_url):
-            service = _build_service(db_url)
+        # Pre-seed actor caches with the test database session factory.
+        with _build_service_caches(_TEST_DB_URL, session_factory=session_factory):
+            service = _build_service(_TEST_DB_URL)
 
-            assert isinstance(service._report_sink, FilesystemReportSink), (
-                "Sink should be a FilesystemReportSink"
+            # Set up a repository with events via ingestion.
+            writer = RawEventWriter(session_factory)
+            transformer = RawEventTransformer(session_factory)
+            commit_time = dt.datetime(2024, 7, 10, 10, 0, tzinfo=dt.UTC)
+            await writer.ingest(
+                commit_envelope(
+                    "wiring/sink", "wire01", commit_time, "feat: wiring test"
+                )
             )
-            assert service._report_sink._base_path == _Path(str(sink_path)), (
-                "Sink base_path should match GHILLIE_REPORT_SINK_PATH"
-            )
+            await transformer.process_pending()
+            repo_id = await _get_repo_id(session_factory, "wiring", "sink")
 
-    def test_build_service_no_sink_when_env_unset(
+            now = dt.datetime(2024, 7, 14, tzinfo=dt.UTC)
+            report = await service.run_for_repository(repo_id, as_of=now)
+
+        assert report is not None, "Report should be generated"
+        latest = sink_path / "wiring" / "sink" / "latest.md"
+        assert latest.is_file(), "Sink should write latest.md when env var is set"
+
+        content = latest.read_text()
+        assert "wiring/sink" in content, (
+            "Report content should include the repository slug"
+        )
+
+        # A dated archive file should also exist alongside latest.md.
+        archive_files = [
+            f
+            for f in (sink_path / "wiring" / "sink").iterdir()
+            if f.name != "latest.md" and f.suffix == ".md"
+        ]
+        assert len(archive_files) == 1, "Exactly one dated archive file should exist"
+
+    @pytest.mark.asyncio
+    async def test_build_service_no_sink_when_env_unset(
         self,
         monkeypatch: pytest.MonkeyPatch,
+        session_factory: async_sessionmaker[AsyncSession],
+        tmp_path: Path,
     ) -> None:
-        """No sink is created when env var is absent."""
+        """No Markdown files are written when GHILLIE_REPORT_SINK_PATH is unset."""
         from ghillie.reporting.actor import _build_service
 
-        db_url = "sqlite+aiosqlite://"
+        sink_path = tmp_path / "reports"
 
         monkeypatch.delenv("GHILLIE_REPORT_SINK_PATH", raising=False)
         monkeypatch.setenv("GHILLIE_STATUS_MODEL_BACKEND", "mock")
         monkeypatch.delenv("GHILLIE_REPORTING_WINDOW_DAYS", raising=False)
 
-        with _build_service_caches(db_url):
-            service = _build_service(db_url)
+        # Pre-seed actor caches with the test database session factory.
+        with _build_service_caches(_TEST_DB_URL, session_factory=session_factory):
+            service = _build_service(_TEST_DB_URL)
 
-            assert service._report_sink is None, (
-                "Sink should be None when GHILLIE_REPORT_SINK_PATH is unset"
+            # Set up a repository with events via ingestion.
+            writer = RawEventWriter(session_factory)
+            transformer = RawEventTransformer(session_factory)
+            commit_time = dt.datetime(2024, 7, 10, 10, 0, tzinfo=dt.UTC)
+            await writer.ingest(
+                commit_envelope(
+                    "wiring/nosink", "wire02", commit_time, "feat: no-sink test"
+                )
             )
+            await transformer.process_pending()
+            repo_id = await _get_repo_id(session_factory, "wiring", "nosink")
+
+            now = dt.datetime(2024, 7, 14, tzinfo=dt.UTC)
+            report = await service.run_for_repository(repo_id, as_of=now)
+
+        assert report is not None, "Report should still be generated without a sink"
+        assert not sink_path.exists(), (
+            "No report directory should be created when sink env var is unset"
+        )

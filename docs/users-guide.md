@@ -1149,7 +1149,11 @@ To use the filesystem sink directly:
 ```python
 from pathlib import Path
 
-from ghillie.reporting import FilesystemReportSink, ReportMetadata
+from ghillie.reporting import (
+    FilesystemReportSink,
+    ReportMetadata,
+    render_report_markdown,
+)
 
 sink = FilesystemReportSink(Path("/var/lib/ghillie/reports"))
 metadata = ReportMetadata(
@@ -1158,6 +1162,7 @@ metadata = ReportMetadata(
     report_id="abc-123",
     window_end="2024-07-14",
 )
+markdown = render_report_markdown(report, owner="acme", name="widget")
 await sink.write_report(markdown, metadata=metadata)
 ```
 
