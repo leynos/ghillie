@@ -11,16 +11,20 @@ Create a service and generate a report:
 >>> from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 >>> from ghillie.evidence import EvidenceBundleService
 >>> from ghillie.status import MockStatusModel
->>> from ghillie.reporting import ReportingConfig, ReportingService
+>>> from ghillie.reporting import (
+...     ReportingConfig,
+...     ReportingService,
+...     ReportingServiceDependencies,
+... )
 >>>
 >>> engine = create_async_engine("sqlite+aiosqlite:///ghillie.db")
 >>> session_factory = async_sessionmaker(engine, expire_on_commit=False)
->>> service = ReportingService.create(
+>>> dependencies = ReportingServiceDependencies(
 ...     session_factory=session_factory,
 ...     evidence_service=EvidenceBundleService(session_factory),
 ...     status_model=MockStatusModel(),
-...     config=ReportingConfig(),
 ... )
+>>> service = ReportingService(dependencies, config=ReportingConfig())
 >>> report = await service.run_for_repository(repository_id, as_of=now)
 
 """
@@ -133,48 +137,6 @@ class ReportingService:
         self._status_model = dependencies.status_model
         self._config = config or ReportingConfig()
         self._report_sink = report_sink
-
-    @classmethod
-    def create(  # noqa: PLR0913
-        cls,
-        session_factory: async_sessionmaker[AsyncSession],
-        evidence_service: EvidenceBundleService,
-        status_model: StatusModel,
-        config: ReportingConfig | None = None,
-        report_sink: ReportSink | None = None,
-    ) -> ReportingService:
-        """Build a service from flat arguments.
-
-        Constructs the internal ``ReportingServiceDependencies`` from
-        the positional collaborators so callers do not need to create
-        the parameter object themselves.
-
-        Parameters
-        ----------
-        session_factory
-            Async session factory for database access.
-        evidence_service
-            Service for building evidence bundles.
-        status_model
-            Model for generating status summaries.
-        config
-            Optional reporting configuration; uses defaults if not
-            provided.
-        report_sink
-            Optional sink for writing rendered Markdown reports.
-
-        Returns
-        -------
-        ReportingService
-            Fully configured service instance.
-
-        """
-        deps = ReportingServiceDependencies(
-            session_factory=session_factory,
-            evidence_service=evidence_service,
-            status_model=status_model,
-        )
-        return cls(deps, config=config, report_sink=report_sink)
 
     async def compute_next_window(
         self,

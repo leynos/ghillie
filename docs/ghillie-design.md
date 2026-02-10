@@ -1222,10 +1222,8 @@ Markdown files involved, this approach is efficient.
 
 `ReportingService` accepts a `ReportingServiceDependencies` parameter object
 grouping its three core collaborators (session factory, evidence service,
-status model), plus optional `config` and `report_sink` parameters. A
-`ReportingService.create()` convenience constructor accepts the three
-collaborators as flat arguments for callers that do not need the parameter
-object directly. The `ReportMetadata` frozen dataclass groups the four report
+status model), plus optional `config` and `report_sink` parameters. The
+`ReportMetadata` frozen dataclass groups the four report
 identification parameters passed to `ReportSink.write_report()`. When a sink is
 provided, the service renders Markdown and invokes the sink after each report
 is persisted to the Gold layer. The private `_write_to_sink()` method fetches

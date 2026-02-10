@@ -27,15 +27,19 @@ Example:
 Generate a report for a repository:
 
 >>> from ghillie.evidence import EvidenceBundleService
->>> from ghillie.reporting import ReportingConfig, ReportingService
+>>> from ghillie.reporting import (
+...     ReportingConfig,
+...     ReportingService,
+...     ReportingServiceDependencies,
+... )
 >>> from ghillie.status import MockStatusModel
 >>>
->>> service = ReportingService.create(
+>>> dependencies = ReportingServiceDependencies(
 ...     session_factory=session_factory,
 ...     evidence_service=EvidenceBundleService(session_factory),
 ...     status_model=MockStatusModel(),
-...     config=ReportingConfig(),
 ... )
+>>> service = ReportingService(dependencies, config=ReportingConfig())
 >>> report = await service.run_for_repository(repository_id)
 
 """

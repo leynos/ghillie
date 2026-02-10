@@ -7,6 +7,8 @@ import datetime as dt
 import typing as typ
 import uuid
 
+import pytest
+
 from ghillie.gold.storage import Report, ReportScope
 from ghillie.reporting.markdown import render_report_markdown
 
@@ -182,21 +184,21 @@ class TestRenderReportMarkdown:
         assert "## Summary" not in md
         assert "## Highlights" not in md
 
-    def test_render_handles_none_machine_summary(self) -> None:
-        """None machine_summary produces a well-formed report."""
-        report = _build_report(machine_summary=None)
-        md = render_report_markdown(report, owner="acme", name="widget")
-
-        assert "acme/widget" in md
-        assert "Unknown" in md
-        assert "## Summary" not in md
-        assert "## Highlights" not in md
-        assert "## Risks" not in md
-        assert "## Next steps" not in md
-
-    def test_render_handles_empty_machine_summary(self) -> None:
-        """Completely empty machine_summary produces a well-formed report."""
-        report = _build_report(machine_summary={})
+    @pytest.mark.parametrize(
+        ("machine_summary", "description"),
+        [
+            (None, "None"),
+            ({}, "empty dict"),
+        ],
+        ids=["none_machine_summary", "empty_machine_summary"],
+    )
+    def test_render_handles_absent_machine_summary(
+        self,
+        machine_summary: dict[str, typ.Any] | None,
+        description: str,
+    ) -> None:
+        """Absent or empty machine_summary produces a well-formed minimal report."""
+        report = _build_report(machine_summary=machine_summary)
         md = render_report_markdown(report, owner="acme", name="widget")
 
         assert "acme/widget" in md
