@@ -1,14 +1,22 @@
 """Ghillie runtime entrypoint for Kubernetes deployments.
 
-This module provides the ASGI application and HTTP endpoints for Kubernetes
-health probes. It exposes ``/health`` and ``/ready`` endpoints on the
-configured port (default 8080).
+This module provides the ASGI application factory for Kubernetes
+deployments.  It delegates to :func:`ghillie.api.app.create_app` for
+application construction while keeping the ``ghillie.runtime:create_app``
+Granian entrypoint stable.
+
+When ``GHILLIE_DATABASE_URL`` is set, the runtime builds full
+``AppDependencies`` (session factory, reporting service) so the app
+includes both health and domain endpoints.  Otherwise it starts in
+health-only mode.
 
 Configuration is driven by environment variables:
 
 - ``GHILLIE_HOST``: Bind address (default ``0.0.0.0``)
 - ``GHILLIE_PORT``: Listen port (default ``8080``)
 - ``GHILLIE_LOG_LEVEL``: Log level (default ``INFO``)
+- ``GHILLIE_DATABASE_URL``: Database connection URL (optional; enables
+  domain endpoints when set)
 
 Run the service directly with ``python -m ghillie.runtime``.
 """
@@ -18,9 +26,10 @@ from __future__ import annotations
 import os
 import typing as typ
 
-import falcon.asgi
-import falcon.media
+from ghillie.api.health.resources import HealthResource, ReadyResource
 
+if typ.TYPE_CHECKING:
+    import falcon.asgi
 from ghillie.logging import (
     configure_logging,
     get_logger,
@@ -28,9 +37,6 @@ from ghillie.logging import (
     log_info,
     log_warning,
 )
-
-if typ.TYPE_CHECKING:
-    from falcon.asgi import Request, Response
 
 __all__ = ["HealthResource", "ReadyResource", "create_app", "main"]
 
@@ -69,30 +75,41 @@ def _parse_port(port_str: str) -> int:
     return port
 
 
-class HealthResource:
-    """Resource for the /health endpoint returning JSON ``{"status": "ok"}``."""
-
-    async def on_get(self, _req: Request, resp: Response) -> None:
-        """Handle GET /health requests."""
-        resp.media = {"status": "ok"}
-        resp.status = falcon.HTTP_200
-
-
-class ReadyResource:
-    """Resource for the /ready endpoint returning JSON ``{"status": "ready"}``."""
-
-    async def on_get(self, _req: Request, resp: Response) -> None:
-        """Handle GET /ready requests."""
-        resp.media = {"status": "ready"}
-        resp.status = falcon.HTTP_200
-
-
 def create_app() -> falcon.asgi.App:
-    """Create and configure the Falcon ASGI application with health endpoints."""
-    app = falcon.asgi.App()
-    app.add_route("/health", HealthResource())
-    app.add_route("/ready", ReadyResource())
-    return app
+    """Create and configure the Falcon ASGI application.
+
+    When ``GHILLIE_DATABASE_URL`` is set, builds full domain
+    dependencies (session factory, reporting service) so the app
+    includes the ``POST /reports/repositories/{owner}/{name}``
+    endpoint.  Otherwise only ``/health`` and ``/ready`` are available.
+
+    Returns
+    -------
+    falcon.asgi.App
+        Configured Falcon ASGI application.
+
+    """
+    from ghillie.api.app import create_app as _create_api_app
+
+    database_url = os.environ.get("GHILLIE_DATABASE_URL")
+
+    if database_url is None:
+        return _create_api_app()
+
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from ghillie.api.app import AppDependencies
+    from ghillie.api.factory import build_reporting_service
+
+    engine = create_async_engine(database_url)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    reporting_service = build_reporting_service(session_factory)
+
+    deps = AppDependencies(
+        session_factory=session_factory,
+        reporting_service=reporting_service,
+    )
+    return _create_api_app(deps)
 
 
 def main() -> None:

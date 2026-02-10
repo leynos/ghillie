@@ -7,8 +7,8 @@ be kept up to date as work proceeds.
 ## Purpose / big picture
 
 Task 2.3.b defines a Markdown format for repository reports and implements a
-storage mechanism, so operators can navigate to a repository's latest report via
-a predictable file path. This bridges the gap between Gold layer database
+storage mechanism, so operators can navigate to a repository's latest report
+via a predictable file path. This bridges the gap between Gold layer database
 storage (already implemented in 2.3.a) and human-readable report output.
 
 The Markdown renderer reads from `Report.machine_summary` (the structured JSON
@@ -555,9 +555,9 @@ If tests fail:
 1. **Renderer operates on `machine_summary`, not `human_text`:** The
    `machine_summary` is the structured data that was produced by
    `to_machine_summary()` from the `RepositoryStatusResult`. By rendering from
-   this structured data, the Markdown content is guaranteed to match the database
-   exactly, satisfying the completion criteria. The existing `human_text` field
-   on `Report` continues to store the raw LLM summary string.
+   this structured data, the Markdown content is guaranteed to match the
+   database exactly, satisfying the completion criteria. The existing
+   `human_text` field on `Report` continues to store the raw LLM summary string.
 
 2. **No schema migration required:** This change adds no database columns.
    It only adds application-level Markdown rendering and filesystem output.

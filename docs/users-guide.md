@@ -1169,7 +1169,7 @@ await sink.write_report(markdown, metadata=metadata)
 The `ReportSink` protocol supports future storage backends (for example, S3 or
 a dedicated Git repository) without changes to the reporting service.
 
-### Integration with the reporting service
+### Integration with the reporting service (scheduled)
 
 When a `FilesystemReportSink` is provided, the `ReportingService` automatically
 renders and writes Markdown after each report is persisted to the Gold layer.
@@ -1199,3 +1199,80 @@ service = ReportingService(dependencies, config=config, report_sink=sink)
 # Reports are now rendered and stored as Markdown automatically
 report = await service.run_for_repository(repository_id)
 ```
+
+## On-demand report generation (Phase 2.3.c)
+
+In addition to scheduled reporting, Ghillie provides an HTTP API endpoint for
+generating reports on demand. This enables operators to trigger a fresh report
+for a specific repository — for example, to respond to a review request or
+verify the state of a project before a release.
+
+### Endpoint
+
+```text
+POST /reports/repositories/{owner}/{name}
+```
+
+The endpoint identifies repositories by their GitHub owner/name slug, matching
+the filesystem sink path convention and catalogue notation.
+
+### Response codes
+
+| Status | Meaning                                                |
+| ------ | ------------------------------------------------------ |
+| 200    | Report generated. JSON body contains report metadata.  |
+| 204    | Repository exists but no events in the current window. |
+| 404    | No repository matching the given owner/name exists.    |
+
+### Example
+
+Generate a report for `acme/widgets`:
+
+```bash
+curl -X POST http://localhost:8080/reports/repositories/acme/widgets
+```
+
+On success, the response body contains report metadata:
+
+```json
+{
+  "report_id": "abc-123",
+  "repository": "acme/widgets",
+  "window_start": "2024-07-07T00:00:00+00:00",
+  "window_end": "2024-07-14T00:00:00+00:00",
+  "generated_at": "2024-07-14T12:00:00+00:00",
+  "status": "on_track",
+  "model": "mock-v1"
+}
+```
+
+When no events exist in the reporting window, the endpoint returns HTTP 204
+with no body.
+
+### Enabling the endpoint
+
+The on-demand report endpoint requires a database connection. Set the
+`GHILLIE_DATABASE_URL` environment variable to enable domain endpoints:
+
+```bash
+export GHILLIE_DATABASE_URL="postgresql+asyncpg://user:pass@host:5432/ghillie"
+```
+
+When `GHILLIE_DATABASE_URL` is not set, the runtime starts in health-only mode
+(backwards compatible with existing deployments). The endpoint also respects
+`GHILLIE_REPORT_SINK_PATH` — when set, generated reports are written to the
+filesystem as Markdown, just like scheduled reports.
+
+### On-demand reporting environment variables
+
+| Variable                        | Required | Description                          |
+| ------------------------------- | -------- | ------------------------------------ |
+| `GHILLIE_DATABASE_URL`          | Yes      | Database connection URL              |
+| `GHILLIE_REPORT_SINK_PATH`      | No       | Directory for Markdown report output |
+| `GHILLIE_REPORTING_WINDOW_DAYS` | No       | Default window size (default: 7)     |
+| `GHILLIE_STATUS_MODEL_BACKEND`  | No       | Status model backend (default: mock) |
+
+### On-demand reporting OpenAPI specification
+
+The endpoint is documented in the OpenAPI specification at
+[`specs/openapi.yml`](../specs/openapi.yml).

@@ -330,11 +330,14 @@ using the evidence and model integrations.
   creation in Dramatiq actors. Unit tests (nine renderer tests, six sink, six
   config/integration) and BDD scenarios (two) validate the implementation.
 
-- [ ] **Task 2.3.c – Provide an on-demand reporting entry-point**  
-  Implement a CLI command or API endpoint that regenerates a repository’s
-  current report window on demand (for example, to respond to a review
-  request), while still respecting report coverage semantics for published
-  reports.
+- [x] **Task 2.3.c – Provide an on-demand reporting entry-point**
+  Implemented as `POST /reports/repositories/{owner}/{name}` HTTP API endpoint.
+  The modular `ghillie/api/` package structure from Section 8.4 of the design
+  document was implemented to support this first database-connected endpoint.
+  The endpoint reuses the existing `ReportingService.run_for_repository()`
+  pipeline and renders Markdown through the same `ReportSink` as scheduled
+  reports. Returns 200 with report metadata, 204 when no events in window, or
+  404 for unknown repositories.
 
   *Completion criteria:* An operator can trigger a fresh report for a
   repository and see the updated Markdown rendered through the same path as
