@@ -555,7 +555,7 @@ If tests fail:
 1. **Renderer operates on `machine_summary`, not `human_text`:** The
    `machine_summary` is the structured data that was produced by
    `to_machine_summary()` from the `RepositoryStatusResult`. By rendering from
-   this structured data, we guarantee the Markdown content matches the database
+   this structured data, the Markdown content is guaranteed to match the database
    exactly, satisfying the completion criteria. The existing `human_text` field
    on `Report` continues to store the raw LLM summary string.
 
