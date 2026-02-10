@@ -7,7 +7,7 @@ be kept up to date as work proceeds.
 ## Purpose / big picture
 
 Task 2.3.b defines a Markdown format for repository reports and implements a
-storage mechanism so operators can navigate to a repository's latest report via
+storage mechanism, so operators can navigate to a repository's latest report via
 a predictable file path. This bridges the gap between Gold layer database
 storage (already implemented in 2.3.a) and human-readable report output.
 
