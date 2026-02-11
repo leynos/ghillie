@@ -67,22 +67,33 @@ class SQLAlchemySessionManager:
         """Attach a fresh ``AsyncSession`` to ``req.context.session``."""
         req.context.session = self._session_factory()
 
-    async def process_response(
-        self,
-        req: Request,
-        resp: Response,
-        _resource: object,
-        req_succeeded: bool,  # noqa: FBT001 - Falcon middleware signature
-    ) -> None:
-        """Commit on success, rollback on error, close always."""
-        session: AsyncSession | None = getattr(req.context, "session", None)
-        if session is None:
-            return
+    def _should_commit(self, resp: Response, *, req_succeeded: bool) -> bool:
+        """Return ``True`` when the response indicates a successful outcome.
 
+        A response is considered successful when the Falcon framework
+        reports *req_succeeded* **and** the status code is not in the
+        4xx/5xx range.
+        """
+        status = str(resp.status)
+        return req_succeeded and not status.startswith(("4", "5"))
+
+    async def _finalize_session(
+        self,
+        session: AsyncSession,
+        resp: Response,
+        *,
+        req_succeeded: bool,
+    ) -> None:
+        """Commit or rollback *session* and ensure it is closed.
+
+        On a successful response the session is committed; otherwise it
+        is rolled back.  The session is **always** closed in the
+        ``finally`` block so that the underlying connection is returned
+        to the pool.
+        """
         try:
             if session.is_active:
-                status = str(resp.status)
-                if req_succeeded and not status.startswith(("4", "5")):
+                if self._should_commit(resp, req_succeeded=req_succeeded):
                     await session.commit()
                 else:
                     await session.rollback()
@@ -96,3 +107,17 @@ class SQLAlchemySessionManager:
             raise
         finally:
             await session.close()
+
+    async def process_response(
+        self,
+        req: Request,
+        resp: Response,
+        _resource: object,
+        req_succeeded: bool,  # noqa: FBT001 - Falcon middleware signature
+    ) -> None:
+        """Commit on success, rollback on error, close always."""
+        session: AsyncSession | None = getattr(req.context, "session", None)
+        if session is None:
+            return
+
+        await self._finalize_session(session, resp, req_succeeded=req_succeeded)
