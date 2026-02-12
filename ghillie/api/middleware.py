@@ -25,6 +25,8 @@ from __future__ import annotations
 
 import typing as typ
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from ghillie.logging import get_logger, log_error
 
 if typ.TYPE_CHECKING:
@@ -103,7 +105,7 @@ class SQLAlchemySessionManager:
                     await session.commit()
                 else:
                     await session.rollback()
-        except Exception:
+        except SQLAlchemyError:
             log_error(
                 logger,
                 "Session cleanup failed during process_response",

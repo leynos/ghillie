@@ -9,9 +9,9 @@ Status: DRAFT
 ## Purpose / big picture
 
 Task 2.3.c adds an HTTP API endpoint so operators can trigger a fresh
-repository report on demand -- for example, to respond to a review request --
+repository report on demand — for example, to respond to a review request —
 without waiting for the next scheduled run. After this change, an operator can
-`POST /reports/repositories/{owner}/{name}` and receive JSON report metadata
+`POST /reports/repositories/{owner}/{name}`, and receive JSON report metadata
 (200), a signal that no events exist in the window (204), or a clear error if
 the repository is unknown (404). The rendered Markdown flows through the same
 `ReportSink` as scheduled reports, so the file at
