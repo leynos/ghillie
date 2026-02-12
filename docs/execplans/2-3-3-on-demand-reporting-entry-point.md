@@ -8,7 +8,7 @@ Status: DRAFT
 
 ## Purpose / big picture
 
-Task 2.3.c adds an HTTP API endpoint so operators can trigger a fresh
+Task 2.3.c adds an HTTP API endpoint, so operators can trigger a fresh
 repository report on demand — for example, to respond to a review request —
 without waiting for the next scheduled run. After this change, an operator can
 `POST /reports/repositories/{owner}/{name}`, and receive JSON report metadata
