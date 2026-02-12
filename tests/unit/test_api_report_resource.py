@@ -68,17 +68,19 @@ def _build_client(
     if run_result is _DEFAULT_REPORT_SENTINEL:
         run_result = mock.MagicMock()
 
-    mock_session_factory = mock.MagicMock()
-
-    # Build a mock async context manager for the session
+    # Mirror async_sessionmaker behaviour: the factory returns an
+    # AsyncSession that doubles as its own async context manager and
+    # exposes commit/rollback/close on the same object.
     mock_session = mock.MagicMock()
-    mock_scalar = mock.AsyncMock(return_value=resolve_repo_id)
-    mock_session.scalar = mock_scalar
+    mock_session.scalar = mock.AsyncMock(return_value=resolve_repo_id)
+    mock_session.commit = mock.AsyncMock()
+    mock_session.rollback = mock.AsyncMock()
+    mock_session.close = mock.AsyncMock()
+    mock_session.is_active = True
+    mock_session.__aenter__ = mock.AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = mock.AsyncMock(return_value=False)
 
-    mock_cm = mock.AsyncMock()
-    mock_cm.__aenter__ = mock.AsyncMock(return_value=mock_session)
-    mock_cm.__aexit__ = mock.AsyncMock(return_value=False)
-    mock_session_factory.return_value = mock_cm
+    mock_session_factory = mock.MagicMock(return_value=mock_session)
 
     mock_reporting_service = mock.MagicMock()
     mock_reporting_service.run_for_repository = mock.AsyncMock(return_value=run_result)
@@ -130,19 +132,31 @@ class TestReportResource200:
         result = client.simulate_post("/reports/repositories/acme/widgets")
         assert result.json["status"] == "at_risk", "wrong status"
 
-    def test_response_status_falls_back_to_unknown(self) -> None:
-        """Response status defaults to 'unknown' when machine_summary lacks status."""
-        report = _make_report(_ReportFields(machine_summary={}))
+    @pytest.mark.parametrize(
+        ("field_overrides", "json_key"),
+        [
+            pytest.param(
+                _ReportFields(machine_summary={}),
+                "status",
+                id="status-fallback",
+            ),
+            pytest.param(
+                _ReportFields(model=None),
+                "model",
+                id="model-fallback",
+            ),
+        ],
+    )
+    def test_response_field_falls_back_to_unknown(
+        self,
+        field_overrides: _ReportFields,
+        json_key: str,
+    ) -> None:
+        """Response field defaults to 'unknown' when source data is missing."""
+        report = _make_report(field_overrides)
         client = _build_client(run_result=report)
         result = client.simulate_post("/reports/repositories/acme/widgets")
-        assert result.json["status"] == "unknown", "expected 'unknown' fallback"
-
-    def test_response_model_falls_back_to_unknown(self) -> None:
-        """Response model defaults to 'unknown' when model metadata is missing."""
-        report = _make_report(_ReportFields(model=None))
-        client = _build_client(run_result=report)
-        result = client.simulate_post("/reports/repositories/acme/widgets")
-        assert result.json["model"] == "unknown", "expected 'unknown' fallback"
+        assert result.json[json_key] == "unknown", f"expected 'unknown' for {json_key}"
 
     def test_response_content_type_is_json(self) -> None:
         """Response content type is application/json."""
@@ -157,10 +171,11 @@ class TestReportResource204:
     """POST returns 204 when no events exist in the reporting window."""
 
     def test_returns_204_no_events(self) -> None:
-        """Returns HTTP 204 when run_for_repository returns None."""
+        """Returns HTTP 204 with no body when run_for_repository returns None."""
         client = _build_client(run_result=None)
         result = client.simulate_post("/reports/repositories/acme/widgets")
         assert result.status == falcon.HTTP_204, "expected HTTP 204"
+        assert result.content in (b"", None), "204 response must have no body"
 
 
 class TestReportResource404:

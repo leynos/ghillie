@@ -3,9 +3,11 @@
 Provides request-scoped ``AsyncSession`` instances via ``req.context.session``,
 following the pattern documented in ``docs/async-sqlalchemy-with-pg-and-falcon.md``.
 
-The middleware creates a fresh session on each request and handles
-commit/rollback/close in ``process_response``, ensuring connections are
-returned to the pool regardless of outcome.
+The middleware creates a fresh session on each request (without ``async with``,
+since it manages commit/rollback/close explicitly in ``process_response``) and
+ensures connections are returned to the pool regardless of outcome.  Resources
+should reuse the request-scoped session via ``req.context.session`` rather than
+opening new sessions from the factory.
 
 Usage
 -----

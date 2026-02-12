@@ -99,12 +99,12 @@ def create_app(
     """
     middleware: list[object] = []
 
-    if _has_domain_deps(dependencies):
+    # Narrow once: _has_domain_deps guarantees non-None fields.
+    deps = dependencies if _has_domain_deps(dependencies) else None
+    if deps is not None:
         from ghillie.api.middleware import SQLAlchemySessionManager
 
-        # _has_domain_deps guarantees non-None; cast to satisfy the
-        # type checker without assert + noqa.
-        sf = typ.cast("async_sessionmaker[AsyncSession]", dependencies.session_factory)  # type: ignore[union-attr]
+        sf = typ.cast("async_sessionmaker[AsyncSession]", deps.session_factory)
         middleware.append(SQLAlchemySessionManager(sf))
 
     app = falcon.asgi.App(middleware=middleware)  # type: ignore[no-matching-overload]  # Falcon stubs
@@ -114,14 +114,13 @@ def create_app(
     app.add_route("/ready", ReadyResource())
 
     # Domain endpoints require database dependencies
-    if _has_domain_deps(dependencies):
+    if deps is not None:
         from ghillie.api.gold.resources import ReportResource
 
-        sf = typ.cast("async_sessionmaker[AsyncSession]", dependencies.session_factory)  # type: ignore[union-attr]
-        rs = typ.cast("ReportingService", dependencies.reporting_service)  # type: ignore[union-attr]
+        rs = typ.cast("ReportingService", deps.reporting_service)
         app.add_route(
             "/reports/repositories/{owner}/{name}",
-            ReportResource(session_factory=sf, reporting_service=rs),
+            ReportResource(reporting_service=rs),
         )
 
     # Error handlers

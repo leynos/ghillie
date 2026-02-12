@@ -12,10 +12,7 @@ Register the resource on the Falcon app::
 
     app.add_route(
         "/reports/repositories/{owner}/{name}",
-        ReportResource(
-            session_factory=session_factory,
-            reporting_service=reporting_service,
-        ),
+        ReportResource(reporting_service=reporting_service),
     )
 
 """
@@ -32,7 +29,7 @@ from ghillie.silver.storage import Repository
 
 if typ.TYPE_CHECKING:
     from falcon.asgi import Request, Response
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+    from sqlalchemy.ext.asyncio import AsyncSession
 
     from ghillie.gold.storage import Report
     from ghillie.reporting.service import ReportingService
@@ -58,12 +55,11 @@ class ReportResource:
 
     ``POST /reports/repositories/{owner}/{name}`` triggers report
     generation for the specified repository using the same pipeline
-    as scheduled reports.
+    as scheduled reports.  The resource expects the middleware to
+    attach a request-scoped ``AsyncSession`` to ``req.context.session``.
 
     Parameters
     ----------
-    session_factory
-        Async session factory for repository lookups.
     reporting_service
         Service for generating reports on demand.
 
@@ -72,20 +68,16 @@ class ReportResource:
     def __init__(
         self,
         *,
-        session_factory: async_sessionmaker[AsyncSession],
         reporting_service: ReportingService,
     ) -> None:
         """Configure the resource with its dependencies.
 
         Parameters
         ----------
-        session_factory
-            Async session factory for repository lookups.
         reporting_service
             Service for generating reports on demand.
 
         """
-        self._session_factory = session_factory
         self._reporting_service = reporting_service
 
     async def on_post(
@@ -110,7 +102,8 @@ class ReportResource:
             GitHub repository name from URL path.
 
         """
-        repo_id = await self._resolve_repository(owner, name)
+        session: AsyncSession = req.context.session
+        repo_id = await self._resolve_repository(session, owner, name)
 
         report = await self._reporting_service.run_for_repository(repo_id)
 
@@ -122,14 +115,18 @@ class ReportResource:
         resp.media = _serialize_report(report, slug)
         resp.status = falcon.HTTP_200
 
-    async def _resolve_repository(self, owner: str, name: str) -> str:
+    async def _resolve_repository(
+        self,
+        session: AsyncSession,
+        owner: str,
+        name: str,
+    ) -> str:
         """Look up a repository by owner/name and return its ID."""
-        async with self._session_factory() as session:
-            stmt = select(Repository.id).where(
-                Repository.github_owner == owner,
-                Repository.github_name == name,
-            )
-            repo_id: str | None = await session.scalar(stmt)
+        stmt = select(Repository.id).where(
+            Repository.github_owner == owner,
+            Repository.github_name == name,
+        )
+        repo_id: str | None = await session.scalar(stmt)
 
         if repo_id is None:
             raise RepositoryNotFoundError(owner, name)

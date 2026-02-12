@@ -53,8 +53,7 @@ Success is observable when:
 - Test-driven development (TDD) required per `AGENTS.md`: write failing tests
   before implementation.
 - Both unit tests (pytest) and behaviour-driven development (BDD) tests
-  (pytest-bdd) required for new
-  features.
+  (pytest-bdd) required for new features.
 - The existing `tests/unit/test_runtime.py` must continue to pass without
   modification.
 - The Granian entrypoint string `ghillie.runtime:create_app` must continue to

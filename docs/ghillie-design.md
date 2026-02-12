@@ -698,9 +698,10 @@ This structure maintains clear separation between:
 - `AppDependencies` frozen dataclass groups `session_factory` and
   `reporting_service` to keep constructor argument counts within lint
   thresholds (`max-args = 4`).
-- `ReportResource` uses its own session factory for repository slug lookups,
-  independent of the request-scoped middleware session. The `ReportingService`
-  manages its own transactions internally.
+- `ReportResource` reuses the request-scoped session from
+  ``req.context.session`` for repository slug lookups, keeping all reads within
+  the middleware's transaction.  The ``ReportingService`` manages its own
+  sessions internally for report generation.
 - `GHILLIE_DATABASE_URL` controls whether the runtime starts in health-only
   mode or full mode with domain endpoints, maintaining backwards compatibility
   with existing deployments.
