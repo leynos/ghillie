@@ -34,7 +34,7 @@ Success is observable when:
    reports.
 5. Health endpoints (`/health`, `/ready`) continue to work unchanged.
 6. The Granian entrypoint `ghillie.runtime:create_app` remains backwards
-   compatible -- when `GHILLIE_DATABASE_URL` is not set, only health endpoints
+   compatible — when `GHILLIE_DATABASE_URL` is not set, only health endpoints
    are registered.
 7. All quality gates pass: `make check-fmt`, `make typecheck`, `make lint`,
    `make test`, `make markdownlint`, `make nixie`.
@@ -192,7 +192,7 @@ The Ghillie codebase follows a Medallion architecture (Bronze/Silver/Gold) with
 hexagonal ports-and-adapters patterns.
 
 **Reporting service** (`ghillie/reporting/service.py`): `ReportingService`
-orchestrates the full workflow -- computing the next reporting window, building
+orchestrates the full workflow — computing the next reporting window, building
 an evidence bundle from Silver layer data, invoking the large language model
 (LLM) status model, and persisting the report to the Gold layer. The key method
 is `run_for_repository(repository_id, as_of=None) -> Report | None`. When a
@@ -251,22 +251,22 @@ functions, `session_factory` fixture from conftest.
 
 ### Files to reference
 
-- `ghillie/runtime.py` -- current app factory to evolve
-- `ghillie/reporting/service.py` -- `ReportingService` to reuse
-- `ghillie/reporting/actor.py` -- `_build_service()` pattern to adapt
-- `ghillie/reporting/config.py` -- `ReportingConfig.from_env()`
-- `ghillie/reporting/errors.py` -- `ReportingError` base class
-- `ghillie/silver/storage.py` -- `Repository` model for slug lookup
-- `ghillie/gold/storage.py` -- `Report` model for response serialization
-- `ghillie/reporting/sink.py` -- `ReportSink` protocol
-- `ghillie/reporting/filesystem_sink.py` -- `FilesystemReportSink`
-- `ghillie/status/factory.py` -- `create_status_model()`
-- `ghillie/evidence/service.py` -- `EvidenceBundleService`
-- `tests/unit/test_runtime.py` -- existing health endpoint test pattern
-- `tests/features/steps/test_reporting_workflow_steps.py` -- BDD step pattern
-- `tests/conftest.py` -- `session_factory` fixture
-- `docs/async-sqlalchemy-with-pg-and-falcon.md` -- session middleware guide
-- `docs/testing-async-falcon-endpoints.md` -- testing guide
+- `ghillie/runtime.py` — current app factory to evolve
+- `ghillie/reporting/service.py` — `ReportingService` to reuse
+- `ghillie/reporting/actor.py` — `_build_service()` pattern to adapt
+- `ghillie/reporting/config.py` — `ReportingConfig.from_env()`
+- `ghillie/reporting/errors.py` — `ReportingError` base class
+- `ghillie/silver/storage.py` — `Repository` model for slug lookup
+- `ghillie/gold/storage.py` — `Report` model for response serialization
+- `ghillie/reporting/sink.py` — `ReportSink` protocol
+- `ghillie/reporting/filesystem_sink.py` — `FilesystemReportSink`
+- `ghillie/status/factory.py` — `create_status_model()`
+- `ghillie/evidence/service.py` — `EvidenceBundleService`
+- `tests/unit/test_runtime.py` — existing health endpoint test pattern
+- `tests/features/steps/test_reporting_workflow_steps.py` — BDD step pattern
+- `tests/conftest.py` — `session_factory` fixture
+- `docs/async-sqlalchemy-with-pg-and-falcon.md` — session middleware guide
+- `docs/testing-async-falcon-endpoints.md` — testing guide
 
 ## Plan of work
 
@@ -280,20 +280,20 @@ because the modules they import do not yet exist.
 Test the `SQLAlchemySessionManager` in isolation using `AsyncMock` for the
 session factory and session:
 
-- `test_process_request_attaches_session_to_context` -- after
+- `test_process_request_attaches_session_to_context` — after
   `process_request`, `req.context.session` is set.
-- `test_process_response_commits_on_success` -- when `req_succeeded` is True
+- `test_process_response_commits_on_success` — when `req_succeeded` is True
   and status is 2xx, `session.commit()` is called.
-- `test_process_response_rolls_back_on_error_status` -- when status is 4xx/5xx,
+- `test_process_response_rolls_back_on_error_status` — when status is 4xx/5xx,
   `session.rollback()` is called.
-- `test_process_response_closes_session_always` -- `session.close()` is called
+- `test_process_response_closes_session_always` — `session.close()` is called
   regardless of outcome.
 
 **A2. Unit tests for error handlers** (`tests/unit/test_api_errors.py`).
 
-- `test_repository_not_found_returns_404` -- a `RepositoryNotFoundError`
+- `test_repository_not_found_returns_404` — a `RepositoryNotFoundError`
   is translated to HTTP 404 with JSON body.
-- `test_value_error_returns_400` -- a `ValueError` returns HTTP 400.
+- `test_value_error_returns_400` — a `ValueError` returns HTTP 400.
 
 **A3. Unit tests for `ReportResource`**
 (`tests/unit/test_api_report_resource.py`).
@@ -301,26 +301,26 @@ session factory and session:
 Test using `falcon.testing.TestClient` with a mock `ReportingService` injected
 into the resource (no database):
 
-- `test_post_generates_report_and_returns_200` -- successful generation returns
+- `test_post_generates_report_and_returns_200` — successful generation returns
   200 with JSON metadata.
-- `test_post_returns_204_when_no_events` -- when `run_for_repository` returns
+- `test_post_returns_204_when_no_events` — when `run_for_repository` returns
   None, returns 204.
-- `test_post_returns_404_for_unknown_repository` -- when the slug does not
+- `test_post_returns_404_for_unknown_repository` — when the slug does not
   match any Silver record, returns 404.
-- `test_response_includes_report_fields` -- 200 JSON body includes
+- `test_response_includes_report_fields` — 200 JSON body includes
   `report_id`, `repository`, `window_start`, `window_end`, `generated_at`,
   `status`, `model`.
-- `test_post_returns_json_content_type` -- Content-Type is
+- `test_post_returns_json_content_type` — Content-Type is
   `application/json`.
 
 **A4. Unit tests for modular `create_app()`** (`tests/unit/test_api_app.py`).
 
-- `test_create_app_returns_falcon_app` -- returns a `falcon.asgi.App`.
-- `test_app_has_health_and_ready_routes` -- `/health` and `/ready` respond
+- `test_create_app_returns_falcon_app` — returns a `falcon.asgi.App`.
+- `test_app_has_health_and_ready_routes` — `/health` and `/ready` respond
   with 200.
-- `test_app_has_report_route_with_deps` -- with `AppDependencies`, the report
+- `test_app_has_report_route_with_deps` — with `AppDependencies`, the report
   route is registered.
-- `test_create_app_without_deps_omits_report_route` -- without deps, POST to
+- `test_create_app_without_deps_omits_report_route` — without deps, POST to
   report path returns 404.
 
 **A5. BDD feature** (`tests/features/on_demand_report.feature` and
@@ -328,12 +328,12 @@ into the resource (no database):
 
 Three scenarios:
 
-1. "Generate a report for a repository with events" -- given a repository
+1. "Generate a report for a repository with events" — given a repository
    with ingested events and the API running, POST returns 200 with report
    metadata and a Gold report exists in the database.
-2. "Return 204 when no events in the reporting window" -- given a
+2. "Return 204 when no events in the reporting window" — given a
    repository without events, POST returns 204.
-3. "Return 404 for an unknown repository" -- POST for `unknown/repo`
+3. "Return 404 for an unknown repository" — POST for `unknown/repo`
    returns 404.
 
 Step definitions follow the pattern in
@@ -533,26 +533,26 @@ If tests fail:
 
 ### New public API
 
-- `ghillie.api.create_app` -- application factory
-- `ghillie.api.app.AppDependencies` -- frozen dataclass for app dependencies
-- `ghillie.api.middleware.SQLAlchemySessionManager` -- request-scoped session
-- `ghillie.api.gold.resources.ReportResource` -- on-demand report endpoint
-- `ghillie.api.errors.RepositoryNotFoundError` -- domain exception
-- `ghillie.api.health.resources.HealthResource` -- health probe (moved)
-- `ghillie.api.health.resources.ReadyResource` -- readiness probe (moved)
-- `ghillie.api.factory.build_reporting_service` -- service factory
+- `ghillie.api.create_app` — application factory
+- `ghillie.api.app.AppDependencies` — frozen dataclass for app dependencies
+- `ghillie.api.middleware.SQLAlchemySessionManager` — request-scoped session
+- `ghillie.api.gold.resources.ReportResource` — on-demand report endpoint
+- `ghillie.api.errors.RepositoryNotFoundError` — domain exception
+- `ghillie.api.health.resources.HealthResource` — health probe (moved)
+- `ghillie.api.health.resources.ReadyResource` — readiness probe (moved)
+- `ghillie.api.factory.build_reporting_service` — service factory
 
 ### Modified public API
 
-- `ghillie.runtime.create_app` -- now delegates to `ghillie.api.app.create_app`
-- `ghillie.runtime.main` -- reads `GHILLIE_DATABASE_URL`, constructs deps
+- `ghillie.runtime.create_app` — now delegates to `ghillie.api.app.create_app`
+- `ghillie.runtime.main` — reads `GHILLIE_DATABASE_URL`, constructs deps
 
 ### Environment variables
 
-- `GHILLIE_DATABASE_URL` -- new; SQLAlchemy URL for the runtime database.
+- `GHILLIE_DATABASE_URL` — new; SQLAlchemy URL for the runtime database.
   When not set, health-only mode.
-- `GHILLIE_STATUS_MODEL_BACKEND` -- existing; required when database URL set.
-- `GHILLIE_REPORT_SINK_PATH` -- existing; optional filesystem path.
+- `GHILLIE_STATUS_MODEL_BACKEND` — existing; required when database URL set.
+- `GHILLIE_REPORT_SINK_PATH` — existing; optional filesystem path.
 
 ### External dependencies
 
