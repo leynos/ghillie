@@ -101,6 +101,7 @@ class SQLAlchemySessionManager:
             log_error(
                 logger,
                 "Session cleanup failed during process_response",
+                exc_info=True,
             )
             if session.is_active:
                 await session.rollback()

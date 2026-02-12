@@ -357,8 +357,7 @@ Move `HealthResource` and `ReadyResource` from `ghillie/runtime.py`. Re-export
 from `ghillie/runtime.py` for backwards compatibility.
 
 **B4. `ghillie/api/gold/__init__.py` and `ghillie/api/gold/resources.py`**:
-`ReportResource` with `ReportResourceDependencies` (frozen dataclass grouping
-`session_factory` and `reporting_service`). The `on_post` method:
+`ReportResource` accepting `reporting_service` directly. The `on_post` method:
 
 1. Opens a session from `req.context.session` and queries `Repository` by
    `github_owner == owner AND github_name == name`.
@@ -538,7 +537,6 @@ If tests fail:
 - `ghillie.api.app.AppDependencies` -- frozen dataclass for app dependencies
 - `ghillie.api.middleware.SQLAlchemySessionManager` -- request-scoped session
 - `ghillie.api.gold.resources.ReportResource` -- on-demand report endpoint
-- `ghillie.api.gold.resources.ReportResourceDependencies` -- resource deps
 - `ghillie.api.errors.RepositoryNotFoundError` -- domain exception
 - `ghillie.api.health.resources.HealthResource` -- health probe (moved)
 - `ghillie.api.health.resources.ReadyResource` -- readiness probe (moved)
