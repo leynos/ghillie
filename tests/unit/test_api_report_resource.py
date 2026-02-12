@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import dataclasses as dc
 import datetime as dt
-import typing as typ
 from unittest import mock
 
 import falcon.asgi
@@ -31,7 +30,7 @@ class _ReportFields:
     window_end: dt.datetime | None = None
     generated_at: dt.datetime | None = None
     model: str | None = "mock-v1"
-    machine_summary: dict[str, typ.Any] | None = None
+    machine_summary: dict[str, str | int | float | bool] | None = None
 
 
 def _make_report(fields: _ReportFields | None = None) -> mock.MagicMock:

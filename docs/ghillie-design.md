@@ -676,8 +676,8 @@ The following components are implemented:
 - **Session middleware** (`SQLAlchemySessionManager`): Provides
   request-scoped `AsyncSession` instances with automatic commit/rollback/close
   per the pattern documented in `async-sqlalchemy-with-pg-and-falcon.md`.
-- **Error handlers**: Map `RepositoryNotFoundError` to 404 and `ValueError`
-  to 400.
+- **Error handlers**: Map `RepositoryNotFoundError` to 404 and
+  `InvalidInputError` to 400.
 
 **Planned evolution:** As additional domain endpoints are added (Concordat
 CloudEvents ingestion, estate-level queries), corresponding resource modules
