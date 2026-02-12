@@ -68,6 +68,12 @@ class SQLAlchemySessionManager:
     async def process_request(self, req: Request, _resp: Response) -> None:
         """Attach a fresh ``AsyncSession`` to ``req.context.session``.
 
+        The session is created via a bare ``session_factory()`` call rather
+        than ``async with session_factory()`` because the middleware needs to
+        keep the session open across ``process_request`` and
+        ``process_response``.  Commit, rollback, and close are handled
+        explicitly in :meth:`_finalize_session`.
+
         Parameters
         ----------
         req
