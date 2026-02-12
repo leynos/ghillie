@@ -41,7 +41,8 @@ Success is observable when:
 
 ## Constraints
 
-- Python 3.12, Falcon 4.x ASGI, SQLAlchemy 2.x async.
+- Python 3.12, Falcon 4.x Asynchronous Server Gateway Interface (ASGI),
+  SQLAlchemy 2.x async.
 - Ruff linting with `max-args = 4` (PLR0913), `max-complexity = 9`, plus 70+
   other rules.
 - Import conventions: `from __future__ import annotations`, `typing as typ`,
@@ -49,8 +50,10 @@ Success is observable when:
 - NumPy-style docstrings with Parameters/Returns/Raises sections.
 - Frozen slots dataclasses for configuration and dependency injection.
 - `@runtime_checkable` Protocol for ports.
-- TDD required per `AGENTS.md`: write failing tests before implementation.
-- Both unit tests (pytest) and behavioural tests (pytest-bdd) required for new
+- Test-driven development (TDD) required per `AGENTS.md`: write failing tests
+  before implementation.
+- Both unit tests (pytest) and behaviour-driven development (BDD) tests
+  (pytest-bdd) required for new
   features.
 - The existing `tests/unit/test_runtime.py` must continue to pass without
   modification.
@@ -191,9 +194,9 @@ hexagonal ports-and-adapters patterns.
 
 **Reporting service** (`ghillie/reporting/service.py`): `ReportingService`
 orchestrates the full workflow -- computing the next reporting window, building
-an evidence bundle from Silver layer data, invoking the LLM status model, and
-persisting the report to the Gold layer. The key method is
-`run_for_repository(repository_id, as_of=None) -> Report | None`. When a
+an evidence bundle from Silver layer data, invoking the large language model
+(LLM) status model, and persisting the report to the Gold layer. The key method
+is `run_for_repository(repository_id, as_of=None) -> Report | None`. When a
 `ReportSink` is injected, the service also renders and writes Markdown via the
 sink.
 

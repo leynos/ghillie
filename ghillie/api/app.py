@@ -30,9 +30,10 @@ import typing as typ
 import falcon.asgi
 
 from ghillie.api.errors import (
+    InvalidInputError,
     RepositoryNotFoundError,
+    handle_invalid_input,
     handle_repository_not_found,
-    handle_value_error,
 )
 from ghillie.api.health.resources import HealthResource, ReadyResource
 
@@ -98,13 +99,13 @@ def create_app(
     """
     middleware: list[object] = []
 
-    if _has_domain_deps(dependencies):
-        assert dependencies is not None  # noqa: S101 - narrowing for type checker
-        assert dependencies.session_factory is not None  # noqa: S101
-
+    if _has_domain_deps(dependencies) and dependencies is not None:
         from ghillie.api.middleware import SQLAlchemySessionManager
 
-        middleware.append(SQLAlchemySessionManager(dependencies.session_factory))
+        # _has_domain_deps guarantees non-None; cast to satisfy the
+        # type checker without assert + noqa.
+        sf = typ.cast("async_sessionmaker[AsyncSession]", dependencies.session_factory)
+        middleware.append(SQLAlchemySessionManager(sf))
 
     app = falcon.asgi.App(middleware=middleware)  # type: ignore[no-matching-overload]  # Falcon stubs
 
@@ -113,27 +114,18 @@ def create_app(
     app.add_route("/ready", ReadyResource())
 
     # Domain endpoints require database dependencies
-    if _has_domain_deps(dependencies):
-        assert dependencies is not None  # noqa: S101
-        assert dependencies.session_factory is not None  # noqa: S101
-        assert dependencies.reporting_service is not None  # noqa: S101
+    if _has_domain_deps(dependencies) and dependencies is not None:
+        from ghillie.api.gold.resources import ReportResource
 
-        from ghillie.api.gold.resources import (
-            ReportResource,
-            ReportResourceDependencies,
-        )
-
-        report_deps = ReportResourceDependencies(
-            session_factory=dependencies.session_factory,
-            reporting_service=dependencies.reporting_service,
-        )
+        sf = typ.cast("async_sessionmaker[AsyncSession]", dependencies.session_factory)
+        rs = typ.cast("ReportingService", dependencies.reporting_service)
         app.add_route(
             "/reports/repositories/{owner}/{name}",
-            ReportResource(report_deps),
+            ReportResource(session_factory=sf, reporting_service=rs),
         )
 
     # Error handlers
     app.add_error_handler(RepositoryNotFoundError, handle_repository_not_found)
-    app.add_error_handler(ValueError, handle_value_error)
+    app.add_error_handler(InvalidInputError, handle_invalid_input)
 
     return app

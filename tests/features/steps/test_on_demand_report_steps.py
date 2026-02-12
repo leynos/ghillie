@@ -1,4 +1,14 @@
-"""Behavioural coverage for on-demand report generation via HTTP API."""
+"""Behavioural coverage for on-demand report generation via HTTP API.
+
+Usage
+-----
+Run with pytest::
+
+    pytest tests/features/steps/test_on_demand_report_steps.py
+
+These tests require the ``session_factory`` fixture from ``conftest.py``
+and a running py-pglite database.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +17,7 @@ import datetime as dt
 import typing as typ
 
 import falcon.testing
+import pytest
 from pytest_bdd import given, parsers, scenario, then, when
 
 from ghillie.api.app import AppDependencies, create_app
@@ -50,6 +61,14 @@ def _build_api_client(
     return falcon.testing.TestClient(create_app(deps))
 
 
+@pytest.fixture
+def api_client(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> falcon.testing.TestClient:
+    """Provide a Falcon test client wired to the real database."""
+    return _build_api_client(session_factory)
+
+
 class OnDemandContext(typ.TypedDict, total=False):
     """Mutable context shared between steps."""
 
@@ -81,6 +100,7 @@ def test_unknown_repo_returns_404() -> None:
 )
 def given_api_with_events(
     session_factory: async_sessionmaker[AsyncSession],
+    api_client: falcon.testing.TestClient,
 ) -> OnDemandContext:
     """Set up an API with a repository containing events."""
     writer = RawEventWriter(session_factory)
@@ -100,10 +120,9 @@ def given_api_with_events(
         return owner, name
 
     owner, name = asyncio.run(_setup())
-    client = _build_api_client(session_factory)
     return {
         "session_factory": session_factory,
-        "client": client,
+        "client": api_client,
         "owner": owner,
         "name": name,
     }
@@ -115,6 +134,7 @@ def given_api_with_events(
 )
 def given_api_without_events(
     session_factory: async_sessionmaker[AsyncSession],
+    api_client: falcon.testing.TestClient,
 ) -> OnDemandContext:
     """Set up an API with a repository but no events."""
 
@@ -130,10 +150,9 @@ def given_api_without_events(
         return "empty", "repo"
 
     owner, name = asyncio.run(_setup())
-    client = _build_api_client(session_factory)
     return {
         "session_factory": session_factory,
-        "client": client,
+        "client": api_client,
         "owner": owner,
         "name": name,
     }
@@ -145,12 +164,12 @@ def given_api_without_events(
 )
 def given_api_no_repos(
     session_factory: async_sessionmaker[AsyncSession],
+    api_client: falcon.testing.TestClient,
 ) -> OnDemandContext:
     """Set up an API with no repositories at all."""
-    client = _build_api_client(session_factory)
     return {
         "session_factory": session_factory,
-        "client": client,
+        "client": api_client,
         "owner": "unknown",
         "name": "repo",
     }
@@ -178,10 +197,24 @@ def when_post_unknown_repo(on_demand_context: OnDemandContext) -> None:
 
 @then(parsers.parse("the response status is {status:d}"))
 def then_response_status(on_demand_context: OnDemandContext, status: int) -> None:
-    """Assert the HTTP response status code."""
+    """Assert the HTTP response status code and basic response contract."""
     response = on_demand_context["response"]
     actual_status = int(response.status.split()[0])
     assert actual_status == status, f"expected status {status}, got {actual_status}"
+
+    if status == 204:
+        # 204 No Content responses must not have a body
+        assert response.content in (
+            b"",
+            None,
+        ), "204 response must not have a body"
+
+    elif status == 404:
+        # 404 responses should include a JSON error payload
+        body = response.json
+        assert body is not None, "404 response must contain a JSON error body"
+        assert "title" in body, "404 response missing title"
+        assert "description" in body, "404 response missing description"
 
 
 @then("the response body contains report metadata")

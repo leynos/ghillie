@@ -64,16 +64,20 @@ class SQLAlchemySessionManager:
         self._session_factory = session_factory
 
     async def process_request(self, req: Request, _resp: Response) -> None:
-        """Attach a fresh ``AsyncSession`` to ``req.context.session``."""
+        """Attach a fresh ``AsyncSession`` to ``req.context.session``.
+
+        Parameters
+        ----------
+        req
+            Falcon request whose context receives the session.
+        _resp
+            Falcon response (unused during request phase).
+
+        """
         req.context.session = self._session_factory()
 
     def _should_commit(self, resp: Response, *, req_succeeded: bool) -> bool:
-        """Return ``True`` when the response indicates a successful outcome.
-
-        A response is considered successful when the Falcon framework
-        reports *req_succeeded* **and** the status code is not in the
-        4xx/5xx range.
-        """
+        """Return whether the response indicates a committable outcome."""
         status = str(resp.status)
         return req_succeeded and not status.startswith(("4", "5"))
 
@@ -84,13 +88,7 @@ class SQLAlchemySessionManager:
         *,
         req_succeeded: bool,
     ) -> None:
-        """Commit or rollback *session* and ensure it is closed.
-
-        On a successful response the session is committed; otherwise it
-        is rolled back.  The session is **always** closed in the
-        ``finally`` block so that the underlying connection is returned
-        to the pool.
-        """
+        """Commit or rollback *session* and close it."""
         try:
             if session.is_active:
                 if self._should_commit(resp, req_succeeded=req_succeeded):
@@ -113,9 +111,23 @@ class SQLAlchemySessionManager:
         req: Request,
         resp: Response,
         _resource: object,
-        req_succeeded: bool,  # noqa: FBT001 - Falcon middleware signature
+        req_succeeded: bool,  # noqa: FBT001 -- FIXME: Falcon middleware signature requires positional bool
     ) -> None:
-        """Commit on success, rollback on error, close always."""
+        """Commit on success, rollback on error, close always.
+
+        Parameters
+        ----------
+        req
+            Falcon request carrying the session in its context.
+        resp
+            Falcon response used to determine success/failure.
+        _resource
+            The matched Falcon resource (unused).
+        req_succeeded
+            ``True`` when no unhandled exception occurred during the
+            request phase.
+
+        """
         session: AsyncSession | None = getattr(req.context, "session", None)
         if session is None:
             return

@@ -1218,11 +1218,11 @@ the filesystem sink path convention and catalogue notation.
 
 ### Response codes
 
-| Status | Meaning                                                |
-| ------ | ------------------------------------------------------ |
-| 200    | Report generated. JSON body contains report metadata.  |
-| 204    | Repository exists but no events in the current window. |
-| 404    | No repository matching the given owner/name exists.    |
+| Status | Meaning                                                   |
+| ------ | --------------------------------------------------------- |
+| 200    | Report generated. JSON body contains the report metadata. |
+| 204    | Repository exists but no events in the current window.    |
+| 404    | No repository matching the given owner/name exists.       |
 
 ### Example
 
@@ -1270,7 +1270,7 @@ filesystem as Markdown, just like scheduled reports.
 | `GHILLIE_DATABASE_URL`          | Yes      | Database connection URL              |
 | `GHILLIE_REPORT_SINK_PATH`      | No       | Directory for Markdown report output |
 | `GHILLIE_REPORTING_WINDOW_DAYS` | No       | Default window size (default: 7)     |
-| `GHILLIE_STATUS_MODEL_BACKEND`  | No       | Status model backend (default: mock) |
+| `GHILLIE_STATUS_MODEL_BACKEND`  | Yes      | Status model backend (e.g. `mock`)   |
 
 ### On-demand reporting OpenAPI specification
 

@@ -651,7 +651,7 @@ data layers.
 partially implemented. The runtime module (`ghillie.runtime`) delegates to the
 `ghillie.api.app` application factory. The modular package structure is:
 
-```text
+```plaintext
 ghillie/api/
   __init__.py         # Package root, exports create_app
   app.py              # Application factory with AppDependencies dataclass

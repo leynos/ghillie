@@ -8,16 +8,20 @@ Usage
 -----
 Register the resource on the Falcon app::
 
+    from ghillie.api.gold.resources import ReportResource
+
     app.add_route(
         "/reports/repositories/{owner}/{name}",
-        ReportResource(dependencies),
+        ReportResource(
+            session_factory=session_factory,
+            reporting_service=reporting_service,
+        ),
     )
 
 """
 
 from __future__ import annotations
 
-import dataclasses as dc
 import typing as typ
 
 import falcon
@@ -33,45 +37,11 @@ if typ.TYPE_CHECKING:
     from ghillie.gold.storage import Report
     from ghillie.reporting.service import ReportingService
 
-__all__ = ["ReportResource", "ReportResourceDependencies"]
-
-
-@dc.dataclass(frozen=True, slots=True)
-class ReportResourceDependencies:
-    """Dependencies for ``ReportResource``.
-
-    Groups the mandatory collaborators into a single parameter object,
-    keeping the constructor argument count within lint thresholds.
-
-    Attributes
-    ----------
-    session_factory
-        Async session factory for repository lookups.
-    reporting_service
-        Service for generating reports on demand.
-
-    """
-
-    session_factory: async_sessionmaker[AsyncSession]
-    reporting_service: ReportingService
+__all__ = ["ReportResource"]
 
 
 def _serialize_report(report: Report, slug: str) -> dict[str, typ.Any]:
-    """Serialize a Gold ``Report`` to a JSON-compatible dict.
-
-    Parameters
-    ----------
-    report
-        The persisted Gold layer report.
-    slug
-        Repository slug (``owner/name``).
-
-    Returns
-    -------
-    dict[str, Any]
-        JSON-serializable report metadata.
-
-    """
+    """Serialize a Gold ``Report`` to a JSON-compatible dict."""
     return {
         "report_id": report.id,
         "repository": slug,
@@ -90,19 +60,33 @@ class ReportResource:
     generation for the specified repository using the same pipeline
     as scheduled reports.
 
+    Parameters
+    ----------
+    session_factory
+        Async session factory for repository lookups.
+    reporting_service
+        Service for generating reports on demand.
+
     """
 
-    def __init__(self, dependencies: ReportResourceDependencies) -> None:
+    def __init__(
+        self,
+        *,
+        session_factory: async_sessionmaker[AsyncSession],
+        reporting_service: ReportingService,
+    ) -> None:
         """Configure the resource with its dependencies.
 
         Parameters
         ----------
-        dependencies
-            Grouped collaborators for the resource.
+        session_factory
+            Async session factory for repository lookups.
+        reporting_service
+            Service for generating reports on demand.
 
         """
-        self._session_factory = dependencies.session_factory
-        self._reporting_service = dependencies.reporting_service
+        self._session_factory = session_factory
+        self._reporting_service = reporting_service
 
     async def on_post(
         self,
@@ -139,26 +123,7 @@ class ReportResource:
         resp.status = falcon.HTTP_200
 
     async def _resolve_repository(self, owner: str, name: str) -> str:
-        """Look up a repository by owner/name and return its ID.
-
-        Parameters
-        ----------
-        owner
-            GitHub repository owner.
-        name
-            GitHub repository name.
-
-        Returns
-        -------
-        str
-            The Silver layer repository ID.
-
-        Raises
-        ------
-        RepositoryNotFoundError
-            If no repository matches the given owner/name.
-
-        """
+        """Look up a repository by owner/name and return its ID."""
         async with self._session_factory() as session:
             stmt = select(Repository.id).where(
                 Repository.github_owner == owner,

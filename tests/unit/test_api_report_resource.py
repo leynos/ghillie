@@ -1,4 +1,12 @@
-"""Unit tests for ghillie.api.gold.resources.ReportResource."""
+"""Unit tests for ghillie.api.gold.resources.ReportResource.
+
+Usage
+-----
+Run with pytest::
+
+    pytest tests/unit/test_api_report_resource.py
+
+"""
 
 from __future__ import annotations
 
@@ -9,6 +17,7 @@ from unittest import mock
 
 import falcon.asgi
 import falcon.testing
+import pytest
 
 from ghillie.api.app import AppDependencies, create_app
 
@@ -21,7 +30,7 @@ class _ReportFields:
     window_start: dt.datetime | None = None
     window_end: dt.datetime | None = None
     generated_at: dt.datetime | None = None
-    model: str = "mock-v1"
+    model: str | None = "mock-v1"
     machine_summary: dict[str, typ.Any] | None = None
 
 
@@ -36,11 +45,19 @@ def _make_report(fields: _ReportFields | None = None) -> mock.MagicMock:
         2024, 7, 14, 12, 0, tzinfo=dt.UTC
     )
     report.model = f.model
-    report.machine_summary = f.machine_summary or {"status": "on_track"}
+    report.machine_summary = (
+        f.machine_summary if f.machine_summary is not None else {"status": "on_track"}
+    )
     return report
 
 
 _DEFAULT_REPORT_SENTINEL = object()
+
+
+@pytest.fixture
+def report_client() -> falcon.testing.TestClient:
+    """Build a test client with a generated report."""
+    return _build_client()
 
 
 def _build_client(
@@ -48,17 +65,7 @@ def _build_client(
     resolve_repo_id: str | None = "repo-abc",
     run_result: mock.MagicMock | None | object = _DEFAULT_REPORT_SENTINEL,
 ) -> falcon.testing.TestClient:
-    """Build a test client with a mocked ReportResource.
-
-    Parameters
-    ----------
-    resolve_repo_id
-        Repository ID returned by the slug lookup.  When ``None``,
-        ``RepositoryNotFoundError`` is raised.
-    run_result
-        Return value of ``ReportingService.run_for_repository``.
-
-    """
+    """Build a test client with a mocked ReportResource."""
     if run_result is _DEFAULT_REPORT_SENTINEL:
         run_result = mock.MagicMock()
 
@@ -93,36 +100,50 @@ class TestReportResource200:
         report = _make_report()
         client = _build_client(run_result=report)
         result = client.simulate_post("/reports/repositories/acme/widgets")
-        assert result.status == falcon.HTTP_200
+        assert result.status == falcon.HTTP_200, "expected HTTP 200"
 
     def test_response_has_report_id(self) -> None:
         """Response body includes report_id."""
         report = _make_report(_ReportFields(report_id="rpt-42"))
         client = _build_client(run_result=report)
         result = client.simulate_post("/reports/repositories/acme/widgets")
-        assert result.json["report_id"] == "rpt-42"
+        assert result.json["report_id"] == "rpt-42", "wrong report_id"
 
     def test_response_has_repository_slug(self) -> None:
         """Response body includes the repository slug."""
         report = _make_report()
         client = _build_client(run_result=report)
         result = client.simulate_post("/reports/repositories/acme/widgets")
-        assert result.json["repository"] == "acme/widgets"
+        assert result.json["repository"] == "acme/widgets", "wrong slug"
 
     def test_response_has_window_dates(self) -> None:
         """Response body includes ISO-formatted window dates."""
         report = _make_report()
         client = _build_client(run_result=report)
         result = client.simulate_post("/reports/repositories/acme/widgets")
-        assert "window_start" in result.json
-        assert "window_end" in result.json
+        assert "window_start" in result.json, "missing window_start"
+        assert "window_end" in result.json, "missing window_end"
 
     def test_response_has_status(self) -> None:
         """Response body includes the status from machine_summary."""
         report = _make_report(_ReportFields(machine_summary={"status": "at_risk"}))
         client = _build_client(run_result=report)
         result = client.simulate_post("/reports/repositories/acme/widgets")
-        assert result.json["status"] == "at_risk"
+        assert result.json["status"] == "at_risk", "wrong status"
+
+    def test_response_status_falls_back_to_unknown(self) -> None:
+        """Response status defaults to 'unknown' when machine_summary lacks status."""
+        report = _make_report(_ReportFields(machine_summary={}))
+        client = _build_client(run_result=report)
+        result = client.simulate_post("/reports/repositories/acme/widgets")
+        assert result.json["status"] == "unknown", "expected 'unknown' fallback"
+
+    def test_response_model_falls_back_to_unknown(self) -> None:
+        """Response model defaults to 'unknown' when model metadata is missing."""
+        report = _make_report(_ReportFields(model=None))
+        client = _build_client(run_result=report)
+        result = client.simulate_post("/reports/repositories/acme/widgets")
+        assert result.json["model"] == "unknown", "expected 'unknown' fallback"
 
     def test_response_content_type_is_json(self) -> None:
         """Response content type is application/json."""
@@ -130,7 +151,7 @@ class TestReportResource200:
         client = _build_client(run_result=report)
         result = client.simulate_post("/reports/repositories/acme/widgets")
         content_type = result.headers.get("content-type", "")
-        assert content_type.startswith("application/json")
+        assert content_type.startswith("application/json"), "wrong content type"
 
 
 class TestReportResource204:
@@ -140,7 +161,7 @@ class TestReportResource204:
         """Returns HTTP 204 when run_for_repository returns None."""
         client = _build_client(run_result=None)
         result = client.simulate_post("/reports/repositories/acme/widgets")
-        assert result.status == falcon.HTTP_204
+        assert result.status == falcon.HTTP_204, "expected HTTP 204"
 
 
 class TestReportResource404:
@@ -150,10 +171,10 @@ class TestReportResource404:
         """Returns HTTP 404 when repository is not found."""
         client = _build_client(resolve_repo_id=None)
         result = client.simulate_post("/reports/repositories/unknown/repo")
-        assert result.status == falcon.HTTP_404
+        assert result.status == falcon.HTTP_404, "expected HTTP 404"
 
     def test_404_body_has_description(self) -> None:
         """404 response body includes the repository slug."""
         client = _build_client(resolve_repo_id=None)
         result = client.simulate_post("/reports/repositories/unknown/repo")
-        assert "unknown/repo" in result.json["description"]
+        assert "unknown/repo" in result.json["description"], "missing slug"

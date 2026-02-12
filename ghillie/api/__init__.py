@@ -1,7 +1,17 @@
 """Ghillie HTTP API layer.
 
-This package provides the Falcon ASGI application and supporting
-infrastructure for the Ghillie runtime HTTP surface.
+This package provides the Falcon Asynchronous Server Gateway Interface
+(ASGI) application and supporting infrastructure for the Ghillie
+runtime HTTP surface.
+
+Usage
+-----
+Create and run the application::
+
+    from ghillie.api import create_app
+
+    app = create_app()              # health-only mode
+    app = create_app(dependencies)  # full mode with domain endpoints
 
 Public API
 ----------

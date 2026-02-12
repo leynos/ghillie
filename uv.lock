@@ -257,7 +257,7 @@ requires-dist = [
     { name = "dramatiq", specifier = ">=1.16.0" },
     { name = "falcon", specifier = ">=4.0.0,<5.0.0" },
     { name = "femtologging", git = "https://github.com/leynos/femtologging?rev=7c139fb7aca18f9277e00b88604b8bf5eb471be0" },
-    { name = "granian", specifier = ">=1.0.0" },
+    { name = "granian", specifier = ">=1.0.0,<3.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "msgspec", specifier = ">=0.18.6" },
     { name = "ruamel-yaml", specifier = ">=0.18.6" },

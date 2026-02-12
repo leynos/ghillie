@@ -3,8 +3,9 @@ info:
   title: Ghillie Runtime API
   version: 0.1.0
   description: >-
-    Minimal HTTP surface for Kubernetes probes. The runtime only exposes
-    liveness and readiness endpoints.
+    HTTP surface for Kubernetes probes and on-demand report generation.
+    Health endpoints are always available; report generation requires
+    database dependencies to be configured.
 servers:
   - url: http://{host}:{port}
     description: Runtime server
@@ -104,6 +105,17 @@ paths:
           description: >-
             Repository exists but no events were found in the current
             reporting window.
+        "400":
+          description: Invalid input parameter.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                invalid_input:
+                  value:
+                    title: Invalid input
+                    description: "owner: must not be empty"
         "404":
           description: Repository not found.
           content:
@@ -185,7 +197,6 @@ components:
           description: Identifier of the model that generated the report.
     ErrorResponse:
       type: object
-      additionalProperties: false
       required:
         - title
         - description
@@ -196,3 +207,8 @@ components:
         description:
           type: string
           description: Human-readable error description.
+        field:
+          type: string
+          description: >-
+            Name of the input field that caused the error. Only present
+            for validation errors that relate to a specific field.
