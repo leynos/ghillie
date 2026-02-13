@@ -3,8 +3,9 @@ info:
   title: Ghillie Runtime API
   version: 0.1.0
   description: >-
-    Minimal HTTP surface for Kubernetes probes. The runtime only exposes
-    liveness and readiness endpoints.
+    HTTP surface for Kubernetes probes and on-demand report generation.
+    Health endpoints are always available; report generation requires
+    database dependencies to be configured.
 servers:
   - url: http://{host}:{port}
     description: Runtime server
@@ -17,6 +18,11 @@ servers:
         description: TCP port for the runtime server.
 security:
   - ApiKeyAuth: []
+tags:
+  - name: Health
+    description: Kubernetes liveness and readiness probes.
+  - name: Reports
+    description: On-demand report generation endpoints.
 paths:
   /health:
     get:
@@ -54,6 +60,73 @@ paths:
                 ready:
                   value:
                     status: ready
+  /reports/repositories/{owner}/{name}:
+    post:
+      summary: Generate on-demand repository report
+      description: >-
+        Triggers report generation for the specified repository using the
+        same pipeline as scheduled reports. The endpoint identifies
+        repositories by their GitHub owner/name slug.
+      tags:
+        - Reports
+      parameters:
+        - name: owner
+          in: path
+          required: true
+          schema:
+            type: string
+          description: GitHub repository owner.
+          example: acme
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: GitHub repository name.
+          example: widgets
+      responses:
+        "200":
+          description: Report generated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportMetadata"
+              examples:
+                on_track:
+                  value:
+                    report_id: abc-123
+                    repository: acme/widgets
+                    window_start: "2024-07-07T00:00:00+00:00"
+                    window_end: "2024-07-14T00:00:00+00:00"
+                    generated_at: "2024-07-14T12:00:00+00:00"
+                    status: on_track
+                    model: mock-v1
+        "204":
+          description: >-
+            Repository exists but no events were found in the current
+            reporting window.
+        "400":
+          description: Invalid input parameter.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                invalid_input:
+                  value:
+                    title: Invalid input
+                    description: "owner: must not be empty"
+        "404":
+          description: Repository not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                not_found:
+                  value:
+                    title: Repository not found
+                    description: "No repository matching 'acme/widgets' exists."
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -86,3 +159,56 @@ components:
           properties:
             status:
               const: ready
+    ReportMetadata:
+      type: object
+      additionalProperties: false
+      required:
+        - report_id
+        - repository
+        - window_start
+        - window_end
+        - generated_at
+        - status
+        - model
+      properties:
+        report_id:
+          type: string
+          description: Unique identifier for the generated report.
+        repository:
+          type: string
+          description: Repository slug (owner/name).
+        window_start:
+          type: string
+          format: date-time
+          description: Start of the reporting window (inclusive).
+        window_end:
+          type: string
+          format: date-time
+          description: End of the reporting window (exclusive).
+        generated_at:
+          type: string
+          format: date-time
+          description: Timestamp when the report was generated.
+        status:
+          type: string
+          description: Repository status from the machine summary.
+        model:
+          type: string
+          description: Identifier of the model that generated the report.
+    ErrorResponse:
+      type: object
+      required:
+        - title
+        - description
+      properties:
+        title:
+          type: string
+          description: Short error title.
+        description:
+          type: string
+          description: Human-readable error description.
+        field:
+          type: string
+          description: >-
+            Name of the input field that caused the error. Only present
+            for validation errors that relate to a specific field.

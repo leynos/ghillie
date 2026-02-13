@@ -647,43 +647,64 @@ placing the Falcon Asynchronous Server Gateway Interface (ASGI) application at
 the adapter boundary between external HTTP consumers and the core Medallion
 data layers.
 
-**Current implementation (Phase 1.5.c):** The runtime module
-(`ghillie.runtime`) provides minimal Kubernetes health probe endpoints
-(`/health`, `/ready`) using Falcon ASGI with Granian as the application server.
-These endpoints are stateless and do not require database access or session
-management.
+**Current implementation (Phase 2.3.c):** The modular API structure has been
+partially implemented. The runtime module (`ghillie.runtime`) delegates to the
+`ghillie.api.app` application factory. The modular package structure is:
 
-**Planned evolution:** As domain-connected endpoints are added (Concordat
-CloudEvents ingestion, status query APIs), the API layer should evolve from the
-current monolithic `runtime.py` to a modular structure:
-
-```text
+```plaintext
 ghillie/api/
-  app.py              # Application factory (create_app)
-  middleware.py       # SQLAlchemy session manager per async-sqlalchemy guide
-  error_handlers.py   # Domain exception to HTTP response mapping
+  __init__.py         # Package root, exports create_app
+  app.py              # Application factory with AppDependencies dataclass
+  factory.py          # build_reporting_service() for API layer
+  middleware.py       # SQLAlchemySessionManager (request-scoped sessions)
+  errors.py           # Domain exceptions and Falcon error handlers
   health/
     resources.py      # HealthResource, ReadyResource
-  bronze/
-    resources.py      # ConcordatEventResource (CloudEvents ingestion)
   gold/
-    resources.py      # ReportResource (status query endpoints)
+    resources.py      # ReportResource (on-demand report generation)
 ```
+
+The following components are implemented:
+
+- **Health probe endpoints** (`/health`, `/ready`): Stateless, always
+  registered regardless of database availability.
+- **On-demand report generation**
+  (`POST /reports/repositories/{owner}/{name}`): Triggers report generation for
+  a specific repository, using the same pipeline as scheduled reports. Returns
+  200 with report metadata, 204 when no events exist in the window, or 404 when
+  the repository slug is unknown.
+- **Session middleware** (`SQLAlchemySessionManager`): Provides
+  request-scoped `AsyncSession` instances with automatic commit/rollback/close
+  per the pattern documented in `async-sqlalchemy-with-pg-and-falcon.md`.
+- **Error handlers**: Map `RepositoryNotFoundError` to 404 and
+  `InvalidInputError` to 400.
+
+**Planned evolution:** As additional domain endpoints are added (Concordat
+CloudEvents ingestion, estate-level queries), corresponding resource modules
+should be created under `ghillie/api/bronze/` and `ghillie/api/gold/`.
 
 This structure maintains clear separation between:
 
 - **Infrastructure adapters** (health probes): No domain logic, stateless
 - **Inbound adapters** (CloudEvents ingestion): Write path to Bronze layer
-- **Outbound adapters** (status queries): Read path from Gold layer
+- **Outbound adapters** (status queries, on-demand reports): Read/write path
+  to Gold layer
 
-The session middleware pattern documented in
-`async-sqlalchemy-with-pg-and-falcon.md` should be implemented before adding
-database-dependent endpoints. This provides request-scoped `AsyncSession`
-instances with automatic transaction demarcation.
+**Design decisions:**
 
-**Design decision:** Health probe endpoints remain in a separate resource
-module from domain endpoints. This allows Kubernetes operators to understand
-which endpoints serve operational purposes versus functional purposes.
+- Health probe endpoints remain in a separate resource module from domain
+  endpoints. This allows Kubernetes operators to understand which endpoints
+  serve operational purposes versus functional purposes.
+- `AppDependencies` frozen dataclass groups `session_factory` and
+  `reporting_service` to keep constructor argument counts within lint
+  thresholds (`max-args = 4`).
+- `ReportResource` reuses the request-scoped session from
+  ``req.context.session`` for repository slug lookups, keeping all reads within
+  the middleware's transaction.  The ``ReportingService`` manages its own
+  sessions internally for report generation.
+- `GHILLIE_DATABASE_URL` controls whether the runtime starts in health-only
+  mode or full mode with domain endpoints, maintaining backwards compatibility
+  with existing deployments.
 
 ## 9. Evidence Bundle Architecture (Phase 2.1)
 
