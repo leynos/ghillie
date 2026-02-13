@@ -57,7 +57,9 @@ def test_ingest_preserves_payload_and_timestamps(
 
     stored_event = asyncio.run(_load())
     expected_payload = dict(payload)
-    expected_payload["when"] = expected_payload["when"].isoformat()
+    expected_when = payload["when"]
+    assert isinstance(expected_when, dt.datetime)
+    expected_payload["when"] = expected_when.isoformat()
 
     assert stored_event.payload == expected_payload, (
         "payload persisted verbatim in JSON form"

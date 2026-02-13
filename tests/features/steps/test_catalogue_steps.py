@@ -170,7 +170,7 @@ def schema_validation(context: StepContext, tmp_path: Path) -> None:
     data_path.write_bytes(msgspec.json.encode(catalogue))
 
     try:
-        subprocess.run(  # type: ignore[arg-type]  # noqa: S603 - static pajv invocation
+        subprocess.run(  # noqa: S603 - static pajv invocation
             # pyright/mypy overloads lack a variant with stdout/stderr pipes + text=True
             # for CompletedProcess[str]; this call is valid at runtime.
             [
