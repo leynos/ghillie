@@ -192,3 +192,79 @@ class TestReportResource404:
         client = _build_client(resolve_repo_id=None)
         result = client.simulate_post("/reports/repositories/unknown/repo")
         assert "unknown/repo" in result.json["description"], "missing slug"
+
+
+class TestReportResource422:
+    """POST returns 422 when report generation fails validation."""
+
+    def test_returns_422_when_report_fails_validation(self) -> None:
+        """Service raising ReportValidationError maps to HTTP 422."""
+        from ghillie.reporting.errors import ReportValidationError
+        from ghillie.reporting.validation import ReportValidationIssue
+
+        issues = (
+            ReportValidationIssue(code="empty_summary", message="Summary is empty"),
+        )
+        mock_service = mock.MagicMock()
+        mock_service.run_for_repository = mock.AsyncMock(
+            side_effect=ReportValidationError(issues=issues, review_id="rev-1"),
+        )
+
+        client = _build_client(run_result=mock.MagicMock())
+        # Replace the reporting service on the resource
+        # We need to build a client whose service raises the error
+        mock_session = mock.MagicMock()
+        mock_session.scalar = mock.AsyncMock(return_value="repo-abc")
+        mock_session.commit = mock.AsyncMock()
+        mock_session.rollback = mock.AsyncMock()
+        mock_session.close = mock.AsyncMock()
+        mock_session.is_active = True
+        mock_session.__aenter__ = mock.AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = mock.AsyncMock(return_value=False)
+
+        mock_session_factory = mock.MagicMock(return_value=mock_session)
+
+        deps = AppDependencies(
+            session_factory=mock_session_factory,
+            reporting_service=mock_service,
+        )
+        app = create_app(deps)
+        client = falcon.testing.TestClient(app)
+
+        result = client.simulate_post("/reports/repositories/acme/widgets")
+        assert result.status == falcon.HTTP_422, "expected HTTP 422"
+
+    def test_422_body_contains_review_reference(self) -> None:
+        """422 response body includes a review_id for operator follow-up."""
+        from ghillie.reporting.errors import ReportValidationError
+        from ghillie.reporting.validation import ReportValidationIssue
+
+        issues = (
+            ReportValidationIssue(code="empty_summary", message="Summary is empty"),
+        )
+        mock_service = mock.MagicMock()
+        mock_service.run_for_repository = mock.AsyncMock(
+            side_effect=ReportValidationError(issues=issues, review_id="rev-42"),
+        )
+
+        mock_session = mock.MagicMock()
+        mock_session.scalar = mock.AsyncMock(return_value="repo-abc")
+        mock_session.commit = mock.AsyncMock()
+        mock_session.rollback = mock.AsyncMock()
+        mock_session.close = mock.AsyncMock()
+        mock_session.is_active = True
+        mock_session.__aenter__ = mock.AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = mock.AsyncMock(return_value=False)
+
+        mock_session_factory = mock.MagicMock(return_value=mock_session)
+
+        deps = AppDependencies(
+            session_factory=mock_session_factory,
+            reporting_service=mock_service,
+        )
+        app = create_app(deps)
+        client = falcon.testing.TestClient(app)
+
+        result = client.simulate_post("/reports/repositories/acme/widgets")
+        assert result.json["review_id"] == "rev-42", "wrong review_id"
+        assert "issues" in result.json, "response should contain issues"
