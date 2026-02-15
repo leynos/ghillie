@@ -43,11 +43,16 @@ class ReportingConfig:
         set, reports are written to ``{path}/{owner}/{name}/latest.md`` and
         ``{path}/{owner}/{name}/{date}-{report_id}.md``. When ``None``, no
         Markdown files are produced.
+    validation_max_attempts
+        Maximum number of status-model invocations attempted when report
+        validation fails.  The first invocation always happens; retries
+        are ``validation_max_attempts - 1``.  Default is 2 (one retry).
 
     """
 
     window_days: int = 7
     report_sink_path: Path | None = None
+    validation_max_attempts: int = 2
 
     @classmethod
     def from_env(cls) -> ReportingConfig:
@@ -59,6 +64,8 @@ class ReportingConfig:
           Must be a positive integer.
         - ``GHILLIE_REPORT_SINK_PATH``: Optional filesystem path for report
           Markdown output.
+        - ``GHILLIE_VALIDATION_MAX_ATTEMPTS``: Maximum number of status-model
+          invocations when validation fails.  Must be a positive integer.
 
         Returns
         -------
@@ -95,4 +102,27 @@ class ReportingConfig:
         if raw_sink_path.strip():
             report_sink_path = Path(raw_sink_path.strip())
 
-        return cls(window_days=window_days, report_sink_path=report_sink_path)
+        max_attempts_str = os.environ.get("GHILLIE_VALIDATION_MAX_ATTEMPTS", "")
+        if max_attempts_str.strip():
+            try:
+                validation_max_attempts = int(max_attempts_str)
+            except ValueError as exc:
+                msg = (
+                    f"GHILLIE_VALIDATION_MAX_ATTEMPTS must be an integer, "
+                    f"got: {max_attempts_str!r}"
+                )
+                raise ValueError(msg) from exc
+            if validation_max_attempts < 1:
+                msg = (
+                    f"GHILLIE_VALIDATION_MAX_ATTEMPTS must be positive, "
+                    f"got: {validation_max_attempts}"
+                )
+                raise ValueError(msg)
+        else:
+            validation_max_attempts = 2
+
+        return cls(
+            window_days=window_days,
+            report_sink_path=report_sink_path,
+            validation_max_attempts=validation_max_attempts,
+        )

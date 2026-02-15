@@ -348,13 +348,23 @@ using the evidence and model integrations.
 **Goal:** Ensure repository reports are accurate enough to trust and
 operationally safe to run.
 
-- [ ] **Task 2.4.a – Add basic correctness checks for generated reports**  
+- [x] **Task 2.4.a – Add basic correctness checks for generated reports**
   Implement post-generation validation that ensures the number of highlighted
   changes is plausible relative to the number of events in the evidence bundle
   and that the model has not produced empty or truncated output.
 
   *Completion criteria:* Invalid or clearly broken reports are rejected and
   retried or marked for human review, rather than silently stored.
+
+  *Implemented:* `ghillie.reporting.validation` module with three heuristic
+  checks (non-empty summary, truncation detection, highlight plausibility).
+  `ReportingService.generate_report` retries model invocation up to
+  `validation_max_attempts` times (default 2). Exhausted retries persist a
+  `ReportReview` Gold-layer marker with failure details and lifecycle state.
+  On-demand API returns HTTP 422 with validation failure details and review
+  reference. Unit tests (validation rules, retry/review behaviour, API
+  mapping), schema tests (ReportReview persistence and uniqueness), and
+  pytest-bdd scenarios cover the new behaviour.
 
 - [ ] **Task 2.4.b – Capture reporting metrics and costs**  
   Emit metrics for the number of reports generated, average model latency, and

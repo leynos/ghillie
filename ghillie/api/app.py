@@ -33,9 +33,11 @@ from ghillie.api.errors import (
     InvalidInputError,
     RepositoryNotFoundError,
     handle_invalid_input,
+    handle_report_validation_failed,
     handle_repository_not_found,
 )
 from ghillie.api.health.resources import HealthResource, ReadyResource
+from ghillie.reporting.errors import ReportValidationError
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -126,5 +128,6 @@ def create_app(
     # Error handlers
     app.add_error_handler(RepositoryNotFoundError, handle_repository_not_found)
     app.add_error_handler(InvalidInputError, handle_invalid_input)
+    app.add_error_handler(ReportValidationError, handle_report_validation_failed)
 
     return app

@@ -10,14 +10,11 @@ import datetime as dt
 
 from ghillie.evidence.models import (
     CommitEvidence,
+    ReportStatus,
     RepositoryEvidenceBundle,
     RepositoryMetadata,
-    ReportStatus,
 )
-from ghillie.reporting.validation import (
-    ReportValidationResult,
-    validate_repository_report,
-)
+from ghillie.reporting.validation import validate_repository_report
 from ghillie.status.models import RepositoryStatusResult
 
 
@@ -59,6 +56,7 @@ class TestValidReportPassesChecks:
     """A well-formed result with plausible data should pass validation."""
 
     def test_valid_result_passes_basic_correctness_checks(self) -> None:
+        """Verify a well-formed result passes all validation checks."""
         bundle = _make_bundle(commit_count=3)
         result = _make_result(highlights=("Did a thing",))
         outcome = validate_repository_report(bundle, result)
@@ -70,6 +68,7 @@ class TestRejectsEmptySummary:
     """Reports with empty or whitespace-only summaries must be rejected."""
 
     def test_rejects_empty_summary(self) -> None:
+        """Reject a report whose summary is the empty string."""
         bundle = _make_bundle()
         result = _make_result(summary="")
         outcome = validate_repository_report(bundle, result)
@@ -79,6 +78,7 @@ class TestRejectsEmptySummary:
         assert "empty_summary" in codes
 
     def test_rejects_whitespace_only_summary(self) -> None:
+        """Reject a report whose summary contains only whitespace."""
         bundle = _make_bundle()
         result = _make_result(summary="   \n  ")
         outcome = validate_repository_report(bundle, result)
@@ -92,6 +92,7 @@ class TestRejectsObviouslyTruncatedSummary:
     """Summaries that look truncated should be rejected."""
 
     def test_rejects_trailing_ellipsis(self) -> None:
+        """Reject a summary ending with ASCII ellipsis."""
         bundle = _make_bundle()
         result = _make_result(summary="The repository was active and...")
         outcome = validate_repository_report(bundle, result)
@@ -101,6 +102,7 @@ class TestRejectsObviouslyTruncatedSummary:
         assert "truncated_summary" in codes
 
     def test_rejects_unicode_ellipsis(self) -> None:
+        """Reject a summary ending with Unicode ellipsis character."""
         bundle = _make_bundle()
         result = _make_result(summary="The repository was active and\u2026")
         outcome = validate_repository_report(bundle, result)
@@ -138,6 +140,7 @@ class TestValidationResultStructure:
     """ReportValidationResult exposes expected attributes."""
 
     def test_valid_result_has_no_issues(self) -> None:
+        """Confirm a valid result has an empty issues tuple."""
         bundle = _make_bundle()
         result = _make_result(highlights=("One thing",))
         outcome = validate_repository_report(bundle, result)
@@ -146,6 +149,7 @@ class TestValidationResultStructure:
         assert outcome.issues == ()
 
     def test_invalid_result_contains_issues(self) -> None:
+        """Confirm an invalid result carries at least one issue."""
         bundle = _make_bundle()
         result = _make_result(summary="")
         outcome = validate_repository_report(bundle, result)

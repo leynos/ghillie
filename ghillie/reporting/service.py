@@ -38,10 +38,21 @@ import typing as typ
 from sqlalchemy import select
 
 from ghillie.common.time import utcnow
-from ghillie.gold.storage import Report, ReportCoverage, ReportScope
+from ghillie.gold.storage import (
+    Report,
+    ReportCoverage,
+    ReportReview,
+    ReportScope,
+    ReviewState,
+)
 from ghillie.logging import get_logger, log_warning
+from ghillie.reporting.errors import ReportValidationError
 from ghillie.reporting.markdown import render_report_markdown
-from ghillie.status.models import to_machine_summary
+from ghillie.reporting.validation import (
+    ReportValidationResult,
+    validate_repository_report,
+)
+from ghillie.status.models import RepositoryStatusResult, to_machine_summary
 
 from .config import ReportingConfig
 from .sink import ReportMetadata
@@ -209,7 +220,11 @@ class ReportingService:
         """Generate a repository report for the given window.
 
         Builds an evidence bundle (unless provided), invokes the status model,
-        and persists the report with coverage records.
+        validates the result, and persists the report with coverage records.
+        If validation fails, the status model is retried up to
+        ``config.validation_max_attempts`` times.  When all attempts fail, a
+        ``ReportReview`` marker is created and ``ReportValidationError`` is
+        raised.
 
         Parameters
         ----------
@@ -232,6 +247,8 @@ class ReportingService:
         ------
         ValueError
             If window_end is not after window_start.
+        ReportValidationError
+            If report validation fails after all retry attempts.
 
         """
         if window_end <= window_start:
@@ -248,27 +265,100 @@ class ReportingService:
                 window_end=window_end,
             )
 
-        status_result = await self._status_model.summarize_repository(bundle)
+        status_result, validation = await self._invoke_with_retries(bundle)
+
+        if not validation.is_valid:
+            review_id = await self._create_review_marker(
+                repository_id=repository_id,
+                window_start=window_start,
+                window_end=window_end,
+                validation=validation,
+            )
+            raise ReportValidationError(
+                issues=validation.issues,
+                review_id=review_id,
+            )
+
+        return await self._persist_report(
+            status_result=status_result,
+            bundle=bundle,
+        )
+
+    async def _invoke_with_retries(
+        self,
+        bundle: RepositoryEvidenceBundle,
+    ) -> tuple[RepositoryStatusResult, ReportValidationResult]:
+        """Invoke the status model with validation retries.
+
+        Returns the last status result and its validation outcome.
+        """
+        max_attempts = self._config.validation_max_attempts
+        status_result: RepositoryStatusResult | None = None
+        validation: ReportValidationResult | None = None
+
+        for _attempt in range(max_attempts):
+            status_result = await self._status_model.summarize_repository(bundle)
+            validation = validate_repository_report(bundle, status_result)
+            if validation.is_valid:
+                break
+
+        # Both are guaranteed non-None after at least one loop iteration.
+        assert status_result is not None  # noqa: S101
+        assert validation is not None  # noqa: S101
+        return status_result, validation
+
+    async def _create_review_marker(
+        self,
+        *,
+        repository_id: str,
+        window_start: dt.datetime,
+        window_end: dt.datetime,
+        validation: ReportValidationResult,
+    ) -> str:
+        """Persist a ``ReportReview`` row and return its ID."""
+        review = ReportReview(
+            repository_id=repository_id,
+            window_start=window_start,
+            window_end=window_end,
+            model=self._get_model_identifier(),
+            attempt_count=self._config.validation_max_attempts,
+            validation_issues=[
+                {"code": issue.code, "message": issue.message}
+                for issue in validation.issues
+            ],
+            state=ReviewState.PENDING,
+        )
+        async with self._session_factory() as session, session.begin():
+            session.add(review)
+            await session.flush()
+            review_id: str = review.id
+        return review_id
+
+    async def _persist_report(
+        self,
+        *,
+        status_result: RepositoryStatusResult,
+        bundle: RepositoryEvidenceBundle,
+    ) -> Report:
+        """Persist the validated report and write to sink."""
+        repository_id = bundle.repository.id
         machine_summary = to_machine_summary(status_result)
 
         async with self._session_factory() as session, session.begin():
             report = Report(
                 scope=ReportScope.REPOSITORY,
                 repository_id=repository_id,
-                window_start=window_start,
-                window_end=window_end,
+                window_start=bundle.window_start,
+                window_end=bundle.window_end,
                 model=self._get_model_identifier(),
                 human_text=status_result.summary,
                 machine_summary=machine_summary,
             )
             session.add(report)
             await session.flush()
-
             self._create_coverage_records(session, report, bundle)
-
             report_id = report.id
 
-        # Fetch the persisted report to return
         async with self._session_factory() as session:
             persisted = await session.get(Report, report_id)
             if persisted is None:  # pragma: no cover - defensive check

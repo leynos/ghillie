@@ -12,15 +12,14 @@ import typing as typ
 from unittest import mock
 
 import pytest
-import pytest_asyncio
 from sqlalchemy import select
 
 from ghillie.evidence import EvidenceBundleService
 from ghillie.evidence.models import (
     CommitEvidence,
+    ReportStatus,
     RepositoryEvidenceBundle,
     RepositoryMetadata,
-    ReportStatus,
 )
 from ghillie.gold.storage import Report, ReportReview, ReviewState
 from ghillie.reporting.config import ReportingConfig
@@ -41,7 +40,7 @@ def _valid_result() -> RepositoryStatusResult:
 
 
 def _invalid_result() -> RepositoryStatusResult:
-    """Result with an empty summary that fails validation."""
+    """Return a result with an empty summary that fails validation."""
     return RepositoryStatusResult(
         summary="",
         status=ReportStatus.ON_TRACK,
@@ -50,9 +49,13 @@ def _invalid_result() -> RepositoryStatusResult:
 
 
 def _make_bundle(repo_id: str) -> RepositoryEvidenceBundle:
+    """Build a minimal bundle for validation/retry tests.
+
+    Uses an empty ``event_fact_ids`` to avoid FK constraint violations
+    from synthetic IDs that don't exist in the test database.
+    """
     commits = tuple(
-        CommitEvidence(sha=f"sha-{i}", message=f"feat: change {i}")
-        for i in range(3)
+        CommitEvidence(sha=f"sha-{i}", message=f"feat: change {i}") for i in range(3)
     )
     return RepositoryEvidenceBundle(
         repository=RepositoryMetadata(
@@ -64,7 +67,7 @@ def _make_bundle(repo_id: str) -> RepositoryEvidenceBundle:
         window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
         window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
         commits=commits,
-        event_fact_ids=(1, 2, 3),
+        event_fact_ids=(),
     )
 
 
@@ -107,9 +110,7 @@ class TestGenerateReportRetriesAfterValidationFailure:
             side_effect=[_invalid_result(), _valid_result()]
         )
 
-        service = _build_service(
-            session_factory, status_model, max_attempts=2
-        )
+        service = _build_service(session_factory, status_model, max_attempts=2)
 
         report = await service.generate_report(
             repository_id=repo_id,
@@ -142,9 +143,7 @@ class TestMarksForHumanReviewAfterExhaustedRetries:
             return_value=_invalid_result()
         )
 
-        service = _build_service(
-            session_factory, status_model, max_attempts=2
-        )
+        service = _build_service(session_factory, status_model, max_attempts=2)
 
         with pytest.raises(ReportValidationError):
             await service.generate_report(
@@ -175,6 +174,7 @@ class TestDoesNotPersistInvalidReport:
         self,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
+        """Assert that no report row exists after validation failure."""
         from tests.unit.conftest import create_test_repository
 
         repo_id = await create_test_repository(session_factory)
@@ -185,9 +185,7 @@ class TestDoesNotPersistInvalidReport:
             return_value=_invalid_result()
         )
 
-        service = _build_service(
-            session_factory, status_model, max_attempts=1
-        )
+        service = _build_service(session_factory, status_model, max_attempts=1)
 
         with pytest.raises(ReportValidationError):
             await service.generate_report(

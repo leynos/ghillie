@@ -144,3 +144,99 @@ async def test_repository_scope_without_repo_is_rejected(
             await session.commit()
 
         await session.rollback()
+
+
+# ---------------------------------------------------------------------------
+# ReportReview (human-review marker) tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_report_review_persists_with_required_fields(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """ReportReview rows persist scope keys and validation issues."""
+    from ghillie.gold.storage import ReportReview, ReviewState
+
+    writer = RawEventWriter(session_factory)
+    transformer = RawEventTransformer(session_factory)
+    repo_slug = "octo/reef"
+    occurred_at = dt.datetime(2024, 7, 6, 10, 5, tzinfo=dt.UTC)
+
+    await writer.ingest(_commit_event(repo_slug, "rev123", occurred_at))
+    await transformer.process_pending()
+
+    async with session_factory() as session:
+        repo = await session.scalar(select(Repository))
+        assert repo is not None
+
+        review = ReportReview(
+            repository_id=repo.id,
+            window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+            window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+            model="mock-v1",
+            attempt_count=2,
+            validation_issues=[
+                {"code": "empty_summary", "message": "Summary is empty"},
+            ],
+            state=ReviewState.PENDING,
+        )
+        session.add(review)
+        await session.commit()
+
+        stored = await session.scalar(select(ReportReview))
+        assert stored is not None
+        assert stored.repository_id == repo.id
+        assert stored.state == ReviewState.PENDING
+        assert stored.attempt_count == 2
+        assert len(stored.validation_issues) == 1
+        assert stored.validation_issues[0]["code"] == "empty_summary"
+
+
+@pytest.mark.asyncio
+async def test_report_review_unique_per_repo_and_window(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Duplicate review markers for the same repo/window are rejected."""
+    from ghillie.gold.storage import ReportReview, ReviewState
+
+    writer = RawEventWriter(session_factory)
+    transformer = RawEventTransformer(session_factory)
+    repo_slug = "octo/reef"
+    occurred_at = dt.datetime(2024, 7, 6, 10, 5, tzinfo=dt.UTC)
+
+    await writer.ingest(_commit_event(repo_slug, "rev456", occurred_at))
+    await transformer.process_pending()
+
+    async with session_factory() as session:
+        repo = await session.scalar(select(Repository))
+        assert repo is not None
+
+        review1 = ReportReview(
+            repository_id=repo.id,
+            window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+            window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+            model="mock-v1",
+            attempt_count=2,
+            validation_issues=[{"code": "empty_summary", "message": "empty"}],
+            state=ReviewState.PENDING,
+        )
+        session.add(review1)
+        await session.commit()
+
+    async with session_factory() as session:
+        review2 = ReportReview(
+            repository_id=repo.id,
+            window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+            window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+            model="mock-v1",
+            attempt_count=3,
+            validation_issues=[{"code": "truncated_summary", "message": "cut"}],
+            state=ReviewState.PENDING,
+        )
+        session.add(review2)
+
+        with pytest.raises(IntegrityError):
+            await session.commit()
+
+        await session.rollback()

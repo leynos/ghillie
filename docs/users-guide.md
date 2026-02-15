@@ -1218,11 +1218,12 @@ the filesystem sink path convention and catalogue notation.
 
 ### Response codes
 
-| Status | Meaning                                                   |
-| ------ | --------------------------------------------------------- |
-| 200    | Report generated. JSON body contains the report metadata. |
-| 204    | Repository exists but no events in the current window.    |
-| 404    | No repository matching the given owner/name exists.       |
+| Status | Meaning                                                        |
+| ------ | -------------------------------------------------------------- |
+| 200    | Report generated. JSON body contains the report metadata.      |
+| 204    | Repository exists but no events in the current window.         |
+| 404    | No repository matching the given owner/name exists.            |
+| 422    | Report generated but failed correctness validation after retry |
 
 ### Example
 
@@ -1276,3 +1277,68 @@ filesystem as Markdown, just like scheduled reports.
 
 The endpoint is documented in the OpenAPI specification at
 [`specs/openapi.yml`](../specs/openapi.yml).
+
+## Report correctness validation (Phase 2.4.a)
+
+Generated repository reports are validated before persistence. If the status
+model produces output that fails basic correctness checks, Ghillie retries
+generation a bounded number of times. If all retries fail, the run is marked
+for human review rather than silently storing invalid data.
+
+### Validation checks
+
+The following heuristics are applied to each generated report:
+
+- **Non-empty summary**: The model must produce a non-empty, non-whitespace
+  summary string.
+- **Truncation detection**: Summaries ending with a trailing ellipsis (`...`
+  or `\u2026`) are rejected as likely truncated.
+- **Highlight plausibility**: The number of highlights must be proportional to
+  the number of events in the evidence bundle. A highlight count exceeding
+  five times the event count is rejected as implausible.
+
+### Retry behaviour
+
+When validation fails, the service retries model invocation up to
+`validation_max_attempts` times (default: 2). If the model eventually
+produces a valid result, the report is persisted normally. If all attempts
+fail, the service persists a `ReportReview` marker in the Gold layer and
+raises a validation error.
+
+### Human review markers
+
+Operators can query `ReportReview` rows to identify failed generation runs.
+Each review marker records:
+
+- the repository and reporting window,
+- the number of generation attempts,
+- the specific validation issues encountered,
+- a lifecycle state (`pending` or `resolved`).
+
+Review markers are uniquely constrained per `(repository_id, window_start,
+window_end)` to prevent duplicates from repeated retries in the same window.
+
+### API behaviour for validation failures
+
+When the on-demand endpoint encounters a validation failure, it returns
+HTTP 422 Unprocessable Entity with a JSON body:
+
+```json
+{
+  "title": "Report validation failed",
+  "description": "The generated report did not pass correctness checks.",
+  "review_id": "abc-123",
+  "issues": [
+    "Summary must not be empty."
+  ]
+}
+```
+
+The `review_id` field references the persisted `ReportReview` row so
+operators can locate the review marker directly.
+
+### Validation configuration
+
+| Variable                          | Default | Description                         |
+| --------------------------------- | ------- | ----------------------------------- |
+| `GHILLIE_VALIDATION_MAX_ATTEMPTS` | `2`     | Maximum model invocation attempts   |

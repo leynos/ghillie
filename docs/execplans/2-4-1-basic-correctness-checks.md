@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: DONE
 
 ## Purpose / big picture
 
@@ -74,16 +74,16 @@ Success is observable when:
 ## Progress
 
 - [x] Draft ExecPlan for Task 2.4.a.
-- [ ] Add failing unit tests for validation logic.
-- [ ] Add failing unit tests for service retry/review behaviour.
-- [ ] Add failing unit tests for API mapping of validation failures.
-- [ ] Add failing pytest-bdd scenario(s) for invalid report handling.
-- [ ] Implement validation module and service integration.
-- [ ] Implement human-review persistence for exhausted retries.
-- [ ] Update API error handlers and endpoint behaviour.
-- [ ] Update users' guide and design docs.
-- [ ] Mark roadmap Task 2.4.a as done.
-- [ ] Run all quality gates and record outcomes.
+- [x] Add failing unit tests for validation logic.
+- [x] Add failing unit tests for service retry/review behaviour.
+- [x] Add failing unit tests for API mapping of validation failures.
+- [x] Add failing pytest-bdd scenario(s) for invalid report handling.
+- [x] Implement validation module and service integration.
+- [x] Implement human-review persistence for exhausted retries.
+- [x] Update API error handlers and endpoint behaviour.
+- [x] Update users' guide and design docs.
+- [x] Mark roadmap Task 2.4.a as done.
+- [x] Run all quality gates and record outcomes.
 
 ## Surprises & discoveries
 
@@ -91,12 +91,22 @@ Success is observable when:
   the established `docs/execplans/` format already used in the repository.
 - No existing Gold-layer table currently captures "needs human review" for
   invalid generated reports.
+- Test fixtures using synthetic `event_fact_ids` caused FK constraint
+  violations against py-pglite. Resolved by using empty tuples `()` in
+  retry/review test bundles since validation does not depend on event fact
+  rows.
+- The lint agent refactored `_persist_report` to derive `repository_id`,
+  `window_start`, and `window_end` from the `bundle` parameter, reducing
+  argument count to satisfy `PLR0913`. This was safe because `generate_report`
+  always provides a bundle with matching metadata.
+- Section 9.6.1 of the design document was drafted as part of the plan phase
+  and did not require further updates during implementation.
 
 ## Decision log
 
 1. **Validate before persistence.**
-   A report that fails correctness checks must never be inserted into
-   `reports` or written to Markdown sinks.
+   A report that fails correctness checks must never be inserted into `reports`
+   or written to Markdown sinks.
 
 2. **Bounded retry inside `ReportingService`.**
    Validation retry attempts should live in service logic so both scheduled and
@@ -113,7 +123,41 @@ Success is observable when:
 
 ## Outcomes & retrospective
 
-To be completed after implementation and validation.
+All acceptance criteria are met:
+
+1. Invalid outputs (empty, truncated, implausible highlights) are rejected
+   before `Report` persistence — verified by 9 validation unit tests and
+   the `test_no_report_persisted_on_validation_failure` integration test.
+2. Report generation retries within configured bounds — verified by
+   `test_retries_then_succeeds` with a two-attempt mock.
+3. Exhausted retries persist a `ReportReview` Gold-layer marker — verified
+   by `test_marks_for_human_review` and schema-level uniqueness tests.
+4. On-demand endpoint returns HTTP 422 with machine-readable details —
+   verified by `TestReportResource422` unit tests and a pytest-bdd scenario.
+5. Unit tests (22 new) and pytest-bdd scenarios (3 new) pass.
+6. Quality gates pass: `make check-fmt`, `make typecheck`, `make lint`,
+   `make test`, `make markdownlint`, and `make nixie`.
+7. `docs/users-guide.md` documents the 422 behaviour, validation checks,
+   retry policy, human review markers, and configuration.
+8. `docs/ghillie-design.md` Section 9.6.1 documents the validation and
+   retry workflow with a Mermaid flowchart.
+9. `docs/roadmap.md` marks Task 2.4.a as done.
+
+Key implementation files:
+
+- `ghillie/reporting/validation.py` — validation module (3 checks)
+- `ghillie/reporting/errors.py` — `ReportValidationError`
+- `ghillie/gold/storage.py` — `ReportReview` model, `ReviewState` enum
+- `ghillie/reporting/service.py` — retry loop and review marker persistence
+- `ghillie/reporting/config.py` — `validation_max_attempts` setting
+- `ghillie/api/errors.py` — 422 error handler
+- `ghillie/api/app.py` — error handler registration
+
+The TDD-first approach worked well. All tests were written and verified as
+failing before implementation, then made green in Phase 2. The conservative
+heuristic approach (three "clearly broken" checks) was appropriate for the
+MVP scope — future work can tighten or add checks without changing the retry
+or review marker infrastructure.
 
 ## Context and orientation
 
@@ -232,8 +276,8 @@ Update `ghillie/reporting/service.py`:
 - on exhausted attempts, persist review marker and raise validation error,
 - keep sink writes only on valid persisted reports.
 
-Update `ghillie/reporting/actor.py` and `ghillie/api/factory.py` wiring for
-any new config parameters.
+Update `ghillie/reporting/actor.py` and `ghillie/api/factory.py` wiring for any
+new config parameters.
 
 ### Phase 5: Surface operational behaviour in API
 
