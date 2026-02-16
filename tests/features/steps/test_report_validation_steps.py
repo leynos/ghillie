@@ -43,19 +43,6 @@ class RepoSetupParams:
     include_client: bool = False
 
 
-class ValidationContext(typ.TypedDict, total=False):
-    """Mutable context shared between validation scenario steps."""
-
-    session_factory: async_sessionmaker[AsyncSession]
-    service: ReportingService
-    status_model: mock.AsyncMock
-    repo_id: str
-    report: Report | None
-    error: ReportValidationError | None
-    client: falcon.testing.TestClient
-    response: Result
-
-
 def _valid_result() -> RepositoryStatusResult:
     return RepositoryStatusResult(
         summary="acme/widgets is on track with 1 events.",
@@ -89,6 +76,19 @@ def _build_reporting_service(
         validation_max_attempts=max_attempts,
     )
     return ReportingService(deps, config=config)
+
+
+class ValidationContext(typ.TypedDict, total=False):
+    """Mutable context shared between validation scenario steps."""
+
+    session_factory: async_sessionmaker[AsyncSession]
+    service: ReportingService
+    status_model: mock.AsyncMock
+    repo_id: str
+    report: Report | None
+    error: ReportValidationError | None
+    client: falcon.testing.TestClient
+    response: Result
 
 
 def _setup_repo_with_status_model(
