@@ -36,7 +36,7 @@ if typ.TYPE_CHECKING:
 class RepoSetupParams:
     """Configuration for repository setup in validation tests."""
 
-    status_model_behavior: dict[str, typ.Any]
+    status_model_behavior: dict[str, object]
     commit_id: str
     commit_message: str
     max_attempts: int = 2
@@ -95,23 +95,9 @@ def _setup_repo_with_status_model(
     session_factory: async_sessionmaker[AsyncSession],
     params: RepoSetupParams,
 ) -> ValidationContext:
-    """Set up repository with configured status model behavior.
-
-    Parameters
-    ----------
-    session_factory : async_sessionmaker[AsyncSession]
-        Database session factory for persistence operations.
-    params : RepoSetupParams
-        Configuration bundle for repository and model setup.
-
-    Returns
-    -------
-    ValidationContext
-        Context containing service, repository, and optional test client.
-
-    """
+    """Set up repository with configured status model behavior."""
     status_model = mock.AsyncMock()
-    status_model.summarize_repository = mock.AsyncMock(**params.status_model_behavior)
+    status_model.summarize_repository = mock.AsyncMock(**params.status_model_behavior)  # type: ignore[arg-type]
 
     service = _build_reporting_service(
         session_factory, status_model, max_attempts=params.max_attempts
@@ -295,9 +281,8 @@ def then_status_model_called_twice(
 ) -> None:
     """Assert the mock status model was called twice (initial + retry)."""
     status_model = validation_context["status_model"]
-    assert status_model.summarize_repository.call_count == 2, (
-        "Status model should be invoked once plus one retry"
-    )
+    count = status_model.summarize_repository.call_count
+    assert count == 2, f"expected summarize_repository to be called twice, got {count}"
 
 
 @then("a human-review marker is created for the repository")
@@ -315,9 +300,9 @@ def then_review_marker_created(
                     ReportReview.repository_id == repo_id,
                 )
             )
-            assert review is not None, "Review marker should exist"
+            assert review is not None, "Review marker should exist for the repository"
             assert review.state == ReviewState.PENDING, (
-                "Review marker should default to pending state"
+                f"expected review.state to be PENDING, got {review.state}"
             )
 
     asyncio.run(_check())

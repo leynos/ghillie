@@ -54,6 +54,36 @@ def _make_result(
     )
 
 
+def _assert_validation_fails_with_code(
+    summary: str,
+    expected_code: str,
+    scenario: str,
+) -> None:
+    """Assert that a summary triggers a specific validation failure code.
+
+    Parameters
+    ----------
+    summary
+        The summary string to validate.
+    expected_code
+        The issue code expected in the validation result.
+    scenario
+        Human-readable label for assertion messages.
+
+    """
+    bundle = _make_bundle()
+    result = _make_result(summary=summary)
+    outcome = validate_repository_report(bundle, result)
+
+    assert not outcome.is_valid, (
+        f"{scenario} summary should fail correctness validation"
+    )
+    codes = [issue.code for issue in outcome.issues]
+    assert expected_code in codes, (
+        f"{scenario} summary should emit {expected_code} issue code"
+    )
+
+
 class TestValidReportPassesChecks:
     """A well-formed result with plausible data should pass validation."""
 
@@ -82,17 +112,7 @@ class TestRejectsEmptySummary:
         scenario: str,
     ) -> None:
         """Reject empty and whitespace-only summaries."""
-        bundle = _make_bundle()
-        result = _make_result(summary=summary)
-        outcome = validate_repository_report(bundle, result)
-
-        assert not outcome.is_valid, (
-            f"{scenario} summary should fail correctness validation"
-        )
-        codes = [issue.code for issue in outcome.issues]
-        assert "empty_summary" in codes, (
-            f"{scenario} summary should emit empty_summary issue code"
-        )
+        _assert_validation_fails_with_code(summary, "empty_summary", scenario)
 
 
 class TestRejectsObviouslyTruncatedSummary:
@@ -111,17 +131,7 @@ class TestRejectsObviouslyTruncatedSummary:
         scenario: str,
     ) -> None:
         """Reject summaries ending in ASCII or Unicode ellipsis."""
-        bundle = _make_bundle()
-        result = _make_result(summary=summary)
-        outcome = validate_repository_report(bundle, result)
-
-        assert not outcome.is_valid, (
-            f"{scenario} summary should fail correctness validation"
-        )
-        codes = [issue.code for issue in outcome.issues]
-        assert "truncated_summary" in codes, (
-            f"{scenario} summary should emit truncated_summary issue code"
-        )
+        _assert_validation_fails_with_code(summary, "truncated_summary", scenario)
 
 
 class TestRejectsImplausibleHighlightCount:
