@@ -101,7 +101,10 @@ async def _run_failing_report_generation(
 
     service = _build_service(session_factory, status_model, max_attempts=max_attempts)
 
-    with pytest.raises(ReportValidationError):
+    with pytest.raises(
+        ReportValidationError,
+        match=r"Report failed validation.*after retries exhausted",
+    ):
         await service.generate_report(
             repository_id=repo_id,
             window_start=bundle.window_start,
@@ -191,7 +194,10 @@ class TestMarksForHumanReviewAfterExhaustedRetries:
         service = _build_service(session_factory, status_model, max_attempts=2)
 
         for _ in range(2):
-            with pytest.raises(ReportValidationError):
+            with pytest.raises(
+                ReportValidationError,
+                match=r"Report failed validation.*after retries exhausted",
+            ):
                 await service.generate_report(
                     repository_id=repo_id,
                     window_start=bundle.window_start,
