@@ -26,10 +26,10 @@ import typing as typ
 
 import falcon
 
-from ghillie.reporting.errors import ReportValidationError  # noqa: TC001
-
 if typ.TYPE_CHECKING:
     from falcon.asgi import Request, Response
+
+    from ghillie.reporting.errors import ReportValidationError
 
 __all__ = [
     "InvalidInputError",

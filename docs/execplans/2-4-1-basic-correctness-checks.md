@@ -93,7 +93,7 @@ Success is observable when:
   invalid generated reports.
 - Test fixtures using synthetic `event_fact_ids` caused FK constraint
   violations against py-pglite. Resolved by using empty tuples `()` in
-  retry/review test bundles since validation does not depend on event fact
+  retry/review test bundles, since validation does not depend on event fact
   rows.
 - The lint agent refactored `_persist_report` to derive `repository_id`,
   `window_start`, and `window_end` from the `bundle` parameter, reducing
@@ -126,8 +126,8 @@ Success is observable when:
 All acceptance criteria are met:
 
 1. Invalid outputs (empty, truncated, implausible highlights) are rejected
-   before `Report` persistence — verified by 9 validation unit tests and
-   the `test_no_report_persisted_on_validation_failure` integration test.
+   before `Report` persistence — verified by 9 validation unit tests and the
+   `test_no_report_persisted_on_validation_failure` integration test.
 2. Report generation retries within configured bounds — verified by
    `test_retries_then_succeeds` with a two-attempt mock.
 3. Exhausted retries persist a `ReportReview` Gold-layer marker — verified
@@ -155,9 +155,9 @@ Key implementation files:
 
 The TDD-first approach worked well. All tests were written and verified as
 failing before implementation, then made green in Phase 2. The conservative
-heuristic approach (three "clearly broken" checks) was appropriate for the
-MVP scope — future work can tighten or add checks without changing the retry
-or review marker infrastructure.
+heuristic approach (three "clearly broken" checks) was appropriate for the MVP
+scope — future work can tighten or add checks without changing the retry or
+review marker infrastructure.
 
 ## Context and orientation
 
@@ -236,7 +236,7 @@ Add new module `ghillie/reporting/validation.py`:
 
 - `ReportValidationIssue` and `ReportValidationResult` frozen dataclasses.
 - `validate_repository_report(bundle, result) -> ReportValidationResult`.
-- Checks for:
+- Checks:
   - non-empty summary,
   - obvious truncation (for example trailing ellipsis or unterminated clause),
   - highlight plausibility relative to `bundle.total_event_count`.

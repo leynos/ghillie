@@ -60,7 +60,7 @@ async def test_repository_report_persists_scope_and_coverage(
 
     async with session_factory() as session:
         repo = await session.scalar(select(Repository))
-        assert repo is not None
+        assert repo is not None, "Repository should exist after ingest + transform"
 
         event_fact = await session.scalar(select(EventFact))
         assert event_fact is not None
@@ -185,12 +185,18 @@ async def test_report_review_persists_with_required_fields(
         await session.commit()
 
         stored = await session.scalar(select(ReportReview))
-        assert stored is not None
-        assert stored.repository_id == repo.id
-        assert stored.state == ReviewState.PENDING
-        assert stored.attempt_count == 2
-        assert len(stored.validation_issues) == 1
-        assert stored.validation_issues[0]["code"] == "empty_summary"
+        assert stored is not None, "ReportReview should persist"
+        assert stored.repository_id == repo.id, "ReportReview should link repository"
+        assert stored.state == ReviewState.PENDING, (
+            "ReportReview state should default to pending"
+        )
+        assert stored.attempt_count == 2, "Attempt count should persist"
+        assert len(stored.validation_issues) == 1, (
+            "Validation issues should be persisted"
+        )
+        assert stored.validation_issues[0]["code"] == "empty_summary", (
+            "Expected empty_summary issue code"
+        )
 
 
 @pytest.mark.asyncio
@@ -236,7 +242,14 @@ async def test_report_review_unique_per_repo_and_window(
         )
         session.add(review2)
 
-        with pytest.raises(IntegrityError):
+        with pytest.raises(
+            IntegrityError,
+            match=(
+                r"(uq_report_reviews_repo_window|UNIQUE constraint failed: "
+                r"report_reviews\.repository_id, report_reviews\.window_start, "
+                r"report_reviews\.window_end)"
+            ),
+        ):
             await session.commit()
 
         await session.rollback()

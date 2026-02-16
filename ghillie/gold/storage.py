@@ -149,6 +149,13 @@ class ReportCoverage(Base):
     event_fact: Mapped[EventFact] = relationship("EventFact")
 
 
+class ValidationIssuePayload(typ.TypedDict):
+    """Serialized report validation issue persisted in ``ReportReview`` JSON."""
+
+    code: str
+    message: str
+
+
 class ReviewState(enum.StrEnum):
     """State of a human-review marker for a failed report generation."""
 
@@ -190,7 +197,7 @@ class ReportReview(Base):
     model: Mapped[str | None] = mapped_column(String(128), default=None)
     attempt_count: Mapped[int] = mapped_column(Integer(), nullable=False)
     # JSON list of {code, message} dicts from the last validation attempt.
-    validation_issues: Mapped[list[dict[str, typ.Any]]] = mapped_column(
+    validation_issues: Mapped[list[ValidationIssuePayload]] = mapped_column(
         JSON, nullable=False
     )
     state: Mapped[ReviewState] = mapped_column(

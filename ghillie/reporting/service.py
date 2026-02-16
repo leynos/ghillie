@@ -36,6 +36,7 @@ import datetime as dt
 import typing as typ
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from ghillie.common.time import utcnow
 from ghillie.gold.storage import (
@@ -44,6 +45,7 @@ from ghillie.gold.storage import (
     ReportReview,
     ReportScope,
     ReviewState,
+    ValidationIssuePayload,
 )
 from ghillie.logging import get_logger, log_warning
 from ghillie.reporting.errors import ReportValidationError
@@ -293,6 +295,10 @@ class ReportingService:
         Returns the last status result and its validation outcome.
         """
         max_attempts = self._config.validation_max_attempts
+        if max_attempts < 1:
+            msg = f"validation_max_attempts must be >= 1, got {max_attempts}"
+            raise ValueError(msg)
+
         status_result: RepositoryStatusResult | None = None
         validation: ReportValidationResult | None = None
 
@@ -302,9 +308,13 @@ class ReportingService:
             if validation.is_valid:
                 break
 
-        # Both are guaranteed non-None after at least one loop iteration.
-        assert status_result is not None  # noqa: S101
-        assert validation is not None  # noqa: S101
+        if status_result is None or validation is None:
+            msg = (
+                "Status model did not run; this indicates an invalid retry "
+                f"configuration (max_attempts={max_attempts})."
+            )
+            raise RuntimeError(msg)
+
         return status_result, validation
 
     async def _create_review_marker(
@@ -316,23 +326,58 @@ class ReportingService:
         validation: ReportValidationResult,
     ) -> str:
         """Persist a ``ReportReview`` row and return its ID."""
+        model = self._get_model_identifier()
+        attempt_count = self._config.validation_max_attempts
+        validation_issues: list[ValidationIssuePayload] = [
+            {"code": issue.code, "message": issue.message}
+            for issue in validation.issues
+        ]
         review = ReportReview(
             repository_id=repository_id,
             window_start=window_start,
             window_end=window_end,
-            model=self._get_model_identifier(),
-            attempt_count=self._config.validation_max_attempts,
-            validation_issues=[
-                {"code": issue.code, "message": issue.message}
-                for issue in validation.issues
-            ],
+            model=model,
+            attempt_count=attempt_count,
+            validation_issues=validation_issues,
             state=ReviewState.PENDING,
         )
-        async with self._session_factory() as session, session.begin():
+
+        async with self._session_factory() as session:
             session.add(review)
+            try:
+                await session.flush()
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+            else:
+                review_id: str = review.id
+                return review_id
+
+            # A marker already exists for this repository/window. Update it so
+            # repeated failed runs are idempotent and keep the latest details.
+            existing = await session.scalar(
+                select(ReportReview).where(
+                    ReportReview.repository_id == repository_id,
+                    ReportReview.window_start == window_start,
+                    ReportReview.window_end == window_end,
+                )
+            )
+            if existing is None:
+                msg = (
+                    "Failed to upsert ReportReview marker for repository "
+                    f"{repository_id} in window {window_start.isoformat()} - "
+                    f"{window_end.isoformat()}."
+                )
+                raise RuntimeError(msg)
+
+            existing.model = model
+            existing.attempt_count = attempt_count
+            existing.validation_issues = validation_issues
+            existing.state = ReviewState.PENDING
             await session.flush()
-            review_id: str = review.id
-        return review_id
+            existing_id = existing.id
+            await session.commit()
+            return existing_id
 
     async def _persist_report(
         self,

@@ -43,6 +43,19 @@ class RepoSetupParams:
     include_client: bool = False
 
 
+class ValidationContext(typ.TypedDict, total=False):
+    """Mutable context shared between validation scenario steps."""
+
+    session_factory: async_sessionmaker[AsyncSession]
+    service: ReportingService
+    status_model: mock.AsyncMock
+    repo_id: str
+    report: Report | None
+    error: ReportValidationError | None
+    client: falcon.testing.TestClient
+    response: Result
+
+
 def _valid_result() -> RepositoryStatusResult:
     return RepositoryStatusResult(
         summary="acme/widgets is on track with 1 events.",
@@ -68,6 +81,7 @@ def _build_reporting_service(
     deps = ReportingServiceDependencies(
         session_factory=session_factory,
         evidence_service=EvidenceBundleService(session_factory),
+        # AsyncMock satisfies the protocol at runtime but not statically.
         status_model=status_model,  # type: ignore[arg-type]
     )
     config = ReportingConfig(
@@ -119,7 +133,7 @@ def _setup_repo_with_status_model(
         await transformer.process_pending()
         async with session_factory() as session:
             repo = await session.scalar(select(Repository))
-            assert repo is not None
+            assert repo is not None, "Repository should exist after ingest + transform"
             return repo.id
 
     repo_id = asyncio.run(_setup())
@@ -139,19 +153,6 @@ def _setup_repo_with_status_model(
         ctx["client"] = falcon.testing.TestClient(create_app(deps))
 
     return ctx
-
-
-class ValidationContext(typ.TypedDict, total=False):
-    """Mutable context shared between validation scenario steps."""
-
-    session_factory: async_sessionmaker[AsyncSession]
-    service: ReportingService
-    status_model: mock.AsyncMock
-    repo_id: str
-    report: Report | None
-    error: ReportValidationError | None
-    client: falcon.testing.TestClient
-    response: Result
 
 
 # -- Scenario wrappers -------------------------------------------------------
@@ -294,7 +295,9 @@ def then_status_model_called_twice(
 ) -> None:
     """Assert the mock status model was called twice (initial + retry)."""
     status_model = validation_context["status_model"]
-    assert status_model.summarize_repository.call_count == 2
+    assert status_model.summarize_repository.call_count == 2, (
+        "Status model should be invoked once plus one retry"
+    )
 
 
 @then("a human-review marker is created for the repository")
@@ -313,7 +316,9 @@ def then_review_marker_created(
                 )
             )
             assert review is not None, "Review marker should exist"
-            assert review.state == ReviewState.PENDING
+            assert review.state == ReviewState.PENDING, (
+                "Review marker should default to pending state"
+            )
 
     asyncio.run(_check())
 

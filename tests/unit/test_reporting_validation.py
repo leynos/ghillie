@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import datetime as dt
 
+import pytest
+
 from ghillie.evidence.models import (
     CommitEvidence,
     ReportStatus,
@@ -67,49 +69,59 @@ class TestValidReportPassesChecks:
 class TestRejectsEmptySummary:
     """Reports with empty or whitespace-only summaries must be rejected."""
 
-    def test_rejects_empty_summary(self) -> None:
-        """Reject a report whose summary is the empty string."""
+    @pytest.mark.parametrize(
+        ("summary", "scenario"),
+        [
+            ("", "empty"),
+            ("   \n  ", "whitespace-only"),
+        ],
+    )
+    def test_rejects_empty_or_whitespace_only_summary(
+        self,
+        summary: str,
+        scenario: str,
+    ) -> None:
+        """Reject empty and whitespace-only summaries."""
         bundle = _make_bundle()
-        result = _make_result(summary="")
+        result = _make_result(summary=summary)
         outcome = validate_repository_report(bundle, result)
 
-        assert not outcome.is_valid
+        assert not outcome.is_valid, (
+            f"{scenario} summary should fail correctness validation"
+        )
         codes = [issue.code for issue in outcome.issues]
-        assert "empty_summary" in codes
-
-    def test_rejects_whitespace_only_summary(self) -> None:
-        """Reject a report whose summary contains only whitespace."""
-        bundle = _make_bundle()
-        result = _make_result(summary="   \n  ")
-        outcome = validate_repository_report(bundle, result)
-
-        assert not outcome.is_valid
-        codes = [issue.code for issue in outcome.issues]
-        assert "empty_summary" in codes
+        assert "empty_summary" in codes, (
+            f"{scenario} summary should emit empty_summary issue code"
+        )
 
 
 class TestRejectsObviouslyTruncatedSummary:
     """Summaries that look truncated should be rejected."""
 
-    def test_rejects_trailing_ellipsis(self) -> None:
-        """Reject a summary ending with ASCII ellipsis."""
+    @pytest.mark.parametrize(
+        ("summary", "scenario"),
+        [
+            ("The repository was active and...", "ascii-ellipsis"),
+            ("The repository was active and\u2026", "unicode-ellipsis"),
+        ],
+    )
+    def test_rejects_ellipsis_terminated_summary(
+        self,
+        summary: str,
+        scenario: str,
+    ) -> None:
+        """Reject summaries ending in ASCII or Unicode ellipsis."""
         bundle = _make_bundle()
-        result = _make_result(summary="The repository was active and...")
+        result = _make_result(summary=summary)
         outcome = validate_repository_report(bundle, result)
 
-        assert not outcome.is_valid
+        assert not outcome.is_valid, (
+            f"{scenario} summary should fail correctness validation"
+        )
         codes = [issue.code for issue in outcome.issues]
-        assert "truncated_summary" in codes
-
-    def test_rejects_unicode_ellipsis(self) -> None:
-        """Reject a summary ending with Unicode ellipsis character."""
-        bundle = _make_bundle()
-        result = _make_result(summary="The repository was active and\u2026")
-        outcome = validate_repository_report(bundle, result)
-
-        assert not outcome.is_valid
-        codes = [issue.code for issue in outcome.issues]
-        assert "truncated_summary" in codes
+        assert "truncated_summary" in codes, (
+            f"{scenario} summary should emit truncated_summary issue code"
+        )
 
 
 class TestRejectsImplausibleHighlightCount:
@@ -123,9 +135,13 @@ class TestRejectsImplausibleHighlightCount:
         result = _make_result(highlights=highlights)
         outcome = validate_repository_report(bundle, result)
 
-        assert not outcome.is_valid
+        assert not outcome.is_valid, (
+            "Implausible highlight count should fail correctness validation"
+        )
         codes = [issue.code for issue in outcome.issues]
-        assert "implausible_highlights" in codes
+        assert "implausible_highlights" in codes, (
+            "Implausible highlight count should emit implausible_highlights code"
+        )
 
     def test_accepts_proportional_highlights(self) -> None:
         """Highlights proportional to events should pass."""
@@ -133,7 +149,9 @@ class TestRejectsImplausibleHighlightCount:
         result = _make_result(highlights=("Did a thing", "Did another"))
         outcome = validate_repository_report(bundle, result)
 
-        assert outcome.is_valid
+        assert outcome.is_valid, (
+            f"Proportional highlights should pass, got issues: {outcome.issues}"
+        )
 
 
 class TestValidationResultStructure:
@@ -145,8 +163,10 @@ class TestValidationResultStructure:
         result = _make_result(highlights=("One thing",))
         outcome = validate_repository_report(bundle, result)
 
-        assert outcome.is_valid
-        assert outcome.issues == ()
+        assert outcome.is_valid, (
+            f"Expected valid outcome for non-empty summary, got: {outcome.issues}"
+        )
+        assert outcome.issues == (), "Valid outcome should contain zero issues"
 
     def test_invalid_result_contains_issues(self) -> None:
         """Confirm an invalid result carries at least one issue."""
@@ -154,8 +174,12 @@ class TestValidationResultStructure:
         result = _make_result(summary="")
         outcome = validate_repository_report(bundle, result)
 
-        assert not outcome.is_valid
-        assert len(outcome.issues) >= 1
+        assert not outcome.is_valid, "Empty summary should produce an invalid outcome"
+        assert len(outcome.issues) >= 1, (
+            "Invalid outcome should contain at least one issue"
+        )
         issue = outcome.issues[0]
-        assert issue.code == "empty_summary"
-        assert issue.message  # non-empty description
+        assert issue.code == "empty_summary", (
+            "First issue should report empty_summary for empty summaries"
+        )
+        assert issue.message, "Issue message should be non-empty"

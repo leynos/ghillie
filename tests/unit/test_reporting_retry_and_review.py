@@ -50,11 +50,7 @@ def _invalid_result() -> RepositoryStatusResult:
 
 
 def _make_bundle(repo_id: str) -> RepositoryEvidenceBundle:
-    """Build a minimal bundle for validation/retry tests.
-
-    Uses an empty ``event_fact_ids`` to avoid FK constraint violations
-    from synthetic IDs that don't exist in the test database.
-    """
+    """Build a minimal validation test bundle with real DB-safe references."""
     commits = tuple(
         CommitEvidence(sha=f"sha-{i}", message=f"feat: change {i}") for i in range(3)
     )
@@ -96,12 +92,7 @@ async def _run_failing_report_generation(
     session_factory: async_sessionmaker[AsyncSession],
     max_attempts: int,
 ) -> str:
-    """Run report generation that always fails validation, returning repo_id.
-
-    Creates a test repository, builds a bundle with an invalid status
-    model result, and asserts that ``generate_report`` raises
-    ``ReportValidationError`` after exhausting *max_attempts*.
-    """
+    """Run always-invalid generation and return the repository ID."""
     repo_id = await create_test_repository(session_factory)
     bundle = _make_bundle(repo_id)
 
@@ -147,9 +138,13 @@ class TestGenerateReportRetriesAfterValidationFailure:
             bundle=bundle,
         )
 
-        assert report is not None
-        assert report.human_text == "acme/widget is on track with 3 events."
-        assert status_model.summarize_repository.call_count == 2
+        assert report is not None, "Report should persist when retry succeeds"
+        assert report.human_text == "acme/widget is on track with 3 events.", (
+            "Persisted report should use the successful retry summary"
+        )
+        assert status_model.summarize_repository.call_count == 2, (
+            "Status model should be invoked once plus one retry"
+        )
 
 
 class TestMarksForHumanReviewAfterExhaustedRetries:
@@ -170,9 +165,57 @@ class TestMarksForHumanReviewAfterExhaustedRetries:
                 )
             )
             assert review is not None, "Review marker should exist"
-            assert review.state == ReviewState.PENDING
-            assert review.attempt_count == 2
-            assert len(review.validation_issues) >= 1
+            assert review.state == ReviewState.PENDING, (
+                "Review marker should remain in pending state"
+            )
+            assert review.attempt_count == 2, (
+                "Review marker should store configured attempt count"
+            )
+            assert len(review.validation_issues) >= 1, (
+                "Review marker should retain at least one validation issue"
+            )
+
+    @pytest.mark.asyncio
+    async def test_repeated_failures_reuse_existing_review_marker(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """Repeated failures for one window should update a single marker."""
+        repo_id = await create_test_repository(session_factory)
+        bundle = _make_bundle(repo_id)
+
+        status_model = mock.AsyncMock()
+        status_model.summarize_repository = mock.AsyncMock(
+            return_value=_invalid_result()
+        )
+        service = _build_service(session_factory, status_model, max_attempts=2)
+
+        for _ in range(2):
+            with pytest.raises(ReportValidationError):
+                await service.generate_report(
+                    repository_id=repo_id,
+                    window_start=bundle.window_start,
+                    window_end=bundle.window_end,
+                    bundle=bundle,
+                )
+
+        async with session_factory() as session:
+            reviews = (
+                await session.scalars(
+                    select(ReportReview).where(ReportReview.repository_id == repo_id)
+                )
+            ).all()
+            assert len(reviews) == 1, (
+                "Repeated failures for one window should not create duplicate "
+                "review markers"
+            )
+            review = reviews[0]
+            assert review.attempt_count == 2, (
+                "Review marker should retain configured attempt count"
+            )
+            assert review.validation_issues[0]["code"] == "empty_summary", (
+                "Review marker should store latest validation issue details"
+            )
 
 
 class TestDoesNotPersistInvalidReport:

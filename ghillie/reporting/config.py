@@ -56,26 +56,7 @@ class ReportingConfig:
 
     @staticmethod
     def _parse_positive_int(env_var: str, default: int) -> int:
-        """Read a positive integer from an environment variable.
-
-        Parameters
-        ----------
-        env_var
-            Name of the environment variable to read.
-        default
-            Value returned when the variable is unset or empty.
-
-        Returns
-        -------
-        int
-            Parsed value or *default*.
-
-        Raises
-        ------
-        ValueError
-            If the value is not a valid integer or is less than 1.
-
-        """
+        """Read a positive integer env var, falling back to a default."""
         raw = os.environ.get(env_var, "")
         if not raw.strip():
             return default

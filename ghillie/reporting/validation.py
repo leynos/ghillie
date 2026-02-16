@@ -67,6 +67,7 @@ class ReportValidationResult:
 def _check_empty_summary(
     result: RepositoryStatusResult,
 ) -> ReportValidationIssue | None:
+    """Return an issue when summary text is empty or whitespace-only."""
     if not result.summary or not result.summary.strip():
         return ReportValidationIssue(
             code="empty_summary",
@@ -78,6 +79,7 @@ def _check_empty_summary(
 def _check_truncated_summary(
     result: RepositoryStatusResult,
 ) -> ReportValidationIssue | None:
+    """Return an issue when summary text appears truncated."""
     summary = result.summary.rstrip()
     if summary.endswith(("...", "\u2026")):
         return ReportValidationIssue(
@@ -91,6 +93,7 @@ def _check_implausible_highlights(
     bundle: RepositoryEvidenceBundle,
     result: RepositoryStatusResult,
 ) -> ReportValidationIssue | None:
+    """Return an issue when highlight count is implausibly high."""
     event_count = max(bundle.total_event_count, 1)
     highlight_count = len(result.highlights)
     if highlight_count > event_count * _HIGHLIGHT_EVENT_RATIO:
