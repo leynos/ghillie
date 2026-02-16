@@ -91,6 +91,37 @@ def _build_service(
     return ReportingService(deps, config=config)
 
 
+async def _run_failing_report_generation(
+    session_factory: async_sessionmaker[AsyncSession],
+    max_attempts: int,
+) -> str:
+    """Run report generation that always fails validation, returning repo_id.
+
+    Creates a test repository, builds a bundle with an invalid status
+    model result, and asserts that ``generate_report`` raises
+    ``ReportValidationError`` after exhausting *max_attempts*.
+    """
+    from tests.unit.conftest import create_test_repository
+
+    repo_id = await create_test_repository(session_factory)
+    bundle = _make_bundle(repo_id)
+
+    status_model = mock.AsyncMock()
+    status_model.summarize_repository = mock.AsyncMock(return_value=_invalid_result())
+
+    service = _build_service(session_factory, status_model, max_attempts=max_attempts)
+
+    with pytest.raises(ReportValidationError):
+        await service.generate_report(
+            repository_id=repo_id,
+            window_start=bundle.window_start,
+            window_end=bundle.window_end,
+            bundle=bundle,
+        )
+
+    return repo_id
+
+
 class TestGenerateReportRetriesAfterValidationFailure:
     """Service retries status model invocation when validation fails."""
 
@@ -133,27 +164,8 @@ class TestMarksForHumanReviewAfterExhaustedRetries:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """All attempts fail validation; a ReportReview row is created."""
-        from tests.unit.conftest import create_test_repository
+        repo_id = await _run_failing_report_generation(session_factory, max_attempts=2)
 
-        repo_id = await create_test_repository(session_factory)
-        bundle = _make_bundle(repo_id)
-
-        status_model = mock.AsyncMock()
-        status_model.summarize_repository = mock.AsyncMock(
-            return_value=_invalid_result()
-        )
-
-        service = _build_service(session_factory, status_model, max_attempts=2)
-
-        with pytest.raises(ReportValidationError):
-            await service.generate_report(
-                repository_id=repo_id,
-                window_start=bundle.window_start,
-                window_end=bundle.window_end,
-                bundle=bundle,
-            )
-
-        # Review marker should be persisted
         async with session_factory() as session:
             review = await session.scalar(
                 select(ReportReview).where(
@@ -175,27 +187,8 @@ class TestDoesNotPersistInvalidReport:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Assert that no report row exists after validation failure."""
-        from tests.unit.conftest import create_test_repository
+        repo_id = await _run_failing_report_generation(session_factory, max_attempts=1)
 
-        repo_id = await create_test_repository(session_factory)
-        bundle = _make_bundle(repo_id)
-
-        status_model = mock.AsyncMock()
-        status_model.summarize_repository = mock.AsyncMock(
-            return_value=_invalid_result()
-        )
-
-        service = _build_service(session_factory, status_model, max_attempts=1)
-
-        with pytest.raises(ReportValidationError):
-            await service.generate_report(
-                repository_id=repo_id,
-                window_start=bundle.window_start,
-                window_end=bundle.window_end,
-                bundle=bundle,
-            )
-
-        # No report should exist
         async with session_factory() as session:
             report = await session.scalar(
                 select(Report).where(Report.repository_id == repo_id)

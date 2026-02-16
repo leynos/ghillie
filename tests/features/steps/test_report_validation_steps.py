@@ -65,6 +65,81 @@ def _build_reporting_service(
     return ReportingService(deps, config=config)
 
 
+def _setup_repo_with_status_model(  # noqa: PLR0913
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    status_model_behavior: dict[str, typ.Any],
+    commit_id: str,
+    commit_message: str,
+    max_attempts: int = 2,
+    include_client: bool = False,
+) -> ValidationContext:
+    """Build a repo, ingest a commit, and return a validation context.
+
+    Centralises the duplicated setup across ``given`` steps: creates a
+    mock status model, wires the reporting service, ingests a single
+    commit through Bronze→Silver, and returns a ``ValidationContext``
+    ready for scenario steps.
+
+    Parameters
+    ----------
+    session_factory
+        Async session factory for database access.
+    status_model_behavior
+        Keyword arguments forwarded to ``mock.AsyncMock`` when
+        configuring ``summarize_repository`` (e.g. ``side_effect``
+        or ``return_value``).
+    commit_id
+        Unique SHA for the ingested commit.
+    commit_message
+        Commit message text.
+    max_attempts
+        Maximum validation attempts passed to ``ReportingConfig``.
+    include_client
+        When ``True``, create an ``AppDependencies``-backed Falcon
+        ``TestClient`` and include it in the returned context.
+
+    """
+    status_model = mock.AsyncMock()
+    status_model.summarize_repository = mock.AsyncMock(**status_model_behavior)
+
+    service = _build_reporting_service(
+        session_factory, status_model, max_attempts=max_attempts
+    )
+
+    writer = RawEventWriter(session_factory)
+    transformer = RawEventTransformer(session_factory)
+
+    async def _setup() -> str:
+        commit_time = dt.datetime.now(dt.UTC) - dt.timedelta(days=2)
+        await writer.ingest(
+            commit_envelope("acme/widgets", commit_id, commit_time, commit_message)
+        )
+        await transformer.process_pending()
+        async with session_factory() as session:
+            repo = await session.scalar(select(Repository))
+            assert repo is not None
+            return repo.id
+
+    repo_id = asyncio.run(_setup())
+
+    ctx: ValidationContext = {
+        "session_factory": session_factory,
+        "service": service,
+        "status_model": status_model,
+        "repo_id": repo_id,
+    }
+
+    if include_client:
+        deps = AppDependencies(
+            session_factory=session_factory,
+            reporting_service=service,
+        )
+        ctx["client"] = falcon.testing.TestClient(create_app(deps))
+
+    return ctx
+
+
 class ValidationContext(typ.TypedDict, total=False):
     """Mutable context shared between validation scenario steps."""
 
@@ -116,34 +191,12 @@ def given_repo_with_retry_model(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> ValidationContext:
     """Set up a repo with a status model that fails once, then succeeds."""
-    status_model = mock.AsyncMock()
-    status_model.summarize_repository = mock.AsyncMock(
-        side_effect=[_invalid_result(), _valid_result()]
+    return _setup_repo_with_status_model(
+        session_factory,
+        status_model_behavior={"side_effect": [_invalid_result(), _valid_result()]},
+        commit_id="abc123",
+        commit_message="feat: x",
     )
-
-    service = _build_reporting_service(session_factory, status_model, max_attempts=2)
-
-    writer = RawEventWriter(session_factory)
-    transformer = RawEventTransformer(session_factory)
-
-    async def _setup() -> str:
-        commit_time = dt.datetime.now(dt.UTC) - dt.timedelta(days=2)
-        await writer.ingest(
-            commit_envelope("acme/widgets", "abc123", commit_time, "feat: x")
-        )
-        await transformer.process_pending()
-        async with session_factory() as session:
-            repo = await session.scalar(select(Repository))
-            assert repo is not None
-            return repo.id
-
-    repo_id = asyncio.run(_setup())
-    return {
-        "session_factory": session_factory,
-        "service": service,
-        "status_model": status_model,
-        "repo_id": repo_id,
-    }
 
 
 @given(
@@ -154,32 +207,12 @@ def given_repo_always_fails(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> ValidationContext:
     """Set up a repo whose status model always returns invalid results."""
-    status_model = mock.AsyncMock()
-    status_model.summarize_repository = mock.AsyncMock(return_value=_invalid_result())
-
-    service = _build_reporting_service(session_factory, status_model, max_attempts=2)
-
-    writer = RawEventWriter(session_factory)
-    transformer = RawEventTransformer(session_factory)
-
-    async def _setup() -> str:
-        commit_time = dt.datetime.now(dt.UTC) - dt.timedelta(days=2)
-        await writer.ingest(
-            commit_envelope("acme/widgets", "abc456", commit_time, "feat: y")
-        )
-        await transformer.process_pending()
-        async with session_factory() as session:
-            repo = await session.scalar(select(Repository))
-            assert repo is not None
-            return repo.id
-
-    repo_id = asyncio.run(_setup())
-    return {
-        "session_factory": session_factory,
-        "service": service,
-        "status_model": status_model,
-        "repo_id": repo_id,
-    }
+    return _setup_repo_with_status_model(
+        session_factory,
+        status_model_behavior={"return_value": _invalid_result()},
+        commit_id="abc456",
+        commit_message="feat: y",
+    )
 
 
 @given(
@@ -190,40 +223,13 @@ def given_api_always_fails(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> ValidationContext:
     """Set up an API whose status model always produces invalid results."""
-    status_model = mock.AsyncMock()
-    status_model.summarize_repository = mock.AsyncMock(return_value=_invalid_result())
-
-    service = _build_reporting_service(session_factory, status_model, max_attempts=2)
-
-    writer = RawEventWriter(session_factory)
-    transformer = RawEventTransformer(session_factory)
-
-    async def _setup() -> str:
-        commit_time = dt.datetime.now(dt.UTC) - dt.timedelta(days=2)
-        await writer.ingest(
-            commit_envelope("acme/widgets", "abc789", commit_time, "feat: z")
-        )
-        await transformer.process_pending()
-        async with session_factory() as session:
-            repo = await session.scalar(select(Repository))
-            assert repo is not None
-            return repo.id
-
-    repo_id = asyncio.run(_setup())
-
-    deps = AppDependencies(
-        session_factory=session_factory,
-        reporting_service=service,
+    return _setup_repo_with_status_model(
+        session_factory,
+        status_model_behavior={"return_value": _invalid_result()},
+        commit_id="abc789",
+        commit_message="feat: z",
+        include_client=True,
     )
-    client = falcon.testing.TestClient(create_app(deps))
-
-    return {
-        "session_factory": session_factory,
-        "service": service,
-        "status_model": status_model,
-        "repo_id": repo_id,
-        "client": client,
-    }
 
 
 # -- When steps ---------------------------------------------------------------

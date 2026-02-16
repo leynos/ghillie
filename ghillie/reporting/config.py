@@ -54,6 +54,41 @@ class ReportingConfig:
     report_sink_path: Path | None = None
     validation_max_attempts: int = 2
 
+    @staticmethod
+    def _parse_positive_int(env_var: str, default: int) -> int:
+        """Read a positive integer from an environment variable.
+
+        Parameters
+        ----------
+        env_var
+            Name of the environment variable to read.
+        default
+            Value returned when the variable is unset or empty.
+
+        Returns
+        -------
+        int
+            Parsed value or *default*.
+
+        Raises
+        ------
+        ValueError
+            If the value is not a valid integer or is less than 1.
+
+        """
+        raw = os.environ.get(env_var, "")
+        if not raw.strip():
+            return default
+        try:
+            value = int(raw)
+        except ValueError as exc:
+            msg = f"{env_var} must be an integer, got: {raw!r}"
+            raise ValueError(msg) from exc
+        if value < 1:
+            msg = f"{env_var} must be positive, got: {value}"
+            raise ValueError(msg)
+        return value
+
     @classmethod
     def from_env(cls) -> ReportingConfig:
         """Create configuration from environment variables.
@@ -78,48 +113,16 @@ class ReportingConfig:
             If GHILLIE_REPORTING_WINDOW_DAYS is not a positive integer.
 
         """
-        window_days_str = os.environ.get("GHILLIE_REPORTING_WINDOW_DAYS", "")
-        if window_days_str.strip():
-            try:
-                window_days = int(window_days_str)
-            except ValueError as exc:
-                msg = (
-                    f"GHILLIE_REPORTING_WINDOW_DAYS must be an integer, "
-                    f"got: {window_days_str!r}"
-                )
-                raise ValueError(msg) from exc
-            if window_days < 1:
-                msg = (
-                    f"GHILLIE_REPORTING_WINDOW_DAYS must be positive, "
-                    f"got: {window_days}"
-                )
-                raise ValueError(msg)
-        else:
-            window_days = 7
+        window_days = cls._parse_positive_int("GHILLIE_REPORTING_WINDOW_DAYS", 7)
 
         report_sink_path: Path | None = None
         raw_sink_path = os.environ.get("GHILLIE_REPORT_SINK_PATH", "")
         if raw_sink_path.strip():
             report_sink_path = Path(raw_sink_path.strip())
 
-        max_attempts_str = os.environ.get("GHILLIE_VALIDATION_MAX_ATTEMPTS", "")
-        if max_attempts_str.strip():
-            try:
-                validation_max_attempts = int(max_attempts_str)
-            except ValueError as exc:
-                msg = (
-                    f"GHILLIE_VALIDATION_MAX_ATTEMPTS must be an integer, "
-                    f"got: {max_attempts_str!r}"
-                )
-                raise ValueError(msg) from exc
-            if validation_max_attempts < 1:
-                msg = (
-                    f"GHILLIE_VALIDATION_MAX_ATTEMPTS must be positive, "
-                    f"got: {validation_max_attempts}"
-                )
-                raise ValueError(msg)
-        else:
-            validation_max_attempts = 2
+        validation_max_attempts = cls._parse_positive_int(
+            "GHILLIE_VALIDATION_MAX_ATTEMPTS", 2
+        )
 
         return cls(
             window_days=window_days,
