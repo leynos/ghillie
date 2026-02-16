@@ -26,6 +26,7 @@ from ghillie.reporting.config import ReportingConfig
 from ghillie.reporting.errors import ReportValidationError
 from ghillie.reporting.service import ReportingService, ReportingServiceDependencies
 from ghillie.status.models import RepositoryStatusResult
+from tests.unit.conftest import create_test_repository
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -101,8 +102,6 @@ async def _run_failing_report_generation(
     model result, and asserts that ``generate_report`` raises
     ``ReportValidationError`` after exhausting *max_attempts*.
     """
-    from tests.unit.conftest import create_test_repository
-
     repo_id = await create_test_repository(session_factory)
     bundle = _make_bundle(repo_id)
 
@@ -131,8 +130,6 @@ class TestGenerateReportRetriesAfterValidationFailure:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """First attempt fails validation; second attempt succeeds."""
-        from tests.unit.conftest import create_test_repository
-
         repo_id = await create_test_repository(session_factory)
         bundle = _make_bundle(repo_id)
 

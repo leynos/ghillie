@@ -69,7 +69,7 @@ Success is observable when:
   `(repository_id, window_start, window_end)` or update-in-place semantics.
 
 - Risk: API error mapping regresses existing 200/204/404 behaviour.
-  Mitigation: Extend unit and BDD API coverage with explicit 422 scenario.
+  Mitigation: Extend unit and BDD API coverage with explicit 422 scenarios.
 
 ## Progress
 
@@ -265,7 +265,7 @@ Extend `ghillie/gold/storage.py` with a Gold-layer review marker entity, e.g.
 - timestamp fields.
 
 Expose exports in `ghillie/gold/__init__.py` as needed and add any required
-storage initialisation coverage.
+storage initialization coverage.
 
 ### Phase 4: Integrate into reporting workflow
 
