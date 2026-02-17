@@ -13,6 +13,7 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Index,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -146,6 +147,76 @@ class ReportCoverage(Base):
 
     report: Mapped[Report] = relationship(back_populates="coverage_records")
     event_fact: Mapped[EventFact] = relationship("EventFact")
+
+
+class ValidationIssuePayload(typ.TypedDict):
+    """Serialized report validation issue persisted in ``ReportReview`` JSON."""
+
+    code: str
+    message: str
+
+
+class ReviewState(enum.StrEnum):
+    """State of a human-review marker for a failed report generation."""
+
+    PENDING = "pending"
+    RESOLVED = "resolved"
+
+
+class ReportReview(Base):
+    """Human-review marker created when report validation fails after retries.
+
+    Each row records the validation issues from the last attempt so that
+    operators can inspect the failure without re-running the pipeline.
+    A unique constraint on ``(repository_id, window_start, window_end)``
+    prevents duplicate markers for the same reporting window.
+    """
+
+    __tablename__ = "report_reviews"
+    __table_args__ = (
+        UniqueConstraint(
+            "repository_id",
+            "window_start",
+            "window_end",
+            name="uq_report_reviews_repo_window",
+        ),
+        Index("ix_report_reviews_repo_id", "repository_id"),
+        Index("ix_report_reviews_state", "state"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    repository_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("repositories.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    window_start: Mapped[dt.datetime] = mapped_column(UTCDateTime(), nullable=False)
+    window_end: Mapped[dt.datetime] = mapped_column(UTCDateTime(), nullable=False)
+    model: Mapped[str | None] = mapped_column(String(128), default=None)
+    attempt_count: Mapped[int] = mapped_column(Integer(), nullable=False)
+    # JSON list of {code, message} dicts from the last validation attempt.
+    validation_issues: Mapped[list[ValidationIssuePayload]] = mapped_column(
+        JSON, nullable=False
+    )
+    state: Mapped[ReviewState] = mapped_column(
+        Enum(
+            ReviewState,
+            native_enum=False,
+            values_callable=lambda enum_cls: [m.value for m in enum_cls],
+            validate_strings=True,
+        ),
+        nullable=False,
+        default=ReviewState.PENDING,
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(
+        UTCDateTime(), default=utcnow, nullable=False
+    )
+
+    repository: Mapped[Repository | None] = relationship(
+        "Repository", foreign_keys=[repository_id]
+    )
 
 
 async def init_gold_storage(engine: AsyncEngine) -> None:

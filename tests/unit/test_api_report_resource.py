@@ -19,6 +19,8 @@ import falcon.testing
 import pytest
 
 from ghillie.api.app import AppDependencies, create_app
+from ghillie.reporting.errors import ReportValidationError
+from ghillie.reporting.validation import ReportValidationIssue
 
 
 @dc.dataclass(frozen=True, slots=True)
@@ -63,6 +65,7 @@ def _build_client(
     *,
     resolve_repo_id: str | None = "repo-abc",
     run_result: mock.MagicMock | None | object = _DEFAULT_REPORT_SENTINEL,
+    run_side_effect: BaseException | None = None,
 ) -> falcon.testing.TestClient:
     """Build a test client with a mocked ReportResource."""
     if run_result is _DEFAULT_REPORT_SENTINEL:
@@ -83,7 +86,14 @@ def _build_client(
     mock_session_factory = mock.MagicMock(return_value=mock_session)
 
     mock_reporting_service = mock.MagicMock()
-    mock_reporting_service.run_for_repository = mock.AsyncMock(return_value=run_result)
+    if run_side_effect is not None:
+        mock_reporting_service.run_for_repository = mock.AsyncMock(
+            side_effect=run_side_effect
+        )
+    else:
+        mock_reporting_service.run_for_repository = mock.AsyncMock(
+            return_value=run_result
+        )
 
     deps = AppDependencies(
         session_factory=mock_session_factory,
@@ -91,6 +101,29 @@ def _build_client(
     )
     app = create_app(deps)
     return falcon.testing.TestClient(app)
+
+
+def _build_failing_validation_client(
+    review_id: str,
+) -> falcon.testing.TestClient:
+    """Build a test client whose reporting service raises a validation error.
+
+    Parameters
+    ----------
+    review_id : str
+        Review identifier attached to the ``ReportValidationError``.
+
+    Returns
+    -------
+    falcon.testing.TestClient
+        A Falcon test client wired to a service that raises
+        ``ReportValidationError`` with a single ``empty_summary`` issue.
+
+    """
+    issues = (ReportValidationIssue(code="empty_summary", message="Summary is empty"),)
+    return _build_client(
+        run_side_effect=ReportValidationError(issues=issues, review_id=review_id),
+    )
 
 
 class TestReportResource200:
@@ -192,3 +225,20 @@ class TestReportResource404:
         client = _build_client(resolve_repo_id=None)
         result = client.simulate_post("/reports/repositories/unknown/repo")
         assert "unknown/repo" in result.json["description"], "missing slug"
+
+
+class TestReportResource422:
+    """POST returns 422 when report generation fails validation."""
+
+    def test_returns_422_when_report_fails_validation(self) -> None:
+        """Service raising ReportValidationError maps to HTTP 422."""
+        client = _build_failing_validation_client("rev-1")
+        result = client.simulate_post("/reports/repositories/acme/widgets")
+        assert result.status == falcon.HTTP_422, "expected HTTP 422"
+
+    def test_422_body_contains_review_reference(self) -> None:
+        """422 response body includes a review_id for operator follow-up."""
+        client = _build_failing_validation_client("rev-42")
+        result = client.simulate_post("/reports/repositories/acme/widgets")
+        assert result.json["review_id"] == "rev-42", "wrong review_id"
+        assert "issues" in result.json, "response should contain issues"

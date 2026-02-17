@@ -62,7 +62,7 @@ def test_example_catalogue_json_matches_schema(tmp_path: Path) -> None:
         assert pajv_path is not None
 
     try:
-        subprocess.run(  # type: ignore[arg-type]  # noqa: S603 - static pajv invocation
+        subprocess.run(  # noqa: S603 - static pajv invocation
             [pajv_path, "-s", str(schema_path), "-d", str(json_path)],
             text=True,
             capture_output=True,

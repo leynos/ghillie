@@ -1170,6 +1170,64 @@ the `EventFact` IDs from the evidence bundle. This preserves the Bronze→Silver
 Gold audit trail and enables downstream queries to identify which events
 contributed to which reports.
 
+### 9.6.1 Report validation and retry workflow (Task 2.4.a)
+
+Generated repository reports must pass correctness validation before
+persistence. Invalid reports are retried with bounded attempts; if still
+invalid after maximum retries, the report is marked for human review rather
+than silently persisting broken data. This section documents the validation
+loop and caller-specific failure handling.
+
+The following flowchart illustrates the report generation, validation, and
+fallback workflow:
+
+```mermaid
+flowchart TD
+    A[Start report generation] --> B[Generate model output for repository]
+    B --> C[Run validate_repository_report]
+
+    C --> D{Validation result}
+
+    D -->|Valid| E[Persist Report row]
+    E --> F[Persist ReportCoverage row]
+    F --> G[Write report to sinks]
+    G --> H[Return success to caller]
+
+    D -->|Invalid| I{Attempt count < validation_max_attempts}
+
+    I -->|Yes| J[Retry model generation]
+    J --> C
+
+    I -->|No| K[Persist ReportReview marker]
+    K --> L[Do not persist Report or sinks]
+
+    L --> M{Caller type}
+    M -->|On-demand API| N[Return 422 with validation failure details]
+    M -->|Scheduled actor| O[Log failure and expose review marker to operators]
+    N --> P[End]
+    O --> P[End]
+```
+
+**Workflow design:**
+
+- **Validation loop**: After model output is generated,
+  `validate_repository_report()` checks correctness rules (required fields,
+  semantic constraints, data integrity).
+- **Bounded retries**: Invalid reports trigger up to `validation_max_attempts`
+  model regeneration cycles, allowing transient LLM issues (hallucinations,
+  formatting errors) to self-correct.
+- **Human review fallback**: Reports that remain invalid after max retries are
+  persisted as `ReportReview` markers with failure details, signaling operators
+  that manual investigation is required.
+- **Caller-specific responses**: On-demand API callers receive a 422
+  Unprocessable Entity response with validation failure details. Scheduled
+  actors log the failure and record the review marker for operational
+  visibility.
+
+This design ensures **no silent failures**: invalid reports are never stored to
+the Gold layer, and operators retain visibility into problematic generations
+for triage and remediation.
+
 ### 9.7 Report Markdown rendering and filesystem storage (Phase 2.3.b)
 
 The reporting pipeline persists Gold layer report records in the database, but

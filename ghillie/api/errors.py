@@ -29,10 +29,13 @@ import falcon
 if typ.TYPE_CHECKING:
     from falcon.asgi import Request, Response
 
+    from ghillie.reporting.errors import ReportValidationError
+
 __all__ = [
     "InvalidInputError",
     "RepositoryNotFoundError",
     "handle_invalid_input",
+    "handle_report_validation_failed",
     "handle_repository_not_found",
 ]
 
@@ -153,3 +156,34 @@ async def handle_invalid_input(
     if ex.field is not None:
         media["field"] = ex.field
     resp.media = media
+
+
+async def handle_report_validation_failed(
+    _req: Request,
+    resp: Response,
+    ex: ReportValidationError,
+    _params: dict[str, typ.Any],
+) -> None:
+    """Map ``ReportValidationError`` to an HTTP 422 JSON response.
+
+    Parameters
+    ----------
+    _req
+        Falcon request (unused).
+    resp
+        Falcon response whose status and media are set.
+    ex
+        The validation exception containing issues and review_id.
+    _params
+        URI template parameters (unused).
+
+    """
+    resp.status = falcon.HTTP_422
+    resp.media = {
+        "title": "Report validation failed",
+        "description": "Generated report failed correctness checks after retries.",
+        "review_id": ex.review_id,
+        "issues": [
+            {"code": issue.code, "message": issue.message} for issue in ex.issues
+        ],
+    }

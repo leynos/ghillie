@@ -38,7 +38,8 @@ def _get_nested(data: dict[str, object], *keys: str) -> object:
     for key in keys:
         if not isinstance(current, dict):
             return None
-        current = current.get(key)
+        current_dict = typ.cast("dict[str, object]", current)
+        current = current_dict.get(key)
     return current
 
 
