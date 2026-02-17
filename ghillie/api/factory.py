@@ -22,6 +22,7 @@ import typing as typ
 
 from ghillie.evidence import EvidenceBundleService
 from ghillie.reporting.config import ReportingConfig
+from ghillie.reporting.observability import ReportingEventLogger
 from ghillie.reporting.service import ReportingService, ReportingServiceDependencies
 from ghillie.status.factory import create_status_model
 
@@ -72,4 +73,5 @@ def build_reporting_service(
         dependencies,
         config=config,
         report_sink=report_sink,
+        event_logger=ReportingEventLogger(),
     )

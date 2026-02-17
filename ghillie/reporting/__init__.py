@@ -14,6 +14,12 @@ ReportSink
     Protocol (port) for writing rendered Markdown reports to storage.
 ReportingConfig
     Configuration for reporting window computation and scheduling.
+ReportingEventLogger
+    Structured logger for reporting lifecycle and metrics events.
+ReportingMetricsService
+    Aggregation service for reporting latency and token usage metrics.
+ReportingMetricsSnapshot
+    Value object containing aggregate reporting metrics for a period.
 ReportingService
     Service that orchestrates report generation workflow.
 ReportingServiceDependencies
@@ -51,6 +57,11 @@ from ghillie.reporting.actor import (
 from ghillie.reporting.config import ReportingConfig
 from ghillie.reporting.filesystem_sink import FilesystemReportSink
 from ghillie.reporting.markdown import render_report_markdown
+from ghillie.reporting.metrics_service import (
+    ReportingMetricsService,
+    ReportingMetricsSnapshot,
+)
+from ghillie.reporting.observability import ReportingEventLogger
 from ghillie.reporting.service import (
     ReportingService,
     ReportingServiceDependencies,
@@ -63,6 +74,9 @@ __all__ = [
     "ReportMetadata",
     "ReportSink",
     "ReportingConfig",
+    "ReportingEventLogger",
+    "ReportingMetricsService",
+    "ReportingMetricsSnapshot",
     "ReportingService",
     "ReportingServiceDependencies",
     "ReportingWindow",

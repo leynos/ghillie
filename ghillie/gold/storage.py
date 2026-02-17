@@ -114,6 +114,18 @@ class Report(Base):
     machine_summary: Mapped[dict[str, typ.Any]] = mapped_column(
         JSON, default=dict, nullable=False
     )
+    model_latency_ms: Mapped[int | None] = mapped_column(
+        Integer(), default=None, nullable=True
+    )
+    prompt_tokens: Mapped[int | None] = mapped_column(
+        Integer(), default=None, nullable=True
+    )
+    completion_tokens: Mapped[int | None] = mapped_column(
+        Integer(), default=None, nullable=True
+    )
+    total_tokens: Mapped[int | None] = mapped_column(
+        Integer(), default=None, nullable=True
+    )
 
     repository: Mapped[Repository | None] = relationship(
         "Repository", back_populates="reports", foreign_keys=[repository_id]

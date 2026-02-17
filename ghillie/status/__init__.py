@@ -17,6 +17,8 @@ OpenAIStatusModel
     OpenAI-compatible LLM implementation.
 OpenAIStatusModelConfig
     Configuration dataclass for OpenAI client.
+ModelInvocationMetrics
+    Token and latency metrics captured per status-model invocation.
 create_status_model
     Factory function to create StatusModel from environment configuration.
 OpenAIStatusError
@@ -58,6 +60,7 @@ from ghillie.status.errors import (
     StatusModelConfigError,
 )
 from ghillie.status.factory import create_status_model
+from ghillie.status.metrics import ModelInvocationMetrics
 from ghillie.status.mock import MockStatusModel
 from ghillie.status.models import RepositoryStatusResult, to_machine_summary
 from ghillie.status.openai_client import OpenAIStatusModel
@@ -65,6 +68,7 @@ from ghillie.status.protocol import StatusModel
 
 __all__ = [
     "MockStatusModel",
+    "ModelInvocationMetrics",
     "OpenAIAPIError",
     "OpenAIConfigError",
     "OpenAIResponseShapeError",

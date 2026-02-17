@@ -435,3 +435,27 @@ class TestMockStatusModelNextSteps:
         result = _summarise(feature_evidence)
 
         _assert_no_next_steps_containing(result, "Triage", "issue triage")
+
+
+class TestMockStatusModelInvocationMetrics:
+    """Tests for invocation metrics exposed by ``MockStatusModel``."""
+
+    def test_metrics_none_before_first_call(self) -> None:
+        """No metrics should be available before invocation."""
+        model = MockStatusModel()
+        assert model.last_invocation_metrics is None
+
+    def test_metrics_set_to_zero_tokens_after_call(
+        self,
+        feature_evidence: RepositoryEvidenceBundle,
+    ) -> None:
+        """Mock model reports zero-token usage after summarization."""
+        model = MockStatusModel()
+
+        asyncio.run(model.summarize_repository(feature_evidence))
+
+        metrics = model.last_invocation_metrics
+        assert metrics is not None
+        assert metrics.prompt_tokens == 0
+        assert metrics.completion_tokens == 0
+        assert metrics.total_tokens == 0

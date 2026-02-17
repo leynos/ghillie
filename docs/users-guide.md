@@ -1243,7 +1243,13 @@ On success, the response body contains report metadata:
   "window_end": "2024-07-14T00:00:00+00:00",
   "generated_at": "2024-07-14T12:00:00+00:00",
   "status": "on_track",
-  "model": "mock-v1"
+  "model": "mock-v1",
+  "metrics": {
+    "model_latency_ms": 87,
+    "prompt_tokens": 1250,
+    "completion_tokens": 350,
+    "total_tokens": 1600
+  }
 }
 ```
 
@@ -1346,3 +1352,69 @@ can locate the review marker directly.
 | Variable                          | Default | Description                       |
 | --------------------------------- | ------- | --------------------------------- |
 | `GHILLIE_VALIDATION_MAX_ATTEMPTS` | `2`     | Maximum model invocation attempts |
+
+## Reporting metrics and costs (Phase 2.4.b)
+
+Repository report generation now captures per-run operational metrics and
+exposes aggregate period snapshots for operators.
+
+### Per-report metrics captured
+
+Each generated repository `Report` now stores nullable metrics fields:
+
+- `model_latency_ms`
+- `prompt_tokens`
+- `completion_tokens`
+- `total_tokens`
+
+Latency is measured by the reporting service (`time.monotonic`) and token usage
+comes from the selected status model adapter when available.
+
+### Structured reporting events
+
+Reporting runs emit structured lifecycle events:
+
+- `reporting.report.started`
+- `reporting.report.completed`
+- `reporting.report.failed`
+
+Completion events include model identifier, latency, and token counts.
+
+### Querying aggregate metrics for a period
+
+Use `ReportingMetricsService` to compute totals and latency profile for a time
+window:
+
+```python
+import asyncio
+import datetime as dt
+
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from ghillie.reporting.metrics_service import ReportingMetricsService
+
+
+async def main() -> None:
+    engine = create_async_engine("postgresql+asyncpg://user:pass@host:5432/ghillie")
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    service = ReportingMetricsService(session_factory)
+
+    snapshot = await service.get_metrics_for_period(
+        period_start=dt.datetime(2026, 2, 1, tzinfo=dt.UTC),
+        period_end=dt.datetime(2026, 3, 1, tzinfo=dt.UTC),
+    )
+    print(snapshot.total_reports)
+    print(snapshot.avg_latency_ms)
+    print(snapshot.total_tokens)
+
+
+asyncio.run(main())
+```
+
+For estate-scoped queries, call `get_metrics_for_estate(estate_id, start, end)`.
+
+### Estimating reporting cost
+
+`ReportingMetricsService` returns token totals. Convert those totals to
+currency using your configured model pricing (for example, prompt and
+completion token rates from the provider contract).

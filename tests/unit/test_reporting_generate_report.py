@@ -39,6 +39,14 @@ class TestReportingServiceGenerateReport:
         assert "status" in report.machine_summary, (
             "Machine summary should contain status"
         )
+        assert report.model_latency_ms is not None, (
+            "Report should record model latency in milliseconds"
+        )
+        assert report.prompt_tokens == 0, "Mock model should persist zero prompt tokens"
+        assert report.completion_tokens == 0, (
+            "Mock model should persist zero completion tokens"
+        )
+        assert report.total_tokens == 0, "Mock model should persist zero total tokens"
 
     @pytest.mark.asyncio
     async def test_creates_coverage_records(

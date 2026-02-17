@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import dataclasses as dc
 import datetime as dt
+import time
 import typing as typ
 
 from sqlalchemy import select
@@ -54,6 +55,7 @@ from ghillie.reporting.validation import (
     ReportValidationResult,
     validate_repository_report,
 )
+from ghillie.status.metrics import ModelInvocationMetrics
 from ghillie.status.models import RepositoryStatusResult, to_machine_summary
 
 from .config import ReportingConfig
@@ -66,6 +68,7 @@ if typ.TYPE_CHECKING:
 
     from ghillie.evidence.models import RepositoryEvidenceBundle
     from ghillie.evidence.service import EvidenceBundleService
+    from ghillie.reporting.observability import ReportingEventLogger
     from ghillie.reporting.sink import ReportSink
     from ghillie.silver.storage import Repository
     from ghillie.status.protocol import StatusModel
@@ -128,6 +131,7 @@ class ReportingService:
         dependencies: ReportingServiceDependencies,
         config: ReportingConfig | None = None,
         report_sink: ReportSink | None = None,
+        event_logger: ReportingEventLogger | None = None,
     ) -> None:
         """Configure the service with dependencies.
 
@@ -143,6 +147,8 @@ class ReportingService:
             provided, each generated report is rendered to Markdown and
             written via the sink. When ``None``, no Markdown output is
             produced.
+        event_logger
+            Optional structured event logger for reporting lifecycle events.
 
         """
         self._session_factory = dependencies.session_factory
@@ -150,6 +156,7 @@ class ReportingService:
         self._status_model = dependencies.status_model
         self._config = config or ReportingConfig()
         self._report_sink = report_sink
+        self._event_logger = event_logger
 
     async def compute_next_window(
         self,
@@ -267,29 +274,69 @@ class ReportingService:
                 window_end=window_end,
             )
 
-        status_result, validation = await self._invoke_with_retries(bundle)
-
-        if not validation.is_valid:
-            review_id = await self._create_review_marker(
-                repository_id=repository_id,
+        repo_slug = self._get_repo_slug(bundle)
+        started_at = time.monotonic()
+        if self._event_logger is not None:
+            self._event_logger.log_report_started(
+                repo_slug=repo_slug,
                 window_start=window_start,
                 window_end=window_end,
-                validation=validation,
-            )
-            raise ReportValidationError(
-                issues=validation.issues,
-                review_id=review_id,
             )
 
-        return await self._persist_report(
-            status_result=status_result,
-            bundle=bundle,
+        try:
+            status_result, validation, metrics = await self._invoke_with_retries(bundle)
+
+            if not validation.is_valid:
+                review_id = await self._create_review_marker(
+                    repository_id=repository_id,
+                    window_start=window_start,
+                    window_end=window_end,
+                    validation=validation,
+                )
+                self._raise_validation_error(validation, review_id)
+
+            report = await self._persist_report(
+                status_result=status_result,
+                bundle=bundle,
+                metrics=metrics,
+            )
+        except Exception as exc:
+            if self._event_logger is not None:
+                duration = dt.timedelta(seconds=time.monotonic() - started_at)
+                self._event_logger.log_report_failed(
+                    repo_slug=repo_slug,
+                    error=exc,
+                    duration=duration,
+                )
+            raise
+
+        if self._event_logger is not None:
+            self._event_logger.log_report_completed(
+                repo_slug=repo_slug,
+                model=report.model or "unknown",
+                metrics=metrics,
+            )
+        return report
+
+    def _raise_validation_error(
+        self,
+        validation: ReportValidationResult,
+        review_id: str,
+    ) -> typ.NoReturn:
+        """Raise a structured validation error for exhausted retries."""
+        raise ReportValidationError(
+            issues=validation.issues,
+            review_id=review_id,
         )
 
     async def _invoke_with_retries(
         self,
         bundle: RepositoryEvidenceBundle,
-    ) -> tuple[RepositoryStatusResult, ReportValidationResult]:
+    ) -> tuple[
+        RepositoryStatusResult,
+        ReportValidationResult,
+        ModelInvocationMetrics | None,
+    ]:
         """Invoke the status model with validation retries.
 
         Returns the last status result and its validation outcome.
@@ -301,9 +348,13 @@ class ReportingService:
 
         status_result: RepositoryStatusResult | None = None
         validation: ReportValidationResult | None = None
+        invocation_metrics: ModelInvocationMetrics | None = None
 
         for _attempt in range(max_attempts):
+            started_at = time.monotonic()
             status_result = await self._status_model.summarize_repository(bundle)
+            elapsed_ms = (time.monotonic() - started_at) * 1000.0
+            invocation_metrics = self._merge_invocation_metrics(elapsed_ms)
             validation = validate_repository_report(bundle, status_result)
             if validation.is_valid:
                 break
@@ -315,7 +366,20 @@ class ReportingService:
             )
             raise RuntimeError(msg)
 
-        return status_result, validation
+        return status_result, validation, invocation_metrics
+
+    def _merge_invocation_metrics(
+        self, latency_ms: float
+    ) -> ModelInvocationMetrics | None:
+        """Merge adapter metrics with measured service-level latency."""
+        if not hasattr(self._status_model, "last_invocation_metrics"):
+            return None
+
+        raw_metrics = getattr(self._status_model, "last_invocation_metrics", None)
+        if isinstance(raw_metrics, ModelInvocationMetrics):
+            return dc.replace(raw_metrics, latency_ms=latency_ms)
+
+        return ModelInvocationMetrics(latency_ms=latency_ms)
 
     async def _create_review_marker(
         self,
@@ -384,10 +448,12 @@ class ReportingService:
         *,
         status_result: RepositoryStatusResult,
         bundle: RepositoryEvidenceBundle,
+        metrics: ModelInvocationMetrics | None,
     ) -> Report:
         """Persist the validated report and write to sink."""
         repository_id = bundle.repository.id
         machine_summary = to_machine_summary(status_result)
+        model_latency_ms = self._to_latency_milliseconds(metrics)
 
         async with self._session_factory() as session, session.begin():
             report = Report(
@@ -398,6 +464,12 @@ class ReportingService:
                 model=self._get_model_identifier(),
                 human_text=status_result.summary,
                 machine_summary=machine_summary,
+                model_latency_ms=model_latency_ms,
+                prompt_tokens=metrics.prompt_tokens if metrics is not None else None,
+                completion_tokens=(
+                    metrics.completion_tokens if metrics is not None else None
+                ),
+                total_tokens=metrics.total_tokens if metrics is not None else None,
             )
             session.add(report)
             await session.flush()
@@ -414,6 +486,14 @@ class ReportingService:
             await self._write_to_sink(persisted, repository_id)
 
         return persisted
+
+    def _to_latency_milliseconds(
+        self, metrics: ModelInvocationMetrics | None
+    ) -> int | None:
+        """Convert measured floating-point latency to integer milliseconds."""
+        if metrics is None or metrics.latency_ms is None:
+            return None
+        return round(metrics.latency_ms)
 
     def _get_model_identifier(self) -> str:
         """Return the model identifier for report metadata."""
@@ -485,6 +565,10 @@ class ReportingService:
             window_end=report.window_end.strftime("%Y-%m-%d"),
         )
         await self._report_sink.write_report(markdown, metadata=metadata)
+
+    def _get_repo_slug(self, bundle: RepositoryEvidenceBundle) -> str:
+        """Return owner/name slug for reporting logs."""
+        return bundle.repository.slug
 
     async def run_for_repository(
         self,

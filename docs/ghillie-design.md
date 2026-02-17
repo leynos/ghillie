@@ -1228,6 +1228,61 @@ This design ensures **no silent failures**: invalid reports are never stored to
 the Gold layer, and operators retain visibility into problematic generations
 for triage and remediation.
 
+### 9.6.2 Reporting metrics and cost telemetry (Task 2.4.b)
+
+Repository-level report generation now records operational metrics per run so
+operators can evaluate latency profile and approximate model cost over a chosen
+period.
+
+**Per-report metrics persisted to Gold:**
+
+The `reports` table includes nullable metric columns:
+
+- `model_latency_ms`: service-measured invocation latency (integer
+  milliseconds),
+- `prompt_tokens`,
+- `completion_tokens`, and
+- `total_tokens`.
+
+All columns are nullable so existing rows remain valid and adapters that do not
+emit usage metrics can continue operating without protocol changes.
+
+**Status model metrics side-channel:**
+
+The `StatusModel` protocol remains unchanged. Adapter implementations expose an
+optional `last_invocation_metrics` attribute (duck-typed), allowing
+`ReportingService` to capture token counts without coupling domain contracts to
+vendor-specific response metadata.
+
+`ReportingService._invoke_with_retries()` measures latency using
+`time.monotonic()`, merges it with adapter token metrics, and persists the
+metrics from the invocation that produced the persisted report.
+
+**Structured observability events:**
+
+`ReportingEventLogger` emits reporting lifecycle events:
+
+- `reporting.report.started`,
+- `reporting.report.completed`, and
+- `reporting.report.failed`.
+
+Completion events include model identifier, latency, and token counts, allowing
+log-only operational diagnosis for report throughput and failure analysis.
+
+**Operator query service:**
+
+`ReportingMetricsService` provides on-demand snapshots for any period (and for
+an estate subset) with:
+
+- total reports generated,
+- reports with metrics populated,
+- average latency,
+- p95 latency, and
+- total prompt/completion/overall token usage.
+
+This enables operators to track latency profile and approximate reporting cost
+over time by combining token totals with configured model pricing.
+
 ### 9.7 Report Markdown rendering and filesystem storage (Phase 2.3.b)
 
 The reporting pipeline persists Gold layer report records in the database, but
