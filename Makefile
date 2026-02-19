@@ -1,7 +1,7 @@
 MDLINT ?= markdownlint-cli2
 NIXIE ?= nixie
 MDFORMAT_ALL ?= mdformat-all
-TOOLS = $(MDFORMAT_ALL) ruff ty $(MDLINT) uv
+TOOLS = $(MDFORMAT_ALL) ruff ty pyscn $(MDLINT) uv
 VENV_TOOLS = pytest
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
 
@@ -63,8 +63,9 @@ check-fmt: ruff ## Verify formatting
 	ruff format --check
 	# mdformat-all doesn't currently do checking
 
-lint: ruff ## Run linters
+lint: ruff pyscn ## Run linters
 	ruff check
+	pyscn check
 
 typecheck: build ty ## Run typechecking
 	ty --version

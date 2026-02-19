@@ -113,30 +113,35 @@ class FailingGitHubClient:
         """Store the error to raise on any method call."""
         self._error = error
 
+    async def _failing_iterator(self) -> typ.AsyncIterator[GitHubIngestedEvent]:
+        """Raise the configured error."""
+        if False:  # pragma: no cover - ensure async generator typing
+            yield typ.cast("GitHubIngestedEvent", None)
+        raise self._error
+
     async def iter_commits(
         self, repo: RepositoryInfo, *, since: dt.datetime, after: str | None = None
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Raise the configured error."""
         del repo, since, after
-        raise self._error
-        # Unreachable but needed for type checker
-        yield  # pragma: no cover
+        async for event in self._failing_iterator():
+            yield event
 
     async def iter_pull_requests(
         self, repo: RepositoryInfo, *, since: dt.datetime, after: str | None = None
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Raise the configured error."""
         del repo, since, after
-        raise self._error
-        yield  # pragma: no cover
+        async for event in self._failing_iterator():
+            yield event
 
     async def iter_issues(
         self, repo: RepositoryInfo, *, since: dt.datetime, after: str | None = None
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Raise the configured error."""
         del repo, since, after
-        raise self._error
-        yield  # pragma: no cover
+        async for event in self._failing_iterator():
+            yield event
 
     async def iter_doc_changes(
         self,
@@ -148,8 +153,8 @@ class FailingGitHubClient:
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Raise the configured error."""
         del repo, since, documentation_paths, after
-        raise self._error
-        yield  # pragma: no cover
+        async for event in self._failing_iterator():
+            yield event
 
 
 def make_repo_info(*, estate_id: str | None = None) -> RepositoryInfo:
