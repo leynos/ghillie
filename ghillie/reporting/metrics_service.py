@@ -121,30 +121,16 @@ class ReportingMetricsService:
         """Create service bound to an async session factory."""
         self._session_factory = session_factory
 
-    async def get_metrics_for_period(
+    async def _get_metrics(
         self,
         period_start: dt.datetime,
         period_end: dt.datetime,
+        estate_id: str | None = None,
     ) -> ReportingMetricsSnapshot:
-        """Return aggregate reporting metrics for all repositories in a period."""
-        rows = await self._fetch_rows(
-            period_start=period_start,
-            period_end=period_end,
-            estate_id=None,
-        )
-        return _snapshot_from_rows(
-            period_start=period_start,
-            period_end=period_end,
-            rows=rows,
-        )
+        """Return aggregate reporting metrics for a period.
 
-    async def get_metrics_for_estate(
-        self,
-        estate_id: str,
-        period_start: dt.datetime,
-        period_end: dt.datetime,
-    ) -> ReportingMetricsSnapshot:
-        """Return aggregate reporting metrics for one estate in a period."""
+        Optionally scope the aggregation to a single estate.
+        """
         rows = await self._fetch_rows(
             period_start=period_start,
             period_end=period_end,
@@ -154,6 +140,31 @@ class ReportingMetricsService:
             period_start=period_start,
             period_end=period_end,
             rows=rows,
+        )
+
+    async def get_metrics_for_period(
+        self,
+        period_start: dt.datetime,
+        period_end: dt.datetime,
+    ) -> ReportingMetricsSnapshot:
+        """Return aggregate reporting metrics for all repositories in a period."""
+        return await self._get_metrics(
+            period_start=period_start,
+            period_end=period_end,
+            estate_id=None,
+        )
+
+    async def get_metrics_for_estate(
+        self,
+        estate_id: str,
+        period_start: dt.datetime,
+        period_end: dt.datetime,
+    ) -> ReportingMetricsSnapshot:
+        """Return aggregate reporting metrics for one estate in a period."""
+        return await self._get_metrics(
+            period_start=period_start,
+            period_end=period_end,
+            estate_id=estate_id,
         )
 
     async def _fetch_rows(

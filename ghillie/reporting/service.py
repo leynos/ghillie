@@ -218,6 +218,35 @@ class ReportingService:
         )
         return await session.scalar(stmt)
 
+    def _validate_window(
+        self,
+        window_start: dt.datetime,
+        window_end: dt.datetime,
+    ) -> None:
+        """Validate that the reporting window boundaries are well-ordered."""
+        if window_end <= window_start:
+            msg = (
+                f"window_end must be after window_start, got "
+                f"start={window_start.isoformat()}, end={window_end.isoformat()}"
+            )
+            raise ValueError(msg)
+
+    async def _ensure_bundle(
+        self,
+        repository_id: str,
+        window_start: dt.datetime,
+        window_end: dt.datetime,
+        bundle: RepositoryEvidenceBundle | None,
+    ) -> RepositoryEvidenceBundle:
+        """Return a provided bundle or build one from the evidence service."""
+        if bundle is not None:
+            return bundle
+        return await self._evidence_service.build_bundle(
+            repository_id=repository_id,
+            window_start=window_start,
+            window_end=window_end,
+        )
+
     async def generate_report(
         self,
         repository_id: str,
@@ -260,57 +289,55 @@ class ReportingService:
             If report validation fails after all retry attempts.
 
         """
-        if window_end <= window_start:
-            msg = (
-                f"window_end must be after window_start, got "
-                f"start={window_start.isoformat()}, end={window_end.isoformat()}"
-            )
-            raise ValueError(msg)
-
-        if bundle is None:
-            bundle = await self._evidence_service.build_bundle(
-                repository_id=repository_id,
-                window_start=window_start,
-                window_end=window_end,
-            )
-
+        self._validate_window(window_start, window_end)
+        bundle = await self._ensure_bundle(
+            repository_id=repository_id,
+            window_start=window_start,
+            window_end=window_end,
+            bundle=bundle,
+        )
         repo_slug = self._get_repo_slug(bundle)
         started_at = time.monotonic()
         self._log_started(
-            repo_slug=repo_slug,
-            window_start=window_start,
-            window_end=window_end,
+            repo_slug=repo_slug, window_start=window_start, window_end=window_end
         )
-
         try:
-            status_result, validation, metrics = await self._invoke_with_retries(bundle)
-            await self._handle_validation_result(
-                validation=validation,
+            report, metrics = await self._generate_and_persist_report(
                 repository_id=repository_id,
                 window_start=window_start,
                 window_end=window_end,
-            )
-
-            report = await self._persist_report(
-                status_result=status_result,
                 bundle=bundle,
-                metrics=metrics,
             )
         except Exception as exc:
             duration = dt.timedelta(seconds=time.monotonic() - started_at)
-            self._log_failed(
-                repo_slug=repo_slug,
-                error=exc,
-                duration=duration,
-            )
+            self._log_failed(repo_slug=repo_slug, error=exc, duration=duration)
             raise
-
         self._log_completed(
-            repo_slug=repo_slug,
-            model=report.model or "unknown",
-            metrics=metrics,
+            repo_slug=repo_slug, model=report.model or "unknown", metrics=metrics
         )
         return report
+
+    async def _generate_and_persist_report(
+        self,
+        repository_id: str,
+        window_start: dt.datetime,
+        window_end: dt.datetime,
+        bundle: RepositoryEvidenceBundle,
+    ) -> tuple[Report, ModelInvocationMetrics | None]:
+        """Generate, validate, and persist a report for an evidence bundle."""
+        status_result, validation, metrics = await self._invoke_with_retries(bundle)
+        await self._handle_validation_result(
+            validation=validation,
+            repository_id=repository_id,
+            window_start=window_start,
+            window_end=window_end,
+        )
+        report = await self._persist_report(
+            status_result=status_result,
+            bundle=bundle,
+            metrics=metrics,
+        )
+        return report, metrics
 
     def _log_started(
         self,
