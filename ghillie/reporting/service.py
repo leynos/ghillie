@@ -276,24 +276,20 @@ class ReportingService:
 
         repo_slug = self._get_repo_slug(bundle)
         started_at = time.monotonic()
-        if self._event_logger is not None:
-            self._event_logger.log_report_started(
-                repo_slug=repo_slug,
-                window_start=window_start,
-                window_end=window_end,
-            )
+        self._log_started(
+            repo_slug=repo_slug,
+            window_start=window_start,
+            window_end=window_end,
+        )
 
         try:
             status_result, validation, metrics = await self._invoke_with_retries(bundle)
-
-            if not validation.is_valid:
-                review_id = await self._create_review_marker(
-                    repository_id=repository_id,
-                    window_start=window_start,
-                    window_end=window_end,
-                    validation=validation,
-                )
-                self._raise_validation_error(validation, review_id)
+            await self._handle_validation_result(
+                validation=validation,
+                repository_id=repository_id,
+                window_start=window_start,
+                window_end=window_end,
+            )
 
             report = await self._persist_report(
                 status_result=status_result,
@@ -301,22 +297,84 @@ class ReportingService:
                 metrics=metrics,
             )
         except Exception as exc:
-            if self._event_logger is not None:
-                duration = dt.timedelta(seconds=time.monotonic() - started_at)
-                self._event_logger.log_report_failed(
-                    repo_slug=repo_slug,
-                    error=exc,
-                    duration=duration,
-                )
+            duration = dt.timedelta(seconds=time.monotonic() - started_at)
+            self._log_failed(
+                repo_slug=repo_slug,
+                error=exc,
+                duration=duration,
+            )
             raise
 
-        if self._event_logger is not None:
-            self._event_logger.log_report_completed(
-                repo_slug=repo_slug,
-                model=report.model or "unknown",
-                metrics=metrics,
-            )
+        self._log_completed(
+            repo_slug=repo_slug,
+            model=report.model or "unknown",
+            metrics=metrics,
+        )
         return report
+
+    def _log_started(
+        self,
+        repo_slug: str,
+        window_start: dt.datetime,
+        window_end: dt.datetime,
+    ) -> None:
+        """Log report generation start when observability logger is configured."""
+        if self._event_logger is None:
+            return
+        self._event_logger.log_report_started(
+            repo_slug=repo_slug,
+            window_start=window_start,
+            window_end=window_end,
+        )
+
+    def _log_failed(
+        self,
+        repo_slug: str,
+        error: Exception,
+        duration: dt.timedelta,
+    ) -> None:
+        """Log report generation failure when observability logger is configured."""
+        if self._event_logger is None:
+            return
+        self._event_logger.log_report_failed(
+            repo_slug=repo_slug,
+            error=error,
+            duration=duration,
+        )
+
+    def _log_completed(
+        self,
+        repo_slug: str,
+        model: str,
+        metrics: ModelInvocationMetrics | None,
+    ) -> None:
+        """Log report generation completion when observability logger is configured."""
+        if self._event_logger is None:
+            return
+        self._event_logger.log_report_completed(
+            repo_slug=repo_slug,
+            model=model,
+            metrics=metrics,
+        )
+
+    async def _handle_validation_result(
+        self,
+        validation: ReportValidationResult,
+        repository_id: str,
+        window_start: dt.datetime,
+        window_end: dt.datetime,
+    ) -> None:
+        """Create review marker and raise when validation result is invalid."""
+        if validation.is_valid:
+            return
+
+        review_id = await self._create_review_marker(
+            repository_id=repository_id,
+            window_start=window_start,
+            window_end=window_end,
+            validation=validation,
+        )
+        self._raise_validation_error(validation, review_id)
 
     def _raise_validation_error(
         self,

@@ -45,15 +45,9 @@ def _compute_p95(latencies_ms: list[int]) -> float | None:
     return float(ordered[index])
 
 
-def _snapshot_from_rows(
-    *,
-    period_start: dt.datetime,
-    period_end: dt.datetime,
-    rows: list[MetricsRow],
-) -> ReportingMetricsSnapshot:
-    """Build a metrics snapshot from per-report metric rows."""
-    total_reports = len(rows)
-    reports_with_metrics = sum(
+def _count_reports_with_metrics(rows: list[MetricsRow]) -> int:
+    """Count rows with at least one non-null metrics field."""
+    return sum(
         1
         for latency_ms, prompt_tokens, completion_tokens, total_tokens in rows
         if any(
@@ -67,11 +61,42 @@ def _snapshot_from_rows(
         )
     )
 
+
+def _compute_latency_stats(rows: list[MetricsRow]) -> tuple[float | None, float | None]:
+    """Compute average and p95 latency from non-null latency values."""
     latencies = [latency for latency, _p, _c, _t in rows if latency is not None]
     avg_latency_ms = (
         float(sum(latencies)) / float(len(latencies)) if latencies else None
     )
     p95_latency_ms = _compute_p95(latencies)
+    return avg_latency_ms, p95_latency_ms
+
+
+def _compute_token_totals(rows: list[MetricsRow]) -> tuple[int, int, int]:
+    """Sum prompt, completion, and total tokens with nulls treated as zero."""
+    total_prompt_tokens = sum(prompt_tokens or 0 for _l, prompt_tokens, _c, _t in rows)
+    total_completion_tokens = sum(
+        completion_tokens or 0 for _l, _p, completion_tokens, _t in rows
+    )
+    total_tokens = sum(total_tokens or 0 for _l, _p, _c, total_tokens in rows)
+    return total_prompt_tokens, total_completion_tokens, total_tokens
+
+
+def _snapshot_from_rows(
+    *,
+    period_start: dt.datetime,
+    period_end: dt.datetime,
+    rows: list[MetricsRow],
+) -> ReportingMetricsSnapshot:
+    """Build a metrics snapshot from per-report metric rows."""
+    total_reports = len(rows)
+    reports_with_metrics = _count_reports_with_metrics(rows)
+    avg_latency_ms, p95_latency_ms = _compute_latency_stats(rows)
+    (
+        total_prompt_tokens,
+        total_completion_tokens,
+        total_tokens,
+    ) = _compute_token_totals(rows)
 
     return ReportingMetricsSnapshot(
         period_start=period_start,
@@ -80,13 +105,9 @@ def _snapshot_from_rows(
         reports_with_metrics=reports_with_metrics,
         avg_latency_ms=avg_latency_ms,
         p95_latency_ms=p95_latency_ms,
-        total_prompt_tokens=sum(
-            prompt_tokens or 0 for _l, prompt_tokens, _c, _t in rows
-        ),
-        total_completion_tokens=sum(
-            completion_tokens or 0 for _l, _p, completion_tokens, _t in rows
-        ),
-        total_tokens=sum(total_tokens or 0 for _l, _p, _c, total_tokens in rows),
+        total_prompt_tokens=total_prompt_tokens,
+        total_completion_tokens=total_completion_tokens,
+        total_tokens=total_tokens,
     )
 
 

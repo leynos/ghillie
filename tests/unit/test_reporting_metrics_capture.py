@@ -26,6 +26,7 @@ from tests.unit.conftest import create_test_repository
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+    from ghillie.gold.storage import Report
     from ghillie.status.protocol import StatusModel
 
 
@@ -144,6 +145,23 @@ def _build_service(
 class TestReportingMetricsCapture:
     """Tests for persisting latency and token metrics on reports."""
 
+    async def _generate_test_report(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        status_model: object,
+    ) -> Report:
+        """Generate a report using the given status model (test helper)."""
+        repo_id = await create_test_repository(session_factory)
+        bundle = _make_bundle(repo_id)
+        service = _build_service(session_factory, status_model)
+
+        return await service.generate_report(
+            repository_id=repo_id,
+            window_start=bundle.window_start,
+            window_end=bundle.window_end,
+            bundle=bundle,
+        )
+
     @pytest.mark.asyncio
     async def test_persists_latency_and_tokens_from_status_model(
         self,
@@ -182,17 +200,7 @@ class TestReportingMetricsCapture:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """``MockStatusModel`` should persist zero-token usage per run."""
-        repo_id = await create_test_repository(session_factory)
-        bundle = _make_bundle(repo_id)
-
-        service = _build_service(session_factory, MockStatusModel())
-
-        report = await service.generate_report(
-            repository_id=repo_id,
-            window_start=bundle.window_start,
-            window_end=bundle.window_end,
-            bundle=bundle,
-        )
+        report = await self._generate_test_report(session_factory, MockStatusModel())
 
         assert report.prompt_tokens == 0
         assert report.completion_tokens == 0
@@ -204,16 +212,9 @@ class TestReportingMetricsCapture:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Models without metrics side-channel keep report metrics nullable."""
-        repo_id = await create_test_repository(session_factory)
-        bundle = _make_bundle(repo_id)
-
-        service = _build_service(session_factory, _NoMetricsStatusModel())
-
-        report = await service.generate_report(
-            repository_id=repo_id,
-            window_start=bundle.window_start,
-            window_end=bundle.window_end,
-            bundle=bundle,
+        report = await self._generate_test_report(
+            session_factory,
+            _NoMetricsStatusModel(),
         )
 
         assert report.model_latency_ms is None
@@ -227,16 +228,9 @@ class TestReportingMetricsCapture:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """When retry succeeds, persisted metrics come from successful attempt."""
-        repo_id = await create_test_repository(session_factory)
-        bundle = _make_bundle(repo_id)
-
-        service = _build_service(session_factory, _RetryingMetricsStatusModel())
-
-        report = await service.generate_report(
-            repository_id=repo_id,
-            window_start=bundle.window_start,
-            window_end=bundle.window_end,
-            bundle=bundle,
+        report = await self._generate_test_report(
+            session_factory,
+            _RetryingMetricsStatusModel(),
         )
 
         assert report.human_text == "retry succeeded"
