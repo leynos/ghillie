@@ -33,6 +33,10 @@ class _ReportFields:
     generated_at: dt.datetime | None = None
     model: str | None = "mock-v1"
     machine_summary: dict[str, str | int | float | bool] | None = None
+    model_latency_ms: int | None = 123
+    prompt_tokens: int | None = 200
+    completion_tokens: int | None = 80
+    total_tokens: int | None = 280
 
 
 def _make_report(fields: _ReportFields | None = None) -> mock.MagicMock:
@@ -49,6 +53,10 @@ def _make_report(fields: _ReportFields | None = None) -> mock.MagicMock:
     report.machine_summary = (
         f.machine_summary if f.machine_summary is not None else {"status": "on_track"}
     )
+    report.model_latency_ms = f.model_latency_ms
+    report.prompt_tokens = f.prompt_tokens
+    report.completion_tokens = f.completion_tokens
+    report.total_tokens = f.total_tokens
     return report
 
 
@@ -198,6 +206,25 @@ class TestReportResource200:
         result = client.simulate_post("/reports/repositories/acme/widgets")
         content_type = result.headers.get("content-type", "")
         assert content_type.startswith("application/json"), "wrong content type"
+
+    def test_response_includes_metrics_payload(self) -> None:
+        """Response body includes persisted reporting metrics fields."""
+        report = _make_report(
+            _ReportFields(
+                model_latency_ms=75,
+                prompt_tokens=120,
+                completion_tokens=40,
+                total_tokens=160,
+            )
+        )
+        client = _build_client(run_result=report)
+        result = client.simulate_post("/reports/repositories/acme/widgets")
+        assert result.json["metrics"] == {
+            "model_latency_ms": 75,
+            "prompt_tokens": 120,
+            "completion_tokens": 40,
+            "total_tokens": 160,
+        }
 
 
 class TestReportResource204:

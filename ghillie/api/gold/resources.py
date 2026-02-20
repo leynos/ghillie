@@ -47,6 +47,12 @@ def _serialize_report(report: Report, slug: str) -> dict[str, typ.Any]:
         "generated_at": report.generated_at.isoformat(),
         "status": report.machine_summary.get("status", "unknown"),
         "model": report.model or "unknown",
+        "metrics": {
+            "model_latency_ms": report.model_latency_ms,
+            "prompt_tokens": report.prompt_tokens,
+            "completion_tokens": report.completion_tokens,
+            "total_tokens": report.total_tokens,
+        },
     }
 
 

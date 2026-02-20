@@ -10,6 +10,7 @@ from ghillie.evidence.models import (
     WorkType,
     WorkTypeGrouping,
 )
+from ghillie.status.metrics import ModelInvocationMetrics
 from ghillie.status.models import RepositoryStatusResult
 
 
@@ -40,6 +41,15 @@ class MockStatusModel:
 
     """
 
+    def __init__(self) -> None:
+        """Initialize invocation metrics storage."""
+        self._last_invocation_metrics: ModelInvocationMetrics | None = None
+
+    @property
+    def last_invocation_metrics(self) -> ModelInvocationMetrics | None:
+        """Return metrics captured from the latest invocation."""
+        return self._last_invocation_metrics
+
     async def summarize_repository(
         self,
         evidence: RepositoryEvidenceBundle,
@@ -57,6 +67,11 @@ class MockStatusModel:
             Deterministic status report based on heuristic rules.
 
         """
+        self._last_invocation_metrics = ModelInvocationMetrics(
+            prompt_tokens=0,
+            completion_tokens=0,
+            total_tokens=0,
+        )
         status = self._determine_status(evidence)
         summary = self._generate_summary(evidence, status)
         highlights = self._extract_highlights(evidence)

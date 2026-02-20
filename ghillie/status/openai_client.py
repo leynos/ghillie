@@ -14,6 +14,7 @@ from ghillie.status.errors import (
     OpenAIConfigError,
     OpenAIResponseShapeError,
 )
+from ghillie.status.metrics import ModelInvocationMetrics
 from ghillie.status.models import RepositoryStatusResult
 from ghillie.status.prompts import SYSTEM_PROMPT, build_user_prompt
 
@@ -22,6 +23,13 @@ if typ.TYPE_CHECKING:
 
 _HTTP_ERROR_STATUS_THRESHOLD = 400
 _HTTP_RATE_LIMITED = 429
+
+
+def _to_int_or_none(value: object) -> int | None:
+    """Return ``int`` for integer values, else ``None``."""
+    if isinstance(value, int):
+        return value
+    return None
 
 
 def _get_retry_after(response: httpx.Response) -> int | None:
@@ -133,6 +141,7 @@ class OpenAIStatusModel:
                 "Content-Type": "application/json",
             },
         )
+        self._last_invocation_metrics: ModelInvocationMetrics | None = None
 
     @property
     def config(self) -> OpenAIStatusModelConfig:
@@ -145,6 +154,11 @@ class OpenAIStatusModel:
 
         """
         return self._config
+
+    @property
+    def last_invocation_metrics(self) -> ModelInvocationMetrics | None:
+        """Return metrics captured from the most recent invocation."""
+        return self._last_invocation_metrics
 
     async def aclose(self) -> None:
         """Close any owned HTTP resources."""
@@ -305,7 +319,24 @@ class OpenAIStatusModel:
             data = response.json()
         except json.JSONDecodeError as exc:
             raise OpenAIResponseShapeError.invalid_json(response.text) from exc
+        self._last_invocation_metrics = self._extract_usage_metrics(data)
         return self._extract_content(data)
+
+    def _extract_usage_metrics(
+        self,
+        data: dict[str, object],
+    ) -> ModelInvocationMetrics:
+        """Extract token usage metrics from the API response payload."""
+        usage = data.get("usage")
+        if not isinstance(usage, dict):
+            return ModelInvocationMetrics()
+
+        usage_dict = typ.cast("dict[str, object]", usage)
+        return ModelInvocationMetrics(
+            prompt_tokens=_to_int_or_none(usage_dict.get("prompt_tokens")),
+            completion_tokens=_to_int_or_none(usage_dict.get("completion_tokens")),
+            total_tokens=_to_int_or_none(usage_dict.get("total_tokens")),
+        )
 
     def _extract_content(self, data: dict[str, object]) -> str:
         """Extract assistant message content from API response.

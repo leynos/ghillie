@@ -366,12 +366,22 @@ operationally safe to run.
   mapping), schema tests (ReportReview persistence and uniqueness), and
   pytest-bdd scenarios cover the new behaviour.
 
-- [ ] **Task 2.4.b – Capture reporting metrics and costs**  
+- [x] **Task 2.4.b – Capture reporting metrics and costs**  
   Emit metrics for the number of reports generated, average model latency, and
   approximate token usage per run.
 
   *Completion criteria:* Operators can see the total reporting cost and latency
   profile for the pilot estate over a given period.
+
+  *Implemented:* Gold `Report` metadata now stores nullable `model_latency_ms`,
+  `prompt_tokens`, `completion_tokens`, and `total_tokens` fields per generated
+  report. `ReportingService` captures service-level model latency and adapter
+  token usage for each invocation, while `ReportingEventLogger` emits
+  structured lifecycle events (`reporting.report.started`,
+  `reporting.report.completed`, `reporting.report.failed`).
+  `ReportingMetricsService` provides aggregate period and estate snapshots
+  (total reports, average/p95 latency, token totals), and on-demand API report
+  responses include a `metrics` payload.
 
 ______________________________________________________________________
 

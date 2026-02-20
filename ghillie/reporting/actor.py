@@ -41,6 +41,7 @@ from ghillie.evidence import EvidenceBundleService
 from ghillie.reporting._broker import ensure_broker_configured
 from ghillie.reporting.config import ReportingConfig
 from ghillie.reporting.errors import EstateReportError
+from ghillie.reporting.observability import ReportingEventLogger
 from ghillie.reporting.service import ReportingService, ReportingServiceDependencies
 from ghillie.silver.storage import Repository
 from ghillie.status.factory import create_status_model
@@ -129,6 +130,7 @@ def _build_service(database_url: str) -> ReportingService:
         dependencies,
         config=config,
         report_sink=report_sink,
+        event_logger=ReportingEventLogger(),
     )
 
 

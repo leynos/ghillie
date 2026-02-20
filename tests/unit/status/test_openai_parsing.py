@@ -21,6 +21,8 @@ from ghillie.status.openai_client import (
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
+    from ghillie.evidence.models import RepositoryEvidenceBundle
+
 
 @contextlib.asynccontextmanager
 async def create_model_with_transport(
@@ -85,6 +87,42 @@ class _NetworkErrorTransport(httpx.AsyncBaseTransport):
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         """Raise network connection error."""
         raise httpx.ConnectError("refused")
+
+
+class _SuccessfulCompletionTransport(httpx.AsyncBaseTransport):
+    """Transport that returns successful completion responses."""
+
+    def __init__(
+        self,
+        *,
+        usage_payloads: tuple[dict[str, object] | None, ...],
+    ) -> None:
+        self._usage_payloads = usage_payloads or (None,)
+        self._index = 0
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        """Return a valid chat completion response with optional usage."""
+        usage = self._usage_payloads[min(self._index, len(self._usage_payloads) - 1)]
+        self._index += 1
+
+        body: dict[str, object] = {
+            "id": "chatcmpl-123",
+            "object": "chat.completion",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": '{"status": "on_track", "summary": "ok"}',
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+        }
+        if usage is not None:
+            body["usage"] = usage
+
+        return httpx.Response(status_code=200, json=body)
 
 
 class TestLLMStatusResponseParsing:
@@ -289,3 +327,159 @@ class TestOpenAIHTTPErrorHandling:
                 assert exc_info.value.status_code == expected_status_code
 
             assert expected_message_fragment in str(exc_info.value).lower()
+
+
+class TestOpenAIInvocationMetrics:
+    """Tests for model invocation metrics captured from API responses."""
+
+    @pytest.fixture
+    def config(self) -> OpenAIStatusModelConfig:
+        """Create config for successful-call tests."""
+        return OpenAIStatusModelConfig(
+            api_key="test-key",
+            endpoint="http://test.local/v1/chat/completions",
+        )
+
+    @pytest.mark.asyncio
+    async def test_metrics_none_before_first_call(
+        self,
+        config: OpenAIStatusModelConfig,
+    ) -> None:
+        """No metrics are available before the first model invocation."""
+        model = OpenAIStatusModel(config)
+        try:
+            assert model.last_invocation_metrics is None, (
+                "Expected no invocation metrics before first model call"
+            )
+        finally:
+            await model.aclose()
+
+    @pytest.mark.asyncio
+    async def test_extracts_token_usage_from_response(
+        self,
+        config: OpenAIStatusModelConfig,
+        feature_evidence: RepositoryEvidenceBundle,
+    ) -> None:
+        """Token usage is captured when the API returns a ``usage`` payload."""
+        transport = _SuccessfulCompletionTransport(
+            usage_payloads=(
+                {
+                    "prompt_tokens": 100,
+                    "completion_tokens": 50,
+                    "total_tokens": 150,
+                },
+            )
+        )
+        async with create_model_with_transport(config, transport) as model:
+            await model.summarize_repository(feature_evidence)
+
+            metrics = model.last_invocation_metrics
+            assert metrics is not None, (
+                "Expected invocation metrics after successful model call"
+            )
+            assert metrics.prompt_tokens == 100, (
+                "Expected prompt token count to match usage payload"
+            )
+            assert metrics.completion_tokens == 50, (
+                "Expected completion token count to match usage payload"
+            )
+            assert metrics.total_tokens == 150, (
+                "Expected total token count to match usage payload"
+            )
+
+    @pytest.mark.asyncio
+    async def test_missing_usage_sets_empty_metrics(
+        self,
+        config: OpenAIStatusModelConfig,
+        feature_evidence: RepositoryEvidenceBundle,
+    ) -> None:
+        """Missing usage payload yields metrics with ``None`` token fields."""
+        transport = _SuccessfulCompletionTransport(usage_payloads=(None,))
+        async with create_model_with_transport(config, transport) as model:
+            await model.summarize_repository(feature_evidence)
+
+            metrics = model.last_invocation_metrics
+            assert metrics is not None, (
+                "Expected metrics object even when usage payload is absent"
+            )
+            assert metrics.prompt_tokens is None, (
+                "Expected missing prompt token usage to remain None"
+            )
+            assert metrics.completion_tokens is None, (
+                "Expected missing completion token usage to remain None"
+            )
+            assert metrics.total_tokens is None, (
+                "Expected missing total token usage to remain None"
+            )
+
+    @pytest.mark.asyncio
+    async def test_metrics_are_overwritten_per_call(
+        self,
+        config: OpenAIStatusModelConfig,
+        feature_evidence: RepositoryEvidenceBundle,
+    ) -> None:
+        """A later invocation replaces token metrics from earlier calls."""
+        transport = _SuccessfulCompletionTransport(
+            usage_payloads=(
+                {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 5,
+                    "total_tokens": 15,
+                },
+                {
+                    "prompt_tokens": 20,
+                    "completion_tokens": 8,
+                    "total_tokens": 28,
+                },
+            )
+        )
+        async with create_model_with_transport(config, transport) as model:
+            await model.summarize_repository(feature_evidence)
+            await model.summarize_repository(feature_evidence)
+
+            metrics = model.last_invocation_metrics
+            assert metrics is not None, (
+                "Expected invocation metrics after repeated model calls"
+            )
+            assert metrics.prompt_tokens == 20, (
+                "Expected latest prompt token count to overwrite previous value"
+            )
+            assert metrics.completion_tokens == 8, (
+                "Expected latest completion token count to overwrite previous value"
+            )
+            assert metrics.total_tokens == 28, (
+                "Expected latest total token count to overwrite previous value"
+            )
+
+    @pytest.mark.asyncio
+    async def test_non_integer_usage_values_are_ignored(
+        self,
+        config: OpenAIStatusModelConfig,
+        feature_evidence: RepositoryEvidenceBundle,
+    ) -> None:
+        """Non-integer usage values are coerced to ``None`` in metrics output."""
+        transport = _SuccessfulCompletionTransport(
+            usage_payloads=(
+                {
+                    "prompt_tokens": "100",
+                    "completion_tokens": 50.0,
+                    "total_tokens": "150.0",
+                },
+            )
+        )
+        async with create_model_with_transport(config, transport) as model:
+            await model.summarize_repository(feature_evidence)
+
+            metrics = model.last_invocation_metrics
+            assert metrics is not None, (
+                "Expected metrics object after successful completion response"
+            )
+            assert metrics.prompt_tokens is None, (
+                "Expected non-integer prompt tokens to coerce to None"
+            )
+            assert metrics.completion_tokens is None, (
+                "Expected non-integer completion tokens to coerce to None"
+            )
+            assert metrics.total_tokens is None, (
+                "Expected non-integer total tokens to coerce to None"
+            )
