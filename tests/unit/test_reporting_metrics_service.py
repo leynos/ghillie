@@ -303,6 +303,18 @@ class TestReportingMetricsService:
             )
 
     @pytest.mark.asyncio
+    async def test_period_end_equals_start_raises_value_error(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """Equal period bounds raise the same ``ValueError``."""
+        service = ReportingMetricsService(session_factory)
+        same_time = dt.datetime(2024, 7, 15, tzinfo=dt.UTC)
+
+        with pytest.raises(ValueError, match="period_end must be after period_start"):
+            await service.get_metrics_for_period(same_time, same_time)
+
+    @pytest.mark.asyncio
     async def test_get_metrics_for_estate_filters_repositories(
         self,
         session_factory: async_sessionmaker[AsyncSession],

@@ -52,6 +52,7 @@ class _MetricsStatusModel:
         self,
         evidence: RepositoryEvidenceBundle,
     ) -> RepositoryStatusResult:
+        """Summarize repository status as part of the status model interface."""
         await asyncio.sleep(0.005)
         self.last_invocation_metrics = ModelInvocationMetrics(
             prompt_tokens=100,
