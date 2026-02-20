@@ -1,4 +1,15 @@
-"""Unit tests for reporting metrics aggregation service."""
+"""Unit tests for reporting metrics aggregation queries.
+
+This module verifies period and estate-level aggregation behaviour for report
+counts, latency profiles, and token totals in ``ReportingMetricsService``.
+
+Usage
+-----
+Run this module directly while iterating on metrics query logic:
+
+>>> # uv run pytest tests/unit/test_reporting_metrics_service.py -v
+
+"""
 
 from __future__ import annotations
 
@@ -75,18 +86,7 @@ async def _create_report(
 async def _create_period_test_fixture(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> str:
-    """Create test repository and reports for period aggregation tests.
-
-    Creates one repository and four reports:
-    - Three reports in July 2024 (two with metrics, one without)
-    - One report in June 2024 (outside the test period)
-
-    Returns
-    -------
-    str
-        The repository ID.
-
-    """
+    """Create one repository and four reports for period aggregation tests."""
     repo_id = await _create_repository(
         session_factory,
         owner="acme",
@@ -162,13 +162,27 @@ class TestReportingMetricsService:
 
         snapshot = await service.get_metrics_for_period(period_start, period_end)
 
-        assert snapshot.total_reports == 0
-        assert snapshot.reports_with_metrics == 0
-        assert snapshot.avg_latency_ms is None
-        assert snapshot.p95_latency_ms is None
-        assert snapshot.total_prompt_tokens == 0
-        assert snapshot.total_completion_tokens == 0
-        assert snapshot.total_tokens == 0
+        assert snapshot.total_reports == 0, (
+            "Expected zero reports when no rows exist in the selected period"
+        )
+        assert snapshot.reports_with_metrics == 0, (
+            "Expected zero reports_with_metrics when no rows exist in period"
+        )
+        assert snapshot.avg_latency_ms is None, (
+            "Expected average latency to be None without latency data"
+        )
+        assert snapshot.p95_latency_ms is None, (
+            "Expected p95 latency to be None without latency data"
+        )
+        assert snapshot.total_prompt_tokens == 0, (
+            "Expected prompt token total to be zero when no reports exist"
+        )
+        assert snapshot.total_completion_tokens == 0, (
+            "Expected completion token total to be zero when no reports exist"
+        )
+        assert snapshot.total_tokens == 0, (
+            "Expected total token usage to be zero when no reports exist"
+        )
 
     @pytest.mark.asyncio
     async def test_period_metrics_aggregate_counts_latency_and_tokens(
@@ -183,13 +197,27 @@ class TestReportingMetricsService:
 
         snapshot = await service.get_metrics_for_period(period_start, period_end)
 
-        assert snapshot.total_reports == 3
-        assert snapshot.reports_with_metrics == 2
-        assert snapshot.avg_latency_ms == 200.0
-        assert snapshot.p95_latency_ms == 300.0
-        assert snapshot.total_prompt_tokens == 40
-        assert snapshot.total_completion_tokens == 25
-        assert snapshot.total_tokens == 65
+        assert snapshot.total_reports == 3, (
+            "Expected three July reports and exclusion of the out-of-period row"
+        )
+        assert snapshot.reports_with_metrics == 2, (
+            "Expected reports_with_metrics to count only rows with non-null metrics"
+        )
+        assert snapshot.avg_latency_ms == 200.0, (
+            "Expected average latency from 100 ms and 300 ms rows"
+        )
+        assert snapshot.p95_latency_ms == 300.0, (
+            "Expected p95 latency to resolve to the highest latency in sample"
+        )
+        assert snapshot.total_prompt_tokens == 40, (
+            "Expected prompt token total from in-period rows only"
+        )
+        assert snapshot.total_completion_tokens == 25, (
+            "Expected completion token total from in-period rows only"
+        )
+        assert snapshot.total_tokens == 65, (
+            "Expected total token count from in-period rows only"
+        )
 
     @pytest.mark.asyncio
     async def test_partial_token_metrics_count_as_metrics_and_total_fallback(
@@ -221,13 +249,27 @@ class TestReportingMetricsService:
         period_end = dt.datetime(2024, 8, 1, tzinfo=dt.UTC)
         snapshot = await service.get_metrics_for_period(period_start, period_end)
 
-        assert snapshot.total_reports == 1
-        assert snapshot.reports_with_metrics == 1
-        assert snapshot.avg_latency_ms is None
-        assert snapshot.p95_latency_ms is None
-        assert snapshot.total_prompt_tokens == 7
-        assert snapshot.total_completion_tokens == 3
-        assert snapshot.total_tokens == 10
+        assert snapshot.total_reports == 1, (
+            "Expected one report in period for partial-token metrics fixture"
+        )
+        assert snapshot.reports_with_metrics == 1, (
+            "Expected token-only metrics row to count as report with metrics"
+        )
+        assert snapshot.avg_latency_ms is None, (
+            "Expected average latency to be None when latency is missing"
+        )
+        assert snapshot.p95_latency_ms is None, (
+            "Expected p95 latency to be None when latency is missing"
+        )
+        assert snapshot.total_prompt_tokens == 7, (
+            "Expected prompt token total to include token-only metrics row"
+        )
+        assert snapshot.total_completion_tokens == 3, (
+            "Expected completion token total to include token-only metrics row"
+        )
+        assert snapshot.total_tokens == 10, (
+            "Expected total token fallback to sum prompt and completion tokens"
+        )
 
     @pytest.mark.asyncio
     async def test_period_end_before_start_raises_value_error(
@@ -296,10 +338,24 @@ class TestReportingMetricsService:
             period_end,
         )
 
-        assert snapshot.total_reports == 1
-        assert snapshot.reports_with_metrics == 1
-        assert snapshot.avg_latency_ms == 120.0
-        assert snapshot.p95_latency_ms == 120.0
-        assert snapshot.total_prompt_tokens == 12
-        assert snapshot.total_completion_tokens == 4
-        assert snapshot.total_tokens == 16
+        assert snapshot.total_reports == 1, (
+            "Expected estate-scoped metrics to include only one matching report"
+        )
+        assert snapshot.reports_with_metrics == 1, (
+            "Expected estate-scoped reports_with_metrics to match included report"
+        )
+        assert snapshot.avg_latency_ms == 120.0, (
+            "Expected estate-scoped average latency to match included report"
+        )
+        assert snapshot.p95_latency_ms == 120.0, (
+            "Expected estate-scoped p95 latency to match included report"
+        )
+        assert snapshot.total_prompt_tokens == 12, (
+            "Expected estate-scoped prompt token sum to match included report"
+        )
+        assert snapshot.total_completion_tokens == 4, (
+            "Expected estate-scoped completion token sum to match included report"
+        )
+        assert snapshot.total_tokens == 16, (
+            "Expected estate-scoped total token sum to match included report"
+        )

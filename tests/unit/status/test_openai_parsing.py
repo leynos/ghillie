@@ -348,7 +348,9 @@ class TestOpenAIInvocationMetrics:
         """No metrics are available before the first model invocation."""
         model = OpenAIStatusModel(config)
         try:
-            assert model.last_invocation_metrics is None
+            assert model.last_invocation_metrics is None, (
+                "Expected no invocation metrics before first model call"
+            )
         finally:
             await model.aclose()
 
@@ -372,10 +374,18 @@ class TestOpenAIInvocationMetrics:
             await model.summarize_repository(feature_evidence)
 
             metrics = model.last_invocation_metrics
-            assert metrics is not None
-            assert metrics.prompt_tokens == 100
-            assert metrics.completion_tokens == 50
-            assert metrics.total_tokens == 150
+            assert metrics is not None, (
+                "Expected invocation metrics after successful model call"
+            )
+            assert metrics.prompt_tokens == 100, (
+                "Expected prompt token count to match usage payload"
+            )
+            assert metrics.completion_tokens == 50, (
+                "Expected completion token count to match usage payload"
+            )
+            assert metrics.total_tokens == 150, (
+                "Expected total token count to match usage payload"
+            )
 
     @pytest.mark.asyncio
     async def test_missing_usage_sets_empty_metrics(
@@ -389,10 +399,18 @@ class TestOpenAIInvocationMetrics:
             await model.summarize_repository(feature_evidence)
 
             metrics = model.last_invocation_metrics
-            assert metrics is not None
-            assert metrics.prompt_tokens is None
-            assert metrics.completion_tokens is None
-            assert metrics.total_tokens is None
+            assert metrics is not None, (
+                "Expected metrics object even when usage payload is absent"
+            )
+            assert metrics.prompt_tokens is None, (
+                "Expected missing prompt token usage to remain None"
+            )
+            assert metrics.completion_tokens is None, (
+                "Expected missing completion token usage to remain None"
+            )
+            assert metrics.total_tokens is None, (
+                "Expected missing total token usage to remain None"
+            )
 
     @pytest.mark.asyncio
     async def test_metrics_are_overwritten_per_call(
@@ -420,10 +438,18 @@ class TestOpenAIInvocationMetrics:
             await model.summarize_repository(feature_evidence)
 
             metrics = model.last_invocation_metrics
-            assert metrics is not None
-            assert metrics.prompt_tokens == 20
-            assert metrics.completion_tokens == 8
-            assert metrics.total_tokens == 28
+            assert metrics is not None, (
+                "Expected invocation metrics after repeated model calls"
+            )
+            assert metrics.prompt_tokens == 20, (
+                "Expected latest prompt token count to overwrite previous value"
+            )
+            assert metrics.completion_tokens == 8, (
+                "Expected latest completion token count to overwrite previous value"
+            )
+            assert metrics.total_tokens == 28, (
+                "Expected latest total token count to overwrite previous value"
+            )
 
     @pytest.mark.asyncio
     async def test_non_integer_usage_values_are_ignored(
@@ -445,7 +471,15 @@ class TestOpenAIInvocationMetrics:
             await model.summarize_repository(feature_evidence)
 
             metrics = model.last_invocation_metrics
-            assert metrics is not None
-            assert metrics.prompt_tokens is None
-            assert metrics.completion_tokens is None
-            assert metrics.total_tokens is None
+            assert metrics is not None, (
+                "Expected metrics object after successful completion response"
+            )
+            assert metrics.prompt_tokens is None, (
+                "Expected non-integer prompt tokens to coerce to None"
+            )
+            assert metrics.completion_tokens is None, (
+                "Expected non-integer completion tokens to coerce to None"
+            )
+            assert metrics.total_tokens is None, (
+                "Expected non-integer total tokens to coerce to None"
+            )

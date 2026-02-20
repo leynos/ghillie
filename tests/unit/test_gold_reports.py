@@ -58,10 +58,18 @@ def test_ensure_report_metric_columns_updates_legacy_reports_table() -> None:
     finally:
         engine.dispose()
 
-    assert "model_latency_ms" in column_names
-    assert "prompt_tokens" in column_names
-    assert "completion_tokens" in column_names
-    assert "total_tokens" in column_names
+    assert "model_latency_ms" in column_names, (
+        "Expected legacy reports table to gain model_latency_ms column"
+    )
+    assert "prompt_tokens" in column_names, (
+        "Expected legacy reports table to gain prompt_tokens column"
+    )
+    assert "completion_tokens" in column_names, (
+        "Expected legacy reports table to gain completion_tokens column"
+    )
+    assert "total_tokens" in column_names, (
+        "Expected legacy reports table to gain total_tokens column"
+    )
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,15 @@
-"""Unit tests for reporting metrics capture in ``ReportingService``."""
+"""Unit tests for reporting metrics capture in ``ReportingService``.
+
+This module verifies that report-generation runs persist latency/token metrics
+and emit lifecycle observability events with the expected payloads.
+
+Usage
+-----
+Run this module directly while iterating on reporting metrics behaviour:
+
+>>> # uv run pytest tests/unit/test_reporting_metrics_capture.py -v
+
+"""
 
 from __future__ import annotations
 
@@ -191,11 +202,21 @@ class TestReportingMetricsCapture:
             bundle=bundle,
         )
 
-        assert report.model_latency_ms is not None
-        assert report.model_latency_ms >= 1
-        assert report.prompt_tokens == 120
-        assert report.completion_tokens == 30
-        assert report.total_tokens == 150
+        assert report.model_latency_ms is not None, (
+            "Expected persisted report to include measured model latency"
+        )
+        assert report.model_latency_ms >= 1, (
+            "Expected measured model latency to be at least 1 ms"
+        )
+        assert report.prompt_tokens == 120, (
+            "Expected persisted prompt token usage to match model metrics"
+        )
+        assert report.completion_tokens == 30, (
+            "Expected persisted completion token usage to match model metrics"
+        )
+        assert report.total_tokens == 150, (
+            "Expected persisted total token usage to match model metrics"
+        )
 
     @pytest.mark.asyncio
     async def test_mock_model_reports_zero_token_usage(
@@ -205,9 +226,15 @@ class TestReportingMetricsCapture:
         """``MockStatusModel`` should persist zero-token usage per run."""
         report = await self._generate_test_report(session_factory, MockStatusModel())
 
-        assert report.prompt_tokens == 0
-        assert report.completion_tokens == 0
-        assert report.total_tokens == 0
+        assert report.prompt_tokens == 0, (
+            "Expected mock model prompt token usage to persist as zero"
+        )
+        assert report.completion_tokens == 0, (
+            "Expected mock model completion token usage to persist as zero"
+        )
+        assert report.total_tokens == 0, (
+            "Expected mock model total token usage to persist as zero"
+        )
 
     @pytest.mark.asyncio
     async def test_missing_metrics_attribute_persists_null_columns(
@@ -220,10 +247,19 @@ class TestReportingMetricsCapture:
             _NoMetricsStatusModel(),
         )
 
-        assert report.model_latency_ms is None
-        assert report.prompt_tokens is None
-        assert report.completion_tokens is None
-        assert report.total_tokens is None
+        assert report.model_latency_ms is None, (
+            "Expected latency column to remain null without metrics side-channel"
+        )
+        assert report.prompt_tokens is None, (
+            "Expected prompt token column to remain null without metrics side-channel"
+        )
+        assert report.completion_tokens is None, (
+            "Expected completion token column to remain null without "
+            "metrics side-channel"
+        )
+        assert report.total_tokens is None, (
+            "Expected total token column to remain null without metrics side-channel"
+        )
 
     @pytest.mark.asyncio
     async def test_retry_persists_metrics_from_last_successful_attempt(
@@ -236,10 +272,18 @@ class TestReportingMetricsCapture:
             _RetryingMetricsStatusModel(),
         )
 
-        assert report.human_text == "retry succeeded"
-        assert report.prompt_tokens == 22
-        assert report.completion_tokens == 8
-        assert report.total_tokens == 30
+        assert report.human_text == "retry succeeded", (
+            "Expected successful retry summary to be persisted"
+        )
+        assert report.prompt_tokens == 22, (
+            "Expected prompt token usage from successful retry attempt"
+        )
+        assert report.completion_tokens == 8, (
+            "Expected completion token usage from successful retry attempt"
+        )
+        assert report.total_tokens == 30, (
+            "Expected total token usage from successful retry attempt"
+        )
 
 
 class TestReportingEventLoggerIntegration:
@@ -270,20 +314,40 @@ class TestReportingEventLoggerIntegration:
 
         event_logger.log_report_started.assert_called_once()
         started_kwargs = event_logger.log_report_started.call_args.kwargs
-        assert started_kwargs["repo_slug"] == bundle.repository.slug
-        assert started_kwargs["window_start"] == bundle.window_start
-        assert started_kwargs["window_end"] == bundle.window_end
+        assert started_kwargs["repo_slug"] == bundle.repository.slug, (
+            "Expected started event repo_slug to match the repository bundle slug"
+        )
+        assert started_kwargs["window_start"] == bundle.window_start, (
+            "Expected started event window_start to match reporting window"
+        )
+        assert started_kwargs["window_end"] == bundle.window_end, (
+            "Expected started event window_end to match reporting window"
+        )
 
         event_logger.log_report_completed.assert_called_once()
         completed_kwargs = event_logger.log_report_completed.call_args.kwargs
-        assert completed_kwargs["repo_slug"] == bundle.repository.slug
-        assert completed_kwargs["model"] == (report.model or "unknown")
+        assert completed_kwargs["repo_slug"] == bundle.repository.slug, (
+            "Expected completed event repo_slug to match the repository bundle slug"
+        )
+        assert completed_kwargs["model"] == (report.model or "unknown"), (
+            "Expected completed event model to match persisted report model"
+        )
         metrics = completed_kwargs["metrics"]
-        assert isinstance(metrics, ModelInvocationMetrics)
-        assert report.model_latency_ms == round(metrics.latency_ms or 0.0)
-        assert report.prompt_tokens == metrics.prompt_tokens
-        assert report.completion_tokens == metrics.completion_tokens
-        assert report.total_tokens == metrics.total_tokens
+        assert isinstance(metrics, ModelInvocationMetrics), (
+            "Expected completed event metrics payload to use ModelInvocationMetrics"
+        )
+        assert report.model_latency_ms == round(metrics.latency_ms or 0.0), (
+            "Expected persisted latency to match rounded completed-event latency"
+        )
+        assert report.prompt_tokens == metrics.prompt_tokens, (
+            "Expected persisted prompt tokens to match completed-event metrics"
+        )
+        assert report.completion_tokens == metrics.completion_tokens, (
+            "Expected persisted completion tokens to match completed-event metrics"
+        )
+        assert report.total_tokens == metrics.total_tokens, (
+            "Expected persisted total tokens to match completed-event metrics"
+        )
 
         event_logger.log_report_failed.assert_not_called()
 
@@ -319,8 +383,16 @@ class TestReportingEventLoggerIntegration:
         event_logger.log_report_started.assert_called_once()
         event_logger.log_report_failed.assert_called_once()
         failed_kwargs = event_logger.log_report_failed.call_args.kwargs
-        assert failed_kwargs["repo_slug"] == bundle.repository.slug
-        assert isinstance(failed_kwargs["error"], RuntimeError)
-        assert str(failed_kwargs["error"]) == "status backend unavailable"
-        assert failed_kwargs["duration"] > dt.timedelta(0)
+        assert failed_kwargs["repo_slug"] == bundle.repository.slug, (
+            "Expected failed event repo_slug to match the repository bundle slug"
+        )
+        assert isinstance(failed_kwargs["error"], RuntimeError), (
+            "Expected failed event error payload to preserve RuntimeError type"
+        )
+        assert str(failed_kwargs["error"]) == "status backend unavailable", (
+            "Expected failed event error message to match raised runtime error"
+        )
+        assert failed_kwargs["duration"] > dt.timedelta(0), (
+            "Expected failed event duration to be positive"
+        )
         event_logger.log_report_completed.assert_not_called()

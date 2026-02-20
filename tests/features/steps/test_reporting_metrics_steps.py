@@ -1,4 +1,15 @@
-"""Behavioural coverage for reporting metrics and costs."""
+"""Behaviour-driven steps for reporting metrics and costs.
+
+This module provides pytest-bdd step implementations that verify reporting
+metric capture and period aggregation from an operator viewpoint.
+
+Usage
+-----
+Run the feature-backed scenarios from the test suite:
+
+>>> # uv run pytest tests/features/steps/test_reporting_metrics_steps.py -v
+
+"""
 
 from __future__ import annotations
 
@@ -57,6 +68,7 @@ class _MetricsStatusModel:
 def _build_reporting_service(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> ReportingService:
+    """Create a reporting service configured for deterministic metrics tests."""
     deps = ReportingServiceDependencies(
         session_factory=session_factory,
         evidence_service=EvidenceBundleService(session_factory),
