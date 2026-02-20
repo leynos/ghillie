@@ -72,6 +72,81 @@ async def _create_report(
         session.add(report)
 
 
+async def _create_period_test_fixture(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> str:
+    """Create test repository and reports for period aggregation tests.
+
+    Creates one repository and four reports:
+    - Three reports in July 2024 (two with metrics, one without)
+    - One report in June 2024 (outside the test period)
+
+    Returns
+    -------
+    str
+        The repository ID.
+
+    """
+    repo_id = await _create_repository(
+        session_factory,
+        owner="acme",
+        name="widget",
+        estate_id="estate-a",
+    )
+
+    inside_1 = dt.datetime(2024, 7, 8, tzinfo=dt.UTC)
+    inside_2 = dt.datetime(2024, 7, 9, tzinfo=dt.UTC)
+    inside_3 = dt.datetime(2024, 7, 10, tzinfo=dt.UTC)
+    outside = dt.datetime(2024, 6, 20, tzinfo=dt.UTC)
+
+    await _create_report(
+        session_factory,
+        ReportInsertSpec(
+            repository_id=repo_id,
+            generated_at=inside_1,
+            model_latency_ms=100,
+            prompt_tokens=10,
+            completion_tokens=5,
+            total_tokens=15,
+        ),
+    )
+    await _create_report(
+        session_factory,
+        ReportInsertSpec(
+            repository_id=repo_id,
+            generated_at=inside_2,
+            model_latency_ms=300,
+            prompt_tokens=30,
+            completion_tokens=20,
+            total_tokens=50,
+        ),
+    )
+    await _create_report(
+        session_factory,
+        ReportInsertSpec(
+            repository_id=repo_id,
+            generated_at=inside_3,
+            model_latency_ms=None,
+            prompt_tokens=None,
+            completion_tokens=None,
+            total_tokens=None,
+        ),
+    )
+    await _create_report(
+        session_factory,
+        ReportInsertSpec(
+            repository_id=repo_id,
+            generated_at=outside,
+            model_latency_ms=700,
+            prompt_tokens=70,
+            completion_tokens=20,
+            total_tokens=90,
+        ),
+    )
+
+    return repo_id
+
+
 class TestReportingMetricsService:
     """Tests for period and estate-level reporting metrics snapshots."""
 
@@ -101,63 +176,7 @@ class TestReportingMetricsService:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Service aggregates totals and latency profile for a time window."""
-        repo_id = await _create_repository(
-            session_factory,
-            owner="acme",
-            name="widget",
-            estate_id="estate-a",
-        )
-
-        inside_1 = dt.datetime(2024, 7, 8, tzinfo=dt.UTC)
-        inside_2 = dt.datetime(2024, 7, 9, tzinfo=dt.UTC)
-        inside_3 = dt.datetime(2024, 7, 10, tzinfo=dt.UTC)
-        outside = dt.datetime(2024, 6, 20, tzinfo=dt.UTC)
-
-        await _create_report(
-            session_factory,
-            ReportInsertSpec(
-                repository_id=repo_id,
-                generated_at=inside_1,
-                model_latency_ms=100,
-                prompt_tokens=10,
-                completion_tokens=5,
-                total_tokens=15,
-            ),
-        )
-        await _create_report(
-            session_factory,
-            ReportInsertSpec(
-                repository_id=repo_id,
-                generated_at=inside_2,
-                model_latency_ms=300,
-                prompt_tokens=30,
-                completion_tokens=20,
-                total_tokens=50,
-            ),
-        )
-        await _create_report(
-            session_factory,
-            ReportInsertSpec(
-                repository_id=repo_id,
-                generated_at=inside_3,
-                model_latency_ms=None,
-                prompt_tokens=None,
-                completion_tokens=None,
-                total_tokens=None,
-            ),
-        )
-        await _create_report(
-            session_factory,
-            ReportInsertSpec(
-                repository_id=repo_id,
-                generated_at=outside,
-                model_latency_ms=700,
-                prompt_tokens=70,
-                completion_tokens=20,
-                total_tokens=90,
-            ),
-        )
-
+        await _create_period_test_fixture(session_factory)
         service = ReportingMetricsService(session_factory)
         period_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
         period_end = dt.datetime(2024, 8, 1, tzinfo=dt.UTC)
