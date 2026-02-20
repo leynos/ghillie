@@ -20,7 +20,10 @@ import typing as typ
 import pytest
 
 from ghillie.gold import Report, ReportScope
-from ghillie.reporting.metrics_service import ReportingMetricsService
+from ghillie.reporting.metrics_service import (
+    ReportingMetricsService,
+    ReportingMetricsSnapshot,
+)
 from ghillie.silver.storage import Repository
 
 if typ.TYPE_CHECKING:
@@ -147,6 +150,34 @@ async def _create_period_test_fixture(
     return repo_id
 
 
+def _assert_snapshot_matches(
+    snapshot: ReportingMetricsSnapshot,
+    expected: ReportingMetricsSnapshot,
+) -> None:
+    """Assert all metrics fields in a snapshot against expected values."""
+    assert snapshot.total_reports == expected.total_reports, (
+        "Unexpected total_reports value"
+    )
+    assert snapshot.reports_with_metrics == expected.reports_with_metrics, (
+        "Unexpected reports_with_metrics value"
+    )
+    assert snapshot.avg_latency_ms == expected.avg_latency_ms, (
+        "Unexpected avg_latency_ms value"
+    )
+    assert snapshot.p95_latency_ms == expected.p95_latency_ms, (
+        "Unexpected p95_latency_ms value"
+    )
+    assert snapshot.total_prompt_tokens == expected.total_prompt_tokens, (
+        "Unexpected total_prompt_tokens value"
+    )
+    assert snapshot.total_completion_tokens == expected.total_completion_tokens, (
+        "Unexpected total_completion_tokens value"
+    )
+    assert snapshot.total_tokens == expected.total_tokens, (
+        "Unexpected total_tokens value"
+    )
+
+
 class TestReportingMetricsService:
     """Tests for period and estate-level reporting metrics snapshots."""
 
@@ -162,26 +193,19 @@ class TestReportingMetricsService:
 
         snapshot = await service.get_metrics_for_period(period_start, period_end)
 
-        assert snapshot.total_reports == 0, (
-            "Expected zero reports when no rows exist in the selected period"
-        )
-        assert snapshot.reports_with_metrics == 0, (
-            "Expected zero reports_with_metrics when no rows exist in period"
-        )
-        assert snapshot.avg_latency_ms is None, (
-            "Expected average latency to be None without latency data"
-        )
-        assert snapshot.p95_latency_ms is None, (
-            "Expected p95 latency to be None without latency data"
-        )
-        assert snapshot.total_prompt_tokens == 0, (
-            "Expected prompt token total to be zero when no reports exist"
-        )
-        assert snapshot.total_completion_tokens == 0, (
-            "Expected completion token total to be zero when no reports exist"
-        )
-        assert snapshot.total_tokens == 0, (
-            "Expected total token usage to be zero when no reports exist"
+        _assert_snapshot_matches(
+            snapshot,
+            ReportingMetricsSnapshot(
+                period_start=period_start,
+                period_end=period_end,
+                total_reports=0,
+                reports_with_metrics=0,
+                avg_latency_ms=None,
+                p95_latency_ms=None,
+                total_prompt_tokens=0,
+                total_completion_tokens=0,
+                total_tokens=0,
+            ),
         )
 
     @pytest.mark.asyncio
@@ -197,26 +221,19 @@ class TestReportingMetricsService:
 
         snapshot = await service.get_metrics_for_period(period_start, period_end)
 
-        assert snapshot.total_reports == 3, (
-            "Expected three July reports and exclusion of the out-of-period row"
-        )
-        assert snapshot.reports_with_metrics == 2, (
-            "Expected reports_with_metrics to count only rows with non-null metrics"
-        )
-        assert snapshot.avg_latency_ms == 200.0, (
-            "Expected average latency from 100 ms and 300 ms rows"
-        )
-        assert snapshot.p95_latency_ms == 300.0, (
-            "Expected p95 latency to resolve to the highest latency in sample"
-        )
-        assert snapshot.total_prompt_tokens == 40, (
-            "Expected prompt token total from in-period rows only"
-        )
-        assert snapshot.total_completion_tokens == 25, (
-            "Expected completion token total from in-period rows only"
-        )
-        assert snapshot.total_tokens == 65, (
-            "Expected total token count from in-period rows only"
+        _assert_snapshot_matches(
+            snapshot,
+            ReportingMetricsSnapshot(
+                period_start=period_start,
+                period_end=period_end,
+                total_reports=3,
+                reports_with_metrics=2,
+                avg_latency_ms=200.0,
+                p95_latency_ms=300.0,
+                total_prompt_tokens=40,
+                total_completion_tokens=25,
+                total_tokens=65,
+            ),
         )
 
     @pytest.mark.asyncio
