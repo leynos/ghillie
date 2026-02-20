@@ -1,4 +1,20 @@
-"""Observability primitives for reporting workflow execution."""
+"""Emit structured observability events for reporting lifecycle execution.
+
+This module defines event identifiers and a logger wrapper used by
+``ReportingService`` to emit start, success, and failure telemetry.
+
+Usage
+-----
+Create a logger and call lifecycle methods during report generation:
+
+>>> event_logger = ReportingEventLogger()
+>>> event_logger.log_report_started(
+...     repo_slug="octo/reef",
+...     window_start=start,
+...     window_end=end,
+... )
+
+"""
 
 from __future__ import annotations
 
@@ -33,7 +49,23 @@ class ReportingEventLogger:
         window_start: dt.datetime,
         window_end: dt.datetime,
     ) -> None:
-        """Log report generation start for one repository window."""
+        """Log report generation start for one repository window.
+
+        Parameters
+        ----------
+        repo_slug
+            Repository slug in ``owner/name`` format.
+        window_start
+            Start of the reporting window (inclusive).
+        window_end
+            End of the reporting window (exclusive).
+
+        Returns
+        -------
+        None
+            This method emits a structured log event and returns ``None``.
+
+        """
         log_info(
             logger,
             "[%s] repo_slug=%s window_start=%s window_end=%s",
@@ -50,7 +82,23 @@ class ReportingEventLogger:
         model: str,
         metrics: ModelInvocationMetrics | None,
     ) -> None:
-        """Log successful report generation with latency and token fields."""
+        """Log successful report generation with latency and token fields.
+
+        Parameters
+        ----------
+        repo_slug
+            Repository slug in ``owner/name`` format.
+        model
+            Model identifier used for report generation.
+        metrics
+            Invocation metrics captured for the successful model call.
+
+        Returns
+        -------
+        None
+            This method emits a structured log event and returns ``None``.
+
+        """
         latency = metrics.latency_ms if metrics is not None else None
         prompt_tokens = metrics.prompt_tokens if metrics is not None else None
         completion_tokens = metrics.completion_tokens if metrics is not None else None
@@ -76,7 +124,23 @@ class ReportingEventLogger:
         error: BaseException,
         duration: dt.timedelta,
     ) -> None:
-        """Log failed report generation with error details."""
+        """Log failed report generation with error details.
+
+        Parameters
+        ----------
+        repo_slug
+            Repository slug in ``owner/name`` format.
+        error
+            Raised exception from report generation.
+        duration
+            Elapsed runtime between report start and failure.
+
+        Returns
+        -------
+        None
+            This method emits a structured log event and returns ``None``.
+
+        """
         log_error(
             logger,
             "[%s] repo_slug=%s duration_seconds=%.3f error_type=%s error_message=%s",

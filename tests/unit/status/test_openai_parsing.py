@@ -95,9 +95,9 @@ class _SuccessfulCompletionTransport(httpx.AsyncBaseTransport):
     def __init__(
         self,
         *,
-        usage_payloads: tuple[dict[str, int] | None, ...],
+        usage_payloads: tuple[dict[str, object] | None, ...],
     ) -> None:
-        self._usage_payloads = usage_payloads
+        self._usage_payloads = usage_payloads or (None,)
         self._index = 0
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
@@ -340,13 +340,17 @@ class TestOpenAIInvocationMetrics:
             endpoint="http://test.local/v1/chat/completions",
         )
 
-    def test_metrics_none_before_first_call(
+    @pytest.mark.asyncio
+    async def test_metrics_none_before_first_call(
         self,
         config: OpenAIStatusModelConfig,
     ) -> None:
         """No metrics are available before the first model invocation."""
         model = OpenAIStatusModel(config)
-        assert model.last_invocation_metrics is None
+        try:
+            assert model.last_invocation_metrics is None
+        finally:
+            await model.aclose()
 
     @pytest.mark.asyncio
     async def test_extracts_token_usage_from_response(
@@ -420,3 +424,28 @@ class TestOpenAIInvocationMetrics:
             assert metrics.prompt_tokens == 20
             assert metrics.completion_tokens == 8
             assert metrics.total_tokens == 28
+
+    @pytest.mark.asyncio
+    async def test_non_integer_usage_values_are_ignored(
+        self,
+        config: OpenAIStatusModelConfig,
+        feature_evidence: RepositoryEvidenceBundle,
+    ) -> None:
+        """Non-integer usage values are coerced to ``None`` in metrics output."""
+        transport = _SuccessfulCompletionTransport(
+            usage_payloads=(
+                {
+                    "prompt_tokens": "100",
+                    "completion_tokens": 50.0,
+                    "total_tokens": "150.0",
+                },
+            )
+        )
+        async with create_model_with_transport(config, transport) as model:
+            await model.summarize_repository(feature_evidence)
+
+            metrics = model.last_invocation_metrics
+            assert metrics is not None
+            assert metrics.prompt_tokens is None
+            assert metrics.completion_tokens is None
+            assert metrics.total_tokens is None

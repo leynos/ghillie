@@ -1416,5 +1416,5 @@ For estate-scoped queries, call `get_metrics_for_estate(estate_id, start, end)`.
 ### Estimating reporting cost
 
 `ReportingMetricsService` returns token totals. Convert those totals to
-currency using your configured model pricing (for example, prompt and
+currency using pricing configured for the active model (for example, prompt and
 completion token rates from the provider contract).

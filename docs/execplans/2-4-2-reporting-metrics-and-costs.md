@@ -35,7 +35,8 @@ Success is observable when:
 ## Constraints
 
 - Keep `StatusModel` protocol unchanged; adapter metrics are side-channel only.
-- Follow TDD requirements in `AGENTS.md` (tests added before implementation).
+- Follow test-driven development (TDD) requirements in `AGENTS.md` (tests
+  added before implementation).
 - Preserve existing reporting architecture and storage contracts.
 - Keep new Gold report metric columns nullable for backward compatibility.
 - Maintain markdown wrapping and linting requirements in `docs/`.
@@ -70,20 +71,22 @@ Success is observable when:
 - [x] Add failing unit tests for reporting metrics capture and logger
   integration.
 - [x] Add failing unit tests for reporting metrics aggregation service.
-- [x] Add failing pytest-bdd scenarios for report metrics and period snapshots.
+- [x] Add failing behaviour-driven development (BDD) scenarios using
+  `pytest-bdd` for report metrics and period snapshots.
 - [x] Implement status adapter metrics (`ModelInvocationMetrics`).
 - [x] Persist latency/token fields on Gold `Report` rows.
 - [x] Add reporting observability logger and wire into service/actors/API
   factory.
 - [x] Add `ReportingMetricsService` for period and estate aggregation.
 - [x] Extend on-demand report response to include metrics payload.
-- [x] Update design docs, users guide, roadmap, and this ExecPlan.
+- [x] Update design docs, user guide, roadmap, and this ExecPlan.
 - [x] Run quality gates and record outcomes.
 
 ## Surprises & discoveries
 
-- The Qdrant project-memory MCP tools are not exposed in this environment, so
-  this implementation relied on repository docs and code context only.
+- The Qdrant project-memory Model Context Protocol (MCP) tools are not exposed
+  in this environment, so this implementation relied on repository docs and
+  code context only.
 - `generated_at` defaults to current time, so BDD period queries must use a
   dynamic "current period" window unless explicit timestamps are inserted.
 

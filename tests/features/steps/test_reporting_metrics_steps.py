@@ -7,10 +7,12 @@ import datetime as dt
 import typing as typ
 
 from pytest_bdd import given, scenario, then, when
+from sqlalchemy import select
 
 from ghillie.bronze import RawEventWriter
 from ghillie.evidence import EvidenceBundleService
 from ghillie.evidence.models import ReportStatus, RepositoryEvidenceBundle
+from ghillie.gold import Report
 from ghillie.reporting import (
     ReportingConfig,
     ReportingService,
@@ -27,8 +29,6 @@ from tests.helpers.event_builders import commit_envelope
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
-    from ghillie.gold import Report
 
 
 class _MetricsStatusModel:
@@ -76,6 +76,8 @@ class ReportingMetricsContext(typ.TypedDict, total=False):
     repo_id: str
     report: Report | None
     snapshot: ReportingMetricsSnapshot
+    period_start: dt.datetime
+    period_end: dt.datetime
 
 
 @scenario(
@@ -122,8 +124,6 @@ def given_repo_with_events(
         )
         await transformer.process_pending()
 
-        from sqlalchemy import select
-
         async with session_factory() as session:
             repo = await session.scalar(select(Repository))
             assert repo is not None, "Repository should exist after event ingestion"
@@ -153,7 +153,7 @@ def given_multiple_reports_in_period(
         "metrics_service": ReportingMetricsService(session_factory),
     }
 
-    async def _setup() -> None:
+    async def _setup() -> tuple[dt.datetime, dt.datetime]:
         commit_time = dt.datetime(2024, 7, 10, 10, 0, tzinfo=dt.UTC)
         await writer.ingest(
             commit_envelope("octo/reef", "metrics-101", commit_time, "feat: one")
@@ -163,8 +163,6 @@ def given_multiple_reports_in_period(
         )
         await transformer.process_pending()
 
-        from sqlalchemy import select
-
         async with session_factory() as session:
             repos = (await session.scalars(select(Repository))).all()
             repo_ids = [repo.id for repo in repos]
@@ -173,7 +171,19 @@ def given_multiple_reports_in_period(
         for repo_id in repo_ids:
             await service.run_for_repository(repo_id, as_of=as_of)
 
-    asyncio.run(_setup())
+        async with session_factory() as session:
+            generated_at_values = (
+                await session.scalars(select(Report.generated_at))
+            ).all()
+            assert generated_at_values, "Expected generated reports in metrics scenario"
+            return (
+                min(generated_at_values) - dt.timedelta(days=1),
+                max(generated_at_values) + dt.timedelta(days=1),
+            )
+
+    period_start, period_end = asyncio.run(_setup())
+    context["period_start"] = period_start
+    context["period_end"] = period_end
     return context
 
 
@@ -202,10 +212,9 @@ def when_query_metrics_for_period(
 
     async def _run() -> ReportingMetricsSnapshot:
         service = reporting_metrics_context["metrics_service"]
-        now = dt.datetime.now(dt.UTC)
         return await service.get_metrics_for_period(
-            now - dt.timedelta(days=30),
-            now + dt.timedelta(days=1),
+            reporting_metrics_context["period_start"],
+            reporting_metrics_context["period_end"],
         )
 
     reporting_metrics_context["snapshot"] = asyncio.run(_run())
@@ -217,9 +226,9 @@ def then_generated_report_has_latency(
 ) -> None:
     """Assert model latency is persisted on the report row."""
     report = reporting_metrics_context["report"]
-    assert report is not None
-    assert report.model_latency_ms is not None
-    assert report.model_latency_ms > 0
+    assert report is not None, "Expected generated report in BDD context"
+    assert report.model_latency_ms is not None, "Expected model latency to be persisted"
+    assert report.model_latency_ms > 0, "Expected model latency to be positive"
 
 
 @then("the generated report has token usage recorded")
@@ -228,10 +237,12 @@ def then_generated_report_has_token_usage(
 ) -> None:
     """Assert token usage columns are populated on the report row."""
     report = reporting_metrics_context["report"]
-    assert report is not None
-    assert report.prompt_tokens == 100
-    assert report.completion_tokens == 20
-    assert report.total_tokens == 120
+    assert report is not None, "Expected generated report in BDD context"
+    assert report.prompt_tokens == 100, "Expected prompt token usage to be persisted"
+    assert report.completion_tokens == 20, (
+        "Expected completion token usage to be persisted"
+    )
+    assert report.total_tokens == 120, "Expected total token usage to be persisted"
 
 
 @then("the snapshot includes total reports generated")
@@ -240,7 +251,7 @@ def then_snapshot_has_total_reports(
 ) -> None:
     """Assert report count appears in aggregate snapshot."""
     snapshot = reporting_metrics_context["snapshot"]
-    assert snapshot.total_reports == 2
+    assert snapshot.total_reports == 2, "Expected two reports in the July period"
 
 
 @then("the snapshot includes average model latency")
@@ -249,9 +260,9 @@ def then_snapshot_has_average_latency(
 ) -> None:
     """Assert latency profile fields are populated."""
     snapshot = reporting_metrics_context["snapshot"]
-    assert snapshot.avg_latency_ms is not None
-    assert snapshot.avg_latency_ms > 0
-    assert snapshot.p95_latency_ms is not None
+    assert snapshot.avg_latency_ms is not None, "Expected average latency to be present"
+    assert snapshot.avg_latency_ms > 0, "Expected average latency to be positive"
+    assert snapshot.p95_latency_ms is not None, "Expected p95 latency to be present"
 
 
 @then("the snapshot includes total token usage")
@@ -260,6 +271,8 @@ def then_snapshot_has_total_tokens(
 ) -> None:
     """Assert aggregate token totals are exposed to operators."""
     snapshot = reporting_metrics_context["snapshot"]
-    assert snapshot.total_prompt_tokens == 200
-    assert snapshot.total_completion_tokens == 40
-    assert snapshot.total_tokens == 240
+    assert snapshot.total_prompt_tokens == 200, "Expected prompt token total to match"
+    assert snapshot.total_completion_tokens == 40, (
+        "Expected completion token total to match"
+    )
+    assert snapshot.total_tokens == 240, "Expected total token usage to match"

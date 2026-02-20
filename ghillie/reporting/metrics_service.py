@@ -1,4 +1,21 @@
-"""Reporting metrics query service for operational cost/latency visibility."""
+"""Query aggregate reporting metrics for operator cost and latency visibility.
+
+This module computes Gold-layer reporting telemetry for a period, either across
+all repositories or scoped to a single estate.
+
+Usage
+-----
+Create a service and request a period snapshot:
+
+>>> import datetime as dt
+>>> from ghillie.reporting.metrics_service import ReportingMetricsService
+>>> service = ReportingMetricsService(session_factory)
+>>> snapshot = await service.get_metrics_for_period(
+...     period_start=dt.datetime(2026, 2, 1, tzinfo=dt.UTC),
+...     period_end=dt.datetime(2026, 3, 1, tzinfo=dt.UTC),
+... )
+
+"""
 
 from __future__ import annotations
 
@@ -22,7 +39,30 @@ type MetricsRow = tuple[int | None, int | None, int | None, int | None]
 
 @dc.dataclass(frozen=True, slots=True)
 class ReportingMetricsSnapshot:
-    """Aggregate reporting metrics for an operator-defined period."""
+    """Aggregate reporting metrics for an operator-defined period.
+
+    Attributes
+    ----------
+    period_start
+        Start timestamp (inclusive) for the aggregation window.
+    period_end
+        End timestamp (exclusive) for the aggregation window.
+    total_reports
+        Number of reports generated in the selected period.
+    reports_with_metrics
+        Number of reports that contain at least one metrics field.
+    avg_latency_ms
+        Mean model latency in milliseconds, or ``None`` when unavailable.
+    p95_latency_ms
+        p95 model latency in milliseconds, or ``None`` when unavailable.
+    total_prompt_tokens
+        Sum of prompt tokens across reports in the period.
+    total_completion_tokens
+        Sum of completion tokens across reports in the period.
+    total_tokens
+        Sum of total token usage across reports in the period.
+
+    """
 
     period_start: dt.datetime
     period_end: dt.datetime
@@ -78,7 +118,12 @@ def _compute_token_totals(rows: list[MetricsRow]) -> tuple[int, int, int]:
     total_completion_tokens = sum(
         completion_tokens or 0 for _l, _p, completion_tokens, _t in rows
     )
-    total_tokens = sum(total_tokens or 0 for _l, _p, _c, total_tokens in rows)
+    total_tokens = sum(
+        total_tokens
+        if total_tokens is not None
+        else (prompt_tokens or 0) + (completion_tokens or 0)
+        for _l, prompt_tokens, completion_tokens, total_tokens in rows
+    )
     return total_prompt_tokens, total_completion_tokens, total_tokens
 
 
@@ -121,6 +166,19 @@ class ReportingMetricsService:
         """Create service bound to an async session factory."""
         self._session_factory = session_factory
 
+    def _validate_period(
+        self,
+        period_start: dt.datetime,
+        period_end: dt.datetime,
+    ) -> None:
+        """Validate that period bounds are chronologically ordered."""
+        if period_end <= period_start:
+            msg = (
+                "period_end must be after period_start, got "
+                f"start={period_start.isoformat()}, end={period_end.isoformat()}"
+            )
+            raise ValueError(msg)
+
     async def _get_metrics(
         self,
         period_start: dt.datetime,
@@ -131,6 +189,7 @@ class ReportingMetricsService:
 
         Optionally scope the aggregation to a single estate.
         """
+        self._validate_period(period_start, period_end)
         rows = await self._fetch_rows(
             period_start=period_start,
             period_end=period_end,
@@ -147,7 +206,21 @@ class ReportingMetricsService:
         period_start: dt.datetime,
         period_end: dt.datetime,
     ) -> ReportingMetricsSnapshot:
-        """Return aggregate reporting metrics for all repositories in a period."""
+        """Return aggregate reporting metrics for all repositories in a period.
+
+        Parameters
+        ----------
+        period_start
+            Start timestamp (inclusive) for the query window.
+        period_end
+            End timestamp (exclusive) for the query window.
+
+        Returns
+        -------
+        ReportingMetricsSnapshot
+            Aggregated report count, latency profile, and token totals.
+
+        """
         return await self._get_metrics(
             period_start=period_start,
             period_end=period_end,
@@ -160,7 +233,23 @@ class ReportingMetricsService:
         period_start: dt.datetime,
         period_end: dt.datetime,
     ) -> ReportingMetricsSnapshot:
-        """Return aggregate reporting metrics for one estate in a period."""
+        """Return aggregate reporting metrics for one estate in a period.
+
+        Parameters
+        ----------
+        estate_id
+            Estate identifier used to scope repository reports.
+        period_start
+            Start timestamp (inclusive) for the query window.
+        period_end
+            End timestamp (exclusive) for the query window.
+
+        Returns
+        -------
+        ReportingMetricsSnapshot
+            Aggregated report count, latency profile, and token totals.
+
+        """
         return await self._get_metrics(
             period_start=period_start,
             period_end=period_end,

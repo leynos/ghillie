@@ -17,6 +17,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    inspect,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,6 +25,7 @@ from ghillie.bronze.storage import Base, UTCDateTime
 from ghillie.common.time import utcnow
 
 if typ.TYPE_CHECKING:
+    from sqlalchemy.engine import Connection
     from sqlalchemy.ext.asyncio import AsyncEngine
 
     # Imported for type annotations only; relationship() uses string targets to
@@ -231,7 +233,40 @@ class ReportReview(Base):
     )
 
 
+_REPORT_METRIC_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("model_latency_ms", "INTEGER"),
+    ("prompt_tokens", "INTEGER"),
+    ("completion_tokens", "INTEGER"),
+    ("total_tokens", "INTEGER"),
+)
+
+
+def _ensure_report_metric_columns(sync_connection: Connection) -> None:
+    """Add missing report metric columns for databases created before 2.4.b."""
+    inspector = inspect(sync_connection)
+    if "reports" not in set(inspector.get_table_names()):
+        return
+
+    existing_columns = {column["name"] for column in inspector.get_columns("reports")}
+    missing_columns = [
+        (column_name, column_type)
+        for column_name, column_type in _REPORT_METRIC_COLUMNS
+        if column_name not in existing_columns
+    ]
+    if not missing_columns:
+        return
+
+    preparer = sync_connection.dialect.identifier_preparer
+    table_name = preparer.quote("reports")
+    for column_name, column_type in missing_columns:
+        quoted_column = preparer.quote(column_name)
+        sync_connection.exec_driver_sql(
+            f"ALTER TABLE {table_name} ADD COLUMN {quoted_column} {column_type}"
+        )
+
+
 async def init_gold_storage(engine: AsyncEngine) -> None:
     """Create all tables registered with Base if they are absent."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_ensure_report_metric_columns)

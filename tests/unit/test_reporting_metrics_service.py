@@ -192,6 +192,58 @@ class TestReportingMetricsService:
         assert snapshot.total_tokens == 65
 
     @pytest.mark.asyncio
+    async def test_partial_token_metrics_count_as_metrics_and_total_fallback(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """Rows with token metrics only still count and contribute to totals."""
+        repo_id = await _create_repository(
+            session_factory,
+            owner="acme",
+            name="widget",
+            estate_id="estate-a",
+        )
+        generated_at = dt.datetime(2024, 7, 12, tzinfo=dt.UTC)
+        await _create_report(
+            session_factory,
+            ReportInsertSpec(
+                repository_id=repo_id,
+                generated_at=generated_at,
+                model_latency_ms=None,
+                prompt_tokens=7,
+                completion_tokens=3,
+                total_tokens=None,
+            ),
+        )
+
+        service = ReportingMetricsService(session_factory)
+        period_start = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
+        period_end = dt.datetime(2024, 8, 1, tzinfo=dt.UTC)
+        snapshot = await service.get_metrics_for_period(period_start, period_end)
+
+        assert snapshot.total_reports == 1
+        assert snapshot.reports_with_metrics == 1
+        assert snapshot.avg_latency_ms is None
+        assert snapshot.p95_latency_ms is None
+        assert snapshot.total_prompt_tokens == 7
+        assert snapshot.total_completion_tokens == 3
+        assert snapshot.total_tokens == 10
+
+    @pytest.mark.asyncio
+    async def test_period_end_before_start_raises_value_error(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """Invalid period bounds raise a clear ``ValueError``."""
+        service = ReportingMetricsService(session_factory)
+
+        with pytest.raises(ValueError, match="period_end must be after period_start"):
+            await service.get_metrics_for_period(
+                dt.datetime(2024, 7, 31, tzinfo=dt.UTC),
+                dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+            )
+
+    @pytest.mark.asyncio
     async def test_get_metrics_for_estate_filters_repositories(
         self,
         session_factory: async_sessionmaker[AsyncSession],

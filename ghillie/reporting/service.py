@@ -158,26 +158,6 @@ class ReportingService:
         self._report_sink = report_sink
         self._event_logger = event_logger
 
-    def _log_to_event_logger(
-        self,
-        event_method_name: str,
-        **kwargs: typ.Any,  # noqa: ANN401
-    ) -> None:
-        """Delegate to an event logger method if the logger is configured.
-
-        Parameters
-        ----------
-        event_method_name
-            Name of the method to call on the event logger.
-        **kwargs
-            Arguments to pass to the event logger method.
-
-        """
-        if self._event_logger is None:
-            return
-        method = getattr(self._event_logger, event_method_name)
-        method(**kwargs)
-
     async def compute_next_window(
         self,
         repository_id: str,
@@ -346,12 +326,17 @@ class ReportingService:
     ) -> tuple[Report, ModelInvocationMetrics | None]:
         """Generate, validate, and persist a report for an evidence bundle."""
         status_result, validation, metrics = await self._invoke_with_retries(bundle)
-        await self._handle_validation_result(
-            validation=validation,
-            repository_id=repository_id,
-            window_start=window_start,
-            window_end=window_end,
-        )
+        if not validation.is_valid:
+            review_id = await self._create_review_marker(
+                repository_id=repository_id,
+                window_start=window_start,
+                window_end=window_end,
+                validation=validation,
+            )
+            raise ReportValidationError(
+                issues=validation.issues,
+                review_id=review_id,
+            )
         report = await self._persist_report(
             status_result=status_result,
             bundle=bundle,
@@ -366,8 +351,9 @@ class ReportingService:
         window_end: dt.datetime,
     ) -> None:
         """Log report generation start when observability logger is configured."""
-        self._log_to_event_logger(
-            "log_report_started",
+        if self._event_logger is None:
+            return
+        self._event_logger.log_report_started(
             repo_slug=repo_slug,
             window_start=window_start,
             window_end=window_end,
@@ -380,8 +366,9 @@ class ReportingService:
         duration: dt.timedelta,
     ) -> None:
         """Log report generation failure when observability logger is configured."""
-        self._log_to_event_logger(
-            "log_report_failed",
+        if self._event_logger is None:
+            return
+        self._event_logger.log_report_failed(
             repo_slug=repo_slug,
             error=error,
             duration=duration,
@@ -394,41 +381,12 @@ class ReportingService:
         metrics: ModelInvocationMetrics | None,
     ) -> None:
         """Log report generation completion when observability logger is configured."""
-        self._log_to_event_logger(
-            "log_report_completed",
+        if self._event_logger is None:
+            return
+        self._event_logger.log_report_completed(
             repo_slug=repo_slug,
             model=model,
             metrics=metrics,
-        )
-
-    async def _handle_validation_result(
-        self,
-        validation: ReportValidationResult,
-        repository_id: str,
-        window_start: dt.datetime,
-        window_end: dt.datetime,
-    ) -> None:
-        """Create review marker and raise when validation result is invalid."""
-        if validation.is_valid:
-            return
-
-        review_id = await self._create_review_marker(
-            repository_id=repository_id,
-            window_start=window_start,
-            window_end=window_end,
-            validation=validation,
-        )
-        self._raise_validation_error(validation, review_id)
-
-    def _raise_validation_error(
-        self,
-        validation: ReportValidationResult,
-        review_id: str,
-    ) -> typ.NoReturn:
-        """Raise a structured validation error for exhausted retries."""
-        raise ReportValidationError(
-            issues=validation.issues,
-            review_id=review_id,
         )
 
     async def _invoke_with_retries(

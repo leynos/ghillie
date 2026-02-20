@@ -31,6 +31,7 @@ if typ.TYPE_CHECKING:
 
 
 def _valid_result(summary: str = "acme/widget is on track") -> RepositoryStatusResult:
+    """Return a valid status result for reporting tests."""
     return RepositoryStatusResult(
         summary=summary,
         status=ReportStatus.ON_TRACK,
@@ -39,6 +40,7 @@ def _valid_result(summary: str = "acme/widget is on track") -> RepositoryStatusR
 
 
 def _invalid_result() -> RepositoryStatusResult:
+    """Return an invalid status result that fails report validation."""
     return RepositoryStatusResult(
         summary="",
         status=ReportStatus.ON_TRACK,
@@ -46,6 +48,7 @@ def _invalid_result() -> RepositoryStatusResult:
 
 
 def _make_bundle(repo_id: str) -> RepositoryEvidenceBundle:
+    """Build a deterministic evidence bundle for report-generation tests."""
     return RepositoryEvidenceBundle(
         repository=RepositoryMetadata(
             id=repo_id,
@@ -247,7 +250,7 @@ class TestReportingEventLoggerIntegration:
         self,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
-        """Successful runs should emit start and completion events."""
+        """Successful runs should emit start and completion events with payloads."""
         repo_id = await create_test_repository(session_factory)
         bundle = _make_bundle(repo_id)
         event_logger = mock.MagicMock()
@@ -258,7 +261,7 @@ class TestReportingEventLoggerIntegration:
             event_logger=event_logger,
         )
 
-        await service.generate_report(
+        report = await service.generate_report(
             repository_id=repo_id,
             window_start=bundle.window_start,
             window_end=bundle.window_end,
@@ -266,7 +269,22 @@ class TestReportingEventLoggerIntegration:
         )
 
         event_logger.log_report_started.assert_called_once()
+        started_kwargs = event_logger.log_report_started.call_args.kwargs
+        assert started_kwargs["repo_slug"] == bundle.repository.slug
+        assert started_kwargs["window_start"] == bundle.window_start
+        assert started_kwargs["window_end"] == bundle.window_end
+
         event_logger.log_report_completed.assert_called_once()
+        completed_kwargs = event_logger.log_report_completed.call_args.kwargs
+        assert completed_kwargs["repo_slug"] == bundle.repository.slug
+        assert completed_kwargs["model"] == (report.model or "unknown")
+        metrics = completed_kwargs["metrics"]
+        assert isinstance(metrics, ModelInvocationMetrics)
+        assert report.model_latency_ms == round(metrics.latency_ms or 0.0)
+        assert report.prompt_tokens == metrics.prompt_tokens
+        assert report.completion_tokens == metrics.completion_tokens
+        assert report.total_tokens == metrics.total_tokens
+
         event_logger.log_report_failed.assert_not_called()
 
     @pytest.mark.asyncio
@@ -274,7 +292,7 @@ class TestReportingEventLoggerIntegration:
         self,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
-        """Exceptions should emit a failed event before re-raising."""
+        """Exceptions should emit start and failure events with payload context."""
         repo_id = await create_test_repository(session_factory)
         bundle = _make_bundle(repo_id)
         event_logger = mock.MagicMock()
@@ -300,3 +318,9 @@ class TestReportingEventLoggerIntegration:
 
         event_logger.log_report_started.assert_called_once()
         event_logger.log_report_failed.assert_called_once()
+        failed_kwargs = event_logger.log_report_failed.call_args.kwargs
+        assert failed_kwargs["repo_slug"] == bundle.repository.slug
+        assert isinstance(failed_kwargs["error"], RuntimeError)
+        assert str(failed_kwargs["error"]) == "status backend unavailable"
+        assert failed_kwargs["duration"] > dt.timedelta(0)
+        event_logger.log_report_completed.assert_not_called()

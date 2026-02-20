@@ -6,12 +6,13 @@ import datetime as dt
 import typing as typ
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.exc import IntegrityError
 
 from ghillie.bronze import RawEventEnvelope, RawEventWriter
 from ghillie.common.slug import parse_repo_slug
 from ghillie.gold import Report, ReportCoverage, ReportProject, ReportScope
+from ghillie.gold.storage import _ensure_report_metric_columns
 from ghillie.silver import EventFact, RawEventTransformer, Repository
 
 if typ.TYPE_CHECKING:
@@ -42,6 +43,25 @@ def _commit_event(
             "metadata": {"ref": "refs/heads/main"},
         },
     )
+
+
+def test_ensure_report_metric_columns_updates_legacy_reports_table() -> None:
+    """Legacy report tables are upgraded with metrics columns during init."""
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    try:
+        with engine.begin() as conn:
+            conn.exec_driver_sql("CREATE TABLE reports (id TEXT PRIMARY KEY)")
+            _ensure_report_metric_columns(conn)
+            column_names = {
+                column["name"] for column in inspect(conn).get_columns("reports")
+            }
+    finally:
+        engine.dispose()
+
+    assert "model_latency_ms" in column_names
+    assert "prompt_tokens" in column_names
+    assert "completion_tokens" in column_names
+    assert "total_tokens" in column_names
 
 
 @pytest.mark.asyncio
