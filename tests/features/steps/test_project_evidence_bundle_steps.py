@@ -1,0 +1,332 @@
+"""Behavioural tests for project evidence bundle generation."""
+
+from __future__ import annotations
+
+import asyncio
+import datetime as dt
+import typing as typ
+
+from pytest_bdd import given, scenario, then, when
+from sqlalchemy import select
+
+from ghillie.catalogue.importer import CatalogueImporter
+from ghillie.catalogue.storage import Estate, RepositoryRecord
+from ghillie.evidence.models import ProjectEvidenceBundle, ReportStatus
+from ghillie.evidence.project_service import ProjectEvidenceBundleService
+from ghillie.gold.storage import Report, ReportProject, ReportScope
+from ghillie.silver.storage import Repository
+
+if typ.TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+
+class ProjectEvidenceContext(typ.TypedDict, total=False):
+    """Mutable context shared between steps."""
+
+    session_factory: async_sessionmaker[AsyncSession]
+    service: ProjectEvidenceBundleService
+    estate_id: str
+    bundle: ProjectEvidenceBundle
+
+
+# Scenario wrappers
+
+
+@scenario(
+    "../project_evidence_bundle.feature",
+    "Build project evidence bundle for multi-component project",
+)
+def test_build_project_evidence_bundle_scenario() -> None:
+    """Wrapper for pytest-bdd scenario."""
+
+
+@scenario(
+    "../project_evidence_bundle.feature",
+    "Bundle includes component with latest repository summary",
+)
+def test_bundle_with_repo_summary_scenario() -> None:
+    """Wrapper for pytest-bdd scenario."""
+
+
+@scenario(
+    "../project_evidence_bundle.feature",
+    "Bundle includes planned component without repository",
+)
+def test_planned_component_scenario() -> None:
+    """Wrapper for pytest-bdd scenario."""
+
+
+@scenario(
+    "../project_evidence_bundle.feature",
+    "Bundle includes previous project report context",
+)
+def test_previous_project_report_scenario() -> None:
+    """Wrapper for pytest-bdd scenario."""
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+WILDSIDE_CATALOGUE = "examples/wildside-catalogue.yaml"
+
+
+async def _get_estate_id(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> str:
+    """Fetch the estate ID from the database."""
+    async with session_factory() as session:
+        estate = await session.scalar(select(Estate))
+        assert estate is not None
+        return estate.id
+
+
+async def _get_catalogue_repo_id(
+    session_factory: async_sessionmaker[AsyncSession],
+    owner: str,
+    name: str,
+) -> str:
+    """Fetch a catalogue repository ID by owner/name."""
+    async with session_factory() as session:
+        repo = await session.scalar(
+            select(RepositoryRecord).where(
+                RepositoryRecord.owner == owner,
+                RepositoryRecord.name == name,
+            )
+        )
+        assert repo is not None
+        return repo.id
+
+
+# Given steps
+
+
+@given(
+    "an imported catalogue with a multi-component project",
+    target_fixture="project_evidence_context",
+)
+def given_imported_catalogue(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> ProjectEvidenceContext:
+    """Import the Wildside catalogue and provision services."""
+    from pathlib import Path
+
+    importer = CatalogueImporter(
+        session_factory, estate_key="demo", estate_name="Demo Estate"
+    )
+    asyncio.run(importer.import_path(Path(WILDSIDE_CATALOGUE), commit_sha="abc123"))
+
+    estate_id = asyncio.run(_get_estate_id(session_factory))
+
+    return {
+        "session_factory": session_factory,
+        "service": ProjectEvidenceBundleService(
+            catalogue_session_factory=session_factory,
+            gold_session_factory=session_factory,
+        ),
+        "estate_id": estate_id,
+    }
+
+
+@given('a repository report exists for "leynos/wildside"')
+def given_repo_report_exists(
+    project_evidence_context: ProjectEvidenceContext,
+) -> None:
+    """Create a Silver Repository and Gold Report for leynos/wildside."""
+    session_factory = project_evidence_context["session_factory"]
+    estate_id = project_evidence_context["estate_id"]
+
+    async def _create() -> None:
+        cat_repo_id = await _get_catalogue_repo_id(
+            session_factory, "leynos", "wildside"
+        )
+        async with session_factory() as session:
+            silver_repo = Repository(
+                github_owner="leynos",
+                github_name="wildside",
+                default_branch="main",
+                estate_id=estate_id,
+                catalogue_repository_id=cat_repo_id,
+                ingestion_enabled=True,
+            )
+            session.add(silver_repo)
+            await session.flush()
+
+            report = Report(
+                scope=ReportScope.REPOSITORY,
+                repository_id=silver_repo.id,
+                window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+                model="test-model",
+                machine_summary={
+                    "status": "on_track",
+                    "summary": "Good progress this week.",
+                    "highlights": ["Shipped v2.0"],
+                    "risks": [],
+                    "next_steps": [],
+                },
+            )
+            session.add(report)
+            await session.commit()
+
+    asyncio.run(_create())
+
+
+@given('a previous project report exists for "wildside"')
+def given_previous_project_report(
+    project_evidence_context: ProjectEvidenceContext,
+) -> None:
+    """Create a previous project-scope report."""
+    session_factory = project_evidence_context["session_factory"]
+    estate_id = project_evidence_context["estate_id"]
+
+    async def _create() -> None:
+        async with session_factory() as session:
+            project = ReportProject(
+                key="wildside",
+                name="Wildside",
+                estate_id=estate_id,
+            )
+            report = Report(
+                scope=ReportScope.PROJECT,
+                project=project,
+                window_start=dt.datetime(2024, 6, 24, tzinfo=dt.UTC),
+                window_end=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                model="test-model",
+                machine_summary={
+                    "status": "on_track",
+                    "highlights": ["Milestone reached"],
+                    "risks": ["Dependency risk"],
+                },
+            )
+            session.add_all([project, report])
+            await session.commit()
+
+    asyncio.run(_create())
+
+
+# When steps
+
+
+@when('I build a project evidence bundle for "wildside"')
+def when_build_bundle(
+    project_evidence_context: ProjectEvidenceContext,
+) -> None:
+    """Build the project evidence bundle."""
+    service = project_evidence_context["service"]
+    estate_id = project_evidence_context["estate_id"]
+
+    bundle = asyncio.run(service.build_bundle("wildside", estate_id))
+    project_evidence_context["bundle"] = bundle
+
+
+# Then steps
+
+
+@then("the bundle contains the project metadata")
+def then_bundle_has_project_metadata(
+    project_evidence_context: ProjectEvidenceContext,
+) -> None:
+    """Assert bundle contains correct project metadata."""
+    bundle = project_evidence_context["bundle"]
+
+    assert bundle.project.key == "wildside"
+    assert bundle.project.name == "Wildside"
+    assert bundle.project.programme == "df12"
+    assert bundle.project.description is not None
+
+
+@then("the bundle contains all four components")
+def then_bundle_has_four_components(
+    project_evidence_context: ProjectEvidenceContext,
+) -> None:
+    """Assert bundle contains all four Wildside components."""
+    bundle = project_evidence_context["bundle"]
+
+    assert bundle.component_count == 4
+    keys = {c.key for c in bundle.components}
+    assert keys == {
+        "wildside-core",
+        "wildside-engine",
+        "wildside-mockup",
+        "wildside-ingestion",
+    }
+
+
+@then("the bundle contains intra-project dependency edges")
+def then_bundle_has_dependency_edges(
+    project_evidence_context: ProjectEvidenceContext,
+) -> None:
+    """Assert bundle contains intra-project edges only."""
+    bundle = project_evidence_context["bundle"]
+
+    assert len(bundle.dependencies) >= 1
+    # wildside-core depends_on wildside-engine (intra-project)
+    core_to_engine = [
+        d
+        for d in bundle.dependencies
+        if d.from_component == "wildside-core"
+        and d.to_component == "wildside-engine"
+        and d.relationship == "depends_on"
+    ]
+    assert len(core_to_engine) == 1
+
+
+@then('the component "wildside-core" has a repository summary')
+def then_core_has_summary(
+    project_evidence_context: ProjectEvidenceContext,
+) -> None:
+    """Assert wildside-core has a repository summary."""
+    bundle = project_evidence_context["bundle"]
+
+    core = next(c for c in bundle.components if c.key == "wildside-core")
+    assert core.repository_summary is not None
+    assert core.repository_summary.summary == "Good progress this week."
+
+
+@then('the repository summary status is "on_track"')
+def then_summary_status_on_track(
+    project_evidence_context: ProjectEvidenceContext,
+) -> None:
+    """Assert repository summary status is on_track."""
+    bundle = project_evidence_context["bundle"]
+
+    core = next(c for c in bundle.components if c.key == "wildside-core")
+    assert core.repository_summary is not None
+    assert core.repository_summary.status == ReportStatus.ON_TRACK
+
+
+@then('the component "wildside-ingestion" has no repository')
+def then_ingestion_has_no_repo(
+    project_evidence_context: ProjectEvidenceContext,
+) -> None:
+    """Assert wildside-ingestion has no repository."""
+    bundle = project_evidence_context["bundle"]
+
+    ingestion = next(c for c in bundle.components if c.key == "wildside-ingestion")
+    assert ingestion.has_repository is False
+    assert ingestion.repository_summary is None
+
+
+@then('the component "wildside-ingestion" has lifecycle "planned"')
+def then_ingestion_is_planned(
+    project_evidence_context: ProjectEvidenceContext,
+) -> None:
+    """Assert wildside-ingestion lifecycle is planned."""
+    bundle = project_evidence_context["bundle"]
+
+    ingestion = next(c for c in bundle.components if c.key == "wildside-ingestion")
+    assert ingestion.lifecycle == "planned"
+
+
+@then("the bundle contains the previous project report summary")
+def then_bundle_has_previous_report(
+    project_evidence_context: ProjectEvidenceContext,
+) -> None:
+    """Assert bundle contains previous project report."""
+    bundle = project_evidence_context["bundle"]
+
+    assert len(bundle.previous_reports) == 1
+    prev = bundle.previous_reports[0]
+    assert prev.status == ReportStatus.ON_TRACK
+    assert "Milestone reached" in prev.highlights

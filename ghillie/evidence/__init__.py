@@ -14,9 +14,14 @@ from .classification import (
 )
 from .models import (
     CommitEvidence,
+    ComponentDependencyEvidence,
+    ComponentEvidence,
+    ComponentRepositorySummary,
     DocumentationEvidence,
     IssueEvidence,
     PreviousReportSummary,
+    ProjectEvidenceBundle,
+    ProjectMetadata,
     PullRequestEvidence,
     ReportStatus,
     RepositoryEvidenceBundle,
@@ -24,6 +29,7 @@ from .models import (
     WorkType,
     WorkTypeGrouping,
 )
+from .project_service import ProjectEvidenceBundleService
 from .service import EvidenceBundleService
 
 __all__ = [
@@ -31,10 +37,16 @@ __all__ = [
     "Classifiable",
     "ClassificationConfig",
     "CommitEvidence",
+    "ComponentDependencyEvidence",
+    "ComponentEvidence",
+    "ComponentRepositorySummary",
     "DocumentationEvidence",
     "EvidenceBundleService",
     "IssueEvidence",
     "PreviousReportSummary",
+    "ProjectEvidenceBundle",
+    "ProjectEvidenceBundleService",
+    "ProjectMetadata",
     "PullRequestEvidence",
     "ReportStatus",
     "RepositoryEvidenceBundle",
