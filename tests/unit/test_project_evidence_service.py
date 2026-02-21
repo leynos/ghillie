@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import datetime as dt
 import typing as typ
 from pathlib import Path
@@ -10,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from ghillie.catalogue.importer import CatalogueImporter
-from ghillie.evidence.models import ReportStatus
+from ghillie.evidence.models import ProjectEvidenceBundle, ReportStatus
 from ghillie.evidence.project_service import ProjectEvidenceBundleService
 from ghillie.gold.storage import Report, ReportProject, ReportScope
 from ghillie.silver.storage import Repository
@@ -61,29 +62,45 @@ def _estate_id(
     return asyncio.run(_get())
 
 
-def _create_silver_repo_and_report(  # noqa: PLR0913
+@dataclasses.dataclass
+class RepositoryParams:
+    """Parameters for creating a Silver Repository linked to catalogue."""
+
+    owner: str
+    name: str
+    catalogue_repository_id: str
+    estate_id: str
+
+
+@dataclasses.dataclass
+class ReportSummaryParams:
+    """Parameters for creating a Gold Report machine summary."""
+
+    status: str = "on_track"
+    summary: str = "Progress is on track."
+    highlights: list[str] = dataclasses.field(
+        default_factory=lambda: ["Feature shipped"]
+    )
+    risks: list[str] = dataclasses.field(default_factory=list)
+    next_steps: list[str] = dataclasses.field(default_factory=list)
+
+
+def _create_silver_repo_and_report(
     session_factory: async_sessionmaker[AsyncSession],
-    owner: str,
-    name: str,
-    catalogue_repository_id: str,
-    estate_id: str,
-    *,
-    status: str = "on_track",
-    summary: str = "Progress is on track.",
-    highlights: list[str] | None = None,
-    risks: list[str] | None = None,
-    next_steps: list[str] | None = None,
+    repo_params: RepositoryParams,
+    report_params: ReportSummaryParams | None = None,
 ) -> None:
     """Create a Silver Repository linked to catalogue, and a Gold Report."""
+    rp = report_params or ReportSummaryParams()
 
     async def _create() -> None:
         async with session_factory() as session:
             silver_repo = Repository(
-                github_owner=owner,
-                github_name=name,
+                github_owner=repo_params.owner,
+                github_name=repo_params.name,
                 default_branch="main",
-                estate_id=estate_id,
-                catalogue_repository_id=catalogue_repository_id,
+                estate_id=repo_params.estate_id,
+                catalogue_repository_id=repo_params.catalogue_repository_id,
                 ingestion_enabled=True,
             )
             session.add(silver_repo)
@@ -96,11 +113,11 @@ def _create_silver_repo_and_report(  # noqa: PLR0913
                 window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
                 model="test-model",
                 machine_summary={
-                    "status": status,
-                    "summary": summary,
-                    "highlights": highlights or ["Feature shipped"],
-                    "risks": risks or [],
-                    "next_steps": next_steps or [],
+                    "status": rp.status,
+                    "summary": rp.summary,
+                    "highlights": rp.highlights,
+                    "risks": rp.risks,
+                    "next_steps": rp.next_steps,
                 },
             )
             session.add(report)
@@ -128,6 +145,15 @@ def _get_catalogue_repo_ids(
 class TestProjectEvidenceBundleService:
     """Tests for ProjectEvidenceBundleService.build_bundle()."""
 
+    def _build_wildside_bundle(
+        self,
+        service: ProjectEvidenceBundleService,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> ProjectEvidenceBundle:
+        """Build and return a bundle for the Wildside project."""
+        estate_id = _estate_id(session_factory)
+        return asyncio.run(service.build_bundle("wildside", estate_id))
+
     @pytest.mark.usefixtures("_import_wildside")
     def test_project_not_found_raises_value_error(
         self,
@@ -147,9 +173,7 @@ class TestProjectEvidenceBundleService:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Bundle project metadata matches catalogue data."""
-        estate_id = _estate_id(session_factory)
-
-        bundle = asyncio.run(service.build_bundle("wildside", estate_id))
+        bundle = self._build_wildside_bundle(service, session_factory)
 
         assert bundle.project.key == "wildside"
         assert bundle.project.name == "Wildside"
@@ -163,9 +187,7 @@ class TestProjectEvidenceBundleService:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Bundle includes all components from the catalogue."""
-        estate_id = _estate_id(session_factory)
-
-        bundle = asyncio.run(service.build_bundle("wildside", estate_id))
+        bundle = self._build_wildside_bundle(service, session_factory)
 
         assert bundle.component_count == 4
         keys = {c.key for c in bundle.components}
@@ -183,9 +205,7 @@ class TestProjectEvidenceBundleService:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Components reflect their catalogue lifecycle stages."""
-        estate_id = _estate_id(session_factory)
-
-        bundle = asyncio.run(service.build_bundle("wildside", estate_id))
+        bundle = self._build_wildside_bundle(service, session_factory)
 
         assert len(bundle.active_components) == 3
         assert len(bundle.planned_components) == 1
@@ -198,9 +218,7 @@ class TestProjectEvidenceBundleService:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Planned components without repos have no repository_slug."""
-        estate_id = _estate_id(session_factory)
-
-        bundle = asyncio.run(service.build_bundle("wildside", estate_id))
+        bundle = self._build_wildside_bundle(service, session_factory)
 
         ingestion = next(c for c in bundle.components if c.key == "wildside-ingestion")
         assert ingestion.has_repository is False
@@ -214,9 +232,7 @@ class TestProjectEvidenceBundleService:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Active components with repos have repository_slug populated."""
-        estate_id = _estate_id(session_factory)
-
-        bundle = asyncio.run(service.build_bundle("wildside", estate_id))
+        bundle = self._build_wildside_bundle(service, session_factory)
 
         core = next(c for c in bundle.components if c.key == "wildside-core")
         assert core.has_repository is True
@@ -234,13 +250,17 @@ class TestProjectEvidenceBundleService:
 
         _create_silver_repo_and_report(
             session_factory,
-            owner="leynos",
-            name="wildside",
-            catalogue_repository_id=repo_ids["leynos/wildside"],
-            estate_id=estate_id,
-            status="on_track",
-            summary="Good progress.",
-            highlights=["Shipped v2.0"],
+            RepositoryParams(
+                owner="leynos",
+                name="wildside",
+                catalogue_repository_id=repo_ids["leynos/wildside"],
+                estate_id=estate_id,
+            ),
+            ReportSummaryParams(
+                status="on_track",
+                summary="Good progress.",
+                highlights=["Shipped v2.0"],
+            ),
         )
 
         bundle = asyncio.run(service.build_bundle("wildside", estate_id))
@@ -258,9 +278,7 @@ class TestProjectEvidenceBundleService:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Component with repo but no report has summary=None."""
-        estate_id = _estate_id(session_factory)
-
-        bundle = asyncio.run(service.build_bundle("wildside", estate_id))
+        bundle = self._build_wildside_bundle(service, session_factory)
 
         # No Silver repos or Gold reports created, so all summaries should
         # be None even for components with catalogue repos.
@@ -274,9 +292,7 @@ class TestProjectEvidenceBundleService:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Bundle includes dependency edges from the component graph."""
-        estate_id = _estate_id(session_factory)
-
-        bundle = asyncio.run(service.build_bundle("wildside", estate_id))
+        bundle = self._build_wildside_bundle(service, session_factory)
 
         assert len(bundle.dependencies) > 0
         # wildside-core depends_on wildside-engine
@@ -302,9 +318,7 @@ class TestProjectEvidenceBundleService:
         belongs to df12-foundations. This edge should not appear in the
         Wildside project bundle.
         """
-        estate_id = _estate_id(session_factory)
-
-        bundle = asyncio.run(service.build_bundle("wildside", estate_id))
+        bundle = self._build_wildside_bundle(service, session_factory)
 
         blocked = bundle.blocked_dependencies
         # ortho-config is in df12-foundations, not wildside, so the
@@ -324,9 +338,7 @@ class TestProjectEvidenceBundleService:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Bundle includes emits_events_to edges."""
-        estate_id = _estate_id(session_factory)
-
-        bundle = asyncio.run(service.build_bundle("wildside", estate_id))
+        bundle = self._build_wildside_bundle(service, session_factory)
 
         emits = [d for d in bundle.dependencies if d.relationship == "emits_events_to"]
         assert len(emits) >= 1
@@ -387,9 +399,7 @@ class TestProjectEvidenceBundleService:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Bundle has a generated_at timestamp."""
-        estate_id = _estate_id(session_factory)
-
-        bundle = asyncio.run(service.build_bundle("wildside", estate_id))
+        bundle = self._build_wildside_bundle(service, session_factory)
 
         assert bundle.generated_at is not None
 
@@ -400,9 +410,7 @@ class TestProjectEvidenceBundleService:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Component type from catalogue is included in evidence."""
-        estate_id = _estate_id(session_factory)
-
-        bundle = asyncio.run(service.build_bundle("wildside", estate_id))
+        bundle = self._build_wildside_bundle(service, session_factory)
 
         core = next(c for c in bundle.components if c.key == "wildside-core")
         assert core.component_type == "service"

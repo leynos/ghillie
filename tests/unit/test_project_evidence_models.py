@@ -20,6 +20,208 @@ from ghillie.evidence.models import (
     ProjectMetadata,
 )
 
+# -- Parametrised cross-model tests ------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("model_factory", "field_to_modify", "new_value"),
+    [
+        pytest.param(
+            lambda: ProjectMetadata(key="test", name="Test"),
+            "key",
+            "modified",
+            id="ProjectMetadata",
+        ),
+        pytest.param(
+            lambda: ComponentRepositorySummary(
+                repository_slug="leynos/wildside",
+                report_id="rpt-001",
+                window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+                status=ReportStatus.ON_TRACK,
+                summary="Summary.",
+            ),
+            "status",
+            ReportStatus.BLOCKED,
+            id="ComponentRepositorySummary",
+        ),
+        pytest.param(
+            lambda: ComponentEvidence(
+                key="wildside-core",
+                name="Wildside Core Service",
+                component_type="service",
+                lifecycle="active",
+            ),
+            "key",
+            "other",
+            id="ComponentEvidence",
+        ),
+        pytest.param(
+            lambda: ComponentDependencyEvidence(
+                from_component="wildside-core",
+                to_component="wildside-engine",
+                relationship="depends_on",
+                kind="runtime",
+            ),
+            "kind",
+            "dev",
+            id="ComponentDependencyEvidence",
+        ),
+        pytest.param(
+            lambda: ProjectEvidenceBundle(
+                project=ProjectMetadata(key="test", name="Test"),
+                components=(),
+                dependencies=(),
+            ),
+            "components",
+            (),
+            id="ProjectEvidenceBundle",
+        ),
+    ],
+)
+def test_frozen_immutability_for_all_models(
+    model_factory: object,
+    field_to_modify: str,
+    new_value: object,
+) -> None:
+    """Verify all evidence models are frozen msgspec structs."""
+    instance = model_factory()  # type: ignore[operator]
+    with pytest.raises(AttributeError):
+        setattr(instance, field_to_modify, new_value)
+
+
+def _check_project_metadata_roundtrip(decoded: object) -> None:
+    assert decoded.key == "wildside"  # type: ignore[union-attr]
+    assert decoded.name == "Wildside"  # type: ignore[union-attr]
+    assert decoded.programme == "df12"  # type: ignore[union-attr]
+    assert decoded.documentation_paths == ("docs/roadmap.md",)  # type: ignore[union-attr]
+
+
+def _check_component_repo_summary_roundtrip(decoded: object) -> None:
+    assert decoded.repository_slug == "leynos/wildside"  # type: ignore[union-attr]
+    assert decoded.status == ReportStatus.ON_TRACK  # type: ignore[union-attr]
+    assert decoded.highlights == ("Feature A shipped",)  # type: ignore[union-attr]
+
+
+def _check_component_evidence_roundtrip(decoded: object) -> None:
+    assert decoded.key == "wildside-core"  # type: ignore[union-attr]
+    assert decoded.has_repository is True  # type: ignore[union-attr]
+    assert decoded.notes == ("Primary service",)  # type: ignore[union-attr]
+
+
+def _check_dependency_evidence_roundtrip(decoded: object) -> None:
+    assert decoded.from_component == "wildside-core"  # type: ignore[union-attr]
+    assert decoded.relationship == "blocked_by"  # type: ignore[union-attr]
+    assert decoded.rationale == "Config releases needed."  # type: ignore[union-attr]
+
+
+def _check_bundle_roundtrip(decoded: object) -> None:
+    assert decoded.project.key == "wildside"  # type: ignore[union-attr]
+    assert decoded.component_count == 2  # type: ignore[union-attr]
+    assert len(decoded.dependencies) == 1  # type: ignore[union-attr]
+    assert decoded.components[0].has_repository is True  # type: ignore[union-attr]
+    assert decoded.components[1].has_repository is False  # type: ignore[union-attr]
+
+
+@pytest.mark.parametrize(
+    ("model_factory", "model_type", "verify"),
+    [
+        pytest.param(
+            lambda: ProjectMetadata(
+                key="wildside",
+                name="Wildside",
+                description="Streaming platform.",
+                programme="df12",
+                documentation_paths=("docs/roadmap.md",),
+            ),
+            ProjectMetadata,
+            _check_project_metadata_roundtrip,
+            id="ProjectMetadata",
+        ),
+        pytest.param(
+            lambda: ComponentRepositorySummary(
+                repository_slug="leynos/wildside",
+                report_id="rpt-001",
+                window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+                status=ReportStatus.ON_TRACK,
+                summary="All good.",
+                highlights=("Feature A shipped",),
+            ),
+            ComponentRepositorySummary,
+            _check_component_repo_summary_roundtrip,
+            id="ComponentRepositorySummary",
+        ),
+        pytest.param(
+            lambda: ComponentEvidence(
+                key="wildside-core",
+                name="Wildside Core Service",
+                component_type="service",
+                lifecycle="active",
+                repository_slug="leynos/wildside",
+                notes=("Primary service",),
+            ),
+            ComponentEvidence,
+            _check_component_evidence_roundtrip,
+            id="ComponentEvidence",
+        ),
+        pytest.param(
+            lambda: ComponentDependencyEvidence(
+                from_component="wildside-core",
+                to_component="ortho-config",
+                relationship="blocked_by",
+                kind="runtime",
+                rationale="Config releases needed.",
+            ),
+            ComponentDependencyEvidence,
+            _check_dependency_evidence_roundtrip,
+            id="ComponentDependencyEvidence",
+        ),
+        pytest.param(
+            lambda: ProjectEvidenceBundle(
+                project=ProjectMetadata(key="wildside", name="Wildside"),
+                components=(
+                    ComponentEvidence(
+                        key="wildside-core",
+                        name="Wildside Core Service",
+                        component_type="service",
+                        lifecycle="active",
+                        repository_slug="leynos/wildside",
+                    ),
+                    ComponentEvidence(
+                        key="wildside-ingestion",
+                        name="Wildside Ingestion Pipeline",
+                        component_type="data-pipeline",
+                        lifecycle="planned",
+                    ),
+                ),
+                dependencies=(
+                    ComponentDependencyEvidence(
+                        from_component="wildside-core",
+                        to_component="wildside-engine",
+                        relationship="depends_on",
+                        kind="runtime",
+                    ),
+                ),
+                generated_at=dt.datetime(2024, 7, 8, 12, 0, tzinfo=dt.UTC),
+            ),
+            ProjectEvidenceBundle,
+            _check_bundle_roundtrip,
+            id="ProjectEvidenceBundle",
+        ),
+    ],
+)
+def test_msgspec_encoding_roundtrip_for_all_models(
+    model_factory: object,
+    model_type: type,
+    verify: object,
+) -> None:
+    """Verify msgspec encode/decode roundtrip for all evidence models."""
+    instance = model_factory()  # type: ignore[operator]
+    encoded = msgspec.json.encode(instance)
+    decoded = msgspec.json.decode(encoded, type=model_type)
+    verify(decoded)  # type: ignore[operator]
+
 
 class TestProjectMetadata:
     """Tests for ProjectMetadata struct."""
@@ -49,29 +251,6 @@ class TestProjectMetadata:
         assert metadata.description == "Transactional streaming platform."
         assert metadata.programme == "df12"
         assert metadata.documentation_paths == ("docs/roadmap.md", "docs/adr/")
-
-    def test_frozen_immutability(self) -> None:
-        metadata = ProjectMetadata(key="wildside", name="Wildside")
-
-        with pytest.raises(AttributeError):
-            metadata.key = "other"  # type: ignore[misc]
-
-    def test_msgspec_encoding_roundtrip(self) -> None:
-        metadata = ProjectMetadata(
-            key="wildside",
-            name="Wildside",
-            description="Streaming platform.",
-            programme="df12",
-            documentation_paths=("docs/roadmap.md",),
-        )
-
-        encoded = msgspec.json.encode(metadata)
-        decoded = msgspec.json.decode(encoded, type=ProjectMetadata)
-
-        assert decoded.key == "wildside"
-        assert decoded.name == "Wildside"
-        assert decoded.programme == "df12"
-        assert decoded.documentation_paths == ("docs/roadmap.md",)
 
 
 class TestComponentRepositorySummary:
@@ -127,37 +306,6 @@ class TestComponentRepositorySummary:
         assert summary.risks == ("Tech debt",)
         assert summary.next_steps == ("Refactor module X",)
         assert summary.generated_at == generated
-
-    def test_frozen_immutability(self) -> None:
-        summary = ComponentRepositorySummary(
-            repository_slug="leynos/wildside",
-            report_id="rpt-001",
-            window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
-            window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
-            status=ReportStatus.ON_TRACK,
-            summary="Summary.",
-        )
-
-        with pytest.raises(AttributeError):
-            summary.status = ReportStatus.BLOCKED  # type: ignore[misc]
-
-    def test_msgspec_encoding_roundtrip(self) -> None:
-        summary = ComponentRepositorySummary(
-            repository_slug="leynos/wildside",
-            report_id="rpt-001",
-            window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
-            window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
-            status=ReportStatus.ON_TRACK,
-            summary="All good.",
-            highlights=("Feature A shipped",),
-        )
-
-        encoded = msgspec.json.encode(summary)
-        decoded = msgspec.json.decode(encoded, type=ComponentRepositorySummary)
-
-        assert decoded.repository_slug == "leynos/wildside"
-        assert decoded.status == ReportStatus.ON_TRACK
-        assert decoded.highlights == ("Feature A shipped",)
 
 
 class TestComponentEvidence:
@@ -234,34 +382,6 @@ class TestComponentEvidence:
         assert component.repository_summary.status == ReportStatus.ON_TRACK
         assert component.notes == ("Primary service",)
 
-    def test_frozen_immutability(self) -> None:
-        component = ComponentEvidence(
-            key="wildside-core",
-            name="Wildside Core Service",
-            component_type="service",
-            lifecycle="active",
-        )
-
-        with pytest.raises(AttributeError):
-            component.key = "other"  # type: ignore[misc]
-
-    def test_msgspec_encoding_roundtrip(self) -> None:
-        component = ComponentEvidence(
-            key="wildside-core",
-            name="Wildside Core Service",
-            component_type="service",
-            lifecycle="active",
-            repository_slug="leynos/wildside",
-            notes=("Primary service",),
-        )
-
-        encoded = msgspec.json.encode(component)
-        decoded = msgspec.json.decode(encoded, type=ComponentEvidence)
-
-        assert decoded.key == "wildside-core"
-        assert decoded.has_repository is True
-        assert decoded.notes == ("Primary service",)
-
 
 class TestComponentDependencyEvidence:
     """Tests for ComponentDependencyEvidence struct."""
@@ -300,33 +420,6 @@ class TestComponentDependencyEvidence:
 
         assert dep.relationship == "blocked_by"
         assert dep.rationale == "Requires config releases for rollout."
-
-    def test_frozen_immutability(self) -> None:
-        dep = ComponentDependencyEvidence(
-            from_component="wildside-core",
-            to_component="wildside-engine",
-            relationship="depends_on",
-            kind="runtime",
-        )
-
-        with pytest.raises(AttributeError):
-            dep.kind = "dev"  # type: ignore[misc]
-
-    def test_msgspec_encoding_roundtrip(self) -> None:
-        dep = ComponentDependencyEvidence(
-            from_component="wildside-core",
-            to_component="ortho-config",
-            relationship="blocked_by",
-            kind="runtime",
-            rationale="Config releases needed.",
-        )
-
-        encoded = msgspec.json.encode(dep)
-        decoded = msgspec.json.decode(encoded, type=ComponentDependencyEvidence)
-
-        assert decoded.from_component == "wildside-core"
-        assert decoded.relationship == "blocked_by"
-        assert decoded.rationale == "Config releases needed."
 
 
 class TestProjectEvidenceBundle:
@@ -499,41 +592,3 @@ class TestProjectEvidenceBundle:
         assert len(blocked) == 1
         assert blocked[0].from_component == "wildside-engine"
         assert blocked[0].to_component == "ortho-config"
-
-    def test_frozen_immutability(self, sample_project: ProjectMetadata) -> None:
-        bundle = ProjectEvidenceBundle(
-            project=sample_project,
-            components=(),
-            dependencies=(),
-        )
-
-        with pytest.raises(AttributeError):
-            bundle.components = ()  # type: ignore[misc]
-
-    def test_msgspec_encoding_roundtrip(
-        self,
-        sample_project: ProjectMetadata,
-        active_component: ComponentEvidence,
-        planned_component: ComponentEvidence,
-    ) -> None:
-        dep = ComponentDependencyEvidence(
-            from_component="wildside-core",
-            to_component="wildside-engine",
-            relationship="depends_on",
-            kind="runtime",
-        )
-        bundle = ProjectEvidenceBundle(
-            project=sample_project,
-            components=(active_component, planned_component),
-            dependencies=(dep,),
-            generated_at=dt.datetime(2024, 7, 8, 12, 0, tzinfo=dt.UTC),
-        )
-
-        encoded = msgspec.json.encode(bundle)
-        decoded = msgspec.json.decode(encoded, type=ProjectEvidenceBundle)
-
-        assert decoded.project.key == "wildside"
-        assert decoded.component_count == 2
-        assert len(decoded.dependencies) == 1
-        assert decoded.components[0].has_repository is True
-        assert decoded.components[1].has_repository is False

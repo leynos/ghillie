@@ -244,23 +244,65 @@ class ProjectEvidenceBundleService:
         )
         reports = list((await session.scalars(report_stmt)).all())
 
-        # Group by repository_id, take the latest per repo.
+        latest_by_repo = self._group_reports_by_repository(reports)
+        return self._build_summary_mapping(
+            cat_id_by_silver_id, latest_by_repo, silver_repos
+        )
+
+    def _group_reports_by_repository(
+        self,
+        reports: list[Report],
+    ) -> dict[str, Report]:
+        """Group reports by repository, keeping only the latest per repo.
+
+        Parameters
+        ----------
+        reports
+            Reports pre-sorted by ``generated_at`` descending.
+
+        Returns
+        -------
+        dict[str, Report]
+            Mapping of silver repository ID to its latest report.
+
+        """
         latest_by_repo: dict[str, Report] = {}
         for report in reports:
             if report.repository_id is not None:
                 latest_by_repo.setdefault(report.repository_id, report)
+        return latest_by_repo
 
-        # Build summaries keyed by catalogue_repository_id.
+    def _build_summary_mapping(
+        self,
+        cat_id_by_silver_id: dict[str, str],
+        latest_by_repo: dict[str, Report],
+        silver_repos: list[Repository],
+    ) -> dict[str, ComponentRepositorySummary]:
+        """Build summaries keyed by catalogue repository ID.
+
+        Parameters
+        ----------
+        cat_id_by_silver_id
+            Mapping of silver repository ID to catalogue repository ID.
+        latest_by_repo
+            Mapping of silver repository ID to its latest Gold report.
+        silver_repos
+            Silver repository records used to resolve slugs.
+
+        Returns
+        -------
+        dict[str, ComponentRepositorySummary]
+            Summaries indexed by catalogue repository ID.
+
+        """
+        slug_by_silver_id = {r.id: r.slug for r in silver_repos}
         result: dict[str, ComponentRepositorySummary] = {}
         for silver_repo_id, cat_repo_id in cat_id_by_silver_id.items():
             report = latest_by_repo.get(silver_repo_id)
             if report is None:
                 continue
-            silver_repo = next(r for r in silver_repos if r.id == silver_repo_id)
-            result[cat_repo_id] = self._build_component_summary(
-                report, silver_repo.slug
-            )
-
+            slug = slug_by_silver_id[silver_repo_id]
+            result[cat_repo_id] = self._build_component_summary(report, slug)
         return result
 
     async def _fetch_previous_project_reports(
