@@ -1387,6 +1387,65 @@ conditionally create a `FilesystemReportSink` when the
    future adapters for S3, Git push, or notification channels (Slack, email)
    without modifying the reporting service.
 
+### 9.8 Project evidence bundle architecture (Phase 3.1.a)
+
+Phase 3 introduces project-level reporting by aggregating repository-level data
+through the catalogue's component graph. The project evidence bundle is the
+foundational data structure for this aggregation.
+
+**Domain models:** Five new frozen msgspec Structs in
+`ghillie/evidence/models.py`:
+
+- `ProjectMetadata` -- project identification and catalogue metadata (key,
+  name, description, programme, documentation paths).
+- `ComponentEvidence` -- per-component evidence including lifecycle stage,
+  component type, optional repository slug, and optional repository summary.
+- `ComponentRepositorySummary` -- latest repository-scope Gold report's
+  machine summary (status, highlights, risks, next steps).
+- `ComponentDependencyEvidence` -- directed edge between components with
+  relationship type, kind, and rationale.
+- `ProjectEvidenceBundle` -- top-level aggregation with computed properties
+  for active/planned components, blocked dependencies, and components with
+  reports.
+
+**Service:** `ProjectEvidenceBundleService` in
+`ghillie/evidence/project_service.py` accepts two session factories (catalogue
+and gold/silver) and joins results in Python to avoid cross-schema SQL joins:
+
+1. Fetches the `ProjectRecord` with eagerly loaded components and
+   repository mappings from catalogue storage.
+2. Fetches outgoing `ComponentEdgeRecord` rows for the project's
+   components.
+3. Finds Silver `Repository` records linked via
+   `catalogue_repository_id`, then fetches the latest repository-scope Gold
+   `Report` for each.
+4. Fetches previous project-scope reports from the Gold layer.
+5. Assembles the `ProjectEvidenceBundle`.
+
+**Design decisions:**
+
+1. **Two session factories.** The service accepts separate session
+   factories for catalogue and gold/silver storage. In tests both point to the
+   same engine; in production they may differ. This preserves deployment
+   flexibility without code changes.
+
+2. **Flat dependency edge representation.** Component edges are a flat
+   tuple on the bundle rather than nested within `ComponentEvidence`. This
+   avoids circular references and simplifies serialisation.
+
+3. **Intra-project edges only.** Cross-project dependency edges (where
+   the target component belongs to a different project) are excluded from the
+   project bundle. These remain available in the catalogue for future
+   estate-level aggregation.
+
+4. **Lifecycle drives status for non-code components.** Components
+   without repositories use their catalogue lifecycle field (planned, active,
+   deprecated). A future task (3.2.a) will add explicit manual status support.
+
+5. **Graceful handling of missing data.** When a component's repository
+   has no Silver record or no Gold report, the component evidence is still
+   included with `repository_summary` set to `None`.
+
 ## 10. Integration testing strategy for LLM backends
 
 The Intelligence Engine's reliance on external LLM providers introduces testing
