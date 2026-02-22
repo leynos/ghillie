@@ -503,6 +503,35 @@ class TestProjectEvidenceBundle:
             repository_slug="leynos/wildside-legacy",
         )
 
+    def _create_bundle(
+        self,
+        project: ProjectMetadata,
+        components: tuple[ComponentEvidence, ...],
+        dependencies: tuple[ComponentDependencyEvidence, ...] = (),
+    ) -> ProjectEvidenceBundle:
+        """Create a ProjectEvidenceBundle with the given project and components.
+
+        Parameters
+        ----------
+        project
+            Project metadata for the bundle.
+        components
+            Tuple of component evidence items.
+        dependencies
+            Tuple of dependency edges (defaults to empty).
+
+        Returns
+        -------
+        ProjectEvidenceBundle
+            The constructed bundle.
+
+        """
+        return ProjectEvidenceBundle(
+            project=project,
+            components=components,
+            dependencies=dependencies,
+        )
+
     def test_minimal_construction(self, sample_project: ProjectMetadata) -> None:
         bundle = ProjectEvidenceBundle(
             project=sample_project,
@@ -530,10 +559,9 @@ class TestProjectEvidenceBundle:
         active_component: ComponentEvidence,
         planned_component: ComponentEvidence,
     ) -> None:
-        bundle = ProjectEvidenceBundle(
-            project=sample_project,
+        bundle = self._create_bundle(
+            sample_project,
             components=(active_component, planned_component),
-            dependencies=(),
         )
 
         assert bundle.component_count == 2
@@ -545,14 +573,13 @@ class TestProjectEvidenceBundle:
         planned_component: ComponentEvidence,
         deprecated_component: ComponentEvidence,
     ) -> None:
-        bundle = ProjectEvidenceBundle(
-            project=sample_project,
+        bundle = self._create_bundle(
+            sample_project,
             components=(
                 active_component,
                 planned_component,
                 deprecated_component,
             ),
-            dependencies=(),
         )
 
         active = bundle.active_components
@@ -565,10 +592,9 @@ class TestProjectEvidenceBundle:
         active_component: ComponentEvidence,
         planned_component: ComponentEvidence,
     ) -> None:
-        bundle = ProjectEvidenceBundle(
-            project=sample_project,
+        bundle = self._create_bundle(
+            sample_project,
             components=(active_component, planned_component),
-            dependencies=(),
         )
 
         planned = bundle.planned_components
@@ -582,14 +608,13 @@ class TestProjectEvidenceBundle:
         planned_component: ComponentEvidence,
         deprecated_component: ComponentEvidence,
     ) -> None:
-        bundle = ProjectEvidenceBundle(
-            project=sample_project,
+        bundle = self._create_bundle(
+            sample_project,
             components=(
                 active_component,
                 planned_component,
                 deprecated_component,
             ),
-            dependencies=(),
         )
 
         with_reports = bundle.components_with_reports
