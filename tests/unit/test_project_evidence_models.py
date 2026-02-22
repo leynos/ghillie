@@ -223,21 +223,137 @@ def test_msgspec_encoding_roundtrip_for_all_models(
     verify(decoded)  # type: ignore[operator]
 
 
+@pytest.mark.parametrize(
+    ("model_factory", "field_assertions"),
+    [
+        pytest.param(
+            lambda: ProjectMetadata(key="wildside", name="Wildside"),
+            {"key": "wildside", "name": "Wildside"},
+            id="ProjectMetadata",
+        ),
+        pytest.param(
+            lambda: ComponentRepositorySummary(
+                repository_slug="leynos/wildside",
+                report_id="rpt-001",
+                window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+                status=ReportStatus.ON_TRACK,
+                summary="Good progress this week.",
+            ),
+            {
+                "repository_slug": "leynos/wildside",
+                "report_id": "rpt-001",
+                "status": ReportStatus.ON_TRACK,
+                "summary": "Good progress this week.",
+            },
+            id="ComponentRepositorySummary",
+        ),
+        pytest.param(
+            lambda: ComponentEvidence(
+                key="wildside-core",
+                name="Wildside Core Service",
+                component_type="service",
+                lifecycle="active",
+            ),
+            {
+                "key": "wildside-core",
+                "name": "Wildside Core Service",
+                "component_type": "service",
+                "lifecycle": "active",
+            },
+            id="ComponentEvidence",
+        ),
+        pytest.param(
+            lambda: ComponentDependencyEvidence(
+                from_component="wildside-core",
+                to_component="wildside-engine",
+                relationship="depends_on",
+                kind="runtime",
+            ),
+            {
+                "from_component": "wildside-core",
+                "to_component": "wildside-engine",
+                "relationship": "depends_on",
+                "kind": "runtime",
+            },
+            id="ComponentDependencyEvidence",
+        ),
+    ],
+)
+def test_required_fields_for_all_models(
+    model_factory: object,
+    field_assertions: dict[str, object],
+) -> None:
+    """Verify required fields are set correctly for all evidence models."""
+    instance = model_factory()  # type: ignore[operator]
+    for field_name, expected in field_assertions.items():
+        assert getattr(instance, field_name) == expected
+
+
+@pytest.mark.parametrize(
+    ("model_factory", "default_assertions"),
+    [
+        pytest.param(
+            lambda: ProjectMetadata(key="wildside", name="Wildside"),
+            {"description": None, "programme": None, "documentation_paths": ()},
+            id="ProjectMetadata",
+        ),
+        pytest.param(
+            lambda: ComponentRepositorySummary(
+                repository_slug="leynos/wildside",
+                report_id="rpt-001",
+                window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+                status=ReportStatus.ON_TRACK,
+                summary="Summary text.",
+            ),
+            {
+                "highlights": (),
+                "risks": (),
+                "next_steps": (),
+                "generated_at": None,
+            },
+            id="ComponentRepositorySummary",
+        ),
+        pytest.param(
+            lambda: ComponentEvidence(
+                key="wildside-core",
+                name="Wildside Core Service",
+                component_type="service",
+                lifecycle="active",
+            ),
+            {
+                "description": None,
+                "repository_slug": None,
+                "repository_summary": None,
+                "notes": (),
+            },
+            id="ComponentEvidence",
+        ),
+        pytest.param(
+            lambda: ComponentDependencyEvidence(
+                from_component="wildside-core",
+                to_component="wildside-engine",
+                relationship="depends_on",
+                kind="runtime",
+            ),
+            {"rationale": None},
+            id="ComponentDependencyEvidence",
+        ),
+    ],
+)
+def test_default_values_for_all_models(
+    model_factory: object,
+    default_assertions: dict[str, object],
+) -> None:
+    """Verify default field values for all evidence models."""
+    instance = model_factory()  # type: ignore[operator]
+    for field_name, expected in default_assertions.items():
+        assert getattr(instance, field_name) == expected
+
+
 class TestProjectMetadata:
     """Tests for ProjectMetadata struct."""
-
-    def test_required_fields(self) -> None:
-        metadata = ProjectMetadata(key="wildside", name="Wildside")
-
-        assert metadata.key == "wildside"
-        assert metadata.name == "Wildside"
-
-    def test_default_values(self) -> None:
-        metadata = ProjectMetadata(key="wildside", name="Wildside")
-
-        assert metadata.description is None
-        assert metadata.programme is None
-        assert metadata.documentation_paths == ()
 
     def test_full_construction(self) -> None:
         metadata = ProjectMetadata(
@@ -255,36 +371,6 @@ class TestProjectMetadata:
 
 class TestComponentRepositorySummary:
     """Tests for ComponentRepositorySummary struct."""
-
-    def test_required_fields(self) -> None:
-        summary = ComponentRepositorySummary(
-            repository_slug="leynos/wildside",
-            report_id="rpt-001",
-            window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
-            window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
-            status=ReportStatus.ON_TRACK,
-            summary="Good progress this week.",
-        )
-
-        assert summary.repository_slug == "leynos/wildside"
-        assert summary.report_id == "rpt-001"
-        assert summary.status == ReportStatus.ON_TRACK
-        assert summary.summary == "Good progress this week."
-
-    def test_default_values(self) -> None:
-        summary = ComponentRepositorySummary(
-            repository_slug="leynos/wildside",
-            report_id="rpt-001",
-            window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
-            window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
-            status=ReportStatus.ON_TRACK,
-            summary="Summary text.",
-        )
-
-        assert summary.highlights == ()
-        assert summary.risks == ()
-        assert summary.next_steps == ()
-        assert summary.generated_at is None
 
     def test_full_construction(self) -> None:
         generated = dt.datetime(2024, 7, 8, 12, 0, tzinfo=dt.UTC)
@@ -310,32 +396,6 @@ class TestComponentRepositorySummary:
 
 class TestComponentEvidence:
     """Tests for ComponentEvidence struct."""
-
-    def test_required_fields(self) -> None:
-        component = ComponentEvidence(
-            key="wildside-core",
-            name="Wildside Core Service",
-            component_type="service",
-            lifecycle="active",
-        )
-
-        assert component.key == "wildside-core"
-        assert component.name == "Wildside Core Service"
-        assert component.component_type == "service"
-        assert component.lifecycle == "active"
-
-    def test_default_values(self) -> None:
-        component = ComponentEvidence(
-            key="wildside-core",
-            name="Wildside Core Service",
-            component_type="service",
-            lifecycle="active",
-        )
-
-        assert component.description is None
-        assert component.repository_slug is None
-        assert component.repository_summary is None
-        assert component.notes == ()
 
     def test_has_repository_true(self) -> None:
         component = ComponentEvidence(
@@ -385,29 +445,6 @@ class TestComponentEvidence:
 
 class TestComponentDependencyEvidence:
     """Tests for ComponentDependencyEvidence struct."""
-
-    def test_required_fields(self) -> None:
-        dep = ComponentDependencyEvidence(
-            from_component="wildside-core",
-            to_component="wildside-engine",
-            relationship="depends_on",
-            kind="runtime",
-        )
-
-        assert dep.from_component == "wildside-core"
-        assert dep.to_component == "wildside-engine"
-        assert dep.relationship == "depends_on"
-        assert dep.kind == "runtime"
-
-    def test_default_rationale(self) -> None:
-        dep = ComponentDependencyEvidence(
-            from_component="wildside-core",
-            to_component="wildside-engine",
-            relationship="depends_on",
-            kind="runtime",
-        )
-
-        assert dep.rationale is None
 
     def test_full_construction(self) -> None:
         dep = ComponentDependencyEvidence(
