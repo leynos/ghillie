@@ -126,10 +126,10 @@ class ProjectEvidenceBundleService:
 
         async with self._gold_session_factory() as gold_session:
             summaries_by_cat_id = await self._fetch_latest_summaries(
-                gold_session, set(repo_slug_by_cat_id.keys())
+                gold_session, set(repo_slug_by_cat_id.keys()), estate_id
             )
             previous_reports = await self._fetch_previous_project_reports(
-                gold_session, project_key
+                gold_session, project_key, estate_id
             )
 
         component_key_by_id = {c.id: c.key for c in components}
@@ -207,19 +207,34 @@ class ProjectEvidenceBundleService:
         self,
         session: AsyncSession,
         catalogue_repo_ids: set[str],
+        estate_id: str,
     ) -> dict[str, ComponentRepositorySummary]:
         """Fetch latest repo reports for each catalogue repository ID.
 
-        Returns a dict mapping catalogue_repository_id to a
-        ComponentRepositorySummary built from the latest Gold Report.
+        Parameters
+        ----------
+        session
+            Active async database session.
+        catalogue_repo_ids
+            Set of catalogue repository IDs to look up.
+        estate_id
+            Estate identifier to scope the Silver repository lookup.
+
+        Returns
+        -------
+        dict[str, ComponentRepositorySummary]
+            Mapping of catalogue_repository_id to a
+            ComponentRepositorySummary built from the latest Gold Report.
 
         """
         if not catalogue_repo_ids:
             return {}
 
-        # Find Silver repositories linked to these catalogue IDs.
+        # Find Silver repositories linked to these catalogue IDs,
+        # scoped to the requested estate.
         repo_stmt = select(Repository).where(
-            Repository.catalogue_repository_id.in_(catalogue_repo_ids)
+            Repository.catalogue_repository_id.in_(catalogue_repo_ids),
+            Repository.estate_id == estate_id,
         )
         silver_repos = list((await session.scalars(repo_stmt)).all())
         if not silver_repos:
@@ -309,9 +324,29 @@ class ProjectEvidenceBundleService:
         self,
         session: AsyncSession,
         project_key: str,
+        estate_id: str,
     ) -> list[PreviousReportSummary]:
-        """Fetch previous project-scope reports for context."""
-        rp_stmt = select(ReportProject).where(ReportProject.key == project_key)
+        """Fetch previous project-scope reports for context.
+
+        Parameters
+        ----------
+        session
+            Active async database session.
+        project_key
+            The project slug to fetch history for.
+        estate_id
+            Estate identifier to scope the lookup.
+
+        Returns
+        -------
+        list[PreviousReportSummary]
+            Up to ``max_previous_reports`` recent project reports.
+
+        """
+        rp_stmt = select(ReportProject).where(
+            ReportProject.key == project_key,
+            ReportProject.estate_id == estate_id,
+        )
         report_project = await session.scalar(rp_stmt)
         if report_project is None:
             return []

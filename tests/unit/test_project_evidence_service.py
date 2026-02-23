@@ -393,6 +393,75 @@ class TestProjectEvidenceBundleService:
         assert "Milestone reached" in prev.highlights
 
     @pytest.mark.usefixtures("_import_wildside")
+    def test_report_from_other_estate_excluded_from_summary(
+        self,
+        service: ProjectEvidenceBundleService,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """Repository report from another estate is not attached to bundle."""
+        estate_id = _estate_id(session_factory)
+        repo_ids = _get_catalogue_repo_ids(session_factory)
+
+        # Create a Silver repo + report in a *different* estate that
+        # shares the same catalogue_repository_id.
+        _create_silver_repo_and_report(
+            session_factory,
+            RepositoryParams(
+                owner="leynos",
+                name="wildside",
+                catalogue_repository_id=repo_ids["leynos/wildside"],
+                estate_id="other-estate-id",
+            ),
+            ReportSummaryParams(
+                status="blocked",
+                summary="Wrong estate report.",
+            ),
+        )
+
+        bundle = asyncio.run(service.build_bundle("wildside", estate_id))
+
+        core = next(c for c in bundle.components if c.key == "wildside-core")
+        assert core.repository_summary is None
+
+    @pytest.mark.usefixtures("_import_wildside")
+    def test_previous_reports_from_other_estate_excluded(
+        self,
+        service: ProjectEvidenceBundleService,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """Previous project reports from another estate are excluded."""
+        estate_id = _estate_id(session_factory)
+
+        # Create a ReportProject for "wildside" in a different estate.
+        async def _create_other_estate_report() -> None:
+            async with session_factory() as session:
+                project = ReportProject(
+                    key="wildside-other",
+                    name="Wildside",
+                    estate_id="other-estate-id",
+                )
+                report = Report(
+                    scope=ReportScope.PROJECT,
+                    project=project,
+                    window_start=dt.datetime(2024, 6, 24, tzinfo=dt.UTC),
+                    window_end=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                    model="test-model",
+                    machine_summary={
+                        "status": "on_track",
+                        "highlights": ["Should not appear"],
+                        "risks": [],
+                    },
+                )
+                session.add_all([project, report])
+                await session.commit()
+
+        asyncio.run(_create_other_estate_report())
+
+        bundle = asyncio.run(service.build_bundle("wildside", estate_id))
+
+        assert len(bundle.previous_reports) == 0
+
+    @pytest.mark.usefixtures("_import_wildside")
     def test_bundle_generated_at_is_set(
         self,
         service: ProjectEvidenceBundleService,
