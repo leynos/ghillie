@@ -56,7 +56,7 @@ def _estate_id(
             from sqlalchemy import select
 
             estate = await session.scalar(select(Estate))
-            assert estate is not None
+            assert estate is not None, "expected an Estate record in DB"
             return estate.id
 
     return asyncio.run(_get())
@@ -162,7 +162,9 @@ class TestParseStatus:
     ) -> None:
         """Verify _parse_status handles edge-case inputs."""
         parsed = service._parse_status(raw_status)
-        assert parsed is expected
+        assert parsed is expected, (
+            f"expected {expected!r} for input {raw_status!r}, got {parsed!r}"
+        )
 
 
 class TestProjectEvidenceBundleService:
@@ -212,14 +214,16 @@ class TestProjectEvidenceBundleService:
         """Bundle includes all components from the catalogue."""
         bundle = self._build_wildside_bundle(service, session_factory)
 
-        assert bundle.component_count == 4
+        assert bundle.component_count == 4, (
+            f"expected 4 components, got {bundle.component_count}"
+        )
         keys = {c.key for c in bundle.components}
         assert keys == {
             "wildside-core",
             "wildside-engine",
             "wildside-mockup",
             "wildside-ingestion",
-        }
+        }, f"unexpected component keys: {keys}"
 
     @pytest.mark.usefixtures("_import_wildside")
     def test_bundle_lifecycle_stages(
@@ -230,9 +234,15 @@ class TestProjectEvidenceBundleService:
         """Components reflect their catalogue lifecycle stages."""
         bundle = self._build_wildside_bundle(service, session_factory)
 
-        assert len(bundle.active_components) == 3
-        assert len(bundle.planned_components) == 1
-        assert bundle.planned_components[0].key == "wildside-ingestion"
+        assert len(bundle.active_components) == 3, (
+            f"expected 3 active components, got {len(bundle.active_components)}"
+        )
+        assert len(bundle.planned_components) == 1, (
+            f"expected 1 planned component, got {len(bundle.planned_components)}"
+        )
+        assert bundle.planned_components[0].key == "wildside-ingestion", (
+            f"expected wildside-ingestion, got {bundle.planned_components[0].key}"
+        )
 
     @pytest.mark.usefixtures("_import_wildside")
     def test_planned_component_has_no_repository(
@@ -244,9 +254,15 @@ class TestProjectEvidenceBundleService:
         bundle = self._build_wildside_bundle(service, session_factory)
 
         ingestion = next(c for c in bundle.components if c.key == "wildside-ingestion")
-        assert ingestion.has_repository is False
-        assert ingestion.repository_summary is None
-        assert ingestion.lifecycle == "planned"
+        assert ingestion.has_repository is False, (
+            "wildside-ingestion should lack a repository"
+        )
+        assert ingestion.repository_summary is None, (
+            "wildside-ingestion should have no summary"
+        )
+        assert ingestion.lifecycle == "planned", (
+            f"expected lifecycle 'planned', got {ingestion.lifecycle!r}"
+        )
 
     @pytest.mark.usefixtures("_import_wildside")
     def test_active_component_has_repository_slug(
@@ -258,8 +274,10 @@ class TestProjectEvidenceBundleService:
         bundle = self._build_wildside_bundle(service, session_factory)
 
         core = next(c for c in bundle.components if c.key == "wildside-core")
-        assert core.has_repository is True
-        assert core.repository_slug == "leynos/wildside"
+        assert core.has_repository is True, "wildside-core should have a repository"
+        assert core.repository_slug == "leynos/wildside", (
+            f"expected leynos/wildside, got {core.repository_slug!r}"
+        )
 
     @pytest.mark.usefixtures("_import_wildside")
     def test_component_with_report_has_summary(
@@ -289,10 +307,18 @@ class TestProjectEvidenceBundleService:
         bundle = asyncio.run(service.build_bundle("wildside", estate_id))
 
         core = next(c for c in bundle.components if c.key == "wildside-core")
-        assert core.repository_summary is not None
-        assert core.repository_summary.status == ReportStatus.ON_TRACK
-        assert core.repository_summary.summary == "Good progress."
-        assert "Shipped v2.0" in core.repository_summary.highlights
+        assert core.repository_summary is not None, (
+            "wildside-core should have a summary"
+        )
+        assert core.repository_summary.status == ReportStatus.ON_TRACK, (
+            f"expected ON_TRACK, got {core.repository_summary.status}"
+        )
+        assert core.repository_summary.summary == "Good progress.", (
+            f"summary mismatch: {core.repository_summary.summary!r}"
+        )
+        assert "Shipped v2.0" in core.repository_summary.highlights, (
+            f"'Shipped v2.0' not in highlights: {core.repository_summary.highlights}"
+        )
 
     @pytest.mark.usefixtures("_import_wildside")
     def test_component_repository_summary_uses_latest_report(
@@ -360,12 +386,18 @@ class TestProjectEvidenceBundleService:
         bundle = asyncio.run(service.build_bundle("wildside", estate_id))
         core = next(c for c in bundle.components if c.key == "wildside-core")
 
-        assert core.repository_summary is not None
-        assert core.repository_summary.summary == "Newer report."
-        assert core.repository_summary.status == ReportStatus.ON_TRACK
+        assert core.repository_summary is not None, (
+            "wildside-core should have a summary"
+        )
+        assert core.repository_summary.summary == "Newer report.", (
+            f"expected newer report, got {core.repository_summary.summary!r}"
+        )
+        assert core.repository_summary.status == ReportStatus.ON_TRACK, (
+            f"expected ON_TRACK, got {core.repository_summary.status}"
+        )
         assert core.repository_summary.window_end == dt.datetime(
             2024, 7, 15, tzinfo=dt.UTC
-        )
+        ), f"window_end mismatch: {core.repository_summary.window_end}"
 
     @pytest.mark.usefixtures("_import_wildside")
     def test_component_without_report_has_no_summary(
@@ -379,7 +411,9 @@ class TestProjectEvidenceBundleService:
         # No Silver repos or Gold reports created, so all summaries should
         # be None even for components with catalogue repos.
         core = next(c for c in bundle.components if c.key == "wildside-core")
-        assert core.repository_summary is None
+        assert core.repository_summary is None, (
+            "wildside-core should have no summary without reports"
+        )
 
     @pytest.mark.usefixtures("_import_wildside")
     def test_bundle_contains_dependency_edges(
@@ -390,7 +424,7 @@ class TestProjectEvidenceBundleService:
         """Bundle includes dependency edges from the component graph."""
         bundle = self._build_wildside_bundle(service, session_factory)
 
-        assert len(bundle.dependencies) > 0
+        assert len(bundle.dependencies) > 0, "expected at least one dependency edge"
         # wildside-core depends_on wildside-engine
         core_to_engine = [
             d
@@ -399,8 +433,12 @@ class TestProjectEvidenceBundleService:
             and d.to_component == "wildside-engine"
             and d.relationship == "depends_on"
         ]
-        assert len(core_to_engine) == 1
-        assert core_to_engine[0].kind == "runtime"
+        assert len(core_to_engine) == 1, (
+            "expected one wildside-core depends_on wildside-engine edge"
+        )
+        assert core_to_engine[0].kind == "runtime", (
+            f"expected kind 'runtime', got {core_to_engine[0].kind!r}"
+        )
 
     @pytest.mark.usefixtures("_import_wildside")
     def test_cross_project_blocked_by_edges_excluded(
@@ -425,7 +463,9 @@ class TestProjectEvidenceBundleService:
             if d.from_component == "wildside-engine"
             and d.to_component == "ortho-config"
         ]
-        assert len(engine_blocked) == 0
+        assert len(engine_blocked) == 0, (
+            "cross-project blocked_by edges should be excluded"
+        )
 
     @pytest.mark.usefixtures("_import_wildside")
     def test_bundle_contains_emits_events_to_edges(
@@ -437,7 +477,7 @@ class TestProjectEvidenceBundleService:
         bundle = self._build_wildside_bundle(service, session_factory)
 
         emits = [d for d in bundle.dependencies if d.relationship == "emits_events_to"]
-        assert len(emits) >= 1
+        assert len(emits) >= 1, "expected at least one emits_events_to edge"
         # wildside-core emits_events_to wildside-mockup
         core_to_mockup = [
             d
@@ -445,7 +485,9 @@ class TestProjectEvidenceBundleService:
             if d.from_component == "wildside-core"
             and d.to_component == "wildside-mockup"
         ]
-        assert len(core_to_mockup) == 1
+        assert len(core_to_mockup) == 1, (
+            "expected one wildside-core emits_events_to wildside-mockup edge"
+        )
 
     @pytest.mark.usefixtures("_import_wildside")
     def test_bundle_includes_previous_project_reports(
@@ -483,10 +525,16 @@ class TestProjectEvidenceBundleService:
 
         bundle = asyncio.run(service.build_bundle("wildside", estate_id))
 
-        assert len(bundle.previous_reports) == 1
+        assert len(bundle.previous_reports) == 1, (
+            f"expected 1 previous report, got {len(bundle.previous_reports)}"
+        )
         prev = bundle.previous_reports[0]
-        assert prev.status == ReportStatus.ON_TRACK
-        assert "Milestone reached" in prev.highlights
+        assert prev.status == ReportStatus.ON_TRACK, (
+            f"expected ON_TRACK, got {prev.status}"
+        )
+        assert "Milestone reached" in prev.highlights, (
+            f"'Milestone reached' not in highlights: {prev.highlights}"
+        )
 
     @pytest.mark.usefixtures("_import_wildside")
     def test_previous_project_reports_limit_and_ordering(
@@ -538,17 +586,21 @@ class TestProjectEvidenceBundleService:
         )
         bundle = asyncio.run(limited_service.build_bundle("wildside", estate_id))
 
-        assert len(bundle.previous_reports) == 2
+        assert len(bundle.previous_reports) == 2, (
+            f"expected 2 previous reports, got {len(bundle.previous_reports)}"
+        )
         # Most recent first (descending window_end).
         assert bundle.previous_reports[0].window_end == dt.datetime(
             2024, 3, 28, tzinfo=dt.UTC
-        )
+        ), f"first report window_end mismatch: {bundle.previous_reports[0].window_end}"
         assert bundle.previous_reports[1].window_end == dt.datetime(
             2024, 2, 28, tzinfo=dt.UTC
-        )
+        ), f"second report window_end mismatch: {bundle.previous_reports[1].window_end}"
         # Oldest report (month 1) should be excluded.
         window_ends = [r.window_end for r in bundle.previous_reports]
-        assert dt.datetime(2024, 1, 28, tzinfo=dt.UTC) not in window_ends
+        assert dt.datetime(2024, 1, 28, tzinfo=dt.UTC) not in window_ends, (
+            "oldest report (month 1) should be excluded by limit"
+        )
 
     @pytest.mark.usefixtures("_import_wildside")
     def test_report_from_other_estate_excluded_from_summary(
@@ -579,7 +631,9 @@ class TestProjectEvidenceBundleService:
         bundle = asyncio.run(service.build_bundle("wildside", estate_id))
 
         core = next(c for c in bundle.components if c.key == "wildside-core")
-        assert core.repository_summary is None
+        assert core.repository_summary is None, (
+            "report from other estate should not appear in summary"
+        )
 
     @pytest.mark.usefixtures("_import_wildside")
     def test_previous_reports_from_other_estate_excluded(
@@ -617,7 +671,9 @@ class TestProjectEvidenceBundleService:
 
         bundle = asyncio.run(service.build_bundle("wildside", estate_id))
 
-        assert len(bundle.previous_reports) == 0
+        assert len(bundle.previous_reports) == 0, (
+            "reports from other estate should be excluded"
+        )
 
     @pytest.mark.usefixtures("_import_wildside")
     def test_bundle_generated_at_is_set(
@@ -628,7 +684,9 @@ class TestProjectEvidenceBundleService:
         """Bundle has a generated_at timestamp."""
         bundle = self._build_wildside_bundle(service, session_factory)
 
-        assert bundle.generated_at is not None
+        assert bundle.generated_at is not None, (
+            "bundle should have a generated_at timestamp"
+        )
 
     @pytest.mark.usefixtures("_import_wildside")
     def test_component_type_is_captured(
@@ -640,7 +698,11 @@ class TestProjectEvidenceBundleService:
         bundle = self._build_wildside_bundle(service, session_factory)
 
         core = next(c for c in bundle.components if c.key == "wildside-core")
-        assert core.component_type == "service"
+        assert core.component_type == "service", (
+            f"expected component_type 'service', got {core.component_type!r}"
+        )
 
         ingestion = next(c for c in bundle.components if c.key == "wildside-ingestion")
-        assert ingestion.component_type == "data-pipeline"
+        assert ingestion.component_type == "data-pipeline", (
+            f"expected component_type 'data-pipeline', got {ingestion.component_type!r}"
+        )

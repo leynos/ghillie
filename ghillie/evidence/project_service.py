@@ -92,19 +92,7 @@ class ProjectEvidenceBundleService:
         gold_session_factory: async_sessionmaker[AsyncSession],
         max_previous_reports: int = 2,
     ) -> None:
-        """Configure the service with session factories.
-
-        Parameters
-        ----------
-        catalogue_session_factory
-            Async session factory for catalogue database access.
-        gold_session_factory
-            Async session factory for silver/gold database access.
-        max_previous_reports
-            Maximum number of previous project reports to include
-            for context (default 2).
-
-        """
+        """Configure the service with session factories."""
         self._catalogue_session_factory = catalogue_session_factory
         self._gold_session_factory = gold_session_factory
         self._max_previous_reports = max_previous_reports
@@ -227,24 +215,7 @@ class ProjectEvidenceBundleService:
         catalogue_repo_ids: set[str],
         estate_id: str,
     ) -> dict[str, ComponentRepositorySummary]:
-        """Fetch latest repo reports for each catalogue repository ID.
-
-        Parameters
-        ----------
-        session
-            Active async database session.
-        catalogue_repo_ids
-            Set of catalogue repository IDs to look up.
-        estate_id
-            Estate identifier to scope the Silver repository lookup.
-
-        Returns
-        -------
-        dict[str, ComponentRepositorySummary]
-            Mapping of catalogue_repository_id to a
-            ComponentRepositorySummary built from the latest Gold Report.
-
-        """
+        """Fetch latest repo reports for each catalogue repository ID."""
         if not catalogue_repo_ids:
             return {}
 
@@ -304,23 +275,7 @@ class ProjectEvidenceBundleService:
         latest_by_repo: dict[str, Report],
         silver_repos: list[Repository],
     ) -> dict[str, ComponentRepositorySummary]:
-        """Build summaries keyed by catalogue repository ID.
-
-        Parameters
-        ----------
-        cat_id_by_silver_id
-            Mapping of silver repository ID to catalogue repository ID.
-        latest_by_repo
-            Mapping of silver repository ID to its latest Gold report.
-        silver_repos
-            Silver repository records used to resolve slugs.
-
-        Returns
-        -------
-        dict[str, ComponentRepositorySummary]
-            Summaries indexed by catalogue repository ID.
-
-        """
+        """Build summaries keyed by catalogue repository ID."""
         slug_by_silver_id = {r.id: r.slug for r in silver_repos}
         result: dict[str, ComponentRepositorySummary] = {}
         for silver_repo_id, cat_repo_id in cat_id_by_silver_id.items():
@@ -337,23 +292,7 @@ class ProjectEvidenceBundleService:
         project_key: str,
         estate_id: str,
     ) -> list[PreviousReportSummary]:
-        """Fetch previous project-scope reports for context.
-
-        Parameters
-        ----------
-        session
-            Active async database session.
-        project_key
-            The project slug to fetch history for.
-        estate_id
-            Estate identifier to scope the lookup.
-
-        Returns
-        -------
-        list[PreviousReportSummary]
-            Up to ``max_previous_reports`` recent project reports.
-
-        """
+        """Fetch previous project-scope reports for context."""
         rp_stmt = select(ReportProject).where(
             ReportProject.key == project_key,
             ReportProject.estate_id == estate_id,

@@ -169,13 +169,7 @@ class EvidenceBundleService:
         repository_id: str,
         window: _WindowQuery,
     ) -> list[EventFact]:
-        """Fetch EventFacts in the window, excluding repository-scope coverage.
-
-        Coverage is treated as global per repository scope so that an EventFact
-        is never reused across repository reports, even when backfilled windows
-        overlap.
-
-        """
+        """Fetch EventFacts in the window, excluding repository-scope coverage."""
         coverage_exists = (
             select(ReportCoverage.id)
             .join(Report, ReportCoverage.report_id == Report.id)
@@ -362,14 +356,7 @@ class EvidenceBundleService:
         list[IssueEvidence],
         list[DocumentationEvidence],
     ]:
-        """Build classified evidence from all event types.
-
-        Returns
-        -------
-        tuple
-            A tuple of (commit_evidence, pr_evidence, issue_evidence, doc_evidence).
-
-        """
+        """Build classified evidence from all event types."""
         commit_evidence = self._build_commit_evidence(commits)
         pr_evidence = self._build_pr_evidence(prs)
         issue_evidence = self._build_issue_evidence(issues)
@@ -596,18 +583,7 @@ class EvidenceBundleService:
         entities: cabc.Sequence[E],
         get_bucket_list: cabc.Callable[[_WorkTypeBucket], list[E]],
     ) -> None:
-        """Populate buckets with entities (PRs or issues).
-
-        Parameters
-        ----------
-        buckets
-            Dictionary mapping work types to their buckets.
-        entities
-            List of entities (PRs or issues) to process.
-        get_bucket_list
-            Function that extracts the appropriate list from a bucket.
-
-        """
+        """Populate buckets with entities (PRs or issues)."""
         for entity in entities:
             bucket = buckets[entity.work_type]
             get_bucket_list(bucket).append(entity)
@@ -618,19 +594,7 @@ class EvidenceBundleService:
         buckets: dict[WorkType, _WorkTypeBucket],
         commits: list[CommitEvidence],
     ) -> None:
-        """Populate buckets with non-merge commits.
-
-        Excludes merge commits from work-type groupings to avoid double-counting.
-        Appends the first 100 characters of the commit message as a sample title.
-
-        Parameters
-        ----------
-        buckets
-            Dictionary mapping work types to their buckets.
-        commits
-            List of commit evidence to process.
-
-        """
+        """Populate buckets with non-merge commits."""
         for commit in commits:
             if commit.is_merge_commit:
                 continue
@@ -660,21 +624,7 @@ class EvidenceBundleService:
         work_type: WorkType,
         bucket: _WorkTypeBucket,
     ) -> WorkTypeGrouping | None:
-        """Build a WorkTypeGrouping from a bucket, or None if empty.
-
-        Parameters
-        ----------
-        work_type
-            The work type for this grouping.
-        bucket
-            The bucket containing events for this work type.
-
-        Returns
-        -------
-        WorkTypeGrouping | None
-            The grouping if any events exist, otherwise None.
-
-        """
+        """Build a WorkTypeGrouping from a bucket, or None if empty."""
         commit_count = len(bucket.commits)
         pr_count = len(bucket.prs)
         issue_count = len(bucket.issues)

@@ -84,33 +84,34 @@ def test_frozen_immutability_for_all_models(
 ) -> None:
     """Verify all evidence models are frozen msgspec structs."""
     instance = model_factory()  # type: ignore[operator]
-    with pytest.raises(AttributeError):
+    with pytest.raises(AttributeError, match=r"immutable type"):
         setattr(instance, field_to_modify, new_value)
 
 
 def _check_project_metadata_roundtrip(decoded: object) -> None:
-    assert decoded.key == "wildside"  # type: ignore[union-attr]
-    assert decoded.name == "Wildside"  # type: ignore[union-attr]
-    assert decoded.programme == "df12"  # type: ignore[union-attr]
-    assert decoded.documentation_paths == ("docs/roadmap.md",)  # type: ignore[union-attr]
+    assert decoded.key == "wildside", "key mismatch"  # type: ignore[union-attr]
+    assert decoded.name == "Wildside", "name mismatch"  # type: ignore[union-attr]
+    assert decoded.programme == "df12", "programme mismatch"  # type: ignore[union-attr]
+    doc_paths = decoded.documentation_paths  # type: ignore[union-attr]
+    assert doc_paths == ("docs/roadmap.md",), "documentation_paths mismatch"
 
 
 def _check_component_repo_summary_roundtrip(decoded: object) -> None:
-    assert decoded.repository_slug == "leynos/wildside"  # type: ignore[union-attr]
-    assert decoded.status == ReportStatus.ON_TRACK  # type: ignore[union-attr]
-    assert decoded.highlights == ("Feature A shipped",)  # type: ignore[union-attr]
+    assert decoded.repository_slug == "leynos/wildside", "repository_slug mismatch"  # type: ignore[union-attr]
+    assert decoded.status == ReportStatus.ON_TRACK, "status mismatch"  # type: ignore[union-attr]
+    assert decoded.highlights == ("Feature A shipped",), "highlights mismatch"  # type: ignore[union-attr]
 
 
 def _check_component_evidence_roundtrip(decoded: object) -> None:
-    assert decoded.key == "wildside-core"  # type: ignore[union-attr]
-    assert decoded.has_repository is True  # type: ignore[union-attr]
-    assert decoded.notes == ("Primary service",)  # type: ignore[union-attr]
+    assert decoded.key == "wildside-core", "key mismatch"  # type: ignore[union-attr]
+    assert decoded.has_repository is True, "has_repository should be True"  # type: ignore[union-attr]
+    assert decoded.notes == ("Primary service",), "notes mismatch"  # type: ignore[union-attr]
 
 
 def _check_dependency_evidence_roundtrip(decoded: object) -> None:
-    assert decoded.from_component == "wildside-core"  # type: ignore[union-attr]
-    assert decoded.relationship == "blocked_by"  # type: ignore[union-attr]
-    assert decoded.rationale == "Config releases needed."  # type: ignore[union-attr]
+    assert decoded.from_component == "wildside-core", "from_component mismatch"  # type: ignore[union-attr]
+    assert decoded.relationship == "blocked_by", "relationship mismatch"  # type: ignore[union-attr]
+    assert decoded.rationale == "Config releases needed.", "rationale mismatch"  # type: ignore[union-attr]
 
 
 def _check_bundle_roundtrip(decoded: object) -> None:
@@ -286,7 +287,10 @@ def test_required_fields_for_all_models(
     """Verify required fields are set correctly for all evidence models."""
     instance = model_factory()  # type: ignore[operator]
     for field_name, expected in field_assertions.items():
-        assert getattr(instance, field_name) == expected
+        actual = getattr(instance, field_name)
+        assert actual == expected, (
+            f"{field_name}: expected {expected!r}, got {actual!r}"
+        )
 
 
 @pytest.mark.parametrize(
@@ -348,7 +352,10 @@ def test_default_values_for_all_models(
     """Verify default field values for all evidence models."""
     instance = model_factory()  # type: ignore[operator]
     for field_name, expected in default_assertions.items():
-        assert getattr(instance, field_name) == expected
+        actual = getattr(instance, field_name)
+        assert actual == expected, (
+            f"{field_name}: expected {expected!r}, got {actual!r}"
+        )
 
 
 class TestProjectMetadata:
@@ -364,9 +371,13 @@ class TestProjectMetadata:
             documentation_paths=("docs/roadmap.md", "docs/adr/"),
         )
 
-        assert metadata.description == "Transactional streaming platform."
-        assert metadata.programme == "df12"
-        assert metadata.documentation_paths == ("docs/roadmap.md", "docs/adr/")
+        assert metadata.description == "Transactional streaming platform.", (
+            "description mismatch"
+        )
+        assert metadata.programme == "df12", "programme mismatch"
+        assert metadata.documentation_paths == ("docs/roadmap.md", "docs/adr/"), (
+            "documentation_paths mismatch"
+        )
 
 
 class TestComponentRepositorySummary:
@@ -388,11 +399,11 @@ class TestComponentRepositorySummary:
             generated_at=generated,
         )
 
-        assert summary.status == ReportStatus.AT_RISK
-        assert summary.highlights == ("Shipped v2.0",)
-        assert summary.risks == ("Tech debt",)
-        assert summary.next_steps == ("Refactor module X",)
-        assert summary.generated_at == generated
+        assert summary.status == ReportStatus.AT_RISK, "status mismatch"
+        assert summary.highlights == ("Shipped v2.0",), "highlights mismatch"
+        assert summary.risks == ("Tech debt",), "risks mismatch"
+        assert summary.next_steps == ("Refactor module X",), "next_steps mismatch"
+        assert summary.generated_at == generated, "generated_at mismatch"
 
 
 class TestComponentEvidence:
@@ -408,7 +419,9 @@ class TestComponentEvidence:
             repository_slug="leynos/wildside",
         )
 
-        assert component.has_repository is True
+        assert component.has_repository is True, (
+            "has_repository should be True with slug"
+        )
 
     def test_has_repository_false(self) -> None:
         """Component without repository_slug has has_repository == False."""
@@ -419,7 +432,9 @@ class TestComponentEvidence:
             lifecycle="planned",
         )
 
-        assert component.has_repository is False
+        assert component.has_repository is False, (
+            "has_repository should be False without slug"
+        )
 
     def test_full_construction_with_summary(self) -> None:
         """Component with all fields and a repository summary."""
@@ -442,9 +457,13 @@ class TestComponentEvidence:
             notes=("Primary service",),
         )
 
-        assert component.repository_summary is not None
-        assert component.repository_summary.status == ReportStatus.ON_TRACK
-        assert component.notes == ("Primary service",)
+        assert component.repository_summary is not None, (
+            "repository_summary should be set"
+        )
+        assert component.repository_summary.status == ReportStatus.ON_TRACK, (
+            "status mismatch"
+        )
+        assert component.notes == ("Primary service",), "notes mismatch"
 
 
 class TestComponentDependencyEvidence:
@@ -460,8 +479,10 @@ class TestComponentDependencyEvidence:
             rationale="Requires config releases for rollout.",
         )
 
-        assert dep.relationship == "blocked_by"
-        assert dep.rationale == "Requires config releases for rollout."
+        assert dep.relationship == "blocked_by", "relationship mismatch"
+        assert dep.rationale == "Requires config releases for rollout.", (
+            "rationale mismatch"
+        )
 
 
 class TestProjectEvidenceBundle:
@@ -518,23 +539,7 @@ class TestProjectEvidenceBundle:
         components: tuple[ComponentEvidence, ...],
         dependencies: tuple[ComponentDependencyEvidence, ...] = (),
     ) -> ProjectEvidenceBundle:
-        """Create a ProjectEvidenceBundle with the given project and components.
-
-        Parameters
-        ----------
-        project
-            Project metadata for the bundle.
-        components
-            Tuple of component evidence items.
-        dependencies
-            Tuple of dependency edges (defaults to empty).
-
-        Returns
-        -------
-        ProjectEvidenceBundle
-            The constructed bundle.
-
-        """
+        """Create a ProjectEvidenceBundle with the given project and components."""
         return ProjectEvidenceBundle(
             project=project,
             components=components,
@@ -549,9 +554,9 @@ class TestProjectEvidenceBundle:
             dependencies=(),
         )
 
-        assert bundle.project.key == "wildside"
-        assert bundle.components == ()
-        assert bundle.dependencies == ()
+        assert bundle.project.key == "wildside", "project key mismatch"
+        assert bundle.components == (), "components should be empty"
+        assert bundle.dependencies == (), "dependencies should be empty"
 
     def test_default_values(self, sample_project: ProjectMetadata) -> None:
         """Optional fields default to empty tuple and None."""
@@ -561,8 +566,8 @@ class TestProjectEvidenceBundle:
             dependencies=(),
         )
 
-        assert bundle.previous_reports == ()
-        assert bundle.generated_at is None
+        assert bundle.previous_reports == (), "previous_reports should default to empty"
+        assert bundle.generated_at is None, "generated_at should default to None"
 
     def test_component_count(
         self,
@@ -576,7 +581,9 @@ class TestProjectEvidenceBundle:
             components=(active_component, planned_component),
         )
 
-        assert bundle.component_count == 2
+        assert bundle.component_count == 2, (
+            f"expected 2 components, got {bundle.component_count}"
+        )
 
     def test_active_components(
         self,
@@ -596,8 +603,10 @@ class TestProjectEvidenceBundle:
         )
 
         active = bundle.active_components
-        assert len(active) == 1
-        assert active[0].key == "wildside-core"
+        assert len(active) == 1, f"expected 1 active component, got {len(active)}"
+        assert active[0].key == "wildside-core", (
+            f"expected wildside-core, got {active[0].key}"
+        )
 
     def test_planned_components(
         self,
@@ -612,8 +621,10 @@ class TestProjectEvidenceBundle:
         )
 
         planned = bundle.planned_components
-        assert len(planned) == 1
-        assert planned[0].key == "wildside-ingestion"
+        assert len(planned) == 1, f"expected 1 planned component, got {len(planned)}"
+        assert planned[0].key == "wildside-ingestion", (
+            f"expected wildside-ingestion, got {planned[0].key}"
+        )
 
     def test_components_with_reports(
         self,
@@ -633,8 +644,12 @@ class TestProjectEvidenceBundle:
         )
 
         with_reports = bundle.components_with_reports
-        assert len(with_reports) == 1
-        assert with_reports[0].key == "wildside-core"
+        assert len(with_reports) == 1, (
+            f"expected 1 component with reports, got {len(with_reports)}"
+        )
+        assert with_reports[0].key == "wildside-core", (
+            f"expected wildside-core, got {with_reports[0].key}"
+        )
 
     def test_blocked_dependencies(self, sample_project: ProjectMetadata) -> None:
         """Only edges with relationship 'blocked_by' are returned."""
@@ -667,6 +682,10 @@ class TestProjectEvidenceBundle:
         )
 
         blocked = bundle.blocked_dependencies
-        assert len(blocked) == 1
-        assert blocked[0].from_component == "wildside-engine"
-        assert blocked[0].to_component == "ortho-config"
+        assert len(blocked) == 1, f"expected 1 blocked dependency, got {len(blocked)}"
+        assert blocked[0].from_component == "wildside-engine", (
+            f"expected from wildside-engine, got {blocked[0].from_component}"
+        )
+        assert blocked[0].to_component == "ortho-config", (
+            f"expected to ortho-config, got {blocked[0].to_component}"
+        )
