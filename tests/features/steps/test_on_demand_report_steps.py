@@ -200,8 +200,9 @@ def when_post_unknown_repo(on_demand_context: OnDemandContext) -> None:
 def then_response_status(on_demand_context: OnDemandContext, status: int) -> None:
     """Assert the HTTP response status code and basic response contract."""
     response = on_demand_context["response"]
-    actual_status = int(response.status.split()[0])
-    assert actual_status == status, f"expected status {status}, got {actual_status}"
+    assert response.status_code == status, (
+        f"expected status {status}, got {response.status_code}"
+    )
 
     if status == HTTPStatus.NO_CONTENT:
         # 204 No Content responses must not have a body

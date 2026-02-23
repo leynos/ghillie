@@ -31,7 +31,7 @@ if typ.TYPE_CHECKING:
 logger = get_logger(__name__)
 
 # HTTP status code threshold for server errors (5xx)
-_HTTP_SERVER_ERROR_THRESHOLD = HTTPStatus.INTERNAL_SERVER_ERROR
+_HTTP_SERVER_ERROR_THRESHOLD = int(HTTPStatus.INTERNAL_SERVER_ERROR)
 
 
 class IngestionEventType(enum.StrEnum):

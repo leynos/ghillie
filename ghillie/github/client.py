@@ -174,7 +174,7 @@ query($owner: String!, $name: String!, $after: String) {
 }
 """
 
-_HTTP_ERROR_STATUS_THRESHOLD = HTTPStatus.BAD_REQUEST
+_HTTP_ERROR_STATUS_THRESHOLD = int(HTTPStatus.BAD_REQUEST)
 
 
 def _ensure_tzaware(value: dt.datetime, *, field: str) -> dt.datetime:

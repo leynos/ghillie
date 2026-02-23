@@ -22,8 +22,8 @@ from ghillie.status.prompts import SYSTEM_PROMPT, build_user_prompt
 if typ.TYPE_CHECKING:
     from ghillie.status.config import OpenAIStatusModelConfig
 
-_HTTP_ERROR_STATUS_THRESHOLD = HTTPStatus.BAD_REQUEST
-_HTTP_RATE_LIMITED = HTTPStatus.TOO_MANY_REQUESTS
+_HTTP_ERROR_STATUS_THRESHOLD = int(HTTPStatus.BAD_REQUEST)
+_HTTP_RATE_LIMITED = int(HTTPStatus.TOO_MANY_REQUESTS)
 
 
 def _to_int_or_none(value: object) -> int | None:
