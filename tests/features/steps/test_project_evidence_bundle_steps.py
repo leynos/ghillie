@@ -260,7 +260,8 @@ def then_bundle_has_dependency_edges(
     """Assert bundle contains intra-project edges only."""
     bundle = project_evidence_context["bundle"]
 
-    assert len(bundle.dependencies) >= 1
+    assert bundle.dependencies, "Expected at least one dependency edge"
+
     # wildside-core depends_on wildside-engine (intra-project)
     core_to_engine = [
         d
@@ -270,6 +271,12 @@ def then_bundle_has_dependency_edges(
         and d.relationship == "depends_on"
     ]
     assert len(core_to_engine) == 1
+
+    # Cross-project edges must be excluded (e.g. ortho-config belongs to
+    # df12-foundations, not wildside).
+    assert all(dep.to_component != "ortho-config" for dep in bundle.dependencies), (
+        "Bundle should not contain cross-project dependency edges to ortho-config"
+    )
 
 
 @then('the component "wildside-core" has a repository summary')

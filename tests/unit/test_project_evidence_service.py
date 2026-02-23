@@ -142,6 +142,29 @@ def _get_catalogue_repo_ids(
     return asyncio.run(_get())
 
 
+class TestParseStatus:
+    """Edge-case tests for _parse_status."""
+
+    @pytest.mark.parametrize(
+        ("raw_status", "expected"),
+        [
+            pytest.param(None, ReportStatus.UNKNOWN, id="none"),
+            pytest.param("On_TrAcK", ReportStatus.ON_TRACK, id="mixed-case"),
+            pytest.param("nonsense", ReportStatus.UNKNOWN, id="invalid-string"),
+            pytest.param(123, ReportStatus.UNKNOWN, id="non-string-int"),
+        ],
+    )
+    def test_parse_status_edge_cases(
+        self,
+        service: ProjectEvidenceBundleService,
+        raw_status: object,
+        expected: ReportStatus,
+    ) -> None:
+        """Verify _parse_status handles edge-case inputs."""
+        parsed = service._parse_status(raw_status)
+        assert parsed is expected
+
+
 class TestProjectEvidenceBundleService:
     """Tests for ProjectEvidenceBundleService.build_bundle()."""
 
@@ -272,6 +295,79 @@ class TestProjectEvidenceBundleService:
         assert "Shipped v2.0" in core.repository_summary.highlights
 
     @pytest.mark.usefixtures("_import_wildside")
+    def test_component_repository_summary_uses_latest_report(
+        self,
+        service: ProjectEvidenceBundleService,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """Repository summary uses the latest report when multiple exist.
+
+        Creates two reports for the same repository with explicit
+        generated_at timestamps and asserts only the latest one is
+        reflected in the component's repository_summary.
+        """
+        estate_id = _estate_id(session_factory)
+        repo_ids = _get_catalogue_repo_ids(session_factory)
+
+        async def _create_repo_with_two_reports() -> None:
+            async with session_factory() as session:
+                silver_repo = Repository(
+                    github_owner="leynos",
+                    github_name="wildside",
+                    default_branch="main",
+                    estate_id=estate_id,
+                    catalogue_repository_id=repo_ids["leynos/wildside"],
+                    ingestion_enabled=True,
+                )
+                session.add(silver_repo)
+                await session.flush()
+
+                older = Report(
+                    scope=ReportScope.REPOSITORY,
+                    repository_id=silver_repo.id,
+                    window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                    window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+                    generated_at=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+                    model="test-model",
+                    machine_summary={
+                        "status": "at_risk",
+                        "summary": "Older report.",
+                        "highlights": ["First milestone"],
+                        "risks": [],
+                        "next_steps": [],
+                    },
+                )
+                newer = Report(
+                    scope=ReportScope.REPOSITORY,
+                    repository_id=silver_repo.id,
+                    window_start=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+                    window_end=dt.datetime(2024, 7, 15, tzinfo=dt.UTC),
+                    generated_at=dt.datetime(2024, 7, 15, tzinfo=dt.UTC),
+                    model="test-model",
+                    machine_summary={
+                        "status": "on_track",
+                        "summary": "Newer report.",
+                        "highlights": ["Second milestone"],
+                        "risks": [],
+                        "next_steps": [],
+                    },
+                )
+                session.add_all([older, newer])
+                await session.commit()
+
+        asyncio.run(_create_repo_with_two_reports())
+
+        bundle = asyncio.run(service.build_bundle("wildside", estate_id))
+        core = next(c for c in bundle.components if c.key == "wildside-core")
+
+        assert core.repository_summary is not None
+        assert core.repository_summary.summary == "Newer report."
+        assert core.repository_summary.status == ReportStatus.ON_TRACK
+        assert core.repository_summary.window_end == dt.datetime(
+            2024, 7, 15, tzinfo=dt.UTC
+        )
+
+    @pytest.mark.usefixtures("_import_wildside")
     def test_component_without_report_has_no_summary(
         self,
         service: ProjectEvidenceBundleService,
@@ -391,6 +487,68 @@ class TestProjectEvidenceBundleService:
         prev = bundle.previous_reports[0]
         assert prev.status == ReportStatus.ON_TRACK
         assert "Milestone reached" in prev.highlights
+
+    @pytest.mark.usefixtures("_import_wildside")
+    def test_previous_project_reports_limit_and_ordering(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """Previous reports respect limit and descending order.
+
+        Creates 3 project-scope reports with distinct window_end values,
+        instantiates the service with max_previous_reports=2, and asserts
+        that only the 2 most recent reports are returned in descending
+        window_end order.
+        """
+        estate_id = _estate_id(session_factory)
+
+        async def _create_project_reports() -> None:
+            async with session_factory() as session:
+                project = ReportProject(
+                    key="wildside",
+                    name="Wildside",
+                    estate_id=estate_id,
+                )
+                session.add(project)
+                await session.flush()
+
+                for month in (1, 2, 3):
+                    report = Report(
+                        scope=ReportScope.PROJECT,
+                        project=project,
+                        window_start=dt.datetime(2024, month, 1, tzinfo=dt.UTC),
+                        window_end=dt.datetime(2024, month, 28, tzinfo=dt.UTC),
+                        generated_at=dt.datetime(2024, month, 28, tzinfo=dt.UTC),
+                        model="test-model",
+                        machine_summary={
+                            "status": "on_track" if month != 1 else "at_risk",
+                            "highlights": [f"Month {month}"],
+                            "risks": [],
+                        },
+                    )
+                    session.add(report)
+                await session.commit()
+
+        asyncio.run(_create_project_reports())
+
+        limited_service = ProjectEvidenceBundleService(
+            catalogue_session_factory=session_factory,
+            gold_session_factory=session_factory,
+            max_previous_reports=2,
+        )
+        bundle = asyncio.run(limited_service.build_bundle("wildside", estate_id))
+
+        assert len(bundle.previous_reports) == 2
+        # Most recent first (descending window_end).
+        assert bundle.previous_reports[0].window_end == dt.datetime(
+            2024, 3, 28, tzinfo=dt.UTC
+        )
+        assert bundle.previous_reports[1].window_end == dt.datetime(
+            2024, 2, 28, tzinfo=dt.UTC
+        )
+        # Oldest report (month 1) should be excluded.
+        window_ends = [r.window_end for r in bundle.previous_reports]
+        assert dt.datetime(2024, 1, 28, tzinfo=dt.UTC) not in window_ends
 
     @pytest.mark.usefixtures("_import_wildside")
     def test_report_from_other_estate_excluded_from_summary(

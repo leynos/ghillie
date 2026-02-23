@@ -57,9 +57,9 @@ After this change:
 
 ## Risks
 
-- Risk: Catalogue and silver/gold ORM models use different `Base` classes.
-  Mitigation: Service accepts two session factories and joins results in Python
-  rather than cross-schema SQL joins.
+- Risk: Catalogue and silver/gold object-relational mapping (ORM) models use
+  different `Base` classes. Mitigation: Service accepts two session factories
+  and joins results in Python rather than cross-schema SQL joins.
 
 - Risk: A component's repository may not have a Silver `Repository` record
   (not yet synced). Mitigation: Missing Silver repositories are handled
@@ -80,8 +80,8 @@ After this change:
 - [x] Add failing unit tests for `ProjectEvidenceBundleService`.
 - [x] Implement `ProjectEvidenceBundleService` in
   `ghillie/evidence/project_service.py`.
-- [x] Write BDD feature (`project_evidence_bundle.feature`) and step
-  definitions.
+- [x] Write behaviour-driven development (BDD) feature
+  (`project_evidence_bundle.feature`) and step definitions.
 - [x] Update `docs/users-guide.md` with project evidence bundle section.
 - [x] Update `docs/ghillie-design.md` with project evidence design
   decisions.

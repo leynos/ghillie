@@ -1487,7 +1487,7 @@ async def main() -> None:
 
     bundle = await service.build_bundle(
         project_key="wildside",
-        estate_id="your-estate-id",
+        estate_id="example-estate-id",
     )
 
     print(f"Project: {bundle.project.name}")
