@@ -17,7 +17,7 @@ from ghillie.catalogue.importer import CatalogueImporter
 from ghillie.catalogue.storage import Estate
 from ghillie.evidence import EvidenceBundleService
 from ghillie.evidence.project_service import ProjectEvidenceBundleService
-from ghillie.gold.storage import Report, ReportScope
+from ghillie.gold.storage import Report, ReportProject, ReportScope
 from ghillie.registry import RepositoryRegistryService
 from ghillie.reporting.config import ReportingConfig
 from ghillie.reporting.service import ReportingService, ReportingServiceDependencies
@@ -322,15 +322,15 @@ async def generated_report(
 WILDSIDE_CATALOGUE = Path("examples/wildside-catalogue.yaml")
 
 
-@pytest.fixture
-def _import_wildside(
+@pytest_asyncio.fixture
+async def _import_wildside(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     """Import the Wildside catalogue into the test database."""
     importer = CatalogueImporter(
         session_factory, estate_key="demo", estate_name="Demo Estate"
     )
-    asyncio.run(importer.import_path(WILDSIDE_CATALOGUE, commit_sha="abc123"))
+    await importer.import_path(WILDSIDE_CATALOGUE, commit_sha="abc123")
 
 
 @pytest.fixture
@@ -344,7 +344,7 @@ def project_evidence_service(
     )
 
 
-def estate_id(
+def get_estate_id(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> str:
     """Retrieve the estate ID from the database."""
@@ -358,7 +358,7 @@ def estate_id(
     return asyncio.run(_get())
 
 
-@dc.dataclass(slots=True)
+@dc.dataclass(frozen=True, slots=True)
 class RepositoryParams:
     """Parameters for creating a Silver Repository linked to catalogue."""
 
@@ -368,15 +368,15 @@ class RepositoryParams:
     estate_id: str
 
 
-@dc.dataclass(slots=True)
+@dc.dataclass(frozen=True, slots=True)
 class ReportSummaryParams:
     """Parameters for creating a Gold Report machine summary."""
 
     status: str = "on_track"
     summary: str = "Progress is on track."
-    highlights: list[str] = dc.field(default_factory=lambda: ["Feature shipped"])
-    risks: list[str] = dc.field(default_factory=list)
-    next_steps: list[str] = dc.field(default_factory=list)
+    highlights: tuple[str, ...] = ("Feature shipped",)
+    risks: tuple[str, ...] = ()
+    next_steps: tuple[str, ...] = ()
 
 
 def create_silver_repo_and_report(
@@ -420,10 +420,21 @@ def create_silver_repo_and_report(
     asyncio.run(_create())
 
 
+@dc.dataclass(frozen=True, slots=True)
+class ReportSpec:
+    """Specification for a single Gold Report in multi-report helpers."""
+
+    window_start: dt.datetime
+    window_end: dt.datetime
+    generated_at: dt.datetime
+    status: str
+    summary: str
+
+
 def create_silver_repo_with_multiple_reports(
     session_factory: async_sessionmaker[AsyncSession],
     repo_params: RepositoryParams,
-    reports: list[tuple[dt.datetime, dt.datetime, dt.datetime, str, str]],
+    reports: list[ReportSpec],
 ) -> None:
     """Create a Silver Repository with multiple Gold Reports.
 
@@ -434,8 +445,7 @@ def create_silver_repo_with_multiple_reports(
     repo_params
         Repository creation parameters.
     reports
-        List of ``(window_start, window_end, generated_at, status, summary)``
-        tuples for each report to create.
+        List of report specifications to create.
 
     """
 
@@ -453,17 +463,17 @@ def create_silver_repo_with_multiple_reports(
             await session.flush()
 
             report_objects = []
-            for window_start, window_end, generated_at, status, summary in reports:
+            for spec in reports:
                 report = Report(
                     scope=ReportScope.REPOSITORY,
                     repository_id=silver_repo.id,
-                    window_start=window_start,
-                    window_end=window_end,
-                    generated_at=generated_at,
+                    window_start=spec.window_start,
+                    window_end=spec.window_end,
+                    generated_at=spec.generated_at,
                     model="test-model",
                     machine_summary={
-                        "status": status,
-                        "summary": summary,
+                        "status": spec.status,
+                        "summary": spec.summary,
                         "highlights": [],
                         "risks": [],
                         "next_steps": [],
@@ -518,6 +528,65 @@ def create_silver_repo_and_report_raw(
                 window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
                 model="test-model",
                 machine_summary=machine_summary,
+            )
+            session.add(report)
+            await session.commit()
+
+    asyncio.run(_create())
+
+
+@dc.dataclass(frozen=True, slots=True)
+class ProjectReportParams:
+    """Parameters for creating a project-scope Gold Report."""
+
+    project_key: str
+    project_name: str
+    estate_id: str
+    window_start: dt.datetime
+    window_end: dt.datetime
+    generated_at: dt.datetime | None = None
+    status: str = "on_track"
+    highlights: tuple[str, ...] = ()
+    risks: tuple[str, ...] = ()
+
+
+def create_project_report(
+    session_factory: async_sessionmaker[AsyncSession],
+    params: ProjectReportParams,
+) -> None:
+    """Create a ReportProject (if needed) and a project-scope Gold Report.
+
+    Re-uses an existing ``ReportProject`` when one with the given *project_key*
+    already exists, allowing multiple reports to be created for the same project
+    across successive calls.
+    """
+
+    async def _create() -> None:
+        async with session_factory() as session:
+            project = await session.scalar(
+                select(ReportProject).where(ReportProject.key == params.project_key)
+            )
+            if project is None:
+                project = ReportProject(
+                    key=params.project_key,
+                    name=params.project_name,
+                    estate_id=params.estate_id,
+                )
+                session.add(project)
+                await session.flush()
+
+            report = Report(
+                scope=ReportScope.PROJECT,
+                project=project,
+                window_start=params.window_start,
+                window_end=params.window_end,
+                generated_at=params.generated_at,
+                model="test-model",
+                machine_summary={
+                    "status": params.status,
+                    "highlights": list(params.highlights),
+                    "risks": list(params.risks),
+                },
             )
             session.add(report)
             await session.commit()

@@ -10,15 +10,17 @@ import pytest
 
 from ghillie.evidence.models import ProjectEvidenceBundle, ReportStatus
 from ghillie.evidence.project_service import ProjectEvidenceBundleService
-from ghillie.gold.storage import Report, ReportProject, ReportScope
 from tests.unit.conftest import (
+    ProjectReportParams,
+    ReportSpec,
     ReportSummaryParams,
     RepositoryParams,
+    create_project_report,
     create_silver_repo_and_report,
     create_silver_repo_and_report_raw,
     create_silver_repo_with_multiple_reports,
-    estate_id,
     get_catalogue_repo_ids,
+    get_estate_id,
 )
 
 if typ.TYPE_CHECKING:
@@ -72,7 +74,7 @@ class TestStatusMappingViaBuildBundle:
             The ``ReportStatus`` enum member expected after mapping.
 
         """
-        eid = estate_id(session_factory)
+        eid = get_estate_id(session_factory)
         repo_ids = get_catalogue_repo_ids(session_factory)
 
         create_silver_repo_and_report_raw(
@@ -113,7 +115,7 @@ class TestProjectEvidenceBundleService:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> ProjectEvidenceBundle:
         """Build and return a bundle for the Wildside project."""
-        eid = estate_id(session_factory)
+        eid = get_estate_id(session_factory)
         return asyncio.run(service.build_bundle("wildside", eid))
 
     @pytest.mark.usefixtures("_import_wildside")
@@ -123,7 +125,7 @@ class TestProjectEvidenceBundleService:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Requesting a nonexistent project raises ValueError."""
-        eid = estate_id(session_factory)
+        eid = get_estate_id(session_factory)
 
         with pytest.raises(ValueError, match="not found"):
             asyncio.run(project_evidence_service.build_bundle("nonexistent", eid))
@@ -223,7 +225,7 @@ class TestProjectEvidenceBundleService:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Component's repository summary is populated from Gold report."""
-        eid = estate_id(session_factory)
+        eid = get_estate_id(session_factory)
         repo_ids = get_catalogue_repo_ids(session_factory)
 
         create_silver_repo_and_report(
@@ -237,7 +239,7 @@ class TestProjectEvidenceBundleService:
             ReportSummaryParams(
                 status="on_track",
                 summary="Good progress.",
-                highlights=["Shipped v2.0"],
+                highlights=("Shipped v2.0",),
             ),
         )
 
@@ -269,7 +271,7 @@ class TestProjectEvidenceBundleService:
         generated_at timestamps and asserts only the latest one is
         reflected in the component's repository_summary.
         """
-        eid = estate_id(session_factory)
+        eid = get_estate_id(session_factory)
         repo_ids = get_catalogue_repo_ids(session_factory)
 
         create_silver_repo_with_multiple_reports(
@@ -281,19 +283,19 @@ class TestProjectEvidenceBundleService:
                 estate_id=eid,
             ),
             reports=[
-                (
-                    dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
-                    dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
-                    dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
-                    "at_risk",
-                    "Older report.",
+                ReportSpec(
+                    window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                    window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+                    generated_at=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+                    status="at_risk",
+                    summary="Older report.",
                 ),
-                (
-                    dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
-                    dt.datetime(2024, 7, 15, tzinfo=dt.UTC),
-                    dt.datetime(2024, 7, 15, tzinfo=dt.UTC),
-                    "on_track",
-                    "Newer report.",
+                ReportSpec(
+                    window_start=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+                    window_end=dt.datetime(2024, 7, 15, tzinfo=dt.UTC),
+                    generated_at=dt.datetime(2024, 7, 15, tzinfo=dt.UTC),
+                    status="on_track",
+                    summary="Newer report.",
                 ),
             ],
         )
@@ -411,32 +413,20 @@ class TestProjectEvidenceBundleService:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Bundle includes previous project-scope reports when they exist."""
-        eid = estate_id(session_factory)
+        eid = get_estate_id(session_factory)
 
-        # Create a previous project report
-        async def _create_project_report() -> None:
-            async with session_factory() as session:
-                project = ReportProject(
-                    key="wildside",
-                    name="Wildside",
-                    estate_id=eid,
-                )
-                report = Report(
-                    scope=ReportScope.PROJECT,
-                    project=project,
-                    window_start=dt.datetime(2024, 6, 24, tzinfo=dt.UTC),
-                    window_end=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
-                    model="test-model",
-                    machine_summary={
-                        "status": "on_track",
-                        "highlights": ["Milestone reached"],
-                        "risks": ["Dependency risk"],
-                    },
-                )
-                session.add_all([project, report])
-                await session.commit()
-
-        asyncio.run(_create_project_report())
+        create_project_report(
+            session_factory,
+            ProjectReportParams(
+                project_key="wildside",
+                project_name="Wildside",
+                estate_id=eid,
+                window_start=dt.datetime(2024, 6, 24, tzinfo=dt.UTC),
+                window_end=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                highlights=("Milestone reached",),
+                risks=("Dependency risk",),
+            ),
+        )
 
         bundle = asyncio.run(project_evidence_service.build_bundle("wildside", eid))
 
@@ -463,36 +453,22 @@ class TestProjectEvidenceBundleService:
         that only the 2 most recent reports are returned in descending
         window_end order.
         """
-        eid = estate_id(session_factory)
+        eid = get_estate_id(session_factory)
 
-        async def _create_project_reports() -> None:
-            async with session_factory() as session:
-                project = ReportProject(
-                    key="wildside",
-                    name="Wildside",
+        for month in (1, 2, 3):
+            create_project_report(
+                session_factory,
+                ProjectReportParams(
+                    project_key="wildside",
+                    project_name="Wildside",
                     estate_id=eid,
-                )
-                session.add(project)
-                await session.flush()
-
-                for month in (1, 2, 3):
-                    report = Report(
-                        scope=ReportScope.PROJECT,
-                        project=project,
-                        window_start=dt.datetime(2024, month, 1, tzinfo=dt.UTC),
-                        window_end=dt.datetime(2024, month, 28, tzinfo=dt.UTC),
-                        generated_at=dt.datetime(2024, month, 28, tzinfo=dt.UTC),
-                        model="test-model",
-                        machine_summary={
-                            "status": ("on_track" if month != 1 else "at_risk"),
-                            "highlights": [f"Month {month}"],
-                            "risks": [],
-                        },
-                    )
-                    session.add(report)
-                await session.commit()
-
-        asyncio.run(_create_project_reports())
+                    window_start=dt.datetime(2024, month, 1, tzinfo=dt.UTC),
+                    window_end=dt.datetime(2024, month, 28, tzinfo=dt.UTC),
+                    generated_at=dt.datetime(2024, month, 28, tzinfo=dt.UTC),
+                    status="at_risk" if month == 1 else "on_track",
+                    highlights=(f"Month {month}",),
+                ),
+            )
 
         limited_service = ProjectEvidenceBundleService(
             catalogue_session_factory=session_factory,
@@ -524,7 +500,7 @@ class TestProjectEvidenceBundleService:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Repository report from another estate is not attached to bundle."""
-        eid = estate_id(session_factory)
+        eid = get_estate_id(session_factory)
         repo_ids = get_catalogue_repo_ids(session_factory)
 
         # Create a Silver repo + report in a *different* estate that
@@ -557,32 +533,20 @@ class TestProjectEvidenceBundleService:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Previous project reports from another estate are excluded."""
-        eid = estate_id(session_factory)
+        eid = get_estate_id(session_factory)
 
         # Create a ReportProject for "wildside" in a different estate.
-        async def _create_other_estate_report() -> None:
-            async with session_factory() as session:
-                project = ReportProject(
-                    key="wildside-other",
-                    name="Wildside",
-                    estate_id="other-estate-id",
-                )
-                report = Report(
-                    scope=ReportScope.PROJECT,
-                    project=project,
-                    window_start=dt.datetime(2024, 6, 24, tzinfo=dt.UTC),
-                    window_end=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
-                    model="test-model",
-                    machine_summary={
-                        "status": "on_track",
-                        "highlights": ["Should not appear"],
-                        "risks": [],
-                    },
-                )
-                session.add_all([project, report])
-                await session.commit()
-
-        asyncio.run(_create_other_estate_report())
+        create_project_report(
+            session_factory,
+            ProjectReportParams(
+                project_key="wildside-other",
+                project_name="Wildside",
+                estate_id="other-estate-id",
+                window_start=dt.datetime(2024, 6, 24, tzinfo=dt.UTC),
+                window_end=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                highlights=("Should not appear",),
+            ),
+        )
 
         bundle = asyncio.run(project_evidence_service.build_bundle("wildside", eid))
 
