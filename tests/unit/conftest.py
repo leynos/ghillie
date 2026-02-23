@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses as dc
 import datetime as dt
 import typing as typ
@@ -12,8 +13,11 @@ import pytest_asyncio
 from sqlalchemy import select
 
 from ghillie.bronze import RawEventWriter
+from ghillie.catalogue.importer import CatalogueImporter
 from ghillie.catalogue.storage import Estate
 from ghillie.evidence import EvidenceBundleService
+from ghillie.evidence.project_service import ProjectEvidenceBundleService
+from ghillie.gold.storage import Report, ReportScope
 from ghillie.registry import RepositoryRegistryService
 from ghillie.reporting.config import ReportingConfig
 from ghillie.reporting.service import ReportingService, ReportingServiceDependencies
@@ -26,8 +30,6 @@ if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
-    from ghillie.gold import Report
 
 
 def _find_repo_root(start: Path) -> Path:
@@ -311,3 +313,213 @@ async def generated_report(
     )
 
     return report, repo_id
+
+
+# ---------------------------------------------------------------------------
+# Project evidence fixtures and helpers
+# ---------------------------------------------------------------------------
+
+WILDSIDE_CATALOGUE = Path("examples/wildside-catalogue.yaml")
+
+
+@pytest.fixture
+def _import_wildside(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Import the Wildside catalogue into the test database."""
+    importer = CatalogueImporter(
+        session_factory, estate_key="demo", estate_name="Demo Estate"
+    )
+    asyncio.run(importer.import_path(WILDSIDE_CATALOGUE, commit_sha="abc123"))
+
+
+@pytest.fixture
+def project_evidence_service(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> ProjectEvidenceBundleService:
+    """Create a ProjectEvidenceBundleService backed by the test database."""
+    return ProjectEvidenceBundleService(
+        catalogue_session_factory=session_factory,
+        gold_session_factory=session_factory,
+    )
+
+
+def estate_id(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> str:
+    """Retrieve the estate ID from the database."""
+
+    async def _get() -> str:
+        async with session_factory() as session:
+            est = await session.scalar(select(Estate))
+            assert est is not None, "expected an Estate record in DB"  # noqa: S101
+            return est.id
+
+    return asyncio.run(_get())
+
+
+@dc.dataclass(slots=True)
+class RepositoryParams:
+    """Parameters for creating a Silver Repository linked to catalogue."""
+
+    owner: str
+    name: str
+    catalogue_repository_id: str
+    estate_id: str
+
+
+@dc.dataclass(slots=True)
+class ReportSummaryParams:
+    """Parameters for creating a Gold Report machine summary."""
+
+    status: str = "on_track"
+    summary: str = "Progress is on track."
+    highlights: list[str] = dc.field(default_factory=lambda: ["Feature shipped"])
+    risks: list[str] = dc.field(default_factory=list)
+    next_steps: list[str] = dc.field(default_factory=list)
+
+
+def create_silver_repo_and_report(
+    session_factory: async_sessionmaker[AsyncSession],
+    repo_params: RepositoryParams,
+    report_params: ReportSummaryParams | None = None,
+) -> None:
+    """Create a Silver Repository linked to catalogue, and a Gold Report."""
+    rp = report_params or ReportSummaryParams()
+
+    async def _create() -> None:
+        async with session_factory() as session:
+            silver_repo = Repository(
+                github_owner=repo_params.owner,
+                github_name=repo_params.name,
+                default_branch="main",
+                estate_id=repo_params.estate_id,
+                catalogue_repository_id=repo_params.catalogue_repository_id,
+                ingestion_enabled=True,
+            )
+            session.add(silver_repo)
+            await session.flush()
+
+            report = Report(
+                scope=ReportScope.REPOSITORY,
+                repository_id=silver_repo.id,
+                window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+                model="test-model",
+                machine_summary={
+                    "status": rp.status,
+                    "summary": rp.summary,
+                    "highlights": rp.highlights,
+                    "risks": rp.risks,
+                    "next_steps": rp.next_steps,
+                },
+            )
+            session.add(report)
+            await session.commit()
+
+    asyncio.run(_create())
+
+
+def create_silver_repo_with_multiple_reports(
+    session_factory: async_sessionmaker[AsyncSession],
+    repo_params: RepositoryParams,
+    reports: list[tuple[dt.datetime, dt.datetime, dt.datetime, str, str]],
+) -> None:
+    """Create a Silver Repository with multiple Gold Reports.
+
+    Parameters
+    ----------
+    session_factory
+        Async session factory for database access.
+    repo_params
+        Repository creation parameters.
+    reports
+        List of ``(window_start, window_end, generated_at, status, summary)``
+        tuples for each report to create.
+
+    """
+
+    async def _create() -> None:
+        async with session_factory() as session:
+            silver_repo = Repository(
+                github_owner=repo_params.owner,
+                github_name=repo_params.name,
+                default_branch="main",
+                estate_id=repo_params.estate_id,
+                catalogue_repository_id=repo_params.catalogue_repository_id,
+                ingestion_enabled=True,
+            )
+            session.add(silver_repo)
+            await session.flush()
+
+            report_objects = []
+            for window_start, window_end, generated_at, status, summary in reports:
+                report = Report(
+                    scope=ReportScope.REPOSITORY,
+                    repository_id=silver_repo.id,
+                    window_start=window_start,
+                    window_end=window_end,
+                    generated_at=generated_at,
+                    model="test-model",
+                    machine_summary={
+                        "status": status,
+                        "summary": summary,
+                        "highlights": [],
+                        "risks": [],
+                        "next_steps": [],
+                    },
+                )
+                report_objects.append(report)
+
+            session.add_all(report_objects)
+            await session.commit()
+
+    asyncio.run(_create())
+
+
+def get_catalogue_repo_ids(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> dict[str, str]:
+    """Return a dict mapping owner/name slugs to catalogue repository IDs."""
+    from ghillie.catalogue.storage import RepositoryRecord
+
+    async def _get() -> dict[str, str]:
+        async with session_factory() as session:
+            repos = (await session.scalars(select(RepositoryRecord))).all()
+            return {f"{r.owner}/{r.name}": r.id for r in repos}
+
+    return asyncio.run(_get())
+
+
+def create_silver_repo_and_report_raw(
+    session_factory: async_sessionmaker[AsyncSession],
+    repo_params: RepositoryParams,
+    machine_summary: dict[str, object],
+) -> None:
+    """Create a Silver Repository and Gold Report with an arbitrary machine_summary."""
+
+    async def _create() -> None:
+        async with session_factory() as session:
+            silver_repo = Repository(
+                github_owner=repo_params.owner,
+                github_name=repo_params.name,
+                default_branch="main",
+                estate_id=repo_params.estate_id,
+                catalogue_repository_id=repo_params.catalogue_repository_id,
+                ingestion_enabled=True,
+            )
+            session.add(silver_repo)
+            await session.flush()
+
+            report = Report(
+                scope=ReportScope.REPOSITORY,
+                repository_id=silver_repo.id,
+                window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+                model="test-model",
+                machine_summary=machine_summary,
+            )
+            session.add(report)
+            await session.commit()
+
+    asyncio.run(_create())

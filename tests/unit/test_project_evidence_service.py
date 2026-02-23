@@ -3,234 +3,26 @@
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 import datetime as dt
 import typing as typ
-from pathlib import Path
 
 import pytest
 
-from ghillie.catalogue.importer import CatalogueImporter
 from ghillie.evidence.models import ProjectEvidenceBundle, ReportStatus
 from ghillie.evidence.project_service import ProjectEvidenceBundleService
 from ghillie.gold.storage import Report, ReportProject, ReportScope
-from ghillie.silver.storage import Repository
+from tests.unit.conftest import (
+    ReportSummaryParams,
+    RepositoryParams,
+    create_silver_repo_and_report,
+    create_silver_repo_and_report_raw,
+    create_silver_repo_with_multiple_reports,
+    estate_id,
+    get_catalogue_repo_ids,
+)
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
-
-WILDSIDE_CATALOGUE = Path("examples/wildside-catalogue.yaml")
-
-
-@pytest.fixture
-def _import_wildside(
-    session_factory: async_sessionmaker[AsyncSession],
-) -> None:
-    """Import the Wildside catalogue into the test database."""
-    importer = CatalogueImporter(
-        session_factory, estate_key="demo", estate_name="Demo Estate"
-    )
-    asyncio.run(importer.import_path(WILDSIDE_CATALOGUE, commit_sha="abc123"))
-
-
-@pytest.fixture
-def service(
-    session_factory: async_sessionmaker[AsyncSession],
-) -> ProjectEvidenceBundleService:
-    """Create a ProjectEvidenceBundleService backed by the test database."""
-    return ProjectEvidenceBundleService(
-        catalogue_session_factory=session_factory,
-        gold_session_factory=session_factory,
-    )
-
-
-def _estate_id(
-    session_factory: async_sessionmaker[AsyncSession],
-) -> str:
-    """Retrieve the estate ID from the database."""
-    from ghillie.catalogue.storage import Estate
-
-    async def _get() -> str:
-        async with session_factory() as session:
-            from sqlalchemy import select
-
-            estate = await session.scalar(select(Estate))
-            assert estate is not None, "expected an Estate record in DB"
-            return estate.id
-
-    return asyncio.run(_get())
-
-
-@dataclasses.dataclass(slots=True)
-class RepositoryParams:
-    """Parameters for creating a Silver Repository linked to catalogue."""
-
-    owner: str
-    name: str
-    catalogue_repository_id: str
-    estate_id: str
-
-
-@dataclasses.dataclass(slots=True)
-class ReportSummaryParams:
-    """Parameters for creating a Gold Report machine summary."""
-
-    status: str = "on_track"
-    summary: str = "Progress is on track."
-    highlights: list[str] = dataclasses.field(
-        default_factory=lambda: ["Feature shipped"]
-    )
-    risks: list[str] = dataclasses.field(default_factory=list)
-    next_steps: list[str] = dataclasses.field(default_factory=list)
-
-
-def _create_silver_repo_and_report(
-    session_factory: async_sessionmaker[AsyncSession],
-    repo_params: RepositoryParams,
-    report_params: ReportSummaryParams | None = None,
-) -> None:
-    """Create a Silver Repository linked to catalogue, and a Gold Report."""
-    rp = report_params or ReportSummaryParams()
-
-    async def _create() -> None:
-        async with session_factory() as session:
-            silver_repo = Repository(
-                github_owner=repo_params.owner,
-                github_name=repo_params.name,
-                default_branch="main",
-                estate_id=repo_params.estate_id,
-                catalogue_repository_id=repo_params.catalogue_repository_id,
-                ingestion_enabled=True,
-            )
-            session.add(silver_repo)
-            await session.flush()
-
-            report = Report(
-                scope=ReportScope.REPOSITORY,
-                repository_id=silver_repo.id,
-                window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
-                window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
-                model="test-model",
-                machine_summary={
-                    "status": rp.status,
-                    "summary": rp.summary,
-                    "highlights": rp.highlights,
-                    "risks": rp.risks,
-                    "next_steps": rp.next_steps,
-                },
-            )
-            session.add(report)
-            await session.commit()
-
-    asyncio.run(_create())
-
-
-def _create_silver_repo_with_multiple_reports(
-    session_factory: async_sessionmaker[AsyncSession],
-    repo_params: RepositoryParams,
-    reports: list[tuple[dt.datetime, dt.datetime, dt.datetime, str, str]],
-) -> None:
-    """Create a Silver Repository with multiple Gold Reports.
-
-    Parameters
-    ----------
-    session_factory
-        Async session factory for database access.
-    repo_params
-        Repository creation parameters.
-    reports
-        List of ``(window_start, window_end, generated_at, status, summary)``
-        tuples for each report to create.
-
-    """
-
-    async def _create() -> None:
-        async with session_factory() as session:
-            silver_repo = Repository(
-                github_owner=repo_params.owner,
-                github_name=repo_params.name,
-                default_branch="main",
-                estate_id=repo_params.estate_id,
-                catalogue_repository_id=repo_params.catalogue_repository_id,
-                ingestion_enabled=True,
-            )
-            session.add(silver_repo)
-            await session.flush()
-
-            report_objects = []
-            for window_start, window_end, generated_at, status, summary in reports:
-                report = Report(
-                    scope=ReportScope.REPOSITORY,
-                    repository_id=silver_repo.id,
-                    window_start=window_start,
-                    window_end=window_end,
-                    generated_at=generated_at,
-                    model="test-model",
-                    machine_summary={
-                        "status": status,
-                        "summary": summary,
-                        "highlights": [],
-                        "risks": [],
-                        "next_steps": [],
-                    },
-                )
-                report_objects.append(report)
-
-            session.add_all(report_objects)
-            await session.commit()
-
-    asyncio.run(_create())
-
-
-def _get_catalogue_repo_ids(
-    session_factory: async_sessionmaker[AsyncSession],
-) -> dict[str, str]:
-    """Return a dict mapping owner/name slugs to catalogue repository IDs."""
-    from ghillie.catalogue.storage import RepositoryRecord
-
-    async def _get() -> dict[str, str]:
-        from sqlalchemy import select
-
-        async with session_factory() as session:
-            repos = (await session.scalars(select(RepositoryRecord))).all()
-            return {f"{r.owner}/{r.name}": r.id for r in repos}
-
-    return asyncio.run(_get())
-
-
-def _create_silver_repo_and_report_raw(
-    session_factory: async_sessionmaker[AsyncSession],
-    repo_params: RepositoryParams,
-    machine_summary: dict[str, object],
-) -> None:
-    """Create a Silver Repository and Gold Report with an arbitrary machine_summary."""
-
-    async def _create() -> None:
-        async with session_factory() as session:
-            silver_repo = Repository(
-                github_owner=repo_params.owner,
-                github_name=repo_params.name,
-                default_branch="main",
-                estate_id=repo_params.estate_id,
-                catalogue_repository_id=repo_params.catalogue_repository_id,
-                ingestion_enabled=True,
-            )
-            session.add(silver_repo)
-            await session.flush()
-
-            report = Report(
-                scope=ReportScope.REPOSITORY,
-                repository_id=silver_repo.id,
-                window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
-                window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
-                model="test-model",
-                machine_summary=machine_summary,
-            )
-            session.add(report)
-            await session.commit()
-
-    asyncio.run(_create())
 
 
 class TestStatusMappingViaBuildBundle:
@@ -261,7 +53,7 @@ class TestStatusMappingViaBuildBundle:
     @pytest.mark.usefixtures("_import_wildside")
     def test_status_mapping_from_reports(
         self,
-        service: ProjectEvidenceBundleService,
+        project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
         machine_summary_status: object,
         expected_status: ReportStatus,
@@ -270,7 +62,7 @@ class TestStatusMappingViaBuildBundle:
 
         Parameters
         ----------
-        service
+        project_evidence_service
             The service under test.
         session_factory
             Async session factory for database access.
@@ -280,16 +72,16 @@ class TestStatusMappingViaBuildBundle:
             The ``ReportStatus`` enum member expected after mapping.
 
         """
-        estate_id = _estate_id(session_factory)
-        repo_ids = _get_catalogue_repo_ids(session_factory)
+        eid = estate_id(session_factory)
+        repo_ids = get_catalogue_repo_ids(session_factory)
 
-        _create_silver_repo_and_report_raw(
+        create_silver_repo_and_report_raw(
             session_factory,
             RepositoryParams(
                 owner="leynos",
                 name="wildside",
                 catalogue_repository_id=repo_ids["leynos/wildside"],
-                estate_id=estate_id,
+                estate_id=eid,
             ),
             machine_summary={
                 "status": machine_summary_status,
@@ -300,7 +92,7 @@ class TestStatusMappingViaBuildBundle:
             },
         )
 
-        bundle = asyncio.run(service.build_bundle("wildside", estate_id))
+        bundle = asyncio.run(project_evidence_service.build_bundle("wildside", eid))
         core = next(c for c in bundle.components if c.key == "wildside-core")
 
         assert core.repository_summary is not None, (
@@ -321,29 +113,29 @@ class TestProjectEvidenceBundleService:
         session_factory: async_sessionmaker[AsyncSession],
     ) -> ProjectEvidenceBundle:
         """Build and return a bundle for the Wildside project."""
-        estate_id = _estate_id(session_factory)
-        return asyncio.run(service.build_bundle("wildside", estate_id))
+        eid = estate_id(session_factory)
+        return asyncio.run(service.build_bundle("wildside", eid))
 
     @pytest.mark.usefixtures("_import_wildside")
     def test_project_not_found_raises_value_error(
         self,
-        service: ProjectEvidenceBundleService,
+        project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Requesting a nonexistent project raises ValueError."""
-        estate_id = _estate_id(session_factory)
+        eid = estate_id(session_factory)
 
         with pytest.raises(ValueError, match="not found"):
-            asyncio.run(service.build_bundle("nonexistent", estate_id))
+            asyncio.run(project_evidence_service.build_bundle("nonexistent", eid))
 
     @pytest.mark.usefixtures("_import_wildside")
     def test_bundle_contains_project_metadata(
         self,
-        service: ProjectEvidenceBundleService,
+        project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Bundle project metadata matches catalogue data."""
-        bundle = self._build_wildside_bundle(service, session_factory)
+        bundle = self._build_wildside_bundle(project_evidence_service, session_factory)
 
         assert bundle.project.key == "wildside", "project key mismatch"
         assert bundle.project.name == "Wildside", "project name mismatch"
@@ -353,11 +145,11 @@ class TestProjectEvidenceBundleService:
     @pytest.mark.usefixtures("_import_wildside")
     def test_bundle_contains_all_components(
         self,
-        service: ProjectEvidenceBundleService,
+        project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Bundle includes all components from the catalogue."""
-        bundle = self._build_wildside_bundle(service, session_factory)
+        bundle = self._build_wildside_bundle(project_evidence_service, session_factory)
 
         assert bundle.component_count == 4, (
             f"expected 4 components, got {bundle.component_count}"
@@ -373,11 +165,11 @@ class TestProjectEvidenceBundleService:
     @pytest.mark.usefixtures("_import_wildside")
     def test_bundle_lifecycle_stages(
         self,
-        service: ProjectEvidenceBundleService,
+        project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Components reflect their catalogue lifecycle stages."""
-        bundle = self._build_wildside_bundle(service, session_factory)
+        bundle = self._build_wildside_bundle(project_evidence_service, session_factory)
 
         assert len(bundle.active_components) == 3, (
             f"expected 3 active components, got {len(bundle.active_components)}"
@@ -392,11 +184,11 @@ class TestProjectEvidenceBundleService:
     @pytest.mark.usefixtures("_import_wildside")
     def test_planned_component_has_no_repository(
         self,
-        service: ProjectEvidenceBundleService,
+        project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Planned components without repos have no repository_slug."""
-        bundle = self._build_wildside_bundle(service, session_factory)
+        bundle = self._build_wildside_bundle(project_evidence_service, session_factory)
 
         ingestion = next(c for c in bundle.components if c.key == "wildside-ingestion")
         assert ingestion.has_repository is False, (
@@ -412,11 +204,11 @@ class TestProjectEvidenceBundleService:
     @pytest.mark.usefixtures("_import_wildside")
     def test_active_component_has_repository_slug(
         self,
-        service: ProjectEvidenceBundleService,
+        project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Active components with repos have repository_slug populated."""
-        bundle = self._build_wildside_bundle(service, session_factory)
+        bundle = self._build_wildside_bundle(project_evidence_service, session_factory)
 
         core = next(c for c in bundle.components if c.key == "wildside-core")
         assert core.has_repository is True, "wildside-core should have a repository"
@@ -427,20 +219,20 @@ class TestProjectEvidenceBundleService:
     @pytest.mark.usefixtures("_import_wildside")
     def test_component_with_report_has_summary(
         self,
-        service: ProjectEvidenceBundleService,
+        project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Component's repository summary is populated from Gold report."""
-        estate_id = _estate_id(session_factory)
-        repo_ids = _get_catalogue_repo_ids(session_factory)
+        eid = estate_id(session_factory)
+        repo_ids = get_catalogue_repo_ids(session_factory)
 
-        _create_silver_repo_and_report(
+        create_silver_repo_and_report(
             session_factory,
             RepositoryParams(
                 owner="leynos",
                 name="wildside",
                 catalogue_repository_id=repo_ids["leynos/wildside"],
-                estate_id=estate_id,
+                estate_id=eid,
             ),
             ReportSummaryParams(
                 status="on_track",
@@ -449,7 +241,7 @@ class TestProjectEvidenceBundleService:
             ),
         )
 
-        bundle = asyncio.run(service.build_bundle("wildside", estate_id))
+        bundle = asyncio.run(project_evidence_service.build_bundle("wildside", eid))
 
         core = next(c for c in bundle.components if c.key == "wildside-core")
         assert core.repository_summary is not None, (
@@ -468,7 +260,7 @@ class TestProjectEvidenceBundleService:
     @pytest.mark.usefixtures("_import_wildside")
     def test_component_repository_summary_uses_latest_report(
         self,
-        service: ProjectEvidenceBundleService,
+        project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Repository summary uses the latest report when multiple exist.
@@ -477,16 +269,16 @@ class TestProjectEvidenceBundleService:
         generated_at timestamps and asserts only the latest one is
         reflected in the component's repository_summary.
         """
-        estate_id = _estate_id(session_factory)
-        repo_ids = _get_catalogue_repo_ids(session_factory)
+        eid = estate_id(session_factory)
+        repo_ids = get_catalogue_repo_ids(session_factory)
 
-        _create_silver_repo_with_multiple_reports(
+        create_silver_repo_with_multiple_reports(
             session_factory,
             repo_params=RepositoryParams(
                 owner="leynos",
                 name="wildside",
                 catalogue_repository_id=repo_ids["leynos/wildside"],
-                estate_id=estate_id,
+                estate_id=eid,
             ),
             reports=[
                 (
@@ -506,7 +298,7 @@ class TestProjectEvidenceBundleService:
             ],
         )
 
-        bundle = asyncio.run(service.build_bundle("wildside", estate_id))
+        bundle = asyncio.run(project_evidence_service.build_bundle("wildside", eid))
         core = next(c for c in bundle.components if c.key == "wildside-core")
 
         assert core.repository_summary is not None, (
@@ -525,11 +317,11 @@ class TestProjectEvidenceBundleService:
     @pytest.mark.usefixtures("_import_wildside")
     def test_component_without_report_has_no_summary(
         self,
-        service: ProjectEvidenceBundleService,
+        project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Component with repo but no report has summary=None."""
-        bundle = self._build_wildside_bundle(service, session_factory)
+        bundle = self._build_wildside_bundle(project_evidence_service, session_factory)
 
         # No Silver repos or Gold reports created, so all summaries should
         # be None even for components with catalogue repos.
@@ -541,11 +333,11 @@ class TestProjectEvidenceBundleService:
     @pytest.mark.usefixtures("_import_wildside")
     def test_bundle_contains_dependency_edges(
         self,
-        service: ProjectEvidenceBundleService,
+        project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Bundle includes dependency edges from the component graph."""
-        bundle = self._build_wildside_bundle(service, session_factory)
+        bundle = self._build_wildside_bundle(project_evidence_service, session_factory)
 
         assert len(bundle.dependencies) > 0, "expected at least one dependency edge"
         # wildside-core depends_on wildside-engine
@@ -566,7 +358,7 @@ class TestProjectEvidenceBundleService:
     @pytest.mark.usefixtures("_import_wildside")
     def test_cross_project_blocked_by_edges_excluded(
         self,
-        service: ProjectEvidenceBundleService,
+        project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Cross-project blocked_by edges are excluded from the bundle.
@@ -575,7 +367,7 @@ class TestProjectEvidenceBundleService:
         belongs to df12-foundations. This edge should not appear in the
         Wildside project bundle.
         """
-        bundle = self._build_wildside_bundle(service, session_factory)
+        bundle = self._build_wildside_bundle(project_evidence_service, session_factory)
 
         blocked = bundle.blocked_dependencies
         # ortho-config is in df12-foundations, not wildside, so the
@@ -593,11 +385,11 @@ class TestProjectEvidenceBundleService:
     @pytest.mark.usefixtures("_import_wildside")
     def test_bundle_contains_emits_events_to_edges(
         self,
-        service: ProjectEvidenceBundleService,
+        project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Bundle includes emits_events_to edges."""
-        bundle = self._build_wildside_bundle(service, session_factory)
+        bundle = self._build_wildside_bundle(project_evidence_service, session_factory)
 
         emits = [d for d in bundle.dependencies if d.relationship == "emits_events_to"]
         assert len(emits) >= 1, "expected at least one emits_events_to edge"
@@ -615,11 +407,11 @@ class TestProjectEvidenceBundleService:
     @pytest.mark.usefixtures("_import_wildside")
     def test_bundle_includes_previous_project_reports(
         self,
-        service: ProjectEvidenceBundleService,
+        project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Bundle includes previous project-scope reports when they exist."""
-        estate_id = _estate_id(session_factory)
+        eid = estate_id(session_factory)
 
         # Create a previous project report
         async def _create_project_report() -> None:
@@ -627,7 +419,7 @@ class TestProjectEvidenceBundleService:
                 project = ReportProject(
                     key="wildside",
                     name="Wildside",
-                    estate_id=estate_id,
+                    estate_id=eid,
                 )
                 report = Report(
                     scope=ReportScope.PROJECT,
@@ -646,7 +438,7 @@ class TestProjectEvidenceBundleService:
 
         asyncio.run(_create_project_report())
 
-        bundle = asyncio.run(service.build_bundle("wildside", estate_id))
+        bundle = asyncio.run(project_evidence_service.build_bundle("wildside", eid))
 
         assert len(bundle.previous_reports) == 1, (
             f"expected 1 previous report, got {len(bundle.previous_reports)}"
@@ -671,14 +463,14 @@ class TestProjectEvidenceBundleService:
         that only the 2 most recent reports are returned in descending
         window_end order.
         """
-        estate_id = _estate_id(session_factory)
+        eid = estate_id(session_factory)
 
         async def _create_project_reports() -> None:
             async with session_factory() as session:
                 project = ReportProject(
                     key="wildside",
                     name="Wildside",
-                    estate_id=estate_id,
+                    estate_id=eid,
                 )
                 session.add(project)
                 await session.flush()
@@ -692,7 +484,7 @@ class TestProjectEvidenceBundleService:
                         generated_at=dt.datetime(2024, month, 28, tzinfo=dt.UTC),
                         model="test-model",
                         machine_summary={
-                            "status": "on_track" if month != 1 else "at_risk",
+                            "status": ("on_track" if month != 1 else "at_risk"),
                             "highlights": [f"Month {month}"],
                             "risks": [],
                         },
@@ -707,7 +499,7 @@ class TestProjectEvidenceBundleService:
             gold_session_factory=session_factory,
             max_previous_reports=2,
         )
-        bundle = asyncio.run(limited_service.build_bundle("wildside", estate_id))
+        bundle = asyncio.run(limited_service.build_bundle("wildside", eid))
 
         assert len(bundle.previous_reports) == 2, (
             f"expected 2 previous reports, got {len(bundle.previous_reports)}"
@@ -728,16 +520,16 @@ class TestProjectEvidenceBundleService:
     @pytest.mark.usefixtures("_import_wildside")
     def test_report_from_other_estate_excluded_from_summary(
         self,
-        service: ProjectEvidenceBundleService,
+        project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Repository report from another estate is not attached to bundle."""
-        estate_id = _estate_id(session_factory)
-        repo_ids = _get_catalogue_repo_ids(session_factory)
+        eid = estate_id(session_factory)
+        repo_ids = get_catalogue_repo_ids(session_factory)
 
         # Create a Silver repo + report in a *different* estate that
         # shares the same catalogue_repository_id.
-        _create_silver_repo_and_report(
+        create_silver_repo_and_report(
             session_factory,
             RepositoryParams(
                 owner="leynos",
@@ -751,7 +543,7 @@ class TestProjectEvidenceBundleService:
             ),
         )
 
-        bundle = asyncio.run(service.build_bundle("wildside", estate_id))
+        bundle = asyncio.run(project_evidence_service.build_bundle("wildside", eid))
 
         core = next(c for c in bundle.components if c.key == "wildside-core")
         assert core.repository_summary is None, (
@@ -761,11 +553,11 @@ class TestProjectEvidenceBundleService:
     @pytest.mark.usefixtures("_import_wildside")
     def test_previous_reports_from_other_estate_excluded(
         self,
-        service: ProjectEvidenceBundleService,
+        project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Previous project reports from another estate are excluded."""
-        estate_id = _estate_id(session_factory)
+        eid = estate_id(session_factory)
 
         # Create a ReportProject for "wildside" in a different estate.
         async def _create_other_estate_report() -> None:
@@ -792,7 +584,7 @@ class TestProjectEvidenceBundleService:
 
         asyncio.run(_create_other_estate_report())
 
-        bundle = asyncio.run(service.build_bundle("wildside", estate_id))
+        bundle = asyncio.run(project_evidence_service.build_bundle("wildside", eid))
 
         assert len(bundle.previous_reports) == 0, (
             "reports from other estate should be excluded"
@@ -801,11 +593,11 @@ class TestProjectEvidenceBundleService:
     @pytest.mark.usefixtures("_import_wildside")
     def test_bundle_generated_at_is_set(
         self,
-        service: ProjectEvidenceBundleService,
+        project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Bundle has a generated_at timestamp."""
-        bundle = self._build_wildside_bundle(service, session_factory)
+        bundle = self._build_wildside_bundle(project_evidence_service, session_factory)
 
         assert bundle.generated_at is not None, (
             "bundle should have a generated_at timestamp"
@@ -814,11 +606,11 @@ class TestProjectEvidenceBundleService:
     @pytest.mark.usefixtures("_import_wildside")
     def test_component_type_is_captured(
         self,
-        service: ProjectEvidenceBundleService,
+        project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Component type from catalogue is included in evidence."""
-        bundle = self._build_wildside_bundle(service, session_factory)
+        bundle = self._build_wildside_bundle(project_evidence_service, session_factory)
 
         core = next(c for c in bundle.components if c.key == "wildside-core")
         assert core.component_type == "service", (
