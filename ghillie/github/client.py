@@ -7,6 +7,7 @@ import dataclasses
 import datetime as dt
 import os
 import typing as typ
+from http import HTTPStatus
 from pathlib import PurePosixPath, PureWindowsPath
 
 import httpx
@@ -173,7 +174,7 @@ query($owner: String!, $name: String!, $after: String) {
 }
 """
 
-_HTTP_ERROR_STATUS_THRESHOLD = 400
+_HTTP_ERROR_STATUS_THRESHOLD = HTTPStatus.BAD_REQUEST
 
 
 def _ensure_tzaware(value: dt.datetime, *, field: str) -> dt.datetime:

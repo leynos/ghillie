@@ -7,6 +7,7 @@ import datetime as dt
 import json
 import secrets
 import typing as typ
+from http import HTTPStatus
 
 import httpx
 import pytest
@@ -16,7 +17,7 @@ from ghillie.github.errors import GitHubAPIError
 from ghillie.registry.models import RepositoryInfo
 
 _TOKEN = secrets.token_hex(8)
-_HTTP_ERROR_STATUS = 500
+_HTTP_ERROR_STATUS = HTTPStatus.INTERNAL_SERVER_ERROR
 _PR_DATABASE_ID = 17
 
 

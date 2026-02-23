@@ -18,8 +18,7 @@ Register health endpoints on the Falcon app::
 from __future__ import annotations
 
 import typing as typ
-
-import falcon
+from http import HTTPStatus
 
 if typ.TYPE_CHECKING:
     from falcon.asgi import Request, Response
@@ -47,7 +46,7 @@ class HealthResource:
 
         """
         resp.media = {"status": "ok"}
-        resp.status = falcon.HTTP_200
+        resp.status = HTTPStatus.OK
 
 
 class ReadyResource:
@@ -70,4 +69,4 @@ class ReadyResource:
 
         """
         resp.media = {"status": "ready"}
-        resp.status = falcon.HTTP_200
+        resp.status = HTTPStatus.OK

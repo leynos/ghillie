@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import typing as typ
+from http import HTTPStatus
 
 import falcon.testing
 import pytest
@@ -202,14 +203,14 @@ def then_response_status(on_demand_context: OnDemandContext, status: int) -> Non
     actual_status = int(response.status.split()[0])
     assert actual_status == status, f"expected status {status}, got {actual_status}"
 
-    if status == 204:
+    if status == HTTPStatus.NO_CONTENT:
         # 204 No Content responses must not have a body
         assert response.content in (
             b"",
             None,
         ), "204 response must not have a body"
 
-    elif status == 404:
+    elif status == HTTPStatus.NOT_FOUND:
         # 404 responses should include a JSON error payload
         body = response.json
         assert body is not None, "404 response must contain a JSON error body"

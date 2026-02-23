@@ -10,6 +10,8 @@ Run with pytest::
 
 from __future__ import annotations
 
+from http import HTTPStatus
+
 import falcon.asgi
 import falcon.testing
 import pytest
@@ -69,7 +71,7 @@ class TestRepositoryNotFoundError:
     def test_returns_404(self, client: falcon.testing.TestClient) -> None:
         """Handler maps RepositoryNotFoundError to HTTP 404."""
         result = client.simulate_get("/not-found")
-        assert result.status == falcon.HTTP_404, "expected HTTP 404"
+        assert result.status_code == HTTPStatus.NOT_FOUND, "expected HTTP 404"
 
     def test_response_body_contains_description(
         self, client: falcon.testing.TestClient
@@ -90,7 +92,7 @@ class TestInvalidInputHandler:
     def test_returns_400(self, client: falcon.testing.TestClient) -> None:
         """Handler maps InvalidInputError to HTTP 400."""
         result = client.simulate_get("/bad-request")
-        assert result.status == falcon.HTTP_400, "expected HTTP 400"
+        assert result.status_code == HTTPStatus.BAD_REQUEST, "expected HTTP 400"
 
     def test_response_body_contains_reason(
         self, client: falcon.testing.TestClient

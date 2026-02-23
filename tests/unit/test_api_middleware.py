@@ -10,6 +10,7 @@ Run with pytest::
 
 from __future__ import annotations
 
+from http import HTTPStatus
 from unittest import mock
 
 import falcon.asgi
@@ -36,7 +37,7 @@ class _EchoResource:
         """Echo whether a session is present on the request context."""
         has_session = hasattr(req.context, "session")
         resp.media = {"has_session": has_session}
-        resp.status = falcon.HTTP_200
+        resp.status = HTTPStatus.OK
 
 
 class _ErrorResource:

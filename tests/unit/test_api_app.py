@@ -10,6 +10,7 @@ Run with pytest::
 
 from __future__ import annotations
 
+from http import HTTPStatus
 from unittest import mock
 
 import falcon.asgi
@@ -59,13 +60,13 @@ class TestCreateAppHealthOnly:
     def test_has_health_route(self, health_client: falcon.testing.TestClient) -> None:
         """Health-only app responds to /health."""
         result = health_client.simulate_get("/health")
-        assert result.status == falcon.HTTP_200, "expected HTTP 200 from /health"
+        assert result.status_code == HTTPStatus.OK, "expected HTTP 200 from /health"
         assert result.json == {"status": "ok"}, "wrong /health body"
 
     def test_has_ready_route(self, health_client: falcon.testing.TestClient) -> None:
         """Health-only app responds to /ready."""
         result = health_client.simulate_get("/ready")
-        assert result.status == falcon.HTTP_200, "expected HTTP 200 from /ready"
+        assert result.status_code == HTTPStatus.OK, "expected HTTP 200 from /ready"
         assert result.json == {"status": "ready"}, "wrong /ready body"
 
     def test_report_endpoint_not_registered(
@@ -73,7 +74,7 @@ class TestCreateAppHealthOnly:
     ) -> None:
         """Without deps, report endpoint returns 404."""
         result = health_client.simulate_post("/reports/repositories/acme/widgets")
-        assert result.status == falcon.HTTP_404, "expected HTTP 404"
+        assert result.status_code == HTTPStatus.NOT_FOUND, "expected HTTP 404"
 
 
 class TestCreateAppWithDeps:
@@ -87,16 +88,16 @@ class TestCreateAppWithDeps:
     def test_has_health_route(self, full_client: falcon.testing.TestClient) -> None:
         """Full app still responds to /health."""
         result = full_client.simulate_get("/health")
-        assert result.status == falcon.HTTP_200, "expected HTTP 200 from /health"
+        assert result.status_code == HTTPStatus.OK, "expected HTTP 200 from /health"
 
     def test_has_ready_route(self, full_client: falcon.testing.TestClient) -> None:
         """Full app still responds to /ready."""
         result = full_client.simulate_get("/ready")
-        assert result.status == falcon.HTTP_200, "expected HTTP 200 from /ready"
+        assert result.status_code == HTTPStatus.OK, "expected HTTP 200 from /ready"
 
     def test_report_endpoint_registered(
         self, full_client: falcon.testing.TestClient
     ) -> None:
         """With deps, report endpoint is registered (not 404)."""
         result = full_client.simulate_post("/reports/repositories/acme/widgets")
-        assert result.status != falcon.HTTP_404, "route should be registered"
+        assert result.status_code != HTTPStatus.NOT_FOUND, "route should be registered"

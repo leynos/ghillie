@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import typing as typ
+from http import HTTPStatus
 
 from ghillie.status.constants import MAX_TEMPERATURE, MIN_TEMPERATURE
 
@@ -81,7 +82,7 @@ class OpenAIAPIError(OpenAIStatusError):
         msg = "OpenAI API rate limited"
         if retry_after is not None:
             msg = f"{msg}, retry after {retry_after}s"
-        return cls(msg, status_code=429)
+        return cls(msg, status_code=HTTPStatus.TOO_MANY_REQUESTS)
 
     @classmethod
     def timeout(cls) -> OpenAIAPIError:

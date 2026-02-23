@@ -10,6 +10,7 @@ from __future__ import annotations
 import dataclasses
 import enum
 import typing as typ
+from http import HTTPStatus
 
 from sqlalchemy.exc import (
     IntegrityError,
@@ -30,7 +31,7 @@ if typ.TYPE_CHECKING:
 logger = get_logger(__name__)
 
 # HTTP status code threshold for server errors (5xx)
-_HTTP_SERVER_ERROR_THRESHOLD = 500
+_HTTP_SERVER_ERROR_THRESHOLD = HTTPStatus.INTERNAL_SERVER_ERROR
 
 
 class IngestionEventType(enum.StrEnum):

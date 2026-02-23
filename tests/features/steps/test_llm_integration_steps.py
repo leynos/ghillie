@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import typing as typ
+from http import HTTPStatus
 
 import httpx
 import pytest
@@ -132,7 +133,7 @@ def _create_invalid_json_transport() -> httpx.AsyncBaseTransport:
     class InvalidJSONTransport(httpx.AsyncBaseTransport):
         async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
             return httpx.Response(
-                status_code=200,
+                status_code=HTTPStatus.OK,
                 json={
                     "id": "chatcmpl-test",
                     "choices": [

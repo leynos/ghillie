@@ -20,8 +20,8 @@ Register the resource on the Falcon app::
 from __future__ import annotations
 
 import typing as typ
+from http import HTTPStatus
 
-import falcon
 from sqlalchemy import select
 
 from ghillie.api.errors import RepositoryNotFoundError
@@ -114,12 +114,12 @@ class ReportResource:
         report = await self._reporting_service.run_for_repository(repo_id)
 
         if report is None:
-            resp.status = falcon.HTTP_204
+            resp.status = HTTPStatus.NO_CONTENT
             return
 
         slug = f"{owner}/{name}"
         resp.media = _serialize_report(report, slug)
-        resp.status = falcon.HTTP_200
+        resp.status = HTTPStatus.OK
 
     async def _resolve_repository(
         self,
