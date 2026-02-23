@@ -230,10 +230,10 @@ def then_bundle_has_project_metadata(
     """Assert bundle contains correct project metadata."""
     bundle = project_evidence_context["bundle"]
 
-    assert bundle.project.key == "wildside"
-    assert bundle.project.name == "Wildside"
-    assert bundle.project.programme == "df12"
-    assert bundle.project.description is not None
+    assert bundle.project.key == "wildside", "project key mismatch"
+    assert bundle.project.name == "Wildside", "project name mismatch"
+    assert bundle.project.programme == "df12", "programme mismatch"
+    assert bundle.project.description is not None, "description missing"
 
 
 @then("the bundle contains all four components")

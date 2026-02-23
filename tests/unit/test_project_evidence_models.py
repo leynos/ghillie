@@ -1,7 +1,5 @@
 """Unit tests for project evidence bundle model structures."""
 
-# ruff: noqa: D102
-
 from __future__ import annotations
 
 import datetime as dt
@@ -116,11 +114,12 @@ def _check_dependency_evidence_roundtrip(decoded: object) -> None:
 
 
 def _check_bundle_roundtrip(decoded: object) -> None:
-    assert decoded.project.key == "wildside"  # type: ignore[union-attr]
-    assert decoded.component_count == 2  # type: ignore[union-attr]
-    assert len(decoded.dependencies) == 1  # type: ignore[union-attr]
-    assert decoded.components[0].has_repository is True  # type: ignore[union-attr]
-    assert decoded.components[1].has_repository is False  # type: ignore[union-attr]
+    assert decoded.project.key == "wildside", "project key mismatch"  # type: ignore[union-attr]
+    assert decoded.component_count == 2, "expected 2 components"  # type: ignore[union-attr]
+    assert len(decoded.dependencies) == 1, "expected 1 dependency"  # type: ignore[union-attr]
+    comps = decoded.components  # type: ignore[union-attr]
+    assert comps[0].has_repository is True, "first component should have repo"
+    assert comps[1].has_repository is False, "second component should lack repo"
 
 
 @pytest.mark.parametrize(
@@ -356,6 +355,7 @@ class TestProjectMetadata:
     """Tests for ProjectMetadata struct."""
 
     def test_full_construction(self) -> None:
+        """All optional fields are populated when provided."""
         metadata = ProjectMetadata(
             key="wildside",
             name="Wildside",
@@ -373,6 +373,7 @@ class TestComponentRepositorySummary:
     """Tests for ComponentRepositorySummary struct."""
 
     def test_full_construction(self) -> None:
+        """All fields are populated including optional generated_at."""
         generated = dt.datetime(2024, 7, 8, 12, 0, tzinfo=dt.UTC)
         summary = ComponentRepositorySummary(
             repository_slug="leynos/wildside",
@@ -398,6 +399,7 @@ class TestComponentEvidence:
     """Tests for ComponentEvidence struct."""
 
     def test_has_repository_true(self) -> None:
+        """Component with repository_slug has has_repository == True."""
         component = ComponentEvidence(
             key="wildside-core",
             name="Wildside Core Service",
@@ -409,6 +411,7 @@ class TestComponentEvidence:
         assert component.has_repository is True
 
     def test_has_repository_false(self) -> None:
+        """Component without repository_slug has has_repository == False."""
         component = ComponentEvidence(
             key="wildside-ingestion",
             name="Wildside Ingestion Pipeline",
@@ -419,6 +422,7 @@ class TestComponentEvidence:
         assert component.has_repository is False
 
     def test_full_construction_with_summary(self) -> None:
+        """Component with all fields and a repository summary."""
         summary = ComponentRepositorySummary(
             repository_slug="leynos/wildside",
             report_id="rpt-001",
@@ -447,6 +451,7 @@ class TestComponentDependencyEvidence:
     """Tests for ComponentDependencyEvidence struct."""
 
     def test_full_construction(self) -> None:
+        """All fields including optional rationale are populated."""
         dep = ComponentDependencyEvidence(
             from_component="wildside-core",
             to_component="ortho-config",
@@ -464,10 +469,12 @@ class TestProjectEvidenceBundle:
 
     @pytest.fixture
     def sample_project(self) -> ProjectMetadata:
+        """Return a minimal Wildside project metadata instance."""
         return ProjectMetadata(key="wildside", name="Wildside")
 
     @pytest.fixture
     def active_component(self) -> ComponentEvidence:
+        """Return an active component with a repository summary."""
         return ComponentEvidence(
             key="wildside-core",
             name="Wildside Core Service",
@@ -486,6 +493,7 @@ class TestProjectEvidenceBundle:
 
     @pytest.fixture
     def planned_component(self) -> ComponentEvidence:
+        """Return a planned component without a repository."""
         return ComponentEvidence(
             key="wildside-ingestion",
             name="Wildside Ingestion Pipeline",
@@ -495,6 +503,7 @@ class TestProjectEvidenceBundle:
 
     @pytest.fixture
     def deprecated_component(self) -> ComponentEvidence:
+        """Return a deprecated component with a repository slug."""
         return ComponentEvidence(
             key="wildside-legacy",
             name="Wildside Legacy",
@@ -533,6 +542,7 @@ class TestProjectEvidenceBundle:
         )
 
     def test_minimal_construction(self, sample_project: ProjectMetadata) -> None:
+        """Bundle can be created with only required fields."""
         bundle = ProjectEvidenceBundle(
             project=sample_project,
             components=(),
@@ -544,6 +554,7 @@ class TestProjectEvidenceBundle:
         assert bundle.dependencies == ()
 
     def test_default_values(self, sample_project: ProjectMetadata) -> None:
+        """Optional fields default to empty tuple and None."""
         bundle = ProjectEvidenceBundle(
             project=sample_project,
             components=(),
@@ -559,6 +570,7 @@ class TestProjectEvidenceBundle:
         active_component: ComponentEvidence,
         planned_component: ComponentEvidence,
     ) -> None:
+        """Component count reflects the number of components."""
         bundle = self._create_bundle(
             sample_project,
             components=(active_component, planned_component),
@@ -573,6 +585,7 @@ class TestProjectEvidenceBundle:
         planned_component: ComponentEvidence,
         deprecated_component: ComponentEvidence,
     ) -> None:
+        """Only components with lifecycle 'active' are returned."""
         bundle = self._create_bundle(
             sample_project,
             components=(
@@ -592,6 +605,7 @@ class TestProjectEvidenceBundle:
         active_component: ComponentEvidence,
         planned_component: ComponentEvidence,
     ) -> None:
+        """Only components with lifecycle 'planned' are returned."""
         bundle = self._create_bundle(
             sample_project,
             components=(active_component, planned_component),
@@ -608,6 +622,7 @@ class TestProjectEvidenceBundle:
         planned_component: ComponentEvidence,
         deprecated_component: ComponentEvidence,
     ) -> None:
+        """Only components with a repository summary are returned."""
         bundle = self._create_bundle(
             sample_project,
             components=(
@@ -622,6 +637,7 @@ class TestProjectEvidenceBundle:
         assert with_reports[0].key == "wildside-core"
 
     def test_blocked_dependencies(self, sample_project: ProjectMetadata) -> None:
+        """Only edges with relationship 'blocked_by' are returned."""
         deps = (
             ComponentDependencyEvidence(
                 from_component="wildside-core",

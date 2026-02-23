@@ -62,7 +62,7 @@ def _estate_id(
     return asyncio.run(_get())
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(slots=True)
 class RepositoryParams:
     """Parameters for creating a Silver Repository linked to catalogue."""
 
@@ -72,7 +72,7 @@ class RepositoryParams:
     estate_id: str
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(slots=True)
 class ReportSummaryParams:
     """Parameters for creating a Gold Report machine summary."""
 
@@ -198,10 +198,10 @@ class TestProjectEvidenceBundleService:
         """Bundle project metadata matches catalogue data."""
         bundle = self._build_wildside_bundle(service, session_factory)
 
-        assert bundle.project.key == "wildside"
-        assert bundle.project.name == "Wildside"
-        assert bundle.project.programme == "df12"
-        assert bundle.project.description is not None
+        assert bundle.project.key == "wildside", "project key mismatch"
+        assert bundle.project.name == "Wildside", "project name mismatch"
+        assert bundle.project.programme == "df12", "programme mismatch"
+        assert bundle.project.description is not None, "description missing"
 
     @pytest.mark.usefixtures("_import_wildside")
     def test_bundle_contains_all_components(

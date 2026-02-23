@@ -1457,7 +1457,7 @@ Gold-layer report, the component evidence includes a
 Components without repositories (lifecycle `planned`) are included in the
 bundle with `repository_slug` and `repository_summary` set to `None`. Their
 lifecycle stage and any catalogue notes are preserved, allowing downstream
-summarisation to distinguish between active and planned work.
+summarization to distinguish between active and planned work.
 
 ### Cross-project dependencies
 

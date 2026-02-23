@@ -1431,7 +1431,7 @@ and gold/silver) and joins results in Python to avoid cross-schema SQL joins:
 
 2. **Flat dependency edge representation.** Component edges are a flat
    tuple on the bundle rather than nested within `ComponentEvidence`. This
-   avoids circular references and simplifies serialisation.
+   avoids circular references and simplifies serialization.
 
 3. **Intra-project edges only.** Cross-project dependency edges (where
    the target component belongs to a different project) are excluded from the

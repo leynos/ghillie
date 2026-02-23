@@ -1,4 +1,22 @@
-"""Evidence bundle structures for repository and project status reporting."""
+"""Evidence bundle structures for repository and project status reporting.
+
+This module defines frozen msgspec Struct types that represent the
+evidence gathered for status reporting at both repository and project
+levels.  Repository-level types (``RepositoryEvidenceBundle`` and its
+children) capture commit, pull-request, issue, and documentation activity
+for a single repository window.  Project-level types
+(``ProjectEvidenceBundle`` and its children) aggregate catalogue metadata,
+component lifecycle stages, repository report summaries, and dependency
+graphs across a project's components.
+
+Examples
+--------
+>>> from ghillie.evidence.models import ProjectMetadata
+>>> meta = ProjectMetadata(key="wildside", name="Wildside")
+>>> meta.key
+'wildside'
+
+"""
 
 from __future__ import annotations
 
@@ -464,7 +482,7 @@ class ProjectEvidenceBundle(msgspec.Struct, kw_only=True, frozen=True):
 
     Aggregates catalogue metadata, component evidence (with optional
     repository summaries), and the component dependency graph into a
-    single immutable structure for project-level summarisation.
+    single immutable structure for project-level summarization.
 
     Attributes
     ----------

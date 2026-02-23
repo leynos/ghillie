@@ -3,7 +3,7 @@
 This module provides the ProjectEvidenceBundleService class for constructing
 project-level evidence bundles that aggregate catalogue metadata, component
 lifecycle stages, repository report summaries, and component dependency
-graphs into a single immutable structure for project-level summarisation.
+graphs into a single immutable structure for project-level summarization.
 
 The service queries two storage layers:
 
@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import typing as typ
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from ghillie.catalogue.storage import (
@@ -65,6 +65,24 @@ class ProjectEvidenceBundleService:
     definitions, and dependency edges, then queries silver/gold storage for
     the latest repository-scope reports associated with each component's
     repository.
+
+    Parameters
+    ----------
+    catalogue_session_factory
+        Async session factory for catalogue database access.
+    gold_session_factory
+        Async session factory for silver/gold database access.
+    max_previous_reports
+        Maximum number of previous project reports to include
+        for context (default 2).
+
+    Examples
+    --------
+    >>> service = ProjectEvidenceBundleService(
+    ...     catalogue_session_factory=cat_session_factory,
+    ...     gold_session_factory=gold_session_factory,
+    ... )
+    >>> bundle = await service.build_bundle("wildside", estate_id="estate-1")
 
     """
 
@@ -248,44 +266,37 @@ class ProjectEvidenceBundleService:
         }
         silver_repo_ids = list(cat_id_by_silver_id.keys())
 
-        # Find latest repository report for each silver repo.
-        report_stmt = (
-            select(Report)
+        # Fetch only the latest report per repository using a window
+        # function so the database discards older rows instead of
+        # loading them all into Python.
+        row_num = (
+            func.row_number()
+            .over(
+                partition_by=Report.repository_id,
+                order_by=Report.generated_at.desc(),
+            )
+            .label("rn")
+        )
+        ranked = (
+            select(Report.id, row_num)
             .where(
                 Report.scope == ReportScope.REPOSITORY,
                 Report.repository_id.in_(silver_repo_ids),
             )
-            .order_by(Report.generated_at.desc())
+            .subquery()
+        )
+        report_stmt = select(Report).join(
+            ranked,
+            (Report.id == ranked.c.id) & (ranked.c.rn == 1),
         )
         reports = list((await session.scalars(report_stmt)).all())
 
-        latest_by_repo = self._group_reports_by_repository(reports)
+        latest_by_repo: dict[str, Report] = {
+            r.repository_id: r for r in reports if r.repository_id is not None
+        }
         return self._build_summary_mapping(
             cat_id_by_silver_id, latest_by_repo, silver_repos
         )
-
-    def _group_reports_by_repository(
-        self,
-        reports: list[Report],
-    ) -> dict[str, Report]:
-        """Group reports by repository, keeping only the latest per repo.
-
-        Parameters
-        ----------
-        reports
-            Reports pre-sorted by ``generated_at`` descending.
-
-        Returns
-        -------
-        dict[str, Report]
-            Mapping of silver repository ID to its latest report.
-
-        """
-        latest_by_repo: dict[str, Report] = {}
-        for report in reports:
-            if report.repository_id is not None:
-                latest_by_repo.setdefault(report.repository_id, report)
-        return latest_by_repo
 
     def _build_summary_mapping(
         self,
@@ -461,7 +472,7 @@ class ProjectEvidenceBundleService:
             risks=tuple(ms.get("risks", [])),
         )
 
-    def _parse_status(self, status: typ.Any) -> ReportStatus:  # noqa: ANN401
+    def _parse_status(self, status: object) -> ReportStatus:
         """Parse status string into ReportStatus enum."""
         match status:
             case None:

@@ -12,7 +12,7 @@ Task 3.1.a introduces domain models and a service for project-level evidence
 bundles. A project evidence bundle aggregates catalogue metadata (project
 description, component list, lifecycle stages, dependency graph) with the
 latest repository-level machine summaries from the Gold layer into a single
-immutable structure suitable for downstream project-level summarisation (Task
+immutable structure suitable for downstream project-level summarization (Task
 3.1.b) and persistence (Task 3.1.c).
 
 After this change:
@@ -119,14 +119,14 @@ After this change:
 
 3. **Two session factories.**
    The service accepts `catalogue_session_factory` and `gold_session_factory`
-   to keep the option of separate databases open. In tests both point to the
+   to keep the option of separate databases open. In tests, both point to the
    same engine via `conftest.py`.
 
 4. **Flat dependency edge representation.**
    Component edges are represented as a flat tuple of
    `ComponentDependencyEvidence` on the bundle, not nested within
    `ComponentEvidence`. This avoids circular references and simplifies
-   serialisation.
+   serialization.
 
 5. **Repository summary from Gold `Report.machine_summary`.**
    For each component with a repository, the latest repository-scope Report's
