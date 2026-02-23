@@ -42,7 +42,11 @@ from sqlalchemy import select
 
 from ghillie.catalogue.importer import CatalogueImporter
 from ghillie.catalogue.storage import Estate, RepositoryRecord
-from ghillie.evidence.models import ProjectEvidenceBundle, ReportStatus
+from ghillie.evidence.models import (
+    ComponentEvidence,
+    ProjectEvidenceBundle,
+    ReportStatus,
+)
 from ghillie.evidence.project_service import ProjectEvidenceBundleService
 from ghillie.gold.storage import Report, ReportProject, ReportScope
 from ghillie.silver.storage import Repository
@@ -162,6 +166,37 @@ async def _get_catalogue_repo_id(
         )
         assert repo is not None, f"Expected RepositoryRecord for {owner}/{name}"
         return repo.id
+
+
+def _get_component_with_summary(
+    bundle: ProjectEvidenceBundle,
+    component_key: str,
+) -> ComponentEvidence:
+    """Retrieve a component and assert it has a repository summary.
+
+    Parameters
+    ----------
+    bundle
+        The project evidence bundle.
+    component_key
+        The component key to look up.
+
+    Returns
+    -------
+    ComponentEvidence
+        The component with a verified non-None repository_summary.
+
+    Raises
+    ------
+    AssertionError
+        If the component has no repository summary.
+
+    """
+    component = next(c for c in bundle.components if c.key == component_key)
+    assert component.repository_summary is not None, (
+        f"{component_key} should have a repository summary"
+    )
+    return component
 
 
 # Given steps
@@ -417,13 +452,12 @@ def then_core_has_summary(
 
     """
     bundle = project_evidence_context["bundle"]
+    core = _get_component_with_summary(bundle, "wildside-core")
+    summary = core.repository_summary
+    assert summary is not None  # narrowed by helper; keeps ty happy
 
-    core = next(c for c in bundle.components if c.key == "wildside-core")
-    assert core.repository_summary is not None, (
-        "wildside-core should have a repository summary"
-    )
-    assert core.repository_summary.summary == "Good progress this week.", (
-        f"summary text mismatch: {core.repository_summary.summary!r}"
+    assert summary.summary == "Good progress this week.", (
+        f"summary text mismatch: {summary.summary!r}"
     )
 
 
@@ -440,13 +474,12 @@ def then_summary_status_on_track(
 
     """
     bundle = project_evidence_context["bundle"]
+    core = _get_component_with_summary(bundle, "wildside-core")
+    summary = core.repository_summary
+    assert summary is not None  # narrowed by helper; keeps ty happy
 
-    core = next(c for c in bundle.components if c.key == "wildside-core")
-    assert core.repository_summary is not None, (
-        "wildside-core should have a repository summary"
-    )
-    assert core.repository_summary.status == ReportStatus.ON_TRACK, (
-        f"expected ON_TRACK, got {core.repository_summary.status}"
+    assert summary.status == ReportStatus.ON_TRACK, (
+        f"expected ON_TRACK, got {summary.status}"
     )
 
 
