@@ -23,7 +23,9 @@ class TestHealthEndpoint:
     def test_health_returns_200(self, client: falcon.testing.TestClient) -> None:
         """GET /health returns HTTP 200."""
         result = client.simulate_get("/health")
-        assert result.status_code == HTTPStatus.OK
+        assert result.status_code == HTTPStatus.OK, (
+            f"expected HTTPStatus.OK, got {result.status_code}"
+        )
 
     def test_health_returns_json_status_ok(
         self, client: falcon.testing.TestClient
@@ -47,7 +49,9 @@ class TestReadyEndpoint:
     def test_ready_returns_200(self, client: falcon.testing.TestClient) -> None:
         """GET /ready returns HTTP 200."""
         result = client.simulate_get("/ready")
-        assert result.status_code == HTTPStatus.OK
+        assert result.status_code == HTTPStatus.OK, (
+            f"expected HTTPStatus.OK, got {result.status_code}"
+        )
 
     def test_ready_returns_json_status_ready(
         self, client: falcon.testing.TestClient
@@ -83,7 +87,9 @@ class TestCreateApp:
         # Falcon apps store routes internally; test via client
         client = falcon.testing.TestClient(app)
         result = client.simulate_get("/health")
-        assert result.status_code != HTTPStatus.NOT_FOUND
+        assert result.status_code != HTTPStatus.NOT_FOUND, (
+            f"expected /health to be routed, got {result.status_code}"
+        )
 
     def test_app_has_ready_route(self) -> None:
         """The app has a /ready route."""
@@ -92,4 +98,6 @@ class TestCreateApp:
         app = create_app()
         client = falcon.testing.TestClient(app)
         result = client.simulate_get("/ready")
-        assert result.status_code != HTTPStatus.NOT_FOUND
+        assert result.status_code != HTTPStatus.NOT_FOUND, (
+            f"expected /ready to be routed, got {result.status_code}"
+        )

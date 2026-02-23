@@ -60,8 +60,9 @@ if request.method == HTTPMethod.GET:
 ### Why
 
 - **Discoverable:** IDE autocompletion lists valid methods.
-- **Typo-proof:** `HTTPMethod.DLETE` is a compile-time error;
-  `"DLETE"` is not.
+- **Typo-proof:** `HTTPMethod.DLETE` raises `AttributeError` at
+  runtime and is flagged by static type checkers (e.g. Pyright, mypy)
+  during analysis; `"DLETE"` bypasses both checks.
 
 ## Banned alternatives
 

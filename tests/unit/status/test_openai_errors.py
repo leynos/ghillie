@@ -17,24 +17,28 @@ class TestOpenAIAPIError:
     def test_http_error_factory(self) -> None:
         """http_error creates error with status code."""
         error = OpenAIAPIError.http_error(HTTPStatus.INTERNAL_SERVER_ERROR)
-        assert error.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
-        assert "500" in str(error)
+        assert error.status_code == HTTPStatus.INTERNAL_SERVER_ERROR, (
+            "expected status_code to be INTERNAL_SERVER_ERROR"
+        )
+        assert "500" in str(error), "expected '500' to appear in error string"
 
     def test_http_error_factory_includes_context(self) -> None:
         """http_error message includes HTTP context."""
         error = OpenAIAPIError.http_error(HTTPStatus.SERVICE_UNAVAILABLE)
-        assert "http" in str(error).lower()
+        assert "http" in str(error).lower(), "expected 'http' in error message"
 
     def test_rate_limited_factory(self) -> None:
         """rate_limited creates error for 429 responses."""
         error = OpenAIAPIError.rate_limited()
-        assert error.status_code == HTTPStatus.TOO_MANY_REQUESTS
-        assert "rate" in str(error).lower()
+        assert error.status_code == HTTPStatus.TOO_MANY_REQUESTS, (
+            "expected status_code to be TOO_MANY_REQUESTS"
+        )
+        assert "rate" in str(error).lower(), "expected 'rate' in error message"
 
     def test_rate_limited_factory_with_retry_after(self) -> None:
         """rate_limited includes retry-after when provided."""
         error = OpenAIAPIError.rate_limited(retry_after=60)
-        assert "60" in str(error)
+        assert "60" in str(error), "expected retry-after value in error string"
 
     def test_timeout_factory(self) -> None:
         """Timeout factory creates error for request timeouts."""
