@@ -126,6 +126,63 @@ def _create_silver_repo_and_report(
     asyncio.run(_create())
 
 
+def _create_silver_repo_with_multiple_reports(
+    session_factory: async_sessionmaker[AsyncSession],
+    repo_params: RepositoryParams,
+    reports: list[tuple[dt.datetime, dt.datetime, dt.datetime, str, str]],
+) -> None:
+    """Create a Silver Repository with multiple Gold Reports.
+
+    Parameters
+    ----------
+    session_factory
+        Async session factory for database access.
+    repo_params
+        Repository creation parameters.
+    reports
+        List of ``(window_start, window_end, generated_at, status, summary)``
+        tuples for each report to create.
+
+    """
+
+    async def _create() -> None:
+        async with session_factory() as session:
+            silver_repo = Repository(
+                github_owner=repo_params.owner,
+                github_name=repo_params.name,
+                default_branch="main",
+                estate_id=repo_params.estate_id,
+                catalogue_repository_id=repo_params.catalogue_repository_id,
+                ingestion_enabled=True,
+            )
+            session.add(silver_repo)
+            await session.flush()
+
+            report_objects = []
+            for window_start, window_end, generated_at, status, summary in reports:
+                report = Report(
+                    scope=ReportScope.REPOSITORY,
+                    repository_id=silver_repo.id,
+                    window_start=window_start,
+                    window_end=window_end,
+                    generated_at=generated_at,
+                    model="test-model",
+                    machine_summary={
+                        "status": status,
+                        "summary": summary,
+                        "highlights": [],
+                        "risks": [],
+                        "next_steps": [],
+                    },
+                )
+                report_objects.append(report)
+
+            session.add_all(report_objects)
+            await session.commit()
+
+    asyncio.run(_create())
+
+
 def _get_catalogue_repo_ids(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> dict[str, str]:
@@ -142,11 +199,58 @@ def _get_catalogue_repo_ids(
     return asyncio.run(_get())
 
 
-class TestParseStatus:
-    """Edge-case tests for _parse_status."""
+def _create_silver_repo_and_report_raw(
+    session_factory: async_sessionmaker[AsyncSession],
+    repo_params: RepositoryParams,
+    machine_summary: dict[str, object],
+) -> None:
+    """Create a Silver Repository and Gold Report with an arbitrary machine_summary."""
+
+    async def _create() -> None:
+        async with session_factory() as session:
+            silver_repo = Repository(
+                github_owner=repo_params.owner,
+                github_name=repo_params.name,
+                default_branch="main",
+                estate_id=repo_params.estate_id,
+                catalogue_repository_id=repo_params.catalogue_repository_id,
+                ingestion_enabled=True,
+            )
+            session.add(silver_repo)
+            await session.flush()
+
+            report = Report(
+                scope=ReportScope.REPOSITORY,
+                repository_id=silver_repo.id,
+                window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+                model="test-model",
+                machine_summary=machine_summary,
+            )
+            session.add(report)
+            await session.commit()
+
+    asyncio.run(_create())
+
+
+class TestStatusMappingViaBuildBundle:
+    """Verify status parsing through the public ``build_bundle`` API.
+
+    Attributes
+    ----------
+    None
+
+    Notes
+    -----
+    Each parametrized case creates a Silver Repository and Gold Report
+    whose ``machine_summary.status`` is set to the given edge-case value,
+    then asserts that the resulting component summary maps it to the
+    correct ``ReportStatus`` enum member.
+
+    """
 
     @pytest.mark.parametrize(
-        ("raw_status", "expected"),
+        ("machine_summary_status", "expected_status"),
         [
             pytest.param(None, ReportStatus.UNKNOWN, id="none"),
             pytest.param("On_TrAcK", ReportStatus.ON_TRACK, id="mixed-case"),
@@ -154,16 +258,57 @@ class TestParseStatus:
             pytest.param(123, ReportStatus.UNKNOWN, id="non-string-int"),
         ],
     )
-    def test_parse_status_edge_cases(
+    @pytest.mark.usefixtures("_import_wildside")
+    def test_status_mapping_from_reports(
         self,
         service: ProjectEvidenceBundleService,
-        raw_status: object,
-        expected: ReportStatus,
+        session_factory: async_sessionmaker[AsyncSession],
+        machine_summary_status: object,
+        expected_status: ReportStatus,
     ) -> None:
-        """Verify _parse_status handles edge-case inputs."""
-        parsed = service._parse_status(raw_status)
-        assert parsed is expected, (
-            f"expected {expected!r} for input {raw_status!r}, got {parsed!r}"
+        """Component summary status reflects edge-case ``machine_summary`` values.
+
+        Parameters
+        ----------
+        service
+            The service under test.
+        session_factory
+            Async session factory for database access.
+        machine_summary_status
+            Raw status value stored in the Gold Report's ``machine_summary``.
+        expected_status
+            The ``ReportStatus`` enum member expected after mapping.
+
+        """
+        estate_id = _estate_id(session_factory)
+        repo_ids = _get_catalogue_repo_ids(session_factory)
+
+        _create_silver_repo_and_report_raw(
+            session_factory,
+            RepositoryParams(
+                owner="leynos",
+                name="wildside",
+                catalogue_repository_id=repo_ids["leynos/wildside"],
+                estate_id=estate_id,
+            ),
+            machine_summary={
+                "status": machine_summary_status,
+                "summary": "Test.",
+                "highlights": [],
+                "risks": [],
+                "next_steps": [],
+            },
+        )
+
+        bundle = asyncio.run(service.build_bundle("wildside", estate_id))
+        core = next(c for c in bundle.components if c.key == "wildside-core")
+
+        assert core.repository_summary is not None, (
+            "wildside-core should have a summary"
+        )
+        assert core.repository_summary.status is expected_status, (
+            f"expected {expected_status!r} for input {machine_summary_status!r}, "
+            f"got {core.repository_summary.status!r}"
         )
 
 
@@ -335,53 +480,31 @@ class TestProjectEvidenceBundleService:
         estate_id = _estate_id(session_factory)
         repo_ids = _get_catalogue_repo_ids(session_factory)
 
-        async def _create_repo_with_two_reports() -> None:
-            async with session_factory() as session:
-                silver_repo = Repository(
-                    github_owner="leynos",
-                    github_name="wildside",
-                    default_branch="main",
-                    estate_id=estate_id,
-                    catalogue_repository_id=repo_ids["leynos/wildside"],
-                    ingestion_enabled=True,
-                )
-                session.add(silver_repo)
-                await session.flush()
-
-                older = Report(
-                    scope=ReportScope.REPOSITORY,
-                    repository_id=silver_repo.id,
-                    window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
-                    window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
-                    generated_at=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
-                    model="test-model",
-                    machine_summary={
-                        "status": "at_risk",
-                        "summary": "Older report.",
-                        "highlights": ["First milestone"],
-                        "risks": [],
-                        "next_steps": [],
-                    },
-                )
-                newer = Report(
-                    scope=ReportScope.REPOSITORY,
-                    repository_id=silver_repo.id,
-                    window_start=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
-                    window_end=dt.datetime(2024, 7, 15, tzinfo=dt.UTC),
-                    generated_at=dt.datetime(2024, 7, 15, tzinfo=dt.UTC),
-                    model="test-model",
-                    machine_summary={
-                        "status": "on_track",
-                        "summary": "Newer report.",
-                        "highlights": ["Second milestone"],
-                        "risks": [],
-                        "next_steps": [],
-                    },
-                )
-                session.add_all([older, newer])
-                await session.commit()
-
-        asyncio.run(_create_repo_with_two_reports())
+        _create_silver_repo_with_multiple_reports(
+            session_factory,
+            repo_params=RepositoryParams(
+                owner="leynos",
+                name="wildside",
+                catalogue_repository_id=repo_ids["leynos/wildside"],
+                estate_id=estate_id,
+            ),
+            reports=[
+                (
+                    dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                    dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+                    dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+                    "at_risk",
+                    "Older report.",
+                ),
+                (
+                    dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+                    dt.datetime(2024, 7, 15, tzinfo=dt.UTC),
+                    dt.datetime(2024, 7, 15, tzinfo=dt.UTC),
+                    "on_track",
+                    "Newer report.",
+                ),
+            ],
+        )
 
         bundle = asyncio.run(service.build_bundle("wildside", estate_id))
         core = next(c for c in bundle.components if c.key == "wildside-core")
