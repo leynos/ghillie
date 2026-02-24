@@ -6,11 +6,11 @@ import typing as typ
 
 import pytest
 
-from tests.unit.conftest import RepositoryCreateSpec
+from tests.fixtures.specs import RepositoryCreateSpec
 
 if typ.TYPE_CHECKING:
     from ghillie.registry import RepositoryRegistryService
-    from tests.unit.conftest import CreateRepoFn
+    from tests.fixtures.specs import CreateRepoFn
 
 
 @pytest.mark.asyncio
@@ -24,7 +24,7 @@ async def test_get_repository_by_slug_returns_info(
         "test-repo",
         spec=RepositoryCreateSpec(
             ingestion_enabled=True,
-            documentation_paths=["docs/roadmap.md"],
+            documentation_paths=("docs/roadmap.md",),
         ),
     )
 

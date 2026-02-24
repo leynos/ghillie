@@ -1418,3 +1418,92 @@ For estate-scoped queries, call `get_metrics_for_estate(estate_id, start, end)`.
 `ReportingMetricsService` returns token totals. Convert those totals to
 currency using pricing configured for the active model (for example, prompt and
 completion token rates from the provider contract).
+
+## Project evidence bundles (Phase 3.1.a)
+
+Project evidence bundles aggregate catalogue metadata, component lifecycle
+stages, repository report summaries, and component dependency graphs into a
+single immutable structure for project-level status reporting.
+
+### What a project evidence bundle contains
+
+A `ProjectEvidenceBundle` includes:
+
+- **Project metadata**: key, name, description, programme, and
+  documentation paths from the catalogue.
+- **Component evidence**: one entry per component listing its key,
+  name, type (service, UI, library, etc.), lifecycle stage (`planned`,
+  `active`, `deprecated`), optional repository slug, and optional repository
+  report summary.
+- **Component dependency edges**: directed relationships between
+  components within the same project (`depends_on`, `blocked_by`,
+  `emits_events_to`), with kind (`runtime`, `dev`, `test`, `ops`) and optional
+  rationale.
+- **Previous project reports**: up to two most recent project-scope Gold
+  reports for contextual continuity.
+
+### Components with repositories
+
+When a component has a mapped repository and the repository has at least one
+Gold-layer report, the component evidence includes a
+`ComponentRepositorySummary` with:
+
+- repository slug (e.g. `leynos/wildside`)
+- the latest report's status (`on_track`, `at_risk`, `blocked`, `unknown`)
+- narrative summary, highlights, risks, and next steps
+- reporting window timestamps
+
+### Planned and non-code components
+
+Components without repositories (lifecycle `planned`) are included in the
+bundle, with `repository_slug` and `repository_summary` set to `None`. Their
+lifecycle stage and any catalogue notes are preserved, allowing downstream
+summarization to distinguish between active and planned work.
+
+### Cross-project dependencies
+
+Dependency edges whose target component belongs to a different project are
+excluded from the bundle. Only intra-project edges appear in the `dependencies`
+field. Cross-project edges remain in the catalogue for future estate-level
+aggregation.
+
+### Building a project evidence bundle
+
+```python
+import asyncio
+
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from ghillie.evidence import ProjectEvidenceBundleService
+
+
+async def main() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///ghillie.db")
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    service = ProjectEvidenceBundleService(
+        catalogue_session_factory=session_factory,
+        gold_session_factory=session_factory,
+    )
+
+    bundle = await service.build_bundle(
+        project_key="wildside",
+        estate_id="example-estate-id",
+    )
+
+    print(f"Project: {bundle.project.name}")
+    print(f"Components: {bundle.component_count}")
+    print(f"Active: {len(bundle.active_components)}")
+    print(f"Planned: {len(bundle.planned_components)}")
+    print(f"Dependencies: {len(bundle.dependencies)}")
+    print(f"Blocked: {len(bundle.blocked_dependencies)}")
+    print(f"With reports: {len(bundle.components_with_reports)}")
+
+
+asyncio.run(main())
+```
+
+The service accepts two session factories: one for catalogue storage, and one
+for Silver/Gold storage. In typical deployments, both point to the same
+database engine, but separate session factories allow future database
+separation without code changes.

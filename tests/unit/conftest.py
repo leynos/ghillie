@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses as dc
 import datetime as dt
 import typing as typ
 from pathlib import Path
@@ -20,14 +19,51 @@ from ghillie.reporting.service import ReportingService, ReportingServiceDependen
 from ghillie.silver import RawEventTransformer
 from ghillie.silver.storage import Repository
 from ghillie.status import MockStatusModel
+from tests.fixtures.specs import (
+    CreateRepoFn,
+    FetchRepoFn,
+    ProjectReportParams,
+    ReportSpec,
+    ReportSummaryParams,
+    RepositoryCreateSpec,
+    RepositoryEventSpec,
+    RepositoryParams,
+)
 from tests.helpers.event_builders import commit_envelope
+from tests.unit.project_evidence_helpers import (
+    _import_wildside,  # noqa: F401  # FIXME: re-exported for pytest fixture discovery
+    create_project_report,
+    create_silver_repo_and_report,
+    create_silver_repo_and_report_raw,
+    create_silver_repo_with_multiple_reports,
+    get_catalogue_repo_ids,
+    get_estate_id,
+    project_evidence_service,  # noqa: F401  # FIXME: re-exported for pytest fixture discovery
+)
 
 if typ.TYPE_CHECKING:
-    import collections.abc as cabc
-
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-    from ghillie.gold import Report
+    from ghillie.gold.storage import Report
+
+# Re-export specs so existing ``from tests.unit.conftest import ...`` lines
+# continue to work until consumers are migrated to ``tests.fixtures.specs``.
+__all__ = [
+    "CreateRepoFn",
+    "FetchRepoFn",
+    "ProjectReportParams",
+    "ReportSpec",
+    "ReportSummaryParams",
+    "RepositoryCreateSpec",
+    "RepositoryEventSpec",
+    "RepositoryParams",
+    "create_project_report",
+    "create_silver_repo_and_report",
+    "create_silver_repo_and_report_raw",
+    "create_silver_repo_with_multiple_reports",
+    "get_catalogue_repo_ids",
+    "get_estate_id",
+]
 
 
 def _find_repo_root(start: Path) -> Path:
@@ -50,39 +86,6 @@ def wildside_catalogue_path(repo_root: Path) -> Path:
     return repo_root / "examples" / "wildside-catalogue.yaml"
 
 
-@dc.dataclass(frozen=True, slots=True)
-class RepositoryCreateSpec:
-    """Fields used when creating Silver Repository rows in tests."""
-
-    ingestion_enabled: bool = True
-    default_branch: str = "main"
-    estate_id: str | None = None
-    catalogue_repository_id: str | None = None
-    documentation_paths: list[str] | None = None
-
-
-class CreateRepoFn(typ.Protocol):
-    """Callable fixture for creating Silver repositories."""
-
-    def __call__(
-        self,
-        owner: str,
-        name: str,
-        *,
-        spec: RepositoryCreateSpec | None = None,
-    ) -> cabc.Awaitable[None]:
-        """Create a Silver repository row."""
-        ...
-
-
-class FetchRepoFn(typ.Protocol):
-    """Callable fixture for fetching repositories."""
-
-    def __call__(self, owner: str, name: str) -> cabc.Awaitable[Repository | None]:
-        """Fetch a repository by owner/name."""
-        ...
-
-
 @pytest.fixture
 def create_repo(session_factory: async_sessionmaker[AsyncSession]) -> CreateRepoFn:
     """Return a factory for creating test repositories."""
@@ -102,7 +105,7 @@ def create_repo(session_factory: async_sessionmaker[AsyncSession]) -> CreateRepo
                 ingestion_enabled=create_spec.ingestion_enabled,
                 estate_id=create_spec.estate_id,
                 catalogue_repository_id=create_spec.catalogue_repository_id,
-                documentation_paths=create_spec.documentation_paths or [],
+                documentation_paths=list(create_spec.documentation_paths or ()),
             )
             session.add(repo)
 
@@ -197,24 +200,6 @@ async def create_test_repository(
         session.add(repo)
         await session.flush()
         return repo.id
-
-
-@dc.dataclass(frozen=True, slots=True)
-class RepositoryEventSpec:
-    """Encapsulates test repository and event data for helper functions.
-
-    Groups the four test-data parameters that are always passed together
-    when setting up a repository with a commit event, reducing the
-    parameter count of ``setup_test_repository_with_event``.
-
-    .. note:: The name avoids the ``Test`` prefix so pytest does not
-       attempt to collect this dataclass as a test class.
-    """
-
-    owner: str = "acme"
-    name: str = "widget"
-    commit_hash: str = "test001"
-    commit_time: dt.datetime | None = None
 
 
 async def get_repo_id(

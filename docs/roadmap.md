@@ -395,7 +395,7 @@ views for projects and the entire estate, using the catalogue’s component grap
 **Goal:** Generate project-level reports that combine repository summaries,
 component definitions, and cross-component dependencies.
 
-- [ ] **Task 3.1.a – Define project evidence structure**  
+- [x] **Task 3.1.a – Define project evidence structure**
   Create an evidence representation that includes:
   - project metadata and objectives from the catalogue,
   - component list with lifecycle stages,
@@ -405,6 +405,16 @@ component definitions, and cross-component dependencies.
 
   *Completion criteria:* At least one multi-repository project can produce a
   complete project evidence bundle from catalogue and repository data.
+
+  *Implemented:* `ghillie.evidence.models` module with five frozen msgspec
+  Structs (`ProjectMetadata`, `ComponentEvidence`,
+  `ComponentRepositorySummary`, `ComponentDependencyEvidence`,
+  `ProjectEvidenceBundle`). `ProjectEvidenceBundleService` in
+  `ghillie/evidence/project_service.py` queries catalogue storage and
+  silver/gold storage to build complete project evidence bundles. Unit tests
+  (31 model tests, 14 service tests) and pytest-bdd scenarios (4) validate
+  construction, lifecycle filtering, repository summary aggregation, dependency
+  edge capture, and previous report context.
 
 - [ ] **Task 3.1.b – Extend status model for project summarisation**  
   Add a project-level summarisation method to the status model interface,
