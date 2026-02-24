@@ -31,14 +31,14 @@ from tests.fixtures.specs import (
 )
 from tests.helpers.event_builders import commit_envelope
 from tests.unit.project_evidence_helpers import (
-    _import_wildside,  # noqa: F401 — fixture must be importable from conftest
+    _import_wildside,  # noqa: F401 — re-exported for pytest fixture discovery
     create_project_report,
     create_silver_repo_and_report,
     create_silver_repo_and_report_raw,
     create_silver_repo_with_multiple_reports,
     get_catalogue_repo_ids,
     get_estate_id,
-    project_evidence_service,  # noqa: F401 — fixture must be importable from conftest
+    project_evidence_service,  # noqa: F401 — re-exported for pytest fixture discovery
 )
 
 if typ.TYPE_CHECKING:

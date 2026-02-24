@@ -27,6 +27,7 @@ from tests.fixtures.specs import (
 )
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
     from pathlib import Path
 
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -109,7 +110,7 @@ async def _async_get_catalogue_repo_ids(
 async def _async_create_silver_repo_with_multiple_reports(
     session_factory: async_sessionmaker[AsyncSession],
     repo_params: RepositoryParams,
-    reports: list[ReportSpec],
+    reports: cabc.Sequence[ReportSpec],
 ) -> None:
     """Create a Silver Repository with multiple Gold Reports (async)."""
     async with session_factory() as session:
@@ -204,10 +205,25 @@ async def _async_create_project_report(
 # ---------------------------------------------------------------------------
 
 
+async def get_estate_id_async(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> str:
+    """Retrieve the estate ID from the database (async).
+
+    Delegates to :func:`_async_get_estate_id`.  Use this variant inside
+    async test code or BDD helpers that already have an event loop.
+    """
+    return await _async_get_estate_id(session_factory)
+
+
 def get_estate_id(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> str:
-    """Retrieve the estate ID from the database."""
+    """Retrieve the estate ID from the database.
+
+    Calls :func:`asyncio.run` internally; use :func:`get_estate_id_async`
+    when an event loop is already running.
+    """
     return asyncio.run(_async_get_estate_id(session_factory))
 
 
@@ -250,7 +266,7 @@ def create_silver_repo_and_report(
 def create_silver_repo_with_multiple_reports(
     session_factory: async_sessionmaker[AsyncSession],
     repo_params: RepositoryParams,
-    reports: list[ReportSpec],
+    reports: cabc.Sequence[ReportSpec],
 ) -> None:
     """Create a Silver Repository with multiple Gold Reports.
 

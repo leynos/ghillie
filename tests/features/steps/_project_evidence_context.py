@@ -12,15 +12,16 @@ import typing as typ
 
 from sqlalchemy import select
 
-from ghillie.catalogue.storage import Estate, RepositoryRecord
+from ghillie.catalogue.storage import RepositoryRecord
 from tests.fixtures.specs import (
     ProjectReportParams,
     ReportSummaryParams,
     RepositoryParams,
 )
 from tests.unit.project_evidence_helpers import (
+    _async_create_silver_repo_and_report_raw,
     create_project_report,
-    create_silver_repo_and_report,
+    get_estate_id_async,
 )
 
 if typ.TYPE_CHECKING:
@@ -58,12 +59,7 @@ async def get_estate_id(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> str:
     """Fetch the estate ID from the database."""
-    async with session_factory() as session:
-        estate = await session.scalar(select(Estate))
-        if estate is None:
-            msg = "Expected an Estate record in DB"
-            raise AssertionError(msg)
-        return estate.id
+    return await get_estate_id_async(session_factory)
 
 
 async def get_catalogue_repo_id(
@@ -83,6 +79,36 @@ async def get_catalogue_repo_id(
             msg = f"Expected RepositoryRecord for {owner}/{name}"
             raise AssertionError(msg)
         return repo.id
+
+
+def get_component(
+    bundle: ProjectEvidenceBundle,
+    component_key: str,
+) -> ComponentEvidence:
+    """Look up a component by key, failing with a clear message if absent.
+
+    Parameters
+    ----------
+    bundle
+        The project evidence bundle.
+    component_key
+        The component key to look up.
+
+    Returns
+    -------
+    ComponentEvidence
+        The matching component.
+
+    """
+    match = next((c for c in bundle.components if c.key == component_key), None)
+    if match is None:
+        available = [c.key for c in bundle.components]
+        msg = (
+            f"component {component_key!r} not found in bundle; "
+            f"available keys: {available}"
+        )
+        raise AssertionError(msg)
+    return match
 
 
 def get_component_with_summary(
@@ -109,8 +135,8 @@ def get_component_with_summary(
         If the component has no repository summary.
 
     """
-    component = next(c for c in bundle.components if c.key == component_key)
-    assert component.repository_summary is not None, (  # noqa: S101
+    component = get_component(bundle, component_key)
+    assert component.repository_summary is not None, (  # noqa: S101 — test helper; assert narrows type for callers
         f"{component_key} should have a repository summary"
     )
     return component
@@ -123,23 +149,33 @@ def create_repo_report(
     session_factory = project_evidence_context["session_factory"]
     estate_id = project_evidence_context["estate_id"]
 
-    cat_repo_id = asyncio.run(
-        get_catalogue_repo_id(session_factory, "leynos", "wildside")
+    rp = ReportSummaryParams(
+        status="on_track",
+        summary="Good progress this week.",
+        highlights=("Shipped v2.0",),
     )
-    create_silver_repo_and_report(
-        session_factory,
-        RepositoryParams(
-            owner="leynos",
-            name="wildside",
-            catalogue_repository_id=cat_repo_id,
-            estate_id=estate_id,
-        ),
-        ReportSummaryParams(
-            status="on_track",
-            summary="Good progress this week.",
-            highlights=("Shipped v2.0",),
-        ),
-    )
+
+    async def _create() -> None:
+        cat_repo_id = await get_catalogue_repo_id(session_factory, "leynos", "wildside")
+        machine_summary: dict[str, object] = {
+            "status": rp.status,
+            "summary": rp.summary,
+            "highlights": rp.highlights,
+            "risks": rp.risks,
+            "next_steps": rp.next_steps,
+        }
+        await _async_create_silver_repo_and_report_raw(
+            session_factory,
+            RepositoryParams(
+                owner="leynos",
+                name="wildside",
+                catalogue_repository_id=cat_repo_id,
+                estate_id=estate_id,
+            ),
+            machine_summary,
+        )
+
+    asyncio.run(_create())
 
 
 def create_previous_report(

@@ -1,31 +1,13 @@
 """Behavioural tests for project evidence bundle generation.
 
-This module implements pytest-bdd step definitions for the project evidence
-bundle feature file (``project_evidence_bundle.feature``).  The scenarios
-exercise end-to-end bundle construction: importing a catalogue, creating
-Silver repositories and Gold reports, building a bundle, and asserting that
-the resulting ``ProjectEvidenceBundle`` contains expected metadata,
-components, dependency edges, repository summaries, and previous report
-context.
-
-Scenarios
----------
-- Build project evidence bundle for multi-component project
-- Bundle includes component with latest repository summary
-- Bundle includes planned component without repository
-- Bundle includes previous project report context
-
-Fixtures
---------
-session_factory
-    Async session factory provided by the ``conftest`` database fixture.
-project_evidence_context
-    A ``ProjectEvidenceContext`` TypedDict populated by Given steps and
-    threaded through When/Then steps.
+pytest-bdd step definitions for ``project_evidence_bundle.feature``.
+Exercises end-to-end bundle construction: catalogue import, Silver/Gold
+data setup, bundle building, and assertion of metadata, components,
+dependency edges, repository summaries, and previous report context.
 
 Examples
 --------
-Run all project evidence bundle scenarios::
+Run all scenarios::
 
     pytest tests/features/steps/test_project_evidence_bundle_steps.py -v
 
@@ -35,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import typing as typ
+from pathlib import Path
 
 from pytest_bdd import given, scenario, then, when
 
@@ -46,6 +29,7 @@ from tests.features.steps._project_evidence_context import (
     ProjectEvidenceContext,
     create_previous_report,
     create_repo_report,
+    get_component,
     get_component_with_summary,
     get_estate_id,
 )
@@ -135,8 +119,6 @@ def given_imported_catalogue(
         ``estate_id`` populated.
 
     """
-    from pathlib import Path
-
     importer = CatalogueImporter(
         session_factory, estate_key="demo", estate_name="Demo Estate"
     )
@@ -350,7 +332,7 @@ def then_ingestion_has_no_repo(
     """
     bundle = project_evidence_context["bundle"]
 
-    ingestion = next(c for c in bundle.components if c.key == "wildside-ingestion")
+    ingestion = get_component(bundle, "wildside-ingestion")
     assert ingestion.has_repository is False, (
         "wildside-ingestion should have no repository"
     )
@@ -373,7 +355,7 @@ def then_ingestion_is_planned(
     """
     bundle = project_evidence_context["bundle"]
 
-    ingestion = next(c for c in bundle.components if c.key == "wildside-ingestion")
+    ingestion = get_component(bundle, "wildside-ingestion")
     assert ingestion.lifecycle == "planned", (
         f"expected lifecycle 'planned', got {ingestion.lifecycle!r}"
     )

@@ -1431,12 +1431,13 @@ A `ProjectEvidenceBundle` includes:
 
 - **Project metadata**: key, name, description, programme, and
   documentation paths from the catalogue.
-- **Component evidence**: one entry per component listing its key, name,
-  type (service, UI, library, etc.), lifecycle stage (planned, active,
-  deprecated), optional repository slug, and optional repository report summary.
+- **Component evidence**: one entry per component listing its key,
+  name, type (service, UI, library, etc.), lifecycle stage (`planned`,
+  `active`, `deprecated`), optional repository slug, and optional repository
+  report summary.
 - **Component dependency edges**: directed relationships between
-  components within the same project (depends\_on, blocked\_by,
-  emits\_events\_to), with kind (runtime, dev, test, ops) and optional
+  components within the same project (`depends_on`, `blocked_by`,
+  `emits_events_to`), with kind (`runtime`, `dev`, `test`, `ops`) and optional
   rationale.
 - **Previous project reports**: up to two most recent project-scope Gold
   reports for contextual continuity.
@@ -1447,10 +1448,10 @@ When a component has a mapped repository and the repository has at least one
 Gold-layer report, the component evidence includes a
 `ComponentRepositorySummary` with:
 
-- repository slug (e.g. `leynos/wildside`),
-- the latest report's status (on\_track, at\_risk, blocked, unknown),
-- narrative summary, highlights, risks, and next steps, and
-- reporting window timestamps.
+- repository slug (e.g. `leynos/wildside`)
+- the latest report's status (`on_track`, `at_risk`, `blocked`, `unknown`)
+- narrative summary, highlights, risks, and next steps
+- reporting window timestamps
 
 ### Planned and non-code components
 

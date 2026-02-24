@@ -97,8 +97,8 @@ class TestStatusMappingViaBuildBundle:
         )
 
         bundle = asyncio.run(project_evidence_service.build_bundle("wildside", eid))
-        core = next(c for c in bundle.components if c.key == "wildside-core")
-
+        core = next((c for c in bundle.components if c.key == "wildside-core"), None)
+        assert core is not None, "wildside-core not found in bundle components"
         assert core.repository_summary is not None, (
             "wildside-core should have a summary"
         )

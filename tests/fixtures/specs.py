@@ -1,4 +1,29 @@
-"""Shared dataclass and protocol definitions for test fixtures."""
+"""Shared dataclass and protocol definitions for test fixtures.
+
+Provides frozen dataclasses and ``typing.Protocol`` types that
+parameterise fixture helpers across the test suite.  Import the types
+you need and instantiate them with test-specific values:
+
+Examples
+--------
+Create a repository with default settings::
+
+    from tests.fixtures.specs import RepositoryParams
+
+    params = RepositoryParams(
+        owner="leynos",
+        name="wildside",
+        catalogue_repository_id="cat-1",
+        estate_id="estate-1",
+    )
+
+Override report summary defaults::
+
+    from tests.fixtures.specs import ReportSummaryParams
+
+    summary = ReportSummaryParams(status="at_risk", summary="Behind.")
+
+"""
 
 from __future__ import annotations
 
