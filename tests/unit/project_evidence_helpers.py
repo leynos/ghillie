@@ -150,10 +150,7 @@ async def _async_create_silver_repo_and_report_raw(
     repo_params: RepositoryParams,
     machine_summary: dict[str, object],
 ) -> None:
-    """Create a Silver Repository and Gold Report with arbitrary summary.
-
-    The *machine_summary* dict is stored verbatim on the Gold Report.
-    """
+    """Create a Silver Repository and Gold Report with arbitrary summary (async)."""
     async with session_factory() as session:
         silver_repo = await _insert_silver_repo(session, repo_params)
         report = Report(
@@ -172,12 +169,7 @@ async def _async_create_project_report(
     session_factory: async_sessionmaker[AsyncSession],
     params: ProjectReportParams,
 ) -> None:
-    """Create a ReportProject (if needed) and a project-scope Gold Report (async).
-
-    Re-uses an existing ``ReportProject`` when one with the given *project_key*
-    already exists, allowing multiple reports to be created for the same project
-    across successive calls.
-    """
+    """Create a ReportProject if needed and a project-scope Gold Report (async)."""
     async with session_factory() as session:
         project = await session.scalar(
             select(ReportProject).where(
@@ -375,14 +367,3 @@ def create_project_report(
 
     """
     asyncio.run(_async_create_project_report(session_factory, params))
-
-
-# ---------------------------------------------------------------------------
-# Re-exports from helpers sub-package
-# ---------------------------------------------------------------------------
-
-from tests.unit.helpers.project_evidence_helpers import (  # noqa: E402
-    build_wildside_bundle,
-)
-
-__all__ = ["build_wildside_bundle"]

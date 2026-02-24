@@ -12,6 +12,9 @@ Build a Wildside bundle in a test::
         build_wildside_bundle,
     )
 
+    bundle = build_wildside_bundle(project_evidence_service, session_factory)
+    # Returns a ProjectEvidenceBundle for the "wildside" project.
+
 """
 
 from __future__ import annotations
@@ -47,5 +50,4 @@ def build_wildside_bundle(
         The assembled evidence bundle for the Wildside project.
 
     """
-    eid = get_estate_id(session_factory)
-    return asyncio.run(service.build_bundle("wildside", eid))
+    return asyncio.run(service.build_bundle("wildside", get_estate_id(session_factory)))
