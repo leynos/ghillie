@@ -6,11 +6,11 @@ import typing as typ
 
 import pytest
 
-from tests.unit.conftest import RepositoryCreateSpec
+from tests.fixtures.specs import RepositoryCreateSpec
 
 if typ.TYPE_CHECKING:
     from ghillie.registry import RepositoryRegistryService
-    from tests.unit.conftest import CreateRepoFn
+    from tests.fixtures.specs import CreateRepoFn
 
 
 @pytest.mark.asyncio

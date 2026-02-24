@@ -11,7 +11,7 @@ from sqlalchemy import delete, select
 from ghillie.catalogue import CatalogueImporter, RepositoryRecord
 from ghillie.registry import RegistrySyncError
 from ghillie.silver.storage import Repository
-from tests.unit.conftest import RepositoryCreateSpec
+from tests.fixtures.specs import RepositoryCreateSpec
 
 if typ.TYPE_CHECKING:
     from pathlib import Path
@@ -19,7 +19,7 @@ if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from ghillie.registry import RepositoryRegistryService, SyncResult
-    from tests.unit.conftest import CreateRepoFn, FetchRepoFn
+    from tests.fixtures.specs import CreateRepoFn, FetchRepoFn
 
 
 async def fetch_silver_repo(

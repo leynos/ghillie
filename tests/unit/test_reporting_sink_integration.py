@@ -11,7 +11,8 @@ from ghillie.evidence import EvidenceBundleService
 from ghillie.reporting.filesystem_sink import FilesystemReportSink
 from ghillie.reporting.service import ReportingService, ReportingServiceDependencies
 from ghillie.status import MockStatusModel
-from tests.unit.conftest import RepositoryEventSpec, setup_test_repository_with_event
+from tests.fixtures.specs import RepositoryEventSpec
+from tests.unit.conftest import setup_test_repository_with_event
 
 if typ.TYPE_CHECKING:
     from pathlib import Path

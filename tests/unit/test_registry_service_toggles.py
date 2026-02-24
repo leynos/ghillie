@@ -8,11 +8,11 @@ import typing as typ
 import pytest
 
 from ghillie.registry import RepositoryNotFoundError
-from tests.unit.conftest import RepositoryCreateSpec
+from tests.fixtures.specs import RepositoryCreateSpec
 
 if typ.TYPE_CHECKING:
     from ghillie.registry import RepositoryRegistryService
-    from tests.unit.conftest import CreateRepoFn, FetchRepoFn
+    from tests.fixtures.specs import CreateRepoFn, FetchRepoFn
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

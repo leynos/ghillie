@@ -8,11 +8,11 @@ import typing as typ
 import pytest
 
 from ghillie.registry.listing import NegativePaginationError
-from tests.unit.conftest import RepositoryCreateSpec
+from tests.fixtures.specs import RepositoryCreateSpec
 
 if typ.TYPE_CHECKING:
     from ghillie.registry import RepositoryRegistryService
-    from tests.unit.conftest import CreateRepoFn
+    from tests.fixtures.specs import CreateRepoFn
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

@@ -1503,6 +1503,6 @@ asyncio.run(main())
 ```
 
 The service accepts two session factories: one for catalogue storage, and one
-for Silver/Gold storage.  In typical deployments, both point to the same
+for Silver/Gold storage. In typical deployments, both point to the same
 database engine, but separate session factories allow future database
 separation without code changes.
