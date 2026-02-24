@@ -29,8 +29,8 @@ from tests.fixtures.specs import (
     ReportSummaryParams,
     RepositoryParams,
 )
+from tests.unit.helpers.project_evidence_helpers import build_wildside_bundle
 from tests.unit.project_evidence_helpers import (
-    build_wildside_bundle,
     create_project_report,
     create_silver_repo_and_report,
     create_silver_repo_with_multiple_reports,

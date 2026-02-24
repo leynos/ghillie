@@ -18,7 +18,7 @@ import typing as typ
 
 import pytest
 
-from tests.unit.project_evidence_helpers import build_wildside_bundle
+from tests.unit.helpers.project_evidence_helpers import build_wildside_bundle
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker

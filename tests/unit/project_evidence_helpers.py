@@ -42,8 +42,6 @@ if typ.TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-    from ghillie.evidence.models import ProjectEvidenceBundle
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -380,28 +378,11 @@ def create_project_report(
 
 
 # ---------------------------------------------------------------------------
-# Shared test helpers
+# Re-exports from helpers sub-package
 # ---------------------------------------------------------------------------
 
+from tests.unit.helpers.project_evidence_helpers import (  # noqa: E402
+    build_wildside_bundle,
+)
 
-def build_wildside_bundle(
-    service: ProjectEvidenceBundleService,
-    session_factory: async_sessionmaker[AsyncSession],
-) -> ProjectEvidenceBundle:
-    """Build and return a bundle for the Wildside project.
-
-    Parameters
-    ----------
-    service
-        The ``ProjectEvidenceBundleService`` under test.
-    session_factory
-        Async session factory for database access.
-
-    Returns
-    -------
-    ProjectEvidenceBundle
-        The assembled evidence bundle for the Wildside project.
-
-    """
-    eid = get_estate_id(session_factory)
-    return asyncio.run(service.build_bundle("wildside", eid))
+__all__ = ["build_wildside_bundle"]
