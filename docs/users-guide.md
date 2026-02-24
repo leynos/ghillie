@@ -1429,16 +1429,16 @@ single immutable structure for project-level status reporting.
 
 A `ProjectEvidenceBundle` includes:
 
-- **Project metadata** -- key, name, description, programme, and
+- **Project metadata**: key, name, description, programme, and
   documentation paths from the catalogue.
-- **Component evidence** -- one entry per component listing its key, name,
+- **Component evidence**: one entry per component listing its key, name,
   type (service, UI, library, etc.), lifecycle stage (planned, active,
   deprecated), optional repository slug, and optional repository report summary.
-- **Component dependency edges** -- directed relationships between
+- **Component dependency edges**: directed relationships between
   components within the same project (depends\_on, blocked\_by,
   emits\_events\_to), with kind (runtime, dev, test, ops) and optional
   rationale.
-- **Previous project reports** -- up to two most recent project-scope Gold
+- **Previous project reports**: up to two most recent project-scope Gold
   reports for contextual continuity.
 
 ### Components with repositories
@@ -1473,7 +1473,7 @@ import asyncio
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from ghillie.evidence.project_service import ProjectEvidenceBundleService
+from ghillie.evidence import ProjectEvidenceBundleService
 
 
 async def main() -> None:

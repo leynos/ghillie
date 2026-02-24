@@ -30,15 +30,15 @@ from tests.fixtures.specs import (
     RepositoryParams,
 )
 from tests.helpers.event_builders import commit_envelope
-from tests.unit.project_evidence_helpers import (  # noqa: F401
-    _import_wildside,
+from tests.unit.project_evidence_helpers import (
+    _import_wildside,  # noqa: F401 — fixture must be importable from conftest
     create_project_report,
     create_silver_repo_and_report,
     create_silver_repo_and_report_raw,
     create_silver_repo_with_multiple_reports,
     get_catalogue_repo_ids,
     get_estate_id,
-    project_evidence_service,
+    project_evidence_service,  # noqa: F401 — fixture must be importable from conftest
 )
 
 if typ.TYPE_CHECKING:
@@ -105,7 +105,7 @@ def create_repo(session_factory: async_sessionmaker[AsyncSession]) -> CreateRepo
                 ingestion_enabled=create_spec.ingestion_enabled,
                 estate_id=create_spec.estate_id,
                 catalogue_repository_id=create_spec.catalogue_repository_id,
-                documentation_paths=create_spec.documentation_paths or [],
+                documentation_paths=list(create_spec.documentation_paths or ()),
             )
             session.add(repo)
 

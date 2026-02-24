@@ -25,7 +25,7 @@ class RepositoryCreateSpec:
     default_branch: str = "main"
     estate_id: str | None = None
     catalogue_repository_id: str | None = None
-    documentation_paths: list[str] | None = None
+    documentation_paths: tuple[str, ...] | None = None
 
 
 class CreateRepoFn(typ.Protocol):

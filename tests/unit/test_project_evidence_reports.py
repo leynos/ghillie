@@ -1,4 +1,17 @@
-"""Unit tests for project evidence repository summaries and previous reports."""
+"""Unit tests for project evidence repository summaries and previous reports.
+
+Verifies that ``ProjectEvidenceBundleService.build_bundle`` correctly
+attaches repository-level Gold report summaries to components, selects
+the latest report when multiple exist, respects limit and ordering for
+previous project-scope reports, and filters out data from other estates.
+
+Examples
+--------
+Run these tests::
+
+    pytest tests/unit/test_project_evidence_reports.py -q
+
+"""
 
 from __future__ import annotations
 
@@ -17,6 +30,7 @@ from tests.fixtures.specs import (
     RepositoryParams,
 )
 from tests.unit.project_evidence_helpers import (
+    build_wildside_bundle,
     create_project_report,
     create_silver_repo_and_report,
     create_silver_repo_with_multiple_reports,
@@ -27,22 +41,11 @@ from tests.unit.project_evidence_helpers import (
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-    from ghillie.evidence.models import ProjectEvidenceBundle
 
-
-def _build_wildside_bundle(
-    service: ProjectEvidenceBundleService,
-    session_factory: async_sessionmaker[AsyncSession],
-) -> ProjectEvidenceBundle:
-    """Build and return a bundle for the Wildside project."""
-    eid = get_estate_id(session_factory)
-    return asyncio.run(service.build_bundle("wildside", eid))
-
-
+@pytest.mark.usefixtures("_import_wildside")
 class TestProjectEvidenceReports:
     """Tests for repository summaries, previous reports, and estate filtering."""
 
-    @pytest.mark.usefixtures("_import_wildside")
     def test_component_with_report_has_summary(
         self,
         project_evidence_service: ProjectEvidenceBundleService,
@@ -83,7 +86,6 @@ class TestProjectEvidenceReports:
             f"'Shipped v2.0' not in highlights: {core.repository_summary.highlights}"
         )
 
-    @pytest.mark.usefixtures("_import_wildside")
     def test_component_repository_summary_uses_latest_report(
         self,
         project_evidence_service: ProjectEvidenceBundleService,
@@ -140,14 +142,13 @@ class TestProjectEvidenceReports:
             2024, 7, 15, tzinfo=dt.UTC
         ), f"window_end mismatch: {core.repository_summary.window_end}"
 
-    @pytest.mark.usefixtures("_import_wildside")
     def test_component_without_report_has_no_summary(
         self,
         project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Component with repo but no report has summary=None."""
-        bundle = _build_wildside_bundle(project_evidence_service, session_factory)
+        bundle = build_wildside_bundle(project_evidence_service, session_factory)
 
         # No Silver repos or Gold reports created, so all summaries should
         # be None even for components with catalogue repos.
@@ -156,7 +157,6 @@ class TestProjectEvidenceReports:
             "wildside-core should have no summary without reports"
         )
 
-    @pytest.mark.usefixtures("_import_wildside")
     def test_bundle_includes_previous_project_reports(
         self,
         project_evidence_service: ProjectEvidenceBundleService,
@@ -191,7 +191,6 @@ class TestProjectEvidenceReports:
             f"'Milestone reached' not in highlights: {prev.highlights}"
         )
 
-    @pytest.mark.usefixtures("_import_wildside")
     def test_previous_project_reports_limit_and_ordering(
         self,
         session_factory: async_sessionmaker[AsyncSession],
@@ -243,7 +242,6 @@ class TestProjectEvidenceReports:
             "oldest report (month 1) should be excluded by limit"
         )
 
-    @pytest.mark.usefixtures("_import_wildside")
     def test_report_from_other_estate_excluded_from_summary(
         self,
         project_evidence_service: ProjectEvidenceBundleService,
@@ -276,7 +274,6 @@ class TestProjectEvidenceReports:
             "report from other estate should not appear in summary"
         )
 
-    @pytest.mark.usefixtures("_import_wildside")
     def test_previous_reports_from_other_estate_excluded(
         self,
         project_evidence_service: ProjectEvidenceBundleService,

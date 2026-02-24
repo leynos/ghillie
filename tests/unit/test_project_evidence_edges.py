@@ -1,41 +1,42 @@
-"""Unit tests for project evidence dependency edges."""
+"""Unit tests for project evidence dependency edges.
+
+Verifies that ``ProjectEvidenceBundleService.build_bundle`` includes
+correct intra-project dependency edges (``depends_on``,
+``emits_events_to``) and excludes cross-project ``blocked_by`` edges.
+
+Examples
+--------
+Run these tests::
+
+    pytest tests/unit/test_project_evidence_edges.py -q
+
+"""
 
 from __future__ import annotations
 
-import asyncio
 import typing as typ
 
 import pytest
 
-from tests.unit.project_evidence_helpers import get_estate_id
+from tests.unit.project_evidence_helpers import build_wildside_bundle
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-    from ghillie.evidence.models import ProjectEvidenceBundle
     from ghillie.evidence.project_service import ProjectEvidenceBundleService
 
 
-def _build_wildside_bundle(
-    service: ProjectEvidenceBundleService,
-    session_factory: async_sessionmaker[AsyncSession],
-) -> ProjectEvidenceBundle:
-    """Build and return a bundle for the Wildside project."""
-    eid = get_estate_id(session_factory)
-    return asyncio.run(service.build_bundle("wildside", eid))
-
-
+@pytest.mark.usefixtures("_import_wildside")
 class TestProjectEvidenceEdges:
     """Tests for dependency edges in the project evidence bundle."""
 
-    @pytest.mark.usefixtures("_import_wildside")
     def test_bundle_contains_dependency_edges(
         self,
         project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Bundle includes dependency edges from the component graph."""
-        bundle = _build_wildside_bundle(project_evidence_service, session_factory)
+        bundle = build_wildside_bundle(project_evidence_service, session_factory)
 
         assert len(bundle.dependencies) > 0, "expected at least one dependency edge"
         # wildside-core depends_on wildside-engine
@@ -53,7 +54,6 @@ class TestProjectEvidenceEdges:
             f"expected kind 'runtime', got {core_to_engine[0].kind!r}"
         )
 
-    @pytest.mark.usefixtures("_import_wildside")
     def test_cross_project_blocked_by_edges_excluded(
         self,
         project_evidence_service: ProjectEvidenceBundleService,
@@ -65,7 +65,7 @@ class TestProjectEvidenceEdges:
         belongs to df12-foundations. This edge should not appear in the
         Wildside project bundle.
         """
-        bundle = _build_wildside_bundle(project_evidence_service, session_factory)
+        bundle = build_wildside_bundle(project_evidence_service, session_factory)
 
         blocked = bundle.blocked_dependencies
         # ortho-config is in df12-foundations, not wildside, so the
@@ -80,14 +80,13 @@ class TestProjectEvidenceEdges:
             "cross-project blocked_by edges should be excluded"
         )
 
-    @pytest.mark.usefixtures("_import_wildside")
     def test_bundle_contains_emits_events_to_edges(
         self,
         project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Bundle includes emits_events_to edges."""
-        bundle = _build_wildside_bundle(project_evidence_service, session_factory)
+        bundle = build_wildside_bundle(project_evidence_service, session_factory)
 
         emits = [d for d in bundle.dependencies if d.relationship == "emits_events_to"]
         assert len(emits) >= 1, "expected at least one emits_events_to edge"

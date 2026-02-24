@@ -34,47 +34,24 @@ Run all project evidence bundle scenarios::
 from __future__ import annotations
 
 import asyncio
-import datetime as dt
 import typing as typ
 
 from pytest_bdd import given, scenario, then, when
-from sqlalchemy import select
 
 from ghillie.catalogue.importer import CatalogueImporter
-from ghillie.catalogue.storage import Estate, RepositoryRecord
-from ghillie.evidence.models import (
-    ComponentEvidence,
-    ProjectEvidenceBundle,
-    ReportStatus,
-)
+from ghillie.evidence.models import ReportStatus
 from ghillie.evidence.project_service import ProjectEvidenceBundleService
-from ghillie.gold.storage import Report, ReportProject, ReportScope
-from ghillie.silver.storage import Repository
+from tests.features.steps._project_evidence_context import (
+    WILDSIDE_CATALOGUE,
+    ProjectEvidenceContext,
+    create_previous_report,
+    create_repo_report,
+    get_component_with_summary,
+    get_estate_id,
+)
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
-
-class ProjectEvidenceContext(typ.TypedDict, total=False):
-    """Mutable context dictionary shared between BDD steps.
-
-    Attributes
-    ----------
-    session_factory
-        Async session factory for database access.
-    service
-        The ``ProjectEvidenceBundleService`` under test.
-    estate_id
-        Estate identifier obtained after catalogue import.
-    bundle
-        The ``ProjectEvidenceBundle`` produced by the When step.
-
-    """
-
-    session_factory: async_sessionmaker[AsyncSession]
-    service: ProjectEvidenceBundleService
-    estate_id: str
-    bundle: ProjectEvidenceBundle
 
 
 # Scenario wrappers
@@ -134,71 +111,6 @@ def test_previous_project_report_scenario() -> None:
     """
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-WILDSIDE_CATALOGUE = "examples/wildside-catalogue.yaml"
-
-
-async def _get_estate_id(
-    session_factory: async_sessionmaker[AsyncSession],
-) -> str:
-    """Fetch the estate ID from the database."""
-    async with session_factory() as session:
-        estate = await session.scalar(select(Estate))
-        assert estate is not None, "Expected an Estate record in DB"
-        return estate.id
-
-
-async def _get_catalogue_repo_id(
-    session_factory: async_sessionmaker[AsyncSession],
-    owner: str,
-    name: str,
-) -> str:
-    """Fetch a catalogue repository ID by owner/name."""
-    async with session_factory() as session:
-        repo = await session.scalar(
-            select(RepositoryRecord).where(
-                RepositoryRecord.owner == owner,
-                RepositoryRecord.name == name,
-            )
-        )
-        assert repo is not None, f"Expected RepositoryRecord for {owner}/{name}"
-        return repo.id
-
-
-def _get_component_with_summary(
-    bundle: ProjectEvidenceBundle,
-    component_key: str,
-) -> ComponentEvidence:
-    """Retrieve a component and assert it has a repository summary.
-
-    Parameters
-    ----------
-    bundle
-        The project evidence bundle.
-    component_key
-        The component key to look up.
-
-    Returns
-    -------
-    ComponentEvidence
-        The component with a verified non-None repository_summary.
-
-    Raises
-    ------
-    AssertionError
-        If the component has no repository summary.
-
-    """
-    component = next(c for c in bundle.components if c.key == component_key)
-    assert component.repository_summary is not None, (
-        f"{component_key} should have a repository summary"
-    )
-    return component
-
-
 # Given steps
 
 
@@ -230,7 +142,7 @@ def given_imported_catalogue(
     )
     asyncio.run(importer.import_path(Path(WILDSIDE_CATALOGUE), commit_sha="abc123"))
 
-    estate_id = asyncio.run(_get_estate_id(session_factory))
+    estate_id = asyncio.run(get_estate_id(session_factory))
 
     return {
         "session_factory": session_factory,
@@ -254,43 +166,7 @@ def given_repo_report_exists(
         Shared step context containing the session factory and estate ID.
 
     """
-    session_factory = project_evidence_context["session_factory"]
-    estate_id = project_evidence_context["estate_id"]
-
-    async def _create() -> None:
-        cat_repo_id = await _get_catalogue_repo_id(
-            session_factory, "leynos", "wildside"
-        )
-        async with session_factory() as session:
-            silver_repo = Repository(
-                github_owner="leynos",
-                github_name="wildside",
-                default_branch="main",
-                estate_id=estate_id,
-                catalogue_repository_id=cat_repo_id,
-                ingestion_enabled=True,
-            )
-            session.add(silver_repo)
-            await session.flush()
-
-            report = Report(
-                scope=ReportScope.REPOSITORY,
-                repository_id=silver_repo.id,
-                window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
-                window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
-                model="test-model",
-                machine_summary={
-                    "status": "on_track",
-                    "summary": "Good progress this week.",
-                    "highlights": ["Shipped v2.0"],
-                    "risks": [],
-                    "next_steps": [],
-                },
-            )
-            session.add(report)
-            await session.commit()
-
-    asyncio.run(_create())
+    create_repo_report(project_evidence_context)
 
 
 @given('a previous project report exists for "wildside"')
@@ -305,32 +181,7 @@ def given_previous_project_report(
         Shared step context containing the session factory and estate ID.
 
     """
-    session_factory = project_evidence_context["session_factory"]
-    estate_id = project_evidence_context["estate_id"]
-
-    async def _create() -> None:
-        async with session_factory() as session:
-            project = ReportProject(
-                key="wildside",
-                name="Wildside",
-                estate_id=estate_id,
-            )
-            report = Report(
-                scope=ReportScope.PROJECT,
-                project=project,
-                window_start=dt.datetime(2024, 6, 24, tzinfo=dt.UTC),
-                window_end=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
-                model="test-model",
-                machine_summary={
-                    "status": "on_track",
-                    "highlights": ["Milestone reached"],
-                    "risks": ["Dependency risk"],
-                },
-            )
-            session.add_all([project, report])
-            await session.commit()
-
-    asyncio.run(_create())
+    create_previous_report(project_evidence_context)
 
 
 # When steps
@@ -452,9 +303,10 @@ def then_core_has_summary(
 
     """
     bundle = project_evidence_context["bundle"]
-    core = _get_component_with_summary(bundle, "wildside-core")
+    core = get_component_with_summary(bundle, "wildside-core")
+    # type-narrow: get_component_with_summary ensures repository_summary is not None
     summary = core.repository_summary
-    assert summary is not None  # narrowed by helper; keeps ty happy
+    assert summary is not None
 
     assert summary.summary == "Good progress this week.", (
         f"summary text mismatch: {summary.summary!r}"
@@ -474,9 +326,10 @@ def then_summary_status_on_track(
 
     """
     bundle = project_evidence_context["bundle"]
-    core = _get_component_with_summary(bundle, "wildside-core")
+    core = get_component_with_summary(bundle, "wildside-core")
+    # type-narrow: get_component_with_summary ensures repository_summary is not None
     summary = core.repository_summary
-    assert summary is not None  # narrowed by helper; keeps ty happy
+    assert summary is not None
 
     assert summary.status == ReportStatus.ON_TRACK, (
         f"expected ON_TRACK, got {summary.status}"

@@ -1,4 +1,18 @@
-"""Unit tests for project evidence bundle structure and components."""
+"""Unit tests for project evidence bundle structure and components.
+
+Verifies that ``ProjectEvidenceBundleService.build_bundle`` produces
+bundles with correct project metadata, component inventory, lifecycle
+stages, repository slugs, ``generated_at`` timestamps, and component
+types.  Repository-summary and dependency-edge assertions are covered
+by sibling modules.
+
+Examples
+--------
+Run these tests::
+
+    pytest tests/unit/test_project_evidence_bundle.py -q
+
+"""
 
 from __future__ import annotations
 
@@ -7,28 +21,18 @@ import typing as typ
 
 import pytest
 
-from tests.unit.project_evidence_helpers import get_estate_id
+from tests.unit.project_evidence_helpers import build_wildside_bundle, get_estate_id
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-    from ghillie.evidence.models import ProjectEvidenceBundle
     from ghillie.evidence.project_service import ProjectEvidenceBundleService
 
 
-def _build_wildside_bundle(
-    service: ProjectEvidenceBundleService,
-    session_factory: async_sessionmaker[AsyncSession],
-) -> ProjectEvidenceBundle:
-    """Build and return a bundle for the Wildside project."""
-    eid = get_estate_id(session_factory)
-    return asyncio.run(service.build_bundle("wildside", eid))
-
-
+@pytest.mark.usefixtures("_import_wildside")
 class TestProjectEvidenceBundleStructure:
     """Tests for bundle structure, metadata, components, and lifecycle."""
 
-    @pytest.mark.usefixtures("_import_wildside")
     def test_project_not_found_raises_value_error(
         self,
         project_evidence_service: ProjectEvidenceBundleService,
@@ -40,28 +44,26 @@ class TestProjectEvidenceBundleStructure:
         with pytest.raises(ValueError, match="not found"):
             asyncio.run(project_evidence_service.build_bundle("nonexistent", eid))
 
-    @pytest.mark.usefixtures("_import_wildside")
     def test_bundle_contains_project_metadata(
         self,
         project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Bundle project metadata matches catalogue data."""
-        bundle = _build_wildside_bundle(project_evidence_service, session_factory)
+        bundle = build_wildside_bundle(project_evidence_service, session_factory)
 
         assert bundle.project.key == "wildside", "project key mismatch"
         assert bundle.project.name == "Wildside", "project name mismatch"
         assert bundle.project.programme == "df12", "programme mismatch"
         assert bundle.project.description is not None, "description missing"
 
-    @pytest.mark.usefixtures("_import_wildside")
     def test_bundle_contains_all_components(
         self,
         project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Bundle includes all components from the catalogue."""
-        bundle = _build_wildside_bundle(project_evidence_service, session_factory)
+        bundle = build_wildside_bundle(project_evidence_service, session_factory)
 
         assert bundle.component_count == 4, (
             f"expected 4 components, got {bundle.component_count}"
@@ -74,14 +76,13 @@ class TestProjectEvidenceBundleStructure:
             "wildside-ingestion",
         }, f"unexpected component keys: {keys}"
 
-    @pytest.mark.usefixtures("_import_wildside")
     def test_bundle_lifecycle_stages(
         self,
         project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Components reflect their catalogue lifecycle stages."""
-        bundle = _build_wildside_bundle(project_evidence_service, session_factory)
+        bundle = build_wildside_bundle(project_evidence_service, session_factory)
 
         assert len(bundle.active_components) == 3, (
             f"expected 3 active components, got {len(bundle.active_components)}"
@@ -93,14 +94,13 @@ class TestProjectEvidenceBundleStructure:
             f"expected wildside-ingestion, got {bundle.planned_components[0].key}"
         )
 
-    @pytest.mark.usefixtures("_import_wildside")
     def test_planned_component_has_no_repository(
         self,
         project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Planned components without repos have no repository_slug."""
-        bundle = _build_wildside_bundle(project_evidence_service, session_factory)
+        bundle = build_wildside_bundle(project_evidence_service, session_factory)
 
         ingestion = next(c for c in bundle.components if c.key == "wildside-ingestion")
         assert ingestion.has_repository is False, (
@@ -113,14 +113,13 @@ class TestProjectEvidenceBundleStructure:
             f"expected lifecycle 'planned', got {ingestion.lifecycle!r}"
         )
 
-    @pytest.mark.usefixtures("_import_wildside")
     def test_active_component_has_repository_slug(
         self,
         project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Active components with repos have repository_slug populated."""
-        bundle = _build_wildside_bundle(project_evidence_service, session_factory)
+        bundle = build_wildside_bundle(project_evidence_service, session_factory)
 
         core = next(c for c in bundle.components if c.key == "wildside-core")
         assert core.has_repository is True, "wildside-core should have a repository"
@@ -128,27 +127,25 @@ class TestProjectEvidenceBundleStructure:
             f"expected leynos/wildside, got {core.repository_slug!r}"
         )
 
-    @pytest.mark.usefixtures("_import_wildside")
     def test_bundle_generated_at_is_set(
         self,
         project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Bundle has a generated_at timestamp."""
-        bundle = _build_wildside_bundle(project_evidence_service, session_factory)
+        bundle = build_wildside_bundle(project_evidence_service, session_factory)
 
         assert bundle.generated_at is not None, (
             "bundle should have a generated_at timestamp"
         )
 
-    @pytest.mark.usefixtures("_import_wildside")
     def test_component_type_is_captured(
         self,
         project_evidence_service: ProjectEvidenceBundleService,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
         """Component type from catalogue is included in evidence."""
-        bundle = _build_wildside_bundle(project_evidence_service, session_factory)
+        bundle = build_wildside_bundle(project_evidence_service, session_factory)
 
         core = next(c for c in bundle.components if c.key == "wildside-core")
         assert core.component_type == "service", (

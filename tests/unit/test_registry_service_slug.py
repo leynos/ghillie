@@ -24,7 +24,7 @@ async def test_get_repository_by_slug_returns_info(
         "test-repo",
         spec=RepositoryCreateSpec(
             ingestion_enabled=True,
-            documentation_paths=["docs/roadmap.md"],
+            documentation_paths=("docs/roadmap.md",),
         ),
     )
 

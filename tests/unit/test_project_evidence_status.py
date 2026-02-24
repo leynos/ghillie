@@ -1,4 +1,16 @@
-"""Unit tests for project evidence status mapping."""
+"""Unit tests for project evidence status mapping.
+
+Verifies that ``ProjectEvidenceBundleService.build_bundle`` correctly maps
+edge-case ``machine_summary.status`` values (``None``, mixed case, invalid
+strings, non-string types) to the appropriate ``ReportStatus`` enum member.
+
+Examples
+--------
+Run these tests::
+
+    pytest tests/unit/test_project_evidence_status.py -q
+
+"""
 
 from __future__ import annotations
 
@@ -21,12 +33,9 @@ if typ.TYPE_CHECKING:
     from ghillie.evidence.project_service import ProjectEvidenceBundleService
 
 
+@pytest.mark.usefixtures("_import_wildside")
 class TestStatusMappingViaBuildBundle:
     """Verify status parsing through the public ``build_bundle`` API.
-
-    Attributes
-    ----------
-    None
 
     Notes
     -----
@@ -46,7 +55,6 @@ class TestStatusMappingViaBuildBundle:
             pytest.param(123, ReportStatus.UNKNOWN, id="non-string-int"),
         ],
     )
-    @pytest.mark.usefixtures("_import_wildside")
     def test_status_mapping_from_reports(
         self,
         project_evidence_service: ProjectEvidenceBundleService,
