@@ -1,0 +1,85 @@
+# HTTP Status Codes and Methods
+
+> Use the Python standard library `http.HTTPStatus` and
+> `http.HTTPMethod` enums throughout. Never use magic numbers or
+> framework-specific constants (e.g. `falcon.HTTP_200`) for HTTP
+> status codes or methods.
+
+## `http.HTTPStatus`
+
+`http.HTTPStatus` is an `IntEnum` whose members compare equal to their
+integer values. Use it everywhere an HTTP status code appears:
+response status assignment, threshold comparisons, test assertions,
+and error construction.
+
+Equality checks (`==`, `!=`) may use `HTTPStatus` members directly.
+Relational comparisons (`>=`, `<`) used as thresholds must cast to
+`int()` so the intent — a numeric boundary, not a specific status — is
+unambiguous to both readers and type checkers.
+
+```python
+from http import HTTPStatus
+
+# Setting a response status (works with Falcon, Starlette, etc.)
+resp.status = HTTPStatus.OK
+
+# Threshold comparisons — cast to int for relational checks
+_HTTP_ERROR_THRESHOLD = int(HTTPStatus.BAD_REQUEST)
+
+if response.status_code >= _HTTP_ERROR_THRESHOLD:
+    raise APIError(response.status_code)
+
+# Equality checks — use the enum member directly
+if response.status_code == HTTPStatus.TOO_MANY_REQUESTS:
+    back_off(response)
+
+# Test assertions — prefer status_code (int) over status (str)
+assert result.status_code == HTTPStatus.NOT_FOUND
+```
+
+### Why use `HTTPStatus`
+
+- **Self-documenting:** `HTTPStatus.NOT_FOUND` is clearer than `404`
+  or `falcon.HTTP_404`.
+- **Framework-agnostic:** the enum is part of the stdlib and works
+  with any HTTP library or framework.
+- **Type-safe:** static analysers can verify exhaustive `match`/`case`
+  branches over `HTTPStatus` members.
+
+## `http.HTTPMethod`
+
+`http.HTTPMethod` is a `StrEnum` whose members compare equal to their
+string values (`HTTPMethod.GET == "GET"`). Use it whenever an HTTP
+method appears as a literal string — for example, in client calls,
+routing tables, or test fixtures.
+
+```python
+from http import HTTPMethod
+
+# Client calls
+response = await client.request(HTTPMethod.POST, url, json=payload)
+
+# Comparisons
+if request.method == HTTPMethod.GET:
+    ...
+```
+
+### Why use `HTTPMethod`
+
+- **Discoverable:** IDE autocompletion lists valid methods.
+- **Typo-proof:** `HTTPMethod.DLETE` raises `AttributeError` at
+  runtime and is flagged by static type checkers (e.g. Pyright, mypy)
+  during analysis; `"DLETE"` bypasses both checks.
+
+## Banned alternatives
+
+| Do not use | Use instead |
+| --- | --- |
+| `falcon.HTTP_200`, `falcon.HTTP_404`, … | `HTTPStatus.OK`, `HTTPStatus.NOT_FOUND`, … |
+| `200`, `404`, `500` (bare integers) | `HTTPStatus.OK`, `HTTPStatus.NOT_FOUND`, `HTTPStatus.INTERNAL_SERVER_ERROR` |
+| `"GET"`, `"POST"`, … (bare strings) | `HTTPMethod.GET`, `HTTPMethod.POST`, … |
+
+______________________________________________________________________
+
+These conventions keep HTTP semantics explicit, framework-independent,
+and verifiable by static analysis.

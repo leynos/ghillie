@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import typing as typ
+from http import HTTPStatus
 
 import httpx
 import msgspec
@@ -45,7 +46,7 @@ class _RateLimitWithRetryTransport(httpx.AsyncBaseTransport):
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         """Return rate limit response with retry-after."""
         return httpx.Response(
-            status_code=429,
+            status_code=HTTPStatus.TOO_MANY_REQUESTS,
             headers={"Retry-After": "30"},
             json={"error": {"message": "Rate limit exceeded"}},
         )
@@ -57,7 +58,7 @@ class _RateLimitWithoutRetryTransport(httpx.AsyncBaseTransport):
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         """Return rate limit response without retry-after."""
         return httpx.Response(
-            status_code=429,
+            status_code=HTTPStatus.TOO_MANY_REQUESTS,
             json={"error": {"message": "Rate limit exceeded"}},
         )
 
@@ -68,7 +69,7 @@ class _BadGatewayTransport(httpx.AsyncBaseTransport):
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         """Return bad gateway response."""
         return httpx.Response(
-            status_code=502,
+            status_code=HTTPStatus.BAD_GATEWAY,
             json={"error": {"message": "Bad gateway"}},
         )
 
@@ -122,7 +123,7 @@ class _SuccessfulCompletionTransport(httpx.AsyncBaseTransport):
         if usage is not None:
             body["usage"] = usage
 
-        return httpx.Response(status_code=200, json=body)
+        return httpx.Response(status_code=HTTPStatus.OK, json=body)
 
 
 class TestLLMStatusResponseParsing:

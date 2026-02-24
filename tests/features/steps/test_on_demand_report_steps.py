@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import typing as typ
+from http import HTTPStatus
 
 import falcon.testing
 import pytest
@@ -199,17 +200,18 @@ def when_post_unknown_repo(on_demand_context: OnDemandContext) -> None:
 def then_response_status(on_demand_context: OnDemandContext, status: int) -> None:
     """Assert the HTTP response status code and basic response contract."""
     response = on_demand_context["response"]
-    actual_status = int(response.status.split()[0])
-    assert actual_status == status, f"expected status {status}, got {actual_status}"
+    assert response.status_code == status, (
+        f"expected status {status}, got {response.status_code}"
+    )
 
-    if status == 204:
+    if status == HTTPStatus.NO_CONTENT:
         # 204 No Content responses must not have a body
         assert response.content in (
             b"",
             None,
         ), "204 response must not have a body"
 
-    elif status == 404:
+    elif status == HTTPStatus.NOT_FOUND:
         # 404 responses should include a JSON error payload
         body = response.json
         assert body is not None, "404 response must contain a JSON error body"

@@ -6,6 +6,7 @@ import asyncio
 import dataclasses as dc
 import datetime as dt
 import typing as typ
+from http import HTTPStatus
 from unittest import mock
 
 import falcon.testing
@@ -328,8 +329,9 @@ def then_no_report(validation_context: ValidationContext) -> None:
 def then_status_422(validation_context: ValidationContext) -> None:
     """Assert the HTTP response is 422."""
     response = validation_context["response"]
-    actual = int(response.status.split()[0])
-    assert actual == 422, f"expected 422, got {actual}"
+    assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY, (
+        f"expected 422, got {response.status_code}"
+    )
 
 
 @then("the response body contains validation issues and a review reference")

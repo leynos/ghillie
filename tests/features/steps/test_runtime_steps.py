@@ -62,9 +62,9 @@ def when_request_get(runtime_context: RuntimeContext, path: str) -> None:
 def then_response_status(runtime_context: RuntimeContext, status: int) -> None:
     """Assert the HTTP response status code."""
     response = runtime_context["response"]
-    # Falcon returns status as string like "200 OK"
-    actual_status = int(response.status.split()[0])
-    assert actual_status == status, f"expected status {status}, got {actual_status}"
+    assert response.status_code == status, (
+        f"expected status {status}, got {response.status_code}"
+    )
 
 
 @then(parsers.parse('the response body is {{"status": "{expected_status}"}}'))

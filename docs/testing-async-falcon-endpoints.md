@@ -222,7 +222,7 @@ methods include ac.get(), ac.post(), ac.put(), and ac.delete(). These methods
 are coroutines and must be awaited. Assertions can then be made on the response
 object, checking attributes such as:
 
-- response.status\_code (e.g., falcon.HTTP\_200, falcon.HTTP\_201)  
+- response.status\_code (e.g., HTTPStatus.OK, HTTPStatus.CREATED)
 - response.json() for JSON payloads  
 - response.text for raw text content  
 - response.headers for HTTP headers
@@ -236,7 +236,8 @@ corresponding tests. **Falcon Application (src/app.py):**
 
 ```python
 # src/app.py
-import falcon
+from http import HTTPStatus
+
 import falcon.asgi
 
 
@@ -244,14 +245,14 @@ class ThingsResource:
     async def on_get(self, req, resp):
         """Handles GET requests"""
         resp.media = {"message": "Hello, async world!"}
-        resp.status = falcon.HTTP_200
+        resp.status = HTTPStatus.OK
 
     async def on_post(self, req, resp):
         """Handles POST requests"""
         # For POST requests, the request body is typically read asynchronously
         data = await req.get_media()  # .get_media() is an awaitable for ASGI apps
         resp.media = {"received": data}
-        resp.status = falcon.HTTP_201
+        resp.status = HTTPStatus.CREATED
 
 
 app = falcon.asgi.App()
@@ -265,6 +266,8 @@ request body, a common pattern in Falcon ASGI applications. **Test File
 
 ```python
 # tests/test_app.py
+from http import HTTPStatus
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from src.app import app  # Assuming app.py is in src
@@ -282,7 +285,7 @@ async def test_get_things(client_app):
         transport=ASGITransport(app=client_app), base_url="<http://test>"
     ) as ac:
         response = await ac.get("/things")
-    assert response.status_code == falcon.HTTP_200
+    assert response.status_code == HTTPStatus.OK
     assert response.json() == {"message": "Hello, async world!"}
 
 
@@ -293,7 +296,7 @@ async def test_post_things(client_app):
         transport=ASGITransport(app=client_app), base_url="<http://test>"
     ) as ac:
         response = await ac.post("/things", json=payload)
-    assert response.status_code == falcon.HTTP_201
+    assert response.status_code == HTTPStatus.CREATED
     assert response.json() == {"received": payload}
 ```
 
@@ -702,7 +705,8 @@ class ExternalService:
 
 ```python
 # src/app_with_service.py
-import falcon
+from http import HTTPStatus
+
 import falcon.asgi
 
 from .services import ExternalService
@@ -717,7 +721,7 @@ class ServiceResource:
         # Calls the asynchronous method on the service instance
         data = await service_instance.fetch_data(item_id)
         resp.media = {"item_data": data}
-        resp.status = falcon.HTTP_200
+        resp.status = HTTPStatus.OK
 
 
 app_svc = falcon.asgi.App()
@@ -727,9 +731,11 @@ app_svc.add_route("/items/{item_id}", ServiceResource())
 **Test File (tests/test\_app\_with\_service.py):**
 
 ```python
+from http import HTTPStatus
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from httpx import ASGITransport, AsyncClient
-from unittest.mock import AsyncMock, patch
 
 # Or: from asyncmock import AsyncMock, patch
 from src.app_with_service import app_svc  # Falcon ASGI app
@@ -757,7 +763,7 @@ async def test_get_item_with_mocked_service(client_svc, mocker):
 
     response = await client_svc.get("/items/item_789")
 
-    assert response.status_code == falcon.HTTP_200
+    assert response.status_code == HTTPStatus.OK
     assert response.json() == {"item_data": mocked_service_data}
 
     # Verify that the mocked fetch_data method was called correctly
@@ -860,6 +866,8 @@ async def authenticate_request_async(req, resp, resource, params):
 
 ```python
 # src/app_with_hooks.py
+from http import HTTPStatus
+
 import falcon
 import falcon.asgi
 
@@ -872,7 +880,7 @@ class ProtectedResource:
         # Access user from context, set by the hook
         user_info = req.context.user
         resp.media = {"data": "This is sensitive data.", "user": user_info}
-        resp.status = falcon.HTTP_200
+        resp.status = HTTPStatus.OK
 
 
 app_hooks = falcon.asgi.App()
@@ -883,7 +891,8 @@ app_hooks.add_route("/protected-info", ProtectedResource())
 
 ```python
 # tests/test_hooks.py
-import falcon  # For falcon.HTTP_OK, falcon.HTTP_UNAUTHORIZED
+from http import HTTPStatus
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -901,7 +910,7 @@ def hooked_app_client(event_loop):  # event_loop from pytest-asyncio
 @pytest.mark.asyncio
 async def test_protected_resource_no_token(hooked_app_client):
     response = await hooked_app_client.get("/protected-info")
-    assert response.status_code == falcon.HTTP_UNAUTHORIZED
+    assert response.status_code == HTTPStatus.UNAUTHORIZED
     response_json = response.json()
     assert response_json["title"] == "Authentication required"
 
@@ -910,14 +919,14 @@ async def test_protected_resource_no_token(hooked_app_client):
 async def test_protected_resource_invalid_token(hooked_app_client):
     headers = {"Authorization": "Bearer invalid-token"}
     response = await hooked_app_client.get("/protected-info", headers=headers)
-    assert response.status_code == falcon.HTTP_UNAUTHORIZED
+    assert response.status_code == HTTPStatus.UNAUTHORIZED
 
 
 @pytest.mark.asyncio
 async def test_protected_resource_valid_token(hooked_app_client):
     headers = {"Authorization": "Bearer secret-token-123"}
     response = await hooked_app_client.get("/protected-info", headers=headers)
-    assert response.status_code == falcon.HTTP_OK
+    assert response.status_code == HTTPStatus.OK
     response_json = response.json()
     assert response_json["data"] == "This is sensitive data."
     assert response_json["user"]["id"] == "user-xyz"
@@ -1061,7 +1070,9 @@ class DatabaseConnectionMiddleware:
 
 ```python
 # src/app_with_middleware.py
-import falcon import falcon.asgi
+from http import HTTPStatus
+
+import falcon.asgi
 
 from .middleware import DatabaseConnectionMiddleware
 
@@ -1078,7 +1089,7 @@ class DataResource:
             "message": "Data resource accessed",
             "db_status": db_pool_status,
         }
-        resp.status = falcon.HTTP_200
+        resp.status = HTTPStatus.OK
 
 
 app_mw = falcon.asgi.App(middleware=[db_middleware_instance])
@@ -1089,7 +1100,10 @@ app_mw.add_route("/data", DataResource())
 
 ```python
 # tests/test_middleware.py
-import pytest from falcon import testing
+from http import HTTPStatus
+
+import pytest
+from falcon import testing
 
 # Import your app and the middleware instance to check its state from the module
 from src.app_with_middleware import app_mw, db_middleware_instance
@@ -1113,7 +1127,7 @@ from src.app_with_middleware import app_mw, db_middleware_instance
 
         # Make a request to verify state is accessible via context
         response = await conductor.get("/data")
-        assert response.status_code == falcon.HTTP_200
+        assert response.status_code == HTTPStatus.OK
         assert response.json()["db_status"] == "fake_db_pool_initialized"
 
     # After exiting context, process_shutdown should have run
@@ -1163,6 +1177,8 @@ Tests should verify that:
 Example: If a resource expects a 'name' field in a POST request:
 
 ```python
+from http import HTTPStatus
+
 # In a Falcon resource:
 # async def on_post(self, req, resp):
 #     media = await req.get_media()
@@ -1171,7 +1187,7 @@ Example: If a resource expects a 'name' field in a POST request:
 #             title="Missing Field", description="The 'name' field is required."
 #         )
 #     # … further processing…
-#     resp.status = falcon.HTTP_201
+#     resp.status = HTTPStatus.CREATED
 #     resp.media = {"id": "new_id", "name": media['name']}
 
 # In the test file:
@@ -1180,7 +1196,7 @@ Example: If a resource expects a 'name' field in a POST request:
     response = await async_test_client.post(
         "/items", json={"value": 42}
     )  # Missing 'name'
-    assert response.status_code == falcon.HTTP_BAD_REQUEST  # Or 400
+    assert response.status_code == HTTPStatus.BAD_REQUEST
     error_payload = response.json()
     assert error_payload["title"] == "Missing Field"
     assert "The 'name' field is required" in error_payload["description"]
@@ -1193,6 +1209,8 @@ Falcon's HTTP exceptions) are expected to be raised from asynchronous code,
 pytest.raises is the appropriate tool. It functions as a context manager:
 
 ```python
+from http import HTTPStatus
+
 import falcon import pytest
 
 # async def some_utility_that_might_fail_async():
@@ -1220,7 +1238,7 @@ async_test_client):
 
     # If testing that the resource correctly translates this to a Falcon error:
     response = await async_test_client.get("/some_endpoint_that_uses_utility")
-    assert response.status_code == falcon.HTTP_INTERNAL_SERVER_ERROR
+    assert response.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
     assert "Simulated problem" in response.json().get("description", "")
 ```
 

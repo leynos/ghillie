@@ -23,8 +23,7 @@ Register error handlers on the Falcon app::
 from __future__ import annotations
 
 import typing as typ
-
-import falcon
+from http import HTTPStatus
 
 if typ.TYPE_CHECKING:
     from falcon.asgi import Request, Response
@@ -121,7 +120,7 @@ async def handle_repository_not_found(
         URI template parameters (unused).
 
     """
-    resp.status = falcon.HTTP_404
+    resp.status = HTTPStatus.NOT_FOUND
     resp.media = {
         "title": "Repository not found",
         "description": str(ex),
@@ -148,7 +147,7 @@ async def handle_invalid_input(
         URI template parameters (unused).
 
     """
-    resp.status = falcon.HTTP_400
+    resp.status = HTTPStatus.BAD_REQUEST
     media: dict[str, str] = {
         "title": "Invalid input",
         "description": ex.reason,
@@ -178,7 +177,7 @@ async def handle_report_validation_failed(
         URI template parameters (unused).
 
     """
-    resp.status = falcon.HTTP_422
+    resp.status = HTTPStatus.UNPROCESSABLE_ENTITY
     resp.media = {
         "title": "Report validation failed",
         "description": "Generated report failed correctness checks after retries.",

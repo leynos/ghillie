@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import dataclasses as dc
 import datetime as dt
+from http import HTTPStatus
 from unittest import mock
 
 import falcon.asgi
@@ -142,7 +143,7 @@ class TestReportResource200:
         report = _make_report()
         client = _build_client(run_result=report)
         result = client.simulate_post("/reports/repositories/acme/widgets")
-        assert result.status == falcon.HTTP_200, "expected HTTP 200"
+        assert result.status_code == HTTPStatus.OK, "expected HTTP 200"
 
     def test_response_has_report_id(self) -> None:
         """Response body includes report_id."""
@@ -234,7 +235,7 @@ class TestReportResource204:
         """Returns HTTP 204 with no body when run_for_repository returns None."""
         client = _build_client(run_result=None)
         result = client.simulate_post("/reports/repositories/acme/widgets")
-        assert result.status == falcon.HTTP_204, "expected HTTP 204"
+        assert result.status_code == HTTPStatus.NO_CONTENT, "expected HTTP 204"
         assert result.content in (b"", None), "204 response must have no body"
 
 
@@ -245,7 +246,7 @@ class TestReportResource404:
         """Returns HTTP 404 when repository is not found."""
         client = _build_client(resolve_repo_id=None)
         result = client.simulate_post("/reports/repositories/unknown/repo")
-        assert result.status == falcon.HTTP_404, "expected HTTP 404"
+        assert result.status_code == HTTPStatus.NOT_FOUND, "expected HTTP 404"
 
     def test_404_body_has_description(self) -> None:
         """404 response body includes the repository slug."""
@@ -261,7 +262,9 @@ class TestReportResource422:
         """Service raising ReportValidationError maps to HTTP 422."""
         client = _build_failing_validation_client("rev-1")
         result = client.simulate_post("/reports/repositories/acme/widgets")
-        assert result.status == falcon.HTTP_422, "expected HTTP 422"
+        assert result.status_code == HTTPStatus.UNPROCESSABLE_ENTITY, (
+            "expected HTTP 422"
+        )
 
     def test_422_body_contains_review_reference(self) -> None:
         """422 response body includes a review_id for operator follow-up."""

@@ -13,6 +13,7 @@ import subprocess
 import time
 import typing as typ
 from contextlib import closing
+from http import HTTPStatus
 
 import httpx
 import pytest
@@ -21,8 +22,6 @@ if typ.TYPE_CHECKING:
     from pathlib import Path
 
     from ghillie.status.config import OpenAIStatusModelConfig
-
-_HTTP_OK = 200
 
 # VidaiMock configuration following ADR-002 structure.
 # The response body content is a JSON string that will be returned as the
@@ -108,7 +107,7 @@ def _wait_for_server(url: str, *, timeout: float = 10.0) -> None:
     while time.monotonic() < deadline:
         try:
             response = httpx.get(url, timeout=1.0)
-            if response.status_code == _HTTP_OK:
+            if response.status_code == HTTPStatus.OK:
                 return
         except httpx.RequestError:
             pass
