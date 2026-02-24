@@ -12,17 +12,24 @@ integer values. Use it everywhere an HTTP status code appears:
 response status assignment, threshold comparisons, test assertions,
 and error construction.
 
+Equality checks (`==`, `!=`) may use `HTTPStatus` members directly.
+Relational comparisons (`>=`, `<`) used as thresholds must cast to
+`int()` so the intent — a numeric boundary, not a specific status — is
+unambiguous to both readers and type checkers.
+
 ```python
 from http import HTTPStatus
 
 # Setting a response status (works with Falcon, Starlette, etc.)
 resp.status = HTTPStatus.OK
 
-# Threshold comparisons
-if response.status_code >= HTTPStatus.BAD_REQUEST:
+# Threshold comparisons — cast to int for relational checks
+_HTTP_ERROR_THRESHOLD = int(HTTPStatus.BAD_REQUEST)
+
+if response.status_code >= _HTTP_ERROR_THRESHOLD:
     raise APIError(response.status_code)
 
-# Named constants for specific codes
+# Equality checks — use the enum member directly
 if response.status_code == HTTPStatus.TOO_MANY_REQUESTS:
     back_off(response)
 
@@ -30,7 +37,7 @@ if response.status_code == HTTPStatus.TOO_MANY_REQUESTS:
 assert result.status_code == HTTPStatus.NOT_FOUND
 ```
 
-### Why
+### Why use `HTTPStatus`
 
 - **Self-documenting:** `HTTPStatus.NOT_FOUND` is clearer than `404`
   or `falcon.HTTP_404`.
@@ -57,7 +64,7 @@ if request.method == HTTPMethod.GET:
     ...
 ```
 
-### Why
+### Why use `HTTPMethod`
 
 - **Discoverable:** IDE autocompletion lists valid methods.
 - **Typo-proof:** `HTTPMethod.DLETE` raises `AttributeError` at
@@ -67,7 +74,7 @@ if request.method == HTTPMethod.GET:
 ## Banned alternatives
 
 | Do not use | Use instead |
-|---|---|
+| --- | --- |
 | `falcon.HTTP_200`, `falcon.HTTP_404`, … | `HTTPStatus.OK`, `HTTPStatus.NOT_FOUND`, … |
 | `200`, `404`, `500` (bare integers) | `HTTPStatus.OK`, `HTTPStatus.NOT_FOUND`, `HTTPStatus.INTERNAL_SERVER_ERROR` |
 | `"GET"`, `"POST"`, … (bare strings) | `HTTPMethod.GET`, `HTTPMethod.POST`, … |
