@@ -288,7 +288,9 @@ def then_core_has_summary(
     core = get_component_with_summary(bundle, "wildside-core")
     # type-narrow: get_component_with_summary ensures repository_summary is not None
     summary = core.repository_summary
-    assert summary is not None
+    assert summary is not None, (
+        "expected repository_summary to be present for wildside-core"
+    )
 
     assert summary.summary == "Good progress this week.", (
         f"summary text mismatch: {summary.summary!r}"
@@ -311,7 +313,9 @@ def then_summary_status_on_track(
     core = get_component_with_summary(bundle, "wildside-core")
     # type-narrow: get_component_with_summary ensures repository_summary is not None
     summary = core.repository_summary
-    assert summary is not None
+    assert summary is not None, (
+        "expected repository_summary to be present for wildside-core"
+    )
 
     assert summary.status == ReportStatus.ON_TRACK, (
         f"expected ON_TRACK, got {summary.status}"

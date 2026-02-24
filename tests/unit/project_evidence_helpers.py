@@ -2,6 +2,16 @@
 
 Extracted from ``tests/unit/conftest.py`` to keep the shared conftest
 focused on general-purpose fixtures.
+
+Examples
+--------
+Import helpers for use in a test module::
+
+    from tests.unit.project_evidence_helpers import (
+        create_silver_repo_and_report,
+        get_estate_id,
+    )
+
 """
 
 from __future__ import annotations

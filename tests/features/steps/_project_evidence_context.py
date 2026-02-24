@@ -2,6 +2,17 @@
 
 Extracted from ``test_project_evidence_bundle_steps.py`` to keep the
 step-definition file thin and focused on scenario wiring.
+
+Examples
+--------
+Import and use in a step-definition module::
+
+    from tests.features.steps._project_evidence_context import (
+        ProjectEvidenceContext,
+        create_repo_report,
+        get_component_with_summary,
+    )
+
 """
 
 from __future__ import annotations
