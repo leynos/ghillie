@@ -204,8 +204,11 @@ async def _async_create_project_report(
 
 
 # ---------------------------------------------------------------------------
-# Synchronous convenience wrappers (use asyncio.run)
+# Public helper façades
 # ---------------------------------------------------------------------------
+
+
+# Public async façades
 
 
 async def get_estate_id_async(
@@ -228,6 +231,9 @@ async def get_estate_id_async(
 
     """
     return await _async_get_estate_id(session_factory)
+
+
+# Synchronous convenience wrappers (use asyncio.run)
 
 
 def get_estate_id(
