@@ -69,7 +69,19 @@ class ProjectEvidenceContext(typ.TypedDict, total=False):
 async def get_estate_id(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> str:
-    """Fetch the estate ID from the database."""
+    """Fetch the estate ID from the database.
+
+    Parameters
+    ----------
+    session_factory
+        Async session factory for database access.
+
+    Returns
+    -------
+    str
+        The estate identifier.
+
+    """
     return await get_estate_id_async(session_factory)
 
 
@@ -78,7 +90,28 @@ async def get_catalogue_repo_id(
     owner: str,
     name: str,
 ) -> str:
-    """Fetch a catalogue repository ID by owner/name."""
+    """Fetch a catalogue repository ID by owner/name.
+
+    Parameters
+    ----------
+    session_factory
+        Async session factory for database access.
+    owner
+        Repository owner (e.g. ``"leynos"``).
+    name
+        Repository name (e.g. ``"wildside"``).
+
+    Returns
+    -------
+    str
+        The catalogue repository identifier.
+
+    Raises
+    ------
+    AssertionError
+        If no ``RepositoryRecord`` matches *owner*/*name*.
+
+    """
     async with session_factory() as session:
         repo = await session.scalar(
             select(RepositoryRecord).where(
@@ -147,7 +180,7 @@ def get_component_with_summary(
 
     """
     component = get_component(bundle, component_key)
-    assert component.repository_summary is not None, (  # noqa: S101 — test helper; assert narrows type for callers
+    assert component.repository_summary is not None, (  # noqa: S101  # FIXME: test helper; assert narrows type for callers
         f"{component_key} should have a repository summary"
     )
     return component
@@ -156,7 +189,18 @@ def get_component_with_summary(
 def create_repo_report(
     project_evidence_context: ProjectEvidenceContext,
 ) -> None:
-    """Create a Silver Repository and Gold Report for leynos/wildside."""
+    """Create a Silver Repository and Gold Report for leynos/wildside.
+
+    Looks up the catalogue repository ID, then creates matching Silver
+    and Gold rows in a single event loop.
+
+    Parameters
+    ----------
+    project_evidence_context
+        Shared BDD context; ``session_factory`` and ``estate_id`` are
+        read from it.
+
+    """
     session_factory = project_evidence_context["session_factory"]
     estate_id = project_evidence_context["estate_id"]
 
@@ -192,7 +236,18 @@ def create_repo_report(
 def create_previous_report(
     project_evidence_context: ProjectEvidenceContext,
 ) -> None:
-    """Create a previous project-scope report for the Wildside project."""
+    """Create a previous project-scope report for the Wildside project.
+
+    Inserts a ``ReportProject`` (if needed) and a project-scope Gold
+    Report so the bundle's ``previous_reports`` list is populated.
+
+    Parameters
+    ----------
+    project_evidence_context
+        Shared BDD context; ``session_factory`` and ``estate_id`` are
+        read from it.
+
+    """
     session_factory = project_evidence_context["session_factory"]
     estate_id = project_evidence_context["estate_id"]
 

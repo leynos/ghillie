@@ -182,7 +182,10 @@ async def _async_create_project_report(
     """
     async with session_factory() as session:
         project = await session.scalar(
-            select(ReportProject).where(ReportProject.key == params.project_key)
+            select(ReportProject).where(
+                ReportProject.key == params.project_key,
+                ReportProject.estate_id == params.estate_id,
+            )
         )
         if project is None:
             project = ReportProject(
@@ -222,6 +225,17 @@ async def get_estate_id_async(
 
     Delegates to :func:`_async_get_estate_id`.  Use this variant inside
     async test code or BDD helpers that already have an event loop.
+
+    Parameters
+    ----------
+    session_factory
+        Async session factory for database access.
+
+    Returns
+    -------
+    str
+        The estate identifier.
+
     """
     return await _async_get_estate_id(session_factory)
 
@@ -233,6 +247,17 @@ def get_estate_id(
 
     Calls :func:`asyncio.run` internally; use :func:`get_estate_id_async`
     when an event loop is already running.
+
+    Parameters
+    ----------
+    session_factory
+        Async session factory for database access.
+
+    Returns
+    -------
+    str
+        The estate identifier.
+
     """
     return asyncio.run(_async_get_estate_id(session_factory))
 
@@ -240,7 +265,19 @@ def get_estate_id(
 def get_catalogue_repo_ids(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> dict[str, str]:
-    """Return a dict mapping owner/name slugs to catalogue repository IDs."""
+    """Return a dict mapping owner/name slugs to catalogue repository IDs.
+
+    Parameters
+    ----------
+    session_factory
+        Async session factory for database access.
+
+    Returns
+    -------
+    dict[str, str]
+        Mapping of ``"owner/name"`` slugs to catalogue repository IDs.
+
+    """
     return asyncio.run(_async_get_catalogue_repo_ids(session_factory))
 
 
@@ -302,7 +339,18 @@ def create_silver_repo_and_report_raw(
     repo_params: RepositoryParams,
     machine_summary: dict[str, object],
 ) -> None:
-    """Create a Silver Repository and Gold Report with an arbitrary machine_summary."""
+    """Create a Silver Repository and Gold Report with an arbitrary summary.
+
+    Parameters
+    ----------
+    session_factory
+        Async session factory for database access.
+    repo_params
+        Repository creation parameters.
+    machine_summary
+        Verbatim dict stored on the Gold Report's ``machine_summary``.
+
+    """
     asyncio.run(
         _async_create_silver_repo_and_report_raw(
             session_factory, repo_params, machine_summary
@@ -316,9 +364,17 @@ def create_project_report(
 ) -> None:
     """Create a ReportProject (if needed) and a project-scope Gold Report.
 
-    Re-uses an existing ``ReportProject`` when one with the given *project_key*
-    already exists, allowing multiple reports to be created for the same project
-    across successive calls.
+    Re-uses an existing ``ReportProject`` when one with the given
+    *project_key* and *estate_id* already exists, allowing multiple
+    reports for the same project across successive calls.
+
+    Parameters
+    ----------
+    session_factory
+        Async session factory for database access.
+    params
+        Project report creation parameters.
+
     """
     asyncio.run(_async_create_project_report(session_factory, params))
 
@@ -332,6 +388,20 @@ def build_wildside_bundle(
     service: ProjectEvidenceBundleService,
     session_factory: async_sessionmaker[AsyncSession],
 ) -> ProjectEvidenceBundle:
-    """Build and return a bundle for the Wildside project."""
+    """Build and return a bundle for the Wildside project.
+
+    Parameters
+    ----------
+    service
+        The ``ProjectEvidenceBundleService`` under test.
+    session_factory
+        Async session factory for database access.
+
+    Returns
+    -------
+    ProjectEvidenceBundle
+        The assembled evidence bundle for the Wildside project.
+
+    """
     eid = get_estate_id(session_factory)
     return asyncio.run(service.build_bundle("wildside", eid))
