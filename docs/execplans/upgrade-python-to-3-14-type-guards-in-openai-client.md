@@ -1,8 +1,8 @@
 # Upgrade Python to 3.14: type guards in OpenAI client
 
 This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
-`Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
-`Outcomes & Retrospective` must be kept up to date as work proceeds.
+`Risks`, `Progress`, `Surprises & discoveries`, `Decision log`, and
+`Outcomes & retrospective` must be kept up to date as work proceeds.
 
 Status: DRAFT
 
@@ -11,9 +11,10 @@ No `PLANS.md` file exists in this repository.
 ## Purpose / big picture
 
 `ghillie/status/openai_client.py` currently narrows JSON-shaped objects with
-`isinstance(...)` checks followed by `typ.cast(...)`. Python 3.14 lets us adopt
-modern type guards (`typing.TypeIs`) so narrowing logic is explicit and type
-checker-friendly without casts.
+`isinstance(...)` checks followed by `typ.cast(...)`. Python 3.13 introduced
+modern type guards such as `typing.TypeIs`, and this 3.14 upgrade cycle can
+adopt them so narrowing logic is explicit and type checker-friendly without
+casts.
 
 This activity introduces private type-guard helpers in the OpenAI client,
 replaces cast-heavy code paths with guard-based narrowing, and keeps runtime
@@ -71,18 +72,18 @@ Success is observable when:
 - [ ] Run targeted status parsing tests.
 - [ ] Run full quality gates.
 
-## Surprises & Discoveries
+## Surprises & discoveries
 
 - None yet. Record concrete findings while implementing.
 
-## Decision Log
+## Decision log
 
 - Decision: apply `TypeIs` only in the OpenAI client first. Rationale: this is
   a high-value, low-risk pilot before broader adoption in GitHub parsers.
 - Decision: keep behaviour-led tests authoritative over static-style goals.
   Rationale: runtime correctness matters more than eliminating every cast.
 
-## Outcomes & Retrospective
+## Outcomes & retrospective
 
 Not started. Populate after implementation with outcomes and follow-ups.
 

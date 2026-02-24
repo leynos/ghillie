@@ -1,8 +1,8 @@
 # Upgrade Python to 3.14: UUIDv7 for storage identifiers
 
 This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
-`Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
-`Outcomes & Retrospective` must be kept up to date as work proceeds.
+`Risks`, `Progress`, `Surprises & discoveries`, `Decision log`, and
+`Outcomes & retrospective` must be kept up to date as work proceeds.
 
 Status: DRAFT
 
@@ -54,7 +54,7 @@ Success is observable when:
   time locality and avoid introducing logic that depends on strict global sort
   guarantees.
 - Risk: duplicated lambda defaults across models can drift. Severity: medium.
-  Likelihood: medium. Mitigation: centralise generation in one helper and reuse
+  Likelihood: medium. Mitigation: centralize generation in one helper and reuse
   it.
 - Risk: tests could become flaky if they assert strict monotonic ordering.
   Severity: medium. Likelihood: medium. Mitigation: test UUID version and basic
@@ -70,18 +70,18 @@ Success is observable when:
 - [ ] Confirm no schema changes are needed.
 - [ ] Run full quality gates.
 
-## Surprises & Discoveries
+## Surprises & discoveries
 
 - None yet. Record implementation details during execution.
 
-## Decision Log
+## Decision log
 
 - Decision: use a shared helper instead of inline lambdas in every model.
   Rationale: keeps UUID policy in one place and reduces copy-paste drift.
 - Decision: preserve `String(36)` columns and canonical UUID text format.
   Rationale: avoids migrations and keeps external contracts stable.
 
-## Outcomes & Retrospective
+## Outcomes & retrospective
 
 Not started. Populate after implementation.
 
@@ -146,7 +146,7 @@ existing storage and reporting tests plus full quality gates.
 The activity is complete when:
 
 1. No storage model default uses `uuid.uuid4()`.
-2. UUID generation is centralised through a UUIDv7 helper.
+2. UUID generation is centralized through a UUIDv7 helper.
 3. New helper tests pass and verify UUIDv7 output properties.
 4. `make check-fmt`, `make lint`, `make typecheck`, and `make test` pass.
 

@@ -1,8 +1,8 @@
 # Upgrade Python to 3.14: readonly attributes
 
 This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
-`Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
-`Outcomes & Retrospective` must be kept up to date as work proceeds.
+`Risks`, `Progress`, `Surprises & discoveries`, `Decision log`, and
+`Outcomes & retrospective` must be kept up to date as work proceeds.
 
 Status: DRAFT
 
@@ -10,10 +10,9 @@ No `PLANS.md` file exists in this repository.
 
 ## Purpose / big picture
 
-Python 3.14 typing supports `typing.ReadOnly` for `TypedDict` keys. Ghillie
-already uses `TypedDict` to describe persisted JSON payloads and scenario
-contexts, but immutable fields are not currently encoded as readonly in type
-contracts.
+Python 3.13 introduced `typing.ReadOnly` for `TypedDict` keys. Ghillie already
+uses `TypedDict` to describe persisted JSON payloads and scenario contexts, but
+immutable fields are not currently encoded as readonly in type contracts.
 
 This activity introduces `ReadOnly` annotations where fields are logically
 immutable so type checking prevents accidental reassignment in future changes,
@@ -27,9 +26,9 @@ Success is observable when:
 
 ## Constraints
 
-- Prioritise production code contracts first (for example
+- Prioritize production code contracts first (for example
   `ghillie/gold/storage.py`) before optional test-context cleanup.
-- Do not change runtime payload shape, database schema, or JSON serialisation.
+- Do not change runtime payload shape, database schema, or JSON serialization.
 - Do not add external dependencies.
 - Keep scope focused on type annotations and related test adjustments only.
 - Preserve backwards-compatible APIs and data formats.
@@ -70,19 +69,19 @@ Success is observable when:
 - [ ] Add or adjust tests/type assertions where useful.
 - [ ] Run full quality gates.
 
-## Surprises & Discoveries
+## Surprises & discoveries
 
 - None yet. Record implementation-time findings here.
 
-## Decision Log
+## Decision log
 
 - Decision: phase this as a conservative typing-hardening task beginning with
-  production payload contracts only. Rationale: minimises disruption to
+  production payload contracts only. Rationale: minimizes disruption to
   behaviour-driven test contexts that are intentionally mutable.
 - Decision: avoid introducing runtime wrappers for immutability in this task.
   Rationale: objective is static typing improvement, not runtime redesign.
 
-## Outcomes & Retrospective
+## Outcomes & retrospective
 
 Not started. Populate after implementation.
 
@@ -151,4 +150,4 @@ This activity is complete when:
 
 Readonly annotation changes are idempotent and safe to reapply. If type
 contracts prove too strict, revert the last `TypedDict` change, document the
-case in `Decision Log`, and resume with a narrower readonly scope.
+case in `Decision log`, and resume with a narrower readonly scope.

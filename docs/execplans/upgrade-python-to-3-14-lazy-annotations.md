@@ -1,8 +1,8 @@
 # Upgrade Python to 3.14: lazy annotations
 
 This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
-`Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
-`Outcomes & Retrospective` must be kept up to date as work proceeds.
+`Risks`, `Progress`, `Surprises & discoveries`, `Decision log`, and
+`Outcomes & retrospective` must be kept up to date as work proceeds.
 
 Status: DRAFT
 
@@ -52,7 +52,7 @@ Success is observable when:
 ## Risks
 
 - Risk: some runtime reflection path may rely on the previous annotation
-  materialisation behaviour. Severity: medium. Likelihood: low. Mitigation: run
+  materialization behaviour. Severity: medium. Likelihood: low. Mitigation: run
   targeted runtime tests around SQLAlchemy models and reporting services, then
   run full quality gates.
 - Risk: partial migration leaves stale `FA` lint policy or residual future
@@ -76,11 +76,11 @@ Success is observable when:
   required convention.
 - [ ] Run formatting, linting, type checking, tests, and Markdown gates.
 
-## Surprises & Discoveries
+## Surprises & discoveries
 
 - None yet. Update this section with concrete findings during implementation.
 
-## Decision Log
+## Decision log
 
 - Decision: keep this activity focused on annotation semantics and lint policy,
   not broader Python 3.14 feature adoption. Rationale: limits blast radius and
@@ -89,7 +89,7 @@ Success is observable when:
   task. Rationale: code snippets in historical design notes can be addressed in
   a separate documentation cleanup if required.
 
-## Outcomes & Retrospective
+## Outcomes & retrospective
 
 Not started. Populate after implementation with what changed, what worked, and
 what should be improved in follow-up tasks.

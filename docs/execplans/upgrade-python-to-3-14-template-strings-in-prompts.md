@@ -1,8 +1,8 @@
 # Upgrade Python to 3.14: template strings in prompts
 
 This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
-`Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
-`Outcomes & Retrospective` must be kept up to date as work proceeds.
+`Risks`, `Progress`, `Surprises & discoveries`, `Decision log`, and
+`Outcomes & retrospective` must be kept up to date as work proceeds.
 
 Status: DRAFT
 
@@ -24,6 +24,9 @@ Success is observable when:
 
 ## Constraints
 
+- Treat Python-baseline uplift as a hard prerequisite: do not implement
+  `t"..."` syntax until project metadata and tooling have moved to 3.14
+  (`pyproject.toml` `requires-python` and Ruff `target-version`).
 - Preserve prompt semantics and formatting; changes should be behaviour-neutral
   unless explicitly approved.
 - Limit scope to prompt-building internals and prompt-related tests/docs.
@@ -61,24 +64,26 @@ Success is observable when:
 
 - [x] (2026-02-24 00:00Z) Draft ExecPlan at
   `docs/execplans/upgrade-python-to-3-14-template-strings-in-prompts.md`.
+- [ ] Confirm Python-baseline uplift is complete (`requires-python >=3.14` and
+  Ruff `target-version = "py314"`).
 - [ ] Prototype template-string rendering approach in tests first.
 - [ ] Add failing regression tests for prompt output equivalence.
 - [ ] Refactor prompt construction to template strings.
 - [ ] Verify exact prompt-output stability.
 - [ ] Run full quality gates.
 
-## Surprises & Discoveries
+## Surprises & discoveries
 
 - None yet. Update with concrete findings from the prototype and refactor.
 
-## Decision Log
+## Decision log
 
 - Decision: include a dedicated prototype checkpoint before full refactor.
   Rationale: template strings are new and need validation in this codebase.
-- Decision: prioritise output equivalence over maximal template-string usage.
+- Decision: prioritize output equivalence over maximal template-string usage.
   Rationale: prompt stability is more important than feature saturation.
 
-## Outcomes & Retrospective
+## Outcomes & retrospective
 
 Not started. Populate after implementation.
 
@@ -95,7 +100,8 @@ assert exact full-output equivalence for representative bundles.
 
 ## Plan of work
 
-Stage A prototypes and de-risks the rendering strategy. Validate template
+Stage A verifies prerequisites and de-risks the rendering strategy. Confirm the
+repository baseline has already moved to Python 3.14, then validate template
 string behaviour in this runtime and define a minimal rendering pattern.
 
 Stage B is tests-first. Add regression tests that lock representative prompt
