@@ -1,7 +1,5 @@
 """Unit tests for work type classification logic."""
 
-# ruff: noqa: D102
-
 from __future__ import annotations
 
 from unittest import mock

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import typing as typ
 from pathlib import Path
 
 import pytest
@@ -36,27 +37,29 @@ class TestConfig:
         )
         assert cfg.pg_cluster_name == "pg-ghillie", "pg_cluster_name default mismatch"
         assert cfg.valkey_name == "valkey-ghillie", "valkey_name default mismatch"
-        # S105 suppression: Bandit flags "ghillie" as a potential hardcoded
-        # password. This is a Kubernetes Secret name, not a password value.
-        assert cfg.app_secret_name == "ghillie", (  # noqa: S105
-            "app_secret_name default mismatch"
-        )
+        assert cfg.app_secret_name == cfg.app_name, "app_secret_name default mismatch"
 
     def test_config_is_frozen(self) -> None:
         """Config should be immutable."""
         cfg = Config()
+        mutable_cfg = typ.cast("typ.Any", cfg)
 
         with pytest.raises(dataclasses.FrozenInstanceError):
-            cfg.cluster_name = "other"  # type: ignore[misc]
+            mutable_cfg.cluster_name = "other"
 
     def test_config_custom_values(self) -> None:
         """Config should accept custom values."""
         cfg = Config(
             cluster_name="custom-cluster",
             namespace="custom-ns",
+            app_name="custom-app",
             ingress_port=8080,
         )
 
         assert cfg.cluster_name == "custom-cluster", "cluster_name not set to custom"
         assert cfg.namespace == "custom-ns", "namespace not set to custom"
+        assert cfg.app_name == "custom-app", "app_name not set to custom"
+        assert cfg.app_secret_name == cfg.app_name, (
+            "app_secret_name should derive from app_name when not set explicitly"
+        )
         assert cfg.ingress_port == 8080, "ingress_port not set to custom"

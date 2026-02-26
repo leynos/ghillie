@@ -57,7 +57,7 @@ def _count_rows(
     return asyncio.run(_inner())
 
 
-def test_importer_populates_and_idempotent(  # noqa: D103
+def test_importer_populates_and_idempotent(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     importer = CatalogueImporter(
@@ -113,7 +113,7 @@ def test_importer_populates_and_idempotent(  # noqa: D103
     )
 
 
-def test_importer_allows_same_commit_per_estate(  # noqa: D103
+def test_importer_allows_same_commit_per_estate(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     importer_a = CatalogueImporter(session_factory, estate_key="alpha")
@@ -144,7 +144,7 @@ def test_importer_allows_same_commit_per_estate(  # noqa: D103
     assert count == EXPECTED_IMPORT_RECORDS
 
 
-def test_importer_rolls_back_on_invalid_catalogue(  # noqa: D103
+def test_importer_rolls_back_on_invalid_catalogue(
     session_factory: async_sessionmaker[AsyncSession], tmp_path: Path
 ) -> None:
     importer = CatalogueImporter(session_factory, estate_key="demo")
@@ -174,7 +174,7 @@ projects:
     assert after == before
 
 
-def test_importer_updates_and_prunes(  # noqa: D103
+def test_importer_updates_and_prunes(
     session_factory: async_sessionmaker[AsyncSession], tmp_path: Path
 ) -> None:
     importer = CatalogueImporter(session_factory, estate_key="demo")
@@ -246,7 +246,8 @@ projects:
 
 
 def _make_noise_catalogue_yaml(
-    enabled: bool,  # noqa: FBT001
+    *,
+    is_enabled: bool,
     toggles: dict[str, bool],
 ) -> str:
     """Generate a catalogue YAML with noise configuration."""
@@ -256,7 +257,7 @@ projects:
   - key: alpha
     name: Alpha
     noise:
-      enabled: {str(enabled).lower()}
+      enabled: {str(is_enabled).lower()}
       toggles:
         ignore_authors: {str(toggles["ignore_authors"]).lower()}
         ignore_labels: {str(toggles["ignore_labels"]).lower()}
@@ -308,7 +309,7 @@ def _assert_noise_config(
     assert noise["ignore_title_prefixes"] == ["chore:"]
 
 
-def test_importer_persists_noise_configuration(  # noqa: D103
+def test_importer_persists_noise_configuration(
     session_factory: async_sessionmaker[AsyncSession],
     tmp_path: Path,
 ) -> None:
@@ -329,13 +330,13 @@ def test_importer_persists_noise_configuration(  # noqa: D103
 
     first = tmp_path / "catalogue-noise-v1.yaml"
     first.write_text(
-        _make_noise_catalogue_yaml(enabled=False, toggles=toggles_v1),
+        _make_noise_catalogue_yaml(is_enabled=False, toggles=toggles_v1),
         encoding="utf-8",
     )
 
     second = tmp_path / "catalogue-noise-v2.yaml"
     second.write_text(
-        _make_noise_catalogue_yaml(enabled=True, toggles=toggles_v2),
+        _make_noise_catalogue_yaml(is_enabled=True, toggles=toggles_v2),
         encoding="utf-8",
     )
 
@@ -354,7 +355,7 @@ def test_importer_persists_noise_configuration(  # noqa: D103
     _assert_noise_config(noise_updated, enabled=True, toggles=toggles_v2)
 
 
-def test_ensure_repository_normalises_documentation_paths(  # noqa: D103
+def test_ensure_repository_normalises_documentation_paths(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     importer = CatalogueImporter(session_factory)
@@ -388,7 +389,7 @@ def test_ensure_repository_normalises_documentation_paths(  # noqa: D103
     ], "documentation_paths should preserve first-seen order and drop duplicates"
 
 
-def test_ensure_repository_updates_documentation_paths(  # noqa: D103
+def test_ensure_repository_updates_documentation_paths(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     importer = CatalogueImporter(session_factory)
@@ -435,7 +436,7 @@ def test_ensure_repository_updates_documentation_paths(  # noqa: D103
     ], "documentation_paths should update to the new normalized order"
 
 
-def test_prune_respects_other_estates(  # noqa: D103
+def test_prune_respects_other_estates(
     session_factory: async_sessionmaker[AsyncSession], tmp_path: Path
 ) -> None:
     importer_a = CatalogueImporter(session_factory, estate_key="alpha")

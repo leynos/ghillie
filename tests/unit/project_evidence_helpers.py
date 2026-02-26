@@ -101,8 +101,8 @@ async def _async_get_estate_id(
     async with session_factory() as session:
         est = await session.scalar(select(Estate))
         if est is None:
-            msg = "expected an Estate record in DB"
-            raise AssertionError(msg)
+            message = "expected an Estate record in DB"
+            raise AssertionError(message)
         return est.id
 
 

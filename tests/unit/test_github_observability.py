@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import typing as typ
 
 import pytest
 from sqlalchemy.exc import IntegrityError, InterfaceError, OperationalError
@@ -248,8 +249,9 @@ class TestIngestionRunContext:
             estate_id="wildside",
             started_at=dt.datetime.now(dt.UTC),
         )
+        mutable_context = typ.cast("typ.Any", context)
         with pytest.raises(AttributeError):
-            context.repo_slug = "other/repo"  # type: ignore[misc]
+            mutable_context.repo_slug = "other/repo"
 
     def test_context_with_none_estate_id(self) -> None:
         """Context accepts None estate_id."""

@@ -76,8 +76,8 @@ select = [
     "C90",
     "PLR",
 ]
-per-file-ignores = {"**/test_*.py" = ["S101", "PLR2004"]}
-ignore = ["D203", "D213", "TD001", "TD002", "TD003"]
+per-file-ignores = {"**/tests/**/*.py" = ["S101", "PLR2004", "D102", "D103"]}
+ignore = ["D203", "D213"]
 
 [tool.ruff.lint.flake8-import-conventions]
 # Declare the banned `from` imports.

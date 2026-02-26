@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses as dc
+import typing as typ
 
 import pytest
 
@@ -38,6 +39,7 @@ class TestModelInvocationMetrics:
     def test_is_frozen(self) -> None:
         """Instances are immutable after construction."""
         metrics = ModelInvocationMetrics(prompt_tokens=1)
+        mutable_metrics = typ.cast("typ.Any", metrics)
 
         with pytest.raises(dc.FrozenInstanceError):
-            metrics.prompt_tokens = 2  # type: ignore[misc]
+            mutable_metrics.prompt_tokens = 2

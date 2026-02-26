@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import dataclasses
-import datetime as dt  # noqa: TC003
 import typing as typ
 
 from ghillie.github.models import GitHubIngestedEvent
@@ -14,6 +13,9 @@ from tests.helpers.github_events import (
     make_issue_event,
     make_pr_event,
 )
+
+if typ.TYPE_CHECKING:
+    import datetime as dt
 
 __all__ = [
     "EventSpec",
@@ -113,32 +115,28 @@ class FailingGitHubClient:
         """Store the error to raise on any method call."""
         self._error = error
 
-    async def iter_commits(
+    def iter_commits(
         self, repo: RepositoryInfo, *, since: dt.datetime, after: str | None = None
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Raise the configured error."""
         del repo, since, after
-        raise self._error
-        # Unreachable but needed for type checker
-        yield  # pragma: no cover
+        return _FailingAsyncIterator(self._error)
 
-    async def iter_pull_requests(
+    def iter_pull_requests(
         self, repo: RepositoryInfo, *, since: dt.datetime, after: str | None = None
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Raise the configured error."""
         del repo, since, after
-        raise self._error
-        yield  # pragma: no cover
+        return _FailingAsyncIterator(self._error)
 
-    async def iter_issues(
+    def iter_issues(
         self, repo: RepositoryInfo, *, since: dt.datetime, after: str | None = None
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Raise the configured error."""
         del repo, since, after
-        raise self._error
-        yield  # pragma: no cover
+        return _FailingAsyncIterator(self._error)
 
-    async def iter_doc_changes(
+    def iter_doc_changes(
         self,
         repo: RepositoryInfo,
         *,
@@ -148,8 +146,20 @@ class FailingGitHubClient:
     ) -> typ.AsyncIterator[GitHubIngestedEvent]:
         """Raise the configured error."""
         del repo, since, documentation_paths, after
+        return _FailingAsyncIterator(self._error)
+
+
+class _FailingAsyncIterator:
+    """Async iterator that raises a configured exception on iteration."""
+
+    def __init__(self, error: BaseException) -> None:
+        self._error = error
+
+    def __aiter__(self) -> _FailingAsyncIterator:
+        return self
+
+    async def __anext__(self) -> GitHubIngestedEvent:
         raise self._error
-        yield  # pragma: no cover
 
 
 def make_repo_info(*, estate_id: str | None = None) -> RepositoryInfo:

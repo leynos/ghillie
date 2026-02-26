@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import typing as typ
+
 import msgspec
 import pytest
 
@@ -47,9 +49,10 @@ class TestRepositoryStatusResult:
             summary="Test",
             status=ReportStatus.ON_TRACK,
         )
+        mutable_result = typ.cast("typ.Any", result)
 
         with pytest.raises(AttributeError):
-            result.summary = "Modified"  # type: ignore[misc]
+            mutable_result.summary = "Modified"
 
     def test_json_serialization_roundtrip(self) -> None:
         """RepositoryStatusResult can be serialized to and from JSON."""

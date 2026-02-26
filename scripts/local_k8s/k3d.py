@@ -47,15 +47,8 @@ import json
 import os
 import subprocess
 from pathlib import Path
-from typing import Any  # noqa: ICN003
 
-from ._port_utils import (  # noqa: F401
-    _extract_http_host_port,
-    _find_host_port_in_mappings,
-    _find_http_port_in_node,
-    _is_http_port,
-    _parse_host_port,
-)
+from ._port_utils import _extract_http_host_port
 
 # Default timeout for k3d subprocess operations (seconds)
 _K3D_SUBPROCESS_TIMEOUT = 60
@@ -72,7 +65,9 @@ def _ensure_valid_host_port(port: int) -> None:
         raise ValueError(msg)
 
 
-def _run_k3d_json(args: list[str], *, timeout: float | None = None) -> Any:  # noqa: ANN401
+def _run_k3d_json(
+    args: list[str], *, timeout: float | None = None
+) -> dict[str, object] | list[dict[str, object]] | None:
     """Run a k3d command and parse JSON output."""
     try:
         result = subprocess.run(  # noqa: S603
@@ -86,12 +81,17 @@ def _run_k3d_json(args: list[str], *, timeout: float | None = None) -> Any:  # n
     except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return None
     try:
-        return json.loads(result.stdout)
+        parsed = json.loads(result.stdout)
     except json.JSONDecodeError:
         return None
+    if isinstance(parsed, dict):
+        return parsed
+    if isinstance(parsed, list) and all(isinstance(item, dict) for item in parsed):
+        return parsed
+    return None
 
 
-def _list_clusters(*, timeout: float | None = None) -> list[dict]:
+def _list_clusters(*, timeout: float | None = None) -> list[dict[str, object]]:
     """List all k3d clusters as parsed JSON.
 
     Returns:
@@ -99,10 +99,14 @@ def _list_clusters(*, timeout: float | None = None) -> list[dict]:
 
     """
     result = _run_k3d_json(["cluster", "list"], timeout=timeout)
-    return result if isinstance(result, list) else []
+    if isinstance(result, list):
+        return result
+    return []
 
 
-def _find_cluster(name: str, clusters: list[dict]) -> dict | None:
+def _find_cluster(
+    name: str, clusters: list[dict[str, object]]
+) -> dict[str, object] | None:
     """Find a cluster by name from the list of k3d clusters.
 
     Args:

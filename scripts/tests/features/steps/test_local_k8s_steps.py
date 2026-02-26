@@ -90,9 +90,8 @@ class SubprocessMock:
                 return base64.b64encode(db_url.encode()).decode(), 0
             if "valkey-ghillie" in joined:
                 # Valkey operator stores only "password", URI is constructed
-                # S105: This is test fixture data, not a production secret
-                password = "testpassword"  # noqa: S105
-                return base64.b64encode(password.encode()).decode(), 0
+                credential = "fixture-token"
+                return base64.b64encode(credential.encode()).decode(), 0
         return "", 0
 
     def _handle_helm(self, _args: list[str]) -> tuple[str, int]:
