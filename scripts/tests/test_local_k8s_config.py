@@ -52,9 +52,14 @@ class TestConfig:
         cfg = Config(
             cluster_name="custom-cluster",
             namespace="custom-ns",
+            app_name="custom-app",
             ingress_port=8080,
         )
 
         assert cfg.cluster_name == "custom-cluster", "cluster_name not set to custom"
         assert cfg.namespace == "custom-ns", "namespace not set to custom"
+        assert cfg.app_name == "custom-app", "app_name not set to custom"
+        assert cfg.app_secret_name == cfg.app_name, (
+            "app_secret_name should derive from app_name when not set explicitly"
+        )
         assert cfg.ingress_port == 8080, "ingress_port not set to custom"

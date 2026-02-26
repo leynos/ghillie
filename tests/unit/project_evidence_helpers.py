@@ -100,7 +100,9 @@ async def _async_get_estate_id(
     """Retrieve the estate ID from the database (async)."""
     async with session_factory() as session:
         est = await session.scalar(select(Estate))
-        assert est is not None, "expected an Estate record in DB"
+        if est is None:
+            message = "expected an Estate record in DB"
+            raise AssertionError(message)
         return est.id
 
 

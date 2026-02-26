@@ -122,7 +122,7 @@ class SQLAlchemySessionManager:
         req: Request,
         resp: Response,
         _resource: object,
-        req_succeeded: bool,  # noqa: FBT001 - Falcon middleware signature requires positional bool
+        req_succeeded: bool,  # noqa: FBT001 - Falcon middleware signature requires positional bool; FIXME: <ticket>
     ) -> None:
         """Commit on success, rollback on error, close always.
 

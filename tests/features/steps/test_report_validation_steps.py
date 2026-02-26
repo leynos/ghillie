@@ -35,11 +35,18 @@ if typ.TYPE_CHECKING:
     from ghillie.status.protocol import StatusModel
 
 
+class StatusModelBehaviorConfig(typ.TypedDict, total=False):
+    """Accepted kwargs shape when configuring ``mock.AsyncMock`` behavior."""
+
+    return_value: RepositoryStatusResult
+    side_effect: list[RepositoryStatusResult]
+
+
 @dc.dataclass(frozen=True, kw_only=True)
 class RepoSetupParams:
     """Configuration for repository setup in validation tests."""
 
-    status_model_behavior: dict[str, typ.Any]
+    status_model_behavior: StatusModelBehaviorConfig
     commit_id: str
     commit_message: str
     max_attempts: int = 2

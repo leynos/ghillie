@@ -22,15 +22,15 @@ from ghillie.evidence.models import (
 
 # -- Parametrised cross-model tests ------------------------------------------
 
-EvidenceModel = (
+type EvidenceModel = (
     ProjectMetadata
     | ComponentRepositorySummary
     | ComponentEvidence
     | ComponentDependencyEvidence
     | ProjectEvidenceBundle
 )
-ModelFactory = cabc.Callable[[], EvidenceModel]
-ModelVerifier = cabc.Callable[[EvidenceModel], None]
+type ModelFactory = cabc.Callable[[], EvidenceModel]
+type ModelVerifier = cabc.Callable[[EvidenceModel], None]
 
 
 @pytest.mark.parametrize(

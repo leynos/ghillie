@@ -45,8 +45,8 @@ class Config:
     valkey_name : str
         Name of the Valkey instance.
     app_secret_name : str
-        Kubernetes Secret name for application credentials. This contains
-        connection URLs, not passwords directly (S105 false positive).
+        Kubernetes Secret name for application credentials. Defaults to
+        ``app_name`` when not explicitly set.
 
     """
 
@@ -64,9 +64,12 @@ class Config:
     values_file: Path = Path("tests/helm/fixtures/values_local.yaml")
     pg_cluster_name: str = "pg-ghillie"
     valkey_name: str = "valkey-ghillie"
-    # S105 false positive: This is a Kubernetes Secret resource name, not a
-    # hardcoded password. The secret contains connection URLs, not credentials.
-    app_secret_name: str = "ghillie"  # noqa: S105  # PR-33 false positive
+    app_secret_name: str = ""
+
+    def __post_init__(self) -> None:
+        """Default derived fields after initialization."""
+        if not self.app_secret_name:
+            object.__setattr__(self, "app_secret_name", self.app_name)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

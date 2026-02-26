@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses as dc
 import subprocess
 import sys
 import typing as typ
@@ -109,7 +110,8 @@ def _print_success_banner(port: int) -> None:
     print("=" * 60)
 
 
-class _EnvironmentSetup(typ.NamedTuple):
+@dc.dataclass(frozen=True, slots=True)
+class _EnvironmentSetup:
     """Validated config and environment for a cluster."""
 
     cfg: Config
