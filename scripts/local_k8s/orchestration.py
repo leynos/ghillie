@@ -5,7 +5,6 @@ from __future__ import annotations
 import subprocess
 import sys
 import typing as typ
-from typing import NamedTuple  # noqa: ICN003
 
 from local_k8s.cnpg import (
     create_cnpg_cluster,
@@ -110,7 +109,7 @@ def _print_success_banner(port: int) -> None:
     print("=" * 60)
 
 
-class _EnvironmentSetup(NamedTuple):
+class _EnvironmentSetup(typ.NamedTuple):
     """Validated config and environment for a cluster."""
 
     cfg: Config

@@ -31,14 +31,14 @@ from tests.fixtures.specs import (
 )
 from tests.helpers.event_builders import commit_envelope
 from tests.unit.project_evidence_helpers import (
-    _import_wildside,  # noqa: F401  # FIXME: re-exported for pytest fixture discovery
+    _import_wildside,
     create_project_report,
     create_silver_repo_and_report,
     create_silver_repo_and_report_raw,
     create_silver_repo_with_multiple_reports,
     get_catalogue_repo_ids,
     get_estate_id,
-    project_evidence_service,  # noqa: F401  # FIXME: re-exported for pytest fixture discovery
+    project_evidence_service,
 )
 
 if typ.TYPE_CHECKING:
@@ -57,12 +57,14 @@ __all__ = [
     "RepositoryCreateSpec",
     "RepositoryEventSpec",
     "RepositoryParams",
+    "_import_wildside",
     "create_project_report",
     "create_silver_repo_and_report",
     "create_silver_repo_and_report_raw",
     "create_silver_repo_with_multiple_reports",
     "get_catalogue_repo_ids",
     "get_estate_id",
+    "project_evidence_service",
 ]
 
 
@@ -215,7 +217,7 @@ async def get_repo_id(
                 Repository.github_name == name,
             )
         )
-        assert repo is not None, f"Repository {owner}/{name} not found"  # noqa: S101
+        assert repo is not None, f"Repository {owner}/{name} not found"
         return repo.id
 
 

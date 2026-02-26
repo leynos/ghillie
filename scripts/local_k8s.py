@@ -37,17 +37,13 @@ from local_k8s.orchestration import (
 from local_k8s.validation import LocalK8sError
 
 _K3D_CREATE_CMD = ("k3d", "cluster", "create")
-_P = typ.ParamSpec("_P")
-_R = typ.TypeVar("_R", bound=int)
 
 
-def handle_cli_errors(  # noqa: UP047
-    func: typ.Callable[_P, _R],
-) -> typ.Callable[_P, int]:
+def handle_cli_errors[**P](func: typ.Callable[P, int]) -> typ.Callable[P, int]:
     """Wrap CLI handlers to standardize error reporting and exit codes."""
 
     @functools.wraps(func)
-    def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> int:
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> int:
         try:
             return int(func(*args, **kwargs))
         except LocalK8sError as e:

@@ -72,9 +72,9 @@ class FemtoLogCapture:
                     break
                 self._condition.wait(timeout=remaining)
 
-        if len(self.records) < count:
-            msg = f"Expected {count} records, got {len(self.records)}"
-            raise AssertionError(msg)
+        assert len(self.records) >= count, (
+            f"Expected {count} records, got {len(self.records)}"
+        )
 
     def wait_for_timeout(self, timeout: float = 0.1) -> None:
         """Wait for the specified duration to allow records to flush."""

@@ -55,8 +55,8 @@ class TestTailLogs:
         cmd_mox: CmdMox,
         test_env: dict[str, str],
         namespace: str,
-        # FBT001: Boolean is a pytest parametrized fixture, not a function API
-        follow: bool,  # noqa: FBT001
+        *,
+        follow: bool,
     ) -> None:
         """Should invoke kubectl logs with correct arguments."""
         cfg = Config(namespace=namespace)

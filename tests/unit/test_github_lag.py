@@ -323,8 +323,9 @@ class TestIngestionLagMetrics:
             has_pending_cursors=False,
             is_stalled=False,
         )
+        mutable_metrics = typ.cast("typ.Any", metrics)
         with pytest.raises(AttributeError):
-            metrics.repo_slug = "other/repo"  # type: ignore[misc]
+            mutable_metrics.repo_slug = "other/repo"
 
     def test_all_fields(self) -> None:
         """All fields are accessible."""

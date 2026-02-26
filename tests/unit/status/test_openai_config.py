@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import typing as typ
 from unittest import mock
 
 import pytest
@@ -105,11 +106,9 @@ class TestOpenAIStatusModelConfigValidation:
         )
 
         # Verify runtime mutation raises FrozenInstanceError.
-        # Direct assignment is required to test frozen dataclass behaviour.
-        # Note: object.__setattr__ bypasses frozen protection and does not
-        # raise FrozenInstanceError, so we must use direct assignment here.
+        mutable_config = typ.cast("typ.Any", config)
         with pytest.raises(dataclasses.FrozenInstanceError):
-            config.api_key = "new-key"  # type: ignore[misc]  # intentional
+            mutable_config.api_key = "new-key"
 
 
 class TestOpenAIStatusModelConfigNumericParametersFromEnv:

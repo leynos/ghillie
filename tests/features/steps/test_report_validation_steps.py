@@ -32,12 +32,14 @@ if typ.TYPE_CHECKING:
     from falcon.testing.client import Result
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+    from ghillie.status.protocol import StatusModel
+
 
 @dc.dataclass(frozen=True, kw_only=True)
 class RepoSetupParams:
     """Configuration for repository setup in validation tests."""
 
-    status_model_behavior: dict[str, object]
+    status_model_behavior: dict[str, typ.Any]
     commit_id: str
     commit_message: str
     max_attempts: int = 2
@@ -62,15 +64,14 @@ def _invalid_result() -> RepositoryStatusResult:
 
 def _build_reporting_service(
     session_factory: async_sessionmaker[AsyncSession],
-    status_model: object,
+    status_model: StatusModel,
     *,
     max_attempts: int = 2,
 ) -> ReportingService:
     deps = ReportingServiceDependencies(
         session_factory=session_factory,
         evidence_service=EvidenceBundleService(session_factory),
-        # AsyncMock satisfies the protocol at runtime but not statically.
-        status_model=status_model,  # type: ignore[arg-type]
+        status_model=status_model,
     )
     config = ReportingConfig(
         window_days=7,
@@ -98,10 +99,12 @@ def _setup_repo_with_status_model(
 ) -> ValidationContext:
     """Set up repository with configured status model behavior."""
     status_model = mock.AsyncMock()
-    status_model.summarize_repository = mock.AsyncMock(**params.status_model_behavior)  # type: ignore[arg-type]
+    status_model.summarize_repository = mock.AsyncMock(**params.status_model_behavior)
 
     service = _build_reporting_service(
-        session_factory, status_model, max_attempts=params.max_attempts
+        session_factory,
+        typ.cast("StatusModel", status_model),
+        max_attempts=params.max_attempts,
     )
 
     writer = RawEventWriter(session_factory)

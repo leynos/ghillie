@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import typing as typ
 from pathlib import Path
 
 import pytest
@@ -36,18 +37,15 @@ class TestConfig:
         )
         assert cfg.pg_cluster_name == "pg-ghillie", "pg_cluster_name default mismatch"
         assert cfg.valkey_name == "valkey-ghillie", "valkey_name default mismatch"
-        # S105 suppression: Bandit flags "ghillie" as a potential hardcoded
-        # password. This is a Kubernetes Secret name, not a password value.
-        assert cfg.app_secret_name == "ghillie", (  # noqa: S105
-            "app_secret_name default mismatch"
-        )
+        assert cfg.app_secret_name == cfg.app_name, "app_secret_name default mismatch"
 
     def test_config_is_frozen(self) -> None:
         """Config should be immutable."""
         cfg = Config()
+        mutable_cfg = typ.cast("typ.Any", cfg)
 
         with pytest.raises(dataclasses.FrozenInstanceError):
-            cfg.cluster_name = "other"  # type: ignore[misc]
+            mutable_cfg.cluster_name = "other"
 
     def test_config_custom_values(self) -> None:
         """Config should accept custom values."""

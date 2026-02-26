@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import collections.abc as cabc
 import datetime as dt
+import typing as typ
 
 import msgspec
 import pytest
@@ -19,6 +21,16 @@ from ghillie.evidence.models import (
 )
 
 # -- Parametrised cross-model tests ------------------------------------------
+
+EvidenceModel = (
+    ProjectMetadata
+    | ComponentRepositorySummary
+    | ComponentEvidence
+    | ComponentDependencyEvidence
+    | ProjectEvidenceBundle
+)
+ModelFactory = cabc.Callable[[], EvidenceModel]
+ModelVerifier = cabc.Callable[[EvidenceModel], None]
 
 
 @pytest.mark.parametrize(
@@ -78,47 +90,56 @@ from ghillie.evidence.models import (
     ],
 )
 def test_frozen_immutability_for_all_models(
-    model_factory: object,
+    model_factory: ModelFactory,
     field_to_modify: str,
     new_value: object,
 ) -> None:
     """Verify all evidence models are frozen msgspec structs."""
-    instance = model_factory()  # type: ignore[operator]
+    instance = model_factory()
     with pytest.raises(AttributeError, match=r"immutable type"):
         setattr(instance, field_to_modify, new_value)
 
 
-def _check_project_metadata_roundtrip(decoded: object) -> None:
-    assert decoded.key == "wildside", "key mismatch"  # type: ignore[union-attr]
-    assert decoded.name == "Wildside", "name mismatch"  # type: ignore[union-attr]
-    assert decoded.programme == "df12", "programme mismatch"  # type: ignore[union-attr]
-    doc_paths = decoded.documentation_paths  # type: ignore[union-attr]
+def _check_project_metadata_roundtrip(decoded: EvidenceModel) -> None:
+    assert isinstance(decoded, ProjectMetadata), "Expected ProjectMetadata"
+    assert decoded.key == "wildside", "key mismatch"
+    assert decoded.name == "Wildside", "name mismatch"
+    assert decoded.programme == "df12", "programme mismatch"
+    doc_paths = decoded.documentation_paths
     assert doc_paths == ("docs/roadmap.md",), "documentation_paths mismatch"
 
 
-def _check_component_repo_summary_roundtrip(decoded: object) -> None:
-    assert decoded.repository_slug == "leynos/wildside", "repository_slug mismatch"  # type: ignore[union-attr]
-    assert decoded.status == ReportStatus.ON_TRACK, "status mismatch"  # type: ignore[union-attr]
-    assert decoded.highlights == ("Feature A shipped",), "highlights mismatch"  # type: ignore[union-attr]
+def _check_component_repo_summary_roundtrip(decoded: EvidenceModel) -> None:
+    assert isinstance(decoded, ComponentRepositorySummary), (
+        "Expected ComponentRepositorySummary"
+    )
+    assert decoded.repository_slug == "leynos/wildside", "repository_slug mismatch"
+    assert decoded.status == ReportStatus.ON_TRACK, "status mismatch"
+    assert decoded.highlights == ("Feature A shipped",), "highlights mismatch"
 
 
-def _check_component_evidence_roundtrip(decoded: object) -> None:
-    assert decoded.key == "wildside-core", "key mismatch"  # type: ignore[union-attr]
-    assert decoded.has_repository is True, "has_repository should be True"  # type: ignore[union-attr]
-    assert decoded.notes == ("Primary service",), "notes mismatch"  # type: ignore[union-attr]
+def _check_component_evidence_roundtrip(decoded: EvidenceModel) -> None:
+    assert isinstance(decoded, ComponentEvidence), "Expected ComponentEvidence"
+    assert decoded.key == "wildside-core", "key mismatch"
+    assert decoded.has_repository is True, "has_repository should be True"
+    assert decoded.notes == ("Primary service",), "notes mismatch"
 
 
-def _check_dependency_evidence_roundtrip(decoded: object) -> None:
-    assert decoded.from_component == "wildside-core", "from_component mismatch"  # type: ignore[union-attr]
-    assert decoded.relationship == "blocked_by", "relationship mismatch"  # type: ignore[union-attr]
-    assert decoded.rationale == "Config releases needed.", "rationale mismatch"  # type: ignore[union-attr]
+def _check_dependency_evidence_roundtrip(decoded: EvidenceModel) -> None:
+    assert isinstance(decoded, ComponentDependencyEvidence), (
+        "Expected ComponentDependencyEvidence"
+    )
+    assert decoded.from_component == "wildside-core", "from_component mismatch"
+    assert decoded.relationship == "blocked_by", "relationship mismatch"
+    assert decoded.rationale == "Config releases needed.", "rationale mismatch"
 
 
-def _check_bundle_roundtrip(decoded: object) -> None:
-    assert decoded.project.key == "wildside", "project key mismatch"  # type: ignore[union-attr]
-    assert decoded.component_count == 2, "expected 2 components"  # type: ignore[union-attr]
-    assert len(decoded.dependencies) == 1, "expected 1 dependency"  # type: ignore[union-attr]
-    comps = decoded.components  # type: ignore[union-attr]
+def _check_bundle_roundtrip(decoded: EvidenceModel) -> None:
+    assert isinstance(decoded, ProjectEvidenceBundle), "Expected ProjectEvidenceBundle"
+    assert decoded.project.key == "wildside", "project key mismatch"
+    assert decoded.component_count == 2, "expected 2 components"
+    assert len(decoded.dependencies) == 1, "expected 1 dependency"
+    comps = decoded.components
     assert comps[0].has_repository is True, "first component should have repo"
     assert comps[1].has_repository is False, "second component should lack repo"
 
@@ -212,15 +233,15 @@ def _check_bundle_roundtrip(decoded: object) -> None:
     ],
 )
 def test_msgspec_encoding_roundtrip_for_all_models(
-    model_factory: object,
-    model_type: type,
-    verify: object,
+    model_factory: ModelFactory,
+    model_type: type[object],
+    verify: ModelVerifier,
 ) -> None:
     """Verify msgspec encode/decode roundtrip for all evidence models."""
-    instance = model_factory()  # type: ignore[operator]
+    instance = model_factory()
     encoded = msgspec.json.encode(instance)
-    decoded = msgspec.json.decode(encoded, type=model_type)
-    verify(decoded)  # type: ignore[operator]
+    decoded = typ.cast("EvidenceModel", msgspec.json.decode(encoded, type=model_type))
+    verify(decoded)
 
 
 @pytest.mark.parametrize(
@@ -281,11 +302,11 @@ def test_msgspec_encoding_roundtrip_for_all_models(
     ],
 )
 def test_required_fields_for_all_models(
-    model_factory: object,
+    model_factory: ModelFactory,
     field_assertions: dict[str, object],
 ) -> None:
     """Verify required fields are set correctly for all evidence models."""
-    instance = model_factory()  # type: ignore[operator]
+    instance = model_factory()
     for field_name, expected in field_assertions.items():
         actual = getattr(instance, field_name)
         assert actual == expected, (
@@ -346,11 +367,11 @@ def test_required_fields_for_all_models(
     ],
 )
 def test_default_values_for_all_models(
-    model_factory: object,
+    model_factory: ModelFactory,
     default_assertions: dict[str, object],
 ) -> None:
     """Verify default field values for all evidence models."""
-    instance = model_factory()  # type: ignore[operator]
+    instance = model_factory()
     for field_name, expected in default_assertions.items():
         actual = getattr(instance, field_name)
         assert actual == expected, (

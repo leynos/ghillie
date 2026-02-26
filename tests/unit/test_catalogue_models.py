@@ -1,5 +1,4 @@
 """Unit tests for catalogue model structures."""
-# ruff: noqa: D103
 
 from __future__ import annotations
 

@@ -119,9 +119,7 @@ async def get_catalogue_repo_id(
                 RepositoryRecord.name == name,
             )
         )
-        if repo is None:
-            msg = f"Expected RepositoryRecord for {owner}/{name}"
-            raise AssertionError(msg)
+        assert repo is not None, f"Expected RepositoryRecord for {owner}/{name}"
         return repo.id
 
 
@@ -145,13 +143,10 @@ def get_component(
 
     """
     match = next((c for c in bundle.components if c.key == component_key), None)
-    if match is None:
-        available = [c.key for c in bundle.components]
-        msg = (
-            f"component {component_key!r} not found in bundle; "
-            f"available keys: {available}"
-        )
-        raise AssertionError(msg)
+    available = [c.key for c in bundle.components]
+    assert match is not None, (
+        f"component {component_key!r} not found in bundle; available keys: {available}"
+    )
     return match
 
 
@@ -180,7 +175,7 @@ def get_component_with_summary(
 
     """
     component = get_component(bundle, component_key)
-    assert component.repository_summary is not None, (  # noqa: S101  # FIXME: test helper; assert narrows type for callers
+    assert component.repository_summary is not None, (
         f"{component_key} should have a repository summary"
     )
     return component

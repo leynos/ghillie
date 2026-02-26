@@ -1,13 +1,15 @@
 """CLI validation behaviour tests."""
-# ruff: noqa: D103
 
 from __future__ import annotations
 
 import subprocess
 import sys
-from pathlib import Path  # noqa: TC003
+import typing as typ
 
 import msgspec
+
+if typ.TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _run_cli(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:

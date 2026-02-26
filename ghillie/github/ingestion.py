@@ -304,21 +304,22 @@ class GitHubIngestionWorker:
             ),
             noise=context.noise,
         )
-        self._update_doc_watermarks(offsets, result, resuming)
+        self._update_doc_watermarks(offsets, result, is_resuming=resuming)
         return result.ingested
 
     def _update_doc_watermarks(
         self,
         offsets: GithubIngestionOffset,
         result: _StreamIngestionResult,
-        resuming: bool,  # noqa: FBT001
+        *,
+        is_resuming: bool,
     ) -> None:
         """Update doc change watermarks based on ingestion result."""
         self._update_stream_watermarks(
             offsets,
             attrs=_DOC_WATERMARK_ATTRS,
             result=result,
-            resuming=resuming,
+            resuming=is_resuming,
         )
 
     def _update_stream_watermarks(

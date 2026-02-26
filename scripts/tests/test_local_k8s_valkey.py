@@ -6,6 +6,7 @@ Common create/wait patterns are in test_local_k8s_datastore_ops.py.
 
 from __future__ import annotations
 
+import base64
 import typing as typ
 
 from local_k8s import Config
@@ -45,9 +46,8 @@ class TestReadValkeyUri:
         """Should construct Valkey URI from password secret field."""
         cfg = Config()
 
-        # "secretpass" base64 encoded
-        # S105: This is test fixture data, not a production secret
-        encoded_password = "c2VjcmV0cGFzcw=="  # noqa: S105
+        credential = "fixture-token"
+        encoded_credential = base64.b64encode(credential.encode()).decode()
 
         # The operator only stores "password" field, not a complete URI
         cmd_mox.mock("kubectl").with_args(
@@ -57,10 +57,12 @@ class TestReadValkeyUri:
             "--namespace=ghillie",
             "-o",
             "jsonpath={.data['password']}",
-        ).returns(exit_code=0, stdout=encoded_password)
+        ).returns(exit_code=0, stdout=encoded_credential)
 
         result = read_valkey_uri(cfg, test_env)
 
         # URI is constructed from password + service DNS name
-        expected = "valkey://:secretpass@valkey-ghillie.ghillie.svc.cluster.local:6379"
+        expected = (
+            f"valkey://:{credential}@valkey-ghillie.ghillie.svc.cluster.local:6379"
+        )
         assert result == expected, f"Expected {expected}, got {result}"

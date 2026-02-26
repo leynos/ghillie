@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses as dc
 import datetime as dt
-from dataclasses import dataclass  # noqa: ICN003
 
 import pytest
 
@@ -12,7 +12,7 @@ from ghillie.github.models import GitHubIngestedEvent
 from ghillie.github.noise import compile_noise_filters
 
 
-@dataclass(frozen=True)
+@dc.dataclass(frozen=True)
 class EventSpec:
     """Specification for constructing a test GitHub event."""
 

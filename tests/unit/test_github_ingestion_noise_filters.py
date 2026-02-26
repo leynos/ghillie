@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import dataclasses as dc
 import datetime as dt
 import typing as typ
-from dataclasses import dataclass  # noqa: ICN003
 
 import msgspec
 import pytest
@@ -105,7 +105,7 @@ def _make_bot_commit_event(
     return (event, sha)
 
 
-@dataclass(frozen=True, slots=True)
+@dc.dataclass(frozen=True, slots=True)
 class MultiProjectCatalogueSetup:
     """Configuration for setting up a multi-project catalogue in tests."""
 
@@ -213,7 +213,7 @@ async def test_ingestion_applies_project_noise_filters_from_catalogue(
         assert offsets.last_commit_ingested_at == occurred_at
 
 
-@dataclass(frozen=True, slots=True)
+@dc.dataclass(frozen=True, slots=True)
 class NoiseFilterTestSetup:
     """Configuration for a multi-project noise filter test scenario."""
 
@@ -224,7 +224,7 @@ class NoiseFilterTestSetup:
     project_b_key: str
 
 
-@dataclass(frozen=True, slots=True)
+@dc.dataclass(frozen=True, slots=True)
 class NoiseFilterExpectedResults:
     """Expected results for noise filter compilation."""
 

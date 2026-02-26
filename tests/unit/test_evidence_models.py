@@ -1,10 +1,9 @@
 """Unit tests for evidence bundle model structures."""
 
-# ruff: noqa: D102
-
 from __future__ import annotations
 
 import datetime as dt
+import typing as typ
 
 import msgspec
 import pytest
@@ -80,9 +79,10 @@ class TestRepositoryMetadata:
             name="reef",
             default_branch="main",
         )
+        mutable_metadata = typ.cast("typ.Any", metadata)
 
         with pytest.raises(AttributeError):
-            metadata.owner = "other"  # type: ignore[misc]
+            mutable_metadata.owner = "other"
 
     def test_msgspec_encoding_roundtrip(self) -> None:
         metadata = RepositoryMetadata(
@@ -133,9 +133,10 @@ class TestCommitEvidence:
 
     def test_frozen_immutability(self) -> None:
         commit = CommitEvidence(sha="abc123")
+        mutable_commit = typ.cast("typ.Any", commit)
 
         with pytest.raises(AttributeError):
-            commit.sha = "other"  # type: ignore[misc]
+            mutable_commit.sha = "other"
 
 
 class TestPullRequestEvidence:
@@ -369,9 +370,10 @@ class TestRepositoryEvidenceBundle:
             window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
             window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
         )
+        mutable_bundle = typ.cast("typ.Any", bundle)
 
         with pytest.raises(AttributeError):
-            bundle.commits = ()  # type: ignore[misc]
+            mutable_bundle.commits = ()
 
     def test_msgspec_encoding_roundtrip(
         self, sample_metadata: RepositoryMetadata
