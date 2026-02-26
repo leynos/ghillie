@@ -357,8 +357,6 @@ def show_environment_status(cluster_name: str, namespace: str) -> int:
     except subprocess.CalledProcessError as e:
         print(f"Subprocess error: {e}", file=sys.stderr)
         return 3
-    else:
-        return 0
 
 
 def stream_environment_logs(cluster_name: str, namespace: str, *, follow: bool) -> int:
@@ -398,5 +396,3 @@ def stream_environment_logs(cluster_name: str, namespace: str, *, follow: bool) 
     except subprocess.CalledProcessError as e:
         print(f"Subprocess error: {e}", file=sys.stderr)
         return 3
-    else:
-        return 0
