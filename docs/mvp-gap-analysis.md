@@ -183,6 +183,20 @@ Impact:
 4. Ingestion/schema upgrades for nice-to-have metrics.
 5. k3d/Helm profile hardening and OpenAPI/documentation parity updates.
 
+## CLI specification deliverable
+
+A concrete CLI specification for this gap-closure work is documented in
+`docs/mvp-cli-specification.md`.
+
+The specification defines:
+
+- a `cyclopts` command tree using verb/noun grammar with explicit
+  predicates/adjectives,
+- `httpx`-backed control-plane command behaviour for estate, ingestion, export,
+  reporting, and metrics workflows,
+- a local runtime integration adapter contract using either `cuprum` or direct
+  Python integrations for Docker/Helm/Kubernetes operations.
+
 ## Evidence references
 
 - [scripts/local_k8s.py](../scripts/local_k8s.py)
@@ -199,3 +213,4 @@ Impact:
 - [ghillie/evidence/service.py](../ghillie/evidence/service.py)
 - [ghillie/reporting/service.py](../ghillie/reporting/service.py)
 - [docs/users-guide.md](./users-guide.md)
+- [docs/mvp-cli-specification.md](./mvp-cli-specification.md)
