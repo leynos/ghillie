@@ -38,13 +38,13 @@ Recommended default:
 Command grammar:
 
 ```text
-ghillie <verb> <noun> [selectors] [predicates] [options]
+ghillie <noun> <verb> [selectors] [predicates] [options]
 ```
 
-- **Verbs** describe actions: `up`, `down`, `list`, `run`, `watch`, `get`,
-  `set`, `import`, `sync`.
-- **Nouns** describe resources: `stack`, `estate`, `repo`, `ingest`, `report`,
-  `export`, `metrics`.
+- **Nouns** describe top-level resources: `stack`, `estate`, `ingest`,
+  `report`, `export`, `metrics`.
+- **Verbs** describe actions within each noun: `up`, `down`, `list`, `run`,
+  `watch`, `get`, `set`, `import`, `sync`.
 - **Predicates/adjectives** narrow behaviour:
   `--active`, `--inactive`, `--wait`, `--no-wait`, `--background-workers`,
   `--no-background-workers`.
@@ -55,7 +55,7 @@ All commands should support these global options:
 
 | Option                | Type                       | Default                 | Purpose                             |
 | --------------------- | -------------------------- | ----------------------- | ----------------------------------- |
-| `--api-base-url`      | `str`                      | `http://127.0.0.1:8080` | Ghillie API root URL                |
+| `--api-base-url`      | `str`                      | auto-discovered         | Ghillie API root URL                |
 | `--auth-token`        | `str`                      | unset                   | Bearer token for authenticated APIs |
 | `--output`            | `table, json, yaml`        | `table`                 | Output format                       |
 | `--log-level`         | `debug, info, warn, error` | `info`                  | CLI log verbosity                   |
@@ -68,6 +68,21 @@ Configuration precedence:
 1. Explicit CLI flags.
 2. Environment variables (for example, `GHILLIE_API_BASE_URL`).
 3. Profile file (`~/.config/ghillie/cli.toml`).
+4. Persisted runtime state (`~/.config/ghillie/state.json`) written by
+   `ghillie stack up`.
+5. Fallback `http://127.0.0.1:8080` only when no discovered state exists.
+
+### API base URL persistence and discovery
+
+To keep the easy path reliable when `stack up` auto-selects an ingress port:
+
+- `ghillie stack up` must persist the resolved API base URL (for example
+  `http://127.0.0.1:49213`) into `state.json`.
+- Subsequent API commands (`estate`, `ingest`, `export`, `report`, `metrics`)
+  must use that persisted value unless explicitly overridden by
+  `--api-base-url` or environment configuration.
+- `ghillie stack status` must print the currently effective API base URL and
+  its source (flag, env, profile, or discovered state).
 
 ## Root command tree
 
