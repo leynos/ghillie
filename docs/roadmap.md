@@ -383,6 +383,113 @@ operationally safe to run.
   (total reports, average/p95 latency, token totals), and on-demand API report
   responses include a `metrics` payload.
 
+### Step 2.5: Provide an operator-facing MVP control plane and CLI
+
+**Goal:** Make the full MVP workflow executable through stable HTTP APIs and a
+single `cyclopts` CLI, without ad hoc scripts.
+
+- [ ] **Task 2.5.a – Define and scaffold the operator CLI contract**
+  Define the command grammar and command groups in
+  `docs/mvp-cli-specification.md`, and scaffold a `cyclopts` CLI with:
+  - verb/noun command structure,
+  - shared global options for API URL, auth, output, and timeouts,
+  - `httpx` control-plane client plumbing,
+  - local runtime integration adapter selection (`cuprum` or direct Python API
+    integrations for Docker/Helm/Kubernetes).
+
+  *Completion criteria:* A runnable CLI skeleton exists with the specified root
+  command tree and validated option parsing.
+
+- [ ] **Task 2.5.b – Add estate-management APIs and CLI commands**
+  Implement API endpoints and CLI commands for:
+  - catalogue import per estate,
+  - registry sync from catalogue,
+  - repository listing and ingestion enable/disable toggles.
+
+  *Completion criteria:* An operator can configure estate repositories end to
+  end via CLI and HTTP APIs, with no direct Python scripting.
+
+- [ ] **Task 2.5.c – Add manual ingestion run APIs with run-state tracking**
+  Implement explicit ingestion run triggering (`repository` or `estate` scope)
+  with lookback window override and persistent run-state queries.
+
+  *Completion criteria:* A two-week (`lookback_days=14`) ingestion run can be
+  started, monitored, and completed through API and CLI alone.
+
+- [ ] **Task 2.5.d – Add manual reporting run APIs for repository and estate**
+  Extend on-demand reporting to support:
+  - repository and estate run triggers,
+  - explicit window/as-of overrides,
+  - run-state retrieval for asynchronous workflows.
+
+  *Completion criteria:* Operators can trigger LLM report generation for an
+  explicit two-week window and monitor run state via API and CLI.
+
+- [ ] **Task 2.5.e – Add k3d/Helm runtime profiles and provider setup path**
+  Provide explicit local runtime profiles (`api-only`, `ingestion-worker`,
+  `reporting-worker`) and CLI-assisted provider configuration for GitHub and
+  inference backends.
+
+  *Completion criteria:* `api-only` startup with no background workers is a
+  documented, repeatable command path with readiness checks.
+
+### Step 2.6: Deliver structured exports and required MVP metrics
+
+**Goal:** Expose required KPI and export capabilities through stable operator
+interfaces.
+
+- [ ] **Task 2.6.a – Implement structured export APIs and CLI commands**
+  Add export surfaces for collected events, derived evidence bundles, and
+  report outputs with lineage metadata.
+
+  *Completion criteria:* Operators can generate versioned structured exports
+  (for example, JSON/JSONL/CSV where applicable) for a selected two-week window
+  using API or CLI.
+
+- [ ] **Task 2.6.b – Implement required metrics APIs and CLI commands**
+  Expose required MVP metrics per repository:
+  - pull requests merged/closed counts,
+  - average PR open-to-merge duration,
+  - resolved/outstanding issue counts,
+  - issue open duration for resolved and unresolved issues.
+
+  *Completion criteria:* Required metrics are queryable by repository and
+  estate scope for an operator-selected reporting window.
+
+- [ ] **Task 2.6.c – Align OpenAPI and user documentation with runtime**
+  Ensure OpenAPI schemas and user-facing docs match the implemented API
+  responses, including validation failures and metrics payloads.
+
+  *Completion criteria:* API behaviour, OpenAPI definitions, and documented
+  examples are consistent and validated in CI.
+
+### Step 2.7: Capture nice-to-have metrics inputs
+
+**Goal:** Add the data model and ingestion signals needed for optional
+engineering insight metrics.
+
+- [ ] **Task 2.7.a – Ingest and store pull request comments**
+  Extend GitHub ingestion and Silver storage to persist PR comments and
+  commenter identity for repository-scoped analytics.
+
+  *Completion criteria:* Comment counts by repository and commenter are
+  queryable from persisted data.
+
+- [ ] **Task 2.7.b – Ingest and store per-PR commit/file statistics**
+  Extend ingestion to persist commit counts and changed-file statistics for
+  each pull request.
+
+  *Completion criteria:* Commit counts per PR and file-level change statistics
+  are available for downstream metrics computations.
+
+- [ ] **Task 2.7.c – Implement SLoC categorisation and metrics exposure**
+  Implement deterministic change categorisation for merged PRs into
+  application, documentation, tests, and supporting code (for example CI
+  workflows, Make, Helm), and expose aggregate SLoC metrics.
+
+  *Completion criteria:* SLoC for merged PRs is queryable per repository and
+  category through API and CLI.
+
 ______________________________________________________________________
 
 ## Phase 3: Add project and estate-level views
