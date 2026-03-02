@@ -84,6 +84,79 @@ To keep the easy path reliable when `stack up` auto-selects an ingress port:
 - `ghillie stack status` must print the currently effective API base URL and
   its source (flag, env, profile, or discovered state).
 
+### Configuration file schemas and environment contract
+
+`~/.config/ghillie/cli.toml` example:
+
+```toml
+[global]
+api_base_url = "http://127.0.0.1:8080"
+auth_token_env = "GHILLIE_AUTH_TOKEN"
+output = "table"
+log_level = "info"
+request_timeout_s = 30
+non_interactive = true
+dry_run = false
+
+[stack]
+backend = "cuprum"
+profile = "api-only"
+cluster_name = "ghillie-local"
+namespace = "ghillie"
+ingress_port = 8080
+image = "ghillie:local"
+provider_github_token_env = "GHILLIE_GITHUB_TOKEN"
+provider_model_backend = "mock"
+provider_openai_key_env = "GHILLIE_OPENAI_API_KEY"
+
+[defaults]
+window_days = 14
+poll_interval_s = 2
+```
+
+`~/.config/ghillie/state.json` example:
+
+```json
+{
+  "api_base_url": "http://127.0.0.1:49213",
+  "source": "stack_up",
+  "cluster_name": "ghillie-local",
+  "namespace": "ghillie",
+  "profile": "api-only",
+  "updated_at": "2026-03-02T16:50:00Z"
+}
+```
+
+State schema notes:
+
+- `api_base_url`: required absolute HTTP(S) URL used for auto-discovery.
+- `source`: required source marker (`stack_up` for current MVP flow).
+- `cluster_name`, `namespace`, `profile`: optional informational fields.
+- `updated_at`: required ISO-8601 UTC timestamp.
+
+Supported environment variables:
+
+| Variable                      | Type                                           | Maps to / purpose                                      |
+| ----------------------------- | ---------------------------------------------- | ------------------------------------------------------ |
+| `GHILLIE_API_BASE_URL`        | `str`                                          | Global `--api-base-url`                                |
+| `GHILLIE_AUTH_TOKEN`          | `str`                                          | Global `--auth-token`                                  |
+| `GHILLIE_OUTPUT`              | `table, json, yaml`                            | Global `--output`                                      |
+| `GHILLIE_LOG_LEVEL`           | `debug, info, warn, error`                     | Global `--log-level`                                   |
+| `GHILLIE_REQUEST_TIMEOUT_S`   | `float`                                        | Global `--request-timeout-s`                           |
+| `GHILLIE_NON_INTERACTIVE`     | `bool`                                         | Global `--non-interactive`                             |
+| `GHILLIE_DRY_RUN`             | `bool`                                         | Global `--dry-run`                                     |
+| `GHILLIE_BACKEND`             | `cuprum, python-api`                           | `stack up --backend` default                           |
+| `GHILLIE_PROFILE`             | `api-only, ingestion-worker, reporting-worker` | `stack up --profile` default                           |
+| `GHILLIE_CLUSTER_NAME`        | `str`                                          | `stack` command default cluster                        |
+| `GHILLIE_NAMESPACE`           | `str`                                          | `stack` command default namespace                      |
+| `GHILLIE_INGRESS_PORT`        | `int`                                          | `stack up --ingress-port` default                      |
+| `GHILLIE_IMAGE`               | `str`                                          | `stack up --image` default                             |
+| `GHILLIE_MODEL_BACKEND`       | `mock, openai`                                 | Report/runtime model backend default                   |
+| `GHILLIE_GITHUB_TOKEN`        | `str`                                          | GitHub provider token (referenced by env-name options) |
+| `GHILLIE_OPENAI_API_KEY`      | `str`                                          | OpenAI provider token (referenced by env-name options) |
+| `GHILLIE_DEFAULT_WINDOW_DAYS` | `int`                                          | Default for `--window-days` / `--lookback-days`        |
+| `GHILLIE_POLL_INTERVAL_S`     | `float`                                        | Default polling interval for `watch` commands          |
+
 ## Root command tree
 
 ```text
@@ -343,19 +416,77 @@ Options:
 
 Each CLI command should call a stable HTTP endpoint via `httpx`.
 
-| CLI command        | HTTP target                                    |
-| ------------------ | ---------------------------------------------- |
-| `estate import`    | `POST /estates/{estate_key}/catalogue-import`  |
-| `estate sync`      | `POST /estates/{estate_key}/registry-sync`     |
-| `estate repo list` | `GET /estates/{estate_key}/repositories`       |
-| `estate repo set`  | `PATCH /repositories/{owner}/{name}/ingestion` |
-| `ingest run`       | `POST /ingestion/runs`                         |
-| `ingest status`    | `GET /ingestion/runs/{run_id}`                 |
-| `report run`       | `POST /reports/runs` or scoped endpoints       |
-| `report status`    | `GET /reports/runs/{run_id}`                   |
-| `export *`         | `POST /exports/{kind}`                         |
-| `metrics required` | `GET /metrics/repositories/required`           |
-| `metrics nice`     | `GET /metrics/repositories/nice`               |
+Naming convention policy:
+
+- Keep OpenAPI path style as plural resource nouns plus optional resource ID:
+  `/estates/{estate_key}/repositories`, `/ingestion/runs/{run_id}`.
+- New endpoints should not introduce verb-first resources in paths.
+- Existing OpenAPI paths keep their current names for MVP to avoid breaking
+  consumers; aliases may be added where needed.
+
+Lifecycle policy for this MVP:
+
+- Existing endpoints retained:
+  - `GET /health`
+  - `GET /ready`
+  - `POST /reports/repositories/{owner}/{name}` (current on-demand repository
+    report trigger)
+- Deprecated endpoints in this MVP: none.
+- Renamed endpoints in this MVP: none.
+
+| CLI command           | HTTP target(s)                                 | Lifecycle in MVP | OpenAPI mapping note                                                     |
+| --------------------- | ---------------------------------------------- | ---------------- | ------------------------------------------------------------------------ |
+| `stack status`        | `GET /ready`, `GET /health`                    | existing         | Reuses existing readiness and liveness paths.                            |
+| `estate import`       | `POST /estates/{estate_key}/catalogue-import`  | new              | Follows plural-resource path style.                                      |
+| `estate sync`         | `POST /estates/{estate_key}/registry-sync`     | new              | Follows plural-resource path style.                                      |
+| `estate repo list`    | `GET /estates/{estate_key}/repositories`       | new              | Follows plural-resource path style.                                      |
+| `estate repo set`     | `PATCH /repositories/{owner}/{name}/ingestion` | new              | Follows plural-resource path style.                                      |
+| `ingest run`          | `POST /ingestion/runs`                         | new              | Adds run resource; aligns with run-status paths.                         |
+| `ingest status`       | `GET /ingestion/runs/{run_id}`                 | new              | Adds run resource; aligns with run-trigger paths.                        |
+| `report run` (repo)   | `POST /reports/repositories/{owner}/{name}`    | existing         | Existing endpoint kept as primary repository trigger.                    |
+| `report run` (estate) | `POST /reports/runs`                           | new              | Adds estate/asynchronous run trigger without renaming existing endpoint. |
+| `report status`       | `GET /reports/runs/{run_id}`                   | new              | Adds run-state retrieval endpoint for asynchronous reporting.            |
+| `export *`            | `POST /exports/{kind}`                         | new              | New export resource family under plural noun.                            |
+| `metrics required`    | `GET /metrics/repositories/required`           | new              | New metrics resource, noun-first naming retained.                        |
+| `metrics nice`        | `GET /metrics/repositories/nice`               | new              | New metrics resource, noun-first naming retained.                        |
+
+### `--wait/--no-wait` run-state contract
+
+Applies to `stack up`, `estate sync`, `ingest run`, and `report run`.
+
+Non-terminal states:
+
+- `queued`
+- `running`
+
+Terminal states:
+
+- `succeeded`
+- `partial` (some scope units failed, others succeeded)
+- `failed`
+- `cancelled`
+- `timed_out` (run-level timeout determined by service)
+
+`--no-wait` behaviour:
+
+- Return immediately after run creation/trigger confirmation.
+- Output includes `run_id`, initial `state`, and status endpoint hint.
+- Exit code `0` if trigger request succeeded.
+
+`--wait` behaviour:
+
+- Poll until one terminal state is observed, or until CLI wait deadline is hit.
+- Always return `run_id`, final observed `state`, and summary counts.
+- For `partial`, `failed`, or `timed_out`, include `partial_results` for any
+  completed units plus `failed_units` and error summaries.
+- If terminal state is:
+  - `succeeded`: exit code `0`.
+  - `partial`: exit code `3`.
+  - `failed`: exit code `3`.
+  - `cancelled`: exit code `3`.
+  - `timed_out`: exit code `3`.
+- If CLI wait deadline is exceeded before terminal state is reached, return
+  `last_observed_state`, any `partial_results`, and exit code `5`.
 
 ## Error handling and exit codes
 
