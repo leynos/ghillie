@@ -435,8 +435,8 @@ single `cyclopts` CLI, without ad hoc scripts.
 
 ### Step 2.6: Deliver structured exports and required MVP metrics
 
-**Goal:** Expose required KPI and export capabilities through stable operator
-interfaces.
+**Goal:** Expose required key performance indicator (KPI) and export
+capabilities through stable operator interfaces.
 
 - [ ] **Task 2.6.a – Implement structured export APIs and CLI commands**
   Add export surfaces for collected events, derived evidence bundles, and

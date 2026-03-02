@@ -1,4 +1,4 @@
-# MVP gap analysis for manual two-week reporting workflow
+# Minimum viable product (MVP) gap analysis for manual two-week reporting workflow
 
 ## Scope and assessment criteria
 
@@ -10,7 +10,8 @@ path and API surface for the requested MVP behaviour:
 2. Manually configure an estate of repositories.
 3. Manually trigger ingestion for two weeks of data with observability.
 4. Manually export structured collected data and derived evidence.
-5. Manually trigger an LLM-generated report over that two-week evidence.
+5. Manually trigger a large language model (LLM)-generated report over that
+   two-week evidence.
 
 For this assessment, an easy execution path means a documented CLI command or
 HTTP API endpoint, rather than bespoke Python scripts.
@@ -149,18 +150,18 @@ Impact:
 
 | Metric                                                                   | Data availability in current model                                            | Current delivery path          | Gap                                   |
 | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------- | ------------------------------ | ------------------------------------- |
-| Number of PRs merged or closed by repo                                   | Available from `pull_requests` (`state`, `merged_at`, `closed_at`, `repo_id`) | No dedicated API/report export | Add metrics query API/export contract |
+| Number of pull requests (PRs) merged or closed by repo                   | Available from `pull_requests` (`state`, `merged_at`, `closed_at`, `repo_id`) | No dedicated API/report export | Add metrics query API/export contract |
 | Average open-to-merge time per repo                                      | Available from `pull_requests.created_at` and `merged_at`                     | No dedicated API/report export | Add metrics query API/export contract |
 | Number of resolved and outstanding issues by repo                        | Available from `issues.state` and `closed_at`                                 | No dedicated API/report export | Add metrics query API/export contract |
 | Duration each resolved issue stayed open / open age of unresolved issues | Available from `issues.created_at` and `closed_at`                            | No dedicated API/report export | Add metrics query API/export contract |
 
 ### Nice-to-have metrics
 
-| Metric                                             | Data availability in current model                                            | Current delivery path | Gap                                                      |
-| -------------------------------------------------- | ----------------------------------------------------------------------------- | --------------------- | -------------------------------------------------------- |
-| PR comments by repo and commenter                  | Not ingested/stored as first-class data                                       | None                  | Extend ingestion + schema + metrics API                  |
-| Commit count per PR                                | Not ingested/stored as first-class data                                       | None                  | Extend ingestion + schema + metrics API                  |
-| SLoC per merged PR, disaggregated by code category | Not ingested/stored (no per-PR file stats/additions/deletions classification) | None                  | Extend ingestion + schema + classification + metrics API |
+| Metric                                                                    | Data availability in current model                                            | Current delivery path | Gap                                                      |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | --------------------- | -------------------------------------------------------- |
+| PR comments by repo and commenter                                         | Not ingested/stored as first-class data                                       | None                  | Extend ingestion + schema + metrics API                  |
+| Commit count per PR                                                       | Not ingested/stored as first-class data                                       | None                  | Extend ingestion + schema + metrics API                  |
+| Source lines of code (SLoC) per merged PR, disaggregated by code category | Not ingested/stored (no per-PR file stats/additions/deletions classification) | None                  | Extend ingestion + schema + classification + metrics API |
 
 ## Cross-cutting API and operability gaps
 

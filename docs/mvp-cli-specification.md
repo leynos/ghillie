@@ -1,4 +1,4 @@
-# MVP operator CLI specification
+# Minimum viable product (MVP) operator CLI specification
 
 ## Purpose
 
@@ -10,7 +10,7 @@ covering:
 2. Manual estate configuration.
 3. Manual two-week ingestion trigger with observability.
 4. Manual structured export of collected and derived data.
-5. Manual LLM report trigger over the two-week window.
+5. Manual large language model (LLM) report trigger over the two-week window.
 
 The CLI is intentionally task-oriented and should be the easiest path for a
 human operator to execute the workflow end to end.
@@ -53,15 +53,15 @@ ghillie <noun> <verb> [selectors] [predicates] [options]
 
 All commands should support these global options:
 
-| Option                | Type                       | Default                 | Purpose                             |
-| --------------------- | -------------------------- | ----------------------- | ----------------------------------- |
-| `--api-base-url`      | `str`                      | auto-discovered         | Ghillie API root URL                |
-| `--auth-token`        | `str`                      | unset                   | Bearer token for authenticated APIs |
-| `--output`            | `table, json, yaml`        | `table`                 | Output format                       |
-| `--log-level`         | `debug, info, warn, error` | `info`                  | CLI log verbosity                   |
-| `--request-timeout-s` | `float`                    | `30`                    | `httpx` timeout                     |
-| `--non-interactive`   | `bool`                     | `true`                  | Fail fast instead of prompting      |
-| `--dry-run`           | `bool`                     | `false`                 | Print intended actions only         |
+| Option                | Type                       | Default         | Purpose                             |
+| --------------------- | -------------------------- | --------------- | ----------------------------------- |
+| `--api-base-url`      | `str`                      | auto-discovered | Ghillie API root URL                |
+| `--auth-token`        | `str`                      | unset           | Bearer token for authenticated APIs |
+| `--output`            | `table, json, yaml`        | `table`         | Output format                       |
+| `--log-level`         | `debug, info, warn, error` | `info`          | CLI log verbosity                   |
+| `--request-timeout-s` | `float`                    | `30`            | `httpx` timeout                     |
+| `--non-interactive`   | `bool`                     | `true`          | Fail fast instead of prompting      |
+| `--dry-run`           | `bool`                     | `false`         | Print intended actions only         |
 
 Configuration precedence:
 
