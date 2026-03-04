@@ -482,8 +482,8 @@ engineering insight metrics.
   *Completion criteria:* Commit counts per PR and file-level change statistics
   are available for downstream metrics computations.
 
-- [ ] **Task 2.7.c – Implement SLoC categorisation and metrics exposure**
-  Implement deterministic change categorisation for merged PRs into
+- [ ] **Task 2.7.c – Implement SLoC categorization and metrics exposure**
+  Implement deterministic change categorization for merged PRs into
   application, documentation, tests, and supporting code (for example CI
   workflows, Make, Helm), and expose aggregate SLoC metrics.
 

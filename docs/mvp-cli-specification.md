@@ -7,10 +7,10 @@ covering:
 
 1. Local k3d/Helm startup with GitHub and inference providers configured,
    without background workers.
-2. Manual estate configuration.
-3. Manual two-week ingestion trigger with observability.
-4. Manual structured export of collected and derived data.
-5. Manual large language model (LLM) report trigger over the two-week window.
+2. Configure estate manually.
+3. Trigger two-week ingestion with observability controls.
+4. Export collected and derived data in a structured format.
+5. Trigger a large language model (LLM) report over the two-week window.
 
 The CLI is intentionally task-oriented and should be the easiest path for a
 human operator to execute the workflow end to end.
@@ -29,7 +29,7 @@ The CLI implementation must use:
 Recommended default:
 
 - Use `cuprum` as the primary integration backend because command parity with
-  existing operational runbooks is higher and failure output is easier to
+  existing operational runbooks is higher, and failure output is easier to
   surface unchanged.
 - Provide a `python-api` backend as an optional adapter where installed.
 
@@ -414,7 +414,9 @@ Options:
 
 ## Endpoint mapping contract
 
-Each CLI command should call a stable HTTP endpoint via `httpx`.
+Each API-backed CLI command should call a stable HTTP endpoint via `httpx`.
+Non-API commands (for example, `stack up`, `stack down`, and `stack logs`) are
+local orchestration commands and are excluded from this `httpx` contract.
 
 Naming convention policy:
 
@@ -436,16 +438,22 @@ Lifecycle policy for this MVP:
 
 | CLI command           | HTTP target(s)                                 | Lifecycle in MVP | OpenAPI mapping note                                                     |
 | --------------------- | ---------------------------------------------- | ---------------- | ------------------------------------------------------------------------ |
+| `stack up`            | no HTTP call                                   | existing (local) | Local orchestration (`k3d`, `helm`, `kubectl`); excluded from OpenAPI.   |
+| `stack down`          | no HTTP call                                   | existing (local) | Local orchestration teardown; excluded from OpenAPI.                     |
+| `stack logs`          | no HTTP call                                   | existing (local) | Local log streaming via Kubernetes tooling; excluded from OpenAPI.       |
 | `stack status`        | `GET /ready`, `GET /health`                    | existing         | Reuses existing readiness and liveness paths.                            |
+| `estate list`         | `GET /estates`                                 | new              | Adds estate collection endpoint using plural-resource path style.        |
 | `estate import`       | `POST /estates/{estate_key}/catalogue-import`  | new              | Follows plural-resource path style.                                      |
 | `estate sync`         | `POST /estates/{estate_key}/registry-sync`     | new              | Follows plural-resource path style.                                      |
 | `estate repo list`    | `GET /estates/{estate_key}/repositories`       | new              | Follows plural-resource path style.                                      |
 | `estate repo set`     | `PATCH /repositories/{owner}/{name}/ingestion` | new              | Follows plural-resource path style.                                      |
 | `ingest run`          | `POST /ingestion/runs`                         | new              | Adds run resource; aligns with run-status paths.                         |
 | `ingest status`       | `GET /ingestion/runs/{run_id}`                 | new              | Adds run resource; aligns with run-trigger paths.                        |
+| `ingest watch`        | `GET /ingestion/runs/{run_id}`                 | new              | Polling wrapper over run status endpoint; WebSocket is optional future.  |
 | `report run` (repo)   | `POST /reports/repositories/{owner}/{name}`    | existing         | Existing endpoint kept as primary repository trigger.                    |
 | `report run` (estate) | `POST /reports/runs`                           | new              | Adds estate/asynchronous run trigger without renaming existing endpoint. |
 | `report status`       | `GET /reports/runs/{run_id}`                   | new              | Adds run-state retrieval endpoint for asynchronous reporting.            |
+| `report watch`        | `GET /reports/runs/{run_id}`                   | new              | Polling wrapper over run status endpoint; WebSocket is optional future.  |
 | `export *`            | `POST /exports/{kind}`                         | new              | New export resource family under plural noun.                            |
 | `metrics required`    | `GET /metrics/repositories/required`           | new              | New metrics resource, noun-first naming retained.                        |
 | `metrics nice`        | `GET /metrics/repositories/nice`               | new              | New metrics resource, noun-first naming retained.                        |

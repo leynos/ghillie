@@ -7,11 +7,10 @@ path and API surface for the requested MVP behaviour:
 
 1. Start an instance on k3d/Helm without background tasks, with GitHub and
    inference provider configured.
-2. Manually configure an estate of repositories.
-3. Manually trigger ingestion for two weeks of data with observability.
-4. Manually export structured collected data and derived evidence.
-5. Manually trigger a large language model (LLM)-generated report over that
-   two-week evidence.
+2. Configure an estate of repositories.
+3. Trigger ingestion for two weeks of data with observability.
+4. Export structured collected data and derived evidence.
+5. Run an LLM-generated report over that two-week evidence.
 
 For this assessment, an easy execution path means a documented CLI command or
 HTTP API endpoint, rather than bespoke Python scripts.
@@ -64,7 +63,7 @@ Impact:
 Current capabilities:
 
 - Estate catalogue schema/validation exists.
-- Import and registry synchronisation services exist.
+- Import and registry synchronization services exist.
 - Ingestion enable/disable controls exist in registry service.
 
 Gaps:
@@ -113,10 +112,9 @@ Current capabilities:
 
 Gaps:
 
-- No export API/CLI for structured bundles (for example, JSON/JSONL/CSV) of:
-  - collected event data,
-  - derived evidence bundles,
-  - report + coverage lineage.
+- No export API/CLI to produce structured bundles (for example,
+  JSON/JSONL/CSV) containing collected event data, derived evidence bundles,
+  and report + coverage lineage.
 - No stable export schema contract for downstream analytics/report pipelines.
 
 Impact:
@@ -191,8 +189,8 @@ A concrete CLI specification for this gap-closure work is documented in
 
 The specification defines:
 
-- a `cyclopts` command tree using verb/noun grammar with explicit
-  predicates/adjectives,
+- a `cyclopts` command tree using noun/verb grammar (`ghillie <noun> <verb>`)
+  with explicit predicates/adjectives,
 - `httpx`-backed control-plane command behaviour for estate, ingestion, export,
   reporting, and metrics workflows,
 - a local runtime integration adapter contract using either `cuprum` or direct
