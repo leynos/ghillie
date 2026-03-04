@@ -10,7 +10,8 @@ path and API surface for the requested MVP behaviour:
 2. Configure an estate of repositories.
 3. Trigger ingestion for two weeks of data with observability.
 4. Export structured collected data and derived evidence.
-5. Run an LLM-generated report over that two-week evidence.
+5. Run a large language model (LLM)-generated report over that two-week
+   evidence.
 
 For this assessment, an easy execution path means a documented CLI command or
 HTTP API endpoint, rather than bespoke Python scripts.
@@ -198,18 +199,32 @@ The specification defines:
 
 ## Evidence references
 
-- [scripts/local_k8s.py](../scripts/local_k8s.py)
-- [charts/ghillie/values.yaml](../charts/ghillie/values.yaml)
-- [ghillie/runtime.py](../ghillie/runtime.py)
-- [ghillie/api/app.py](../ghillie/api/app.py)
-- [specs/openapi.yml](../specs/openapi.yml)
-- [ghillie/github/ingestion.py](../ghillie/github/ingestion.py)
-- [ghillie/github/observability.py](../ghillie/github/observability.py)
-- [ghillie/github/lag.py](../ghillie/github/lag.py)
-- [ghillie/registry/service.py](../ghillie/registry/service.py)
-- [ghillie/silver/storage.py](../ghillie/silver/storage.py)
-- [ghillie/github/client.py](../ghillie/github/client.py)
-- [ghillie/evidence/service.py](../ghillie/evidence/service.py)
-- [ghillie/reporting/service.py](../ghillie/reporting/service.py)
-- [docs/users-guide.md](./users-guide.md)
-- [docs/mvp-cli-specification.md](./mvp-cli-specification.md)
+This assessment references the local k3d bootstrap script[^scripts-local-k8s],
+Helm chart values[^charts-ghillie-values], runtime bootstrap
+path[^ghillie-runtime], API application wiring[^ghillie-api-app], the OpenAPI
+contract[^specs-openapi], GitHub ingestion worker
+behaviour[^ghillie-github-ingestion], ingestion observability
+signals[^ghillie-github-observability], lag analysis
+services[^ghillie-github-lag], registry
+orchestration[^ghillie-registry-service], Silver storage
+contracts[^ghillie-silver-storage], GitHub client
+integrations[^ghillie-github-client], evidence construction
+logic[^ghillie-evidence-service], reporting
+services[^ghillie-reporting-service], user guidance[^docs-users-guide], and the
+MVP CLI specification[^docs-mvp-cli-specification].
+
+[^scripts-local-k8s]: [scripts/local_k8s.py](../scripts/local_k8s.py)
+[^charts-ghillie-values]: [charts/ghillie/values.yaml](../charts/ghillie/values.yaml)
+[^ghillie-runtime]: [ghillie/runtime.py](../ghillie/runtime.py)
+[^ghillie-api-app]: [ghillie/api/app.py](../ghillie/api/app.py)
+[^specs-openapi]: [specs/openapi.yml](../specs/openapi.yml)
+[^ghillie-github-ingestion]: [ghillie/github/ingestion.py](../ghillie/github/ingestion.py)
+[^ghillie-github-observability]: [ghillie/github/observability.py](../ghillie/github/observability.py)
+[^ghillie-github-lag]: [ghillie/github/lag.py](../ghillie/github/lag.py)
+[^ghillie-registry-service]: [ghillie/registry/service.py](../ghillie/registry/service.py)
+[^ghillie-silver-storage]: [ghillie/silver/storage.py](../ghillie/silver/storage.py)
+[^ghillie-github-client]: [ghillie/github/client.py](../ghillie/github/client.py)
+[^ghillie-evidence-service]: [ghillie/evidence/service.py](../ghillie/evidence/service.py)
+[^ghillie-reporting-service]: [ghillie/reporting/service.py](../ghillie/reporting/service.py)
+[^docs-users-guide]: [docs/users-guide.md](./users-guide.md)
+[^docs-mvp-cli-specification]: [docs/mvp-cli-specification.md](./mvp-cli-specification.md)

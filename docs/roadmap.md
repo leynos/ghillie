@@ -391,11 +391,13 @@ single `cyclopts` CLI, without ad hoc scripts.
 - [ ] **Task 2.5.a – Define and scaffold the operator CLI contract**
   Define the command grammar and command groups in
   `docs/mvp-cli-specification.md`, and scaffold a `cyclopts` CLI with:
-  - verb/noun command structure,
+  - noun/verb command structure (`ghillie <noun> <verb>`),
   - shared global options for API URL, auth, output, and timeouts,
   - `httpx` control-plane client plumbing,
   - local runtime integration adapter selection (`cuprum` or direct Python API
     integrations for Docker/Helm/Kubernetes).
+
+  *Prerequisite:* none (entry task for Step 2.5).
 
   *Completion criteria:* A runnable CLI skeleton exists with the specified root
   command tree and validated option parsing.
@@ -406,12 +408,16 @@ single `cyclopts` CLI, without ad hoc scripts.
   - registry sync from catalogue,
   - repository listing and ingestion enable/disable toggles.
 
+  *Prerequisite:* Task 2.5.a.
+
   *Completion criteria:* An operator can configure estate repositories end to
   end via CLI and HTTP APIs, with no direct Python scripting.
 
 - [ ] **Task 2.5.c – Add manual ingestion run APIs with run-state tracking**
   Implement explicit ingestion run triggering (`repository` or `estate` scope)
   with lookback window override and persistent run-state queries.
+
+  *Prerequisite:* Task 2.5.a.
 
   *Completion criteria:* A two-week (`lookback_days=14`) ingestion run can be
   started, monitored, and completed through API and CLI alone.
@@ -422,6 +428,8 @@ single `cyclopts` CLI, without ad hoc scripts.
   - explicit window/as-of overrides,
   - run-state retrieval for asynchronous workflows.
 
+  *Prerequisite:* Task 2.5.a.
+
   *Completion criteria:* Operators can trigger LLM report generation for an
   explicit two-week window and monitor run state via API and CLI.
 
@@ -429,6 +437,8 @@ single `cyclopts` CLI, without ad hoc scripts.
   Provide explicit local runtime profiles (`api-only`, `ingestion-worker`,
   `reporting-worker`) and CLI-assisted provider configuration for GitHub and
   inference backends.
+
+  *Prerequisite:* Task 2.5.a.
 
   *Completion criteria:* `api-only` startup with no background workers is a
   documented, repeatable command path with readiness checks.
@@ -442,6 +452,8 @@ capabilities through stable operator interfaces.
   Add export surfaces for collected events, derived evidence bundles, and
   report outputs with lineage metadata.
 
+  *Prerequisite:* Task 2.5.b, Task 2.5.c, and Task 2.5.d.
+
   *Completion criteria:* Operators can generate versioned structured exports
   (for example, JSON/JSONL/CSV where applicable) for a selected two-week window
   using API or CLI.
@@ -453,12 +465,16 @@ capabilities through stable operator interfaces.
   - resolved/outstanding issue counts,
   - issue open duration for resolved and unresolved issues.
 
+  *Prerequisite:* Task 2.5.b, Task 2.5.c, and Task 2.5.d.
+
   *Completion criteria:* Required metrics are queryable by repository and
   estate scope for an operator-selected reporting window.
 
 - [ ] **Task 2.6.c – Align OpenAPI and user documentation with runtime**
   Ensure OpenAPI schemas and user-facing docs match the implemented API
   responses, including validation failures and metrics payloads.
+
+  *Prerequisite:* Task 2.6.a and Task 2.6.b.
 
   *Completion criteria:* API behaviour, OpenAPI definitions, and documented
   examples are consistent and validated in CI.
@@ -472,12 +488,16 @@ engineering insight metrics.
   Extend GitHub ingestion and Silver storage to persist PR comments and
   commenter identity for repository-scoped analytics.
 
+  *Prerequisite:* Task 2.6.a.
+
   *Completion criteria:* Comment counts by repository and commenter are
   queryable from persisted data.
 
 - [ ] **Task 2.7.b – Ingest and store per-PR commit/file statistics**
   Extend ingestion to persist commit counts and changed-file statistics for
   each pull request.
+
+  *Prerequisite:* Task 2.6.a.
 
   *Completion criteria:* Commit counts per PR and file-level change statistics
   are available for downstream metrics computations.
@@ -486,6 +506,8 @@ engineering insight metrics.
   Implement deterministic change categorization for merged PRs into
   application, documentation, tests, and supporting code (for example CI
   workflows, Make, Helm), and expose aggregate SLoC metrics.
+
+  *Prerequisite:* Task 2.6.a.
 
   *Completion criteria:* SLoC for merged PRs is queryable per repository and
   category through API and CLI.
