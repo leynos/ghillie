@@ -390,7 +390,8 @@ single `cyclopts` CLI, without ad hoc scripts.
 
 - [ ] **Task 2.5.a – Define and scaffold the operator CLI contract**
   Define the command grammar and command groups in
-  `docs/mvp-cli-specification.md`, and scaffold a `cyclopts` CLI with:
+  `docs/mvp-cli-specification.md`, and scaffold a `cyclopts` CLI with the
+  following features:
   - noun/verb command structure (`ghillie <noun> <verb>`),
   - shared global options for API URL, auth, output, and timeouts,
   - `httpx` control-plane client plumbing,
@@ -403,7 +404,7 @@ single `cyclopts` CLI, without ad hoc scripts.
   command tree and validated option parsing.
 
 - [ ] **Task 2.5.b – Add estate-management APIs and CLI commands**
-  Implement API endpoints and CLI commands for:
+  Implement API endpoints and CLI commands for the following estate operations:
   - catalogue import per estate,
   - registry sync from catalogue,
   - repository listing and ingestion enable/disable toggles.
