@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & discoveries`, `Decision log`, and
 `Outcomes & retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 No `PLANS.md` file exists in this repository.
 
@@ -64,15 +64,32 @@ Success is observable when:
 
 - [x] (2026-02-24 00:00Z) Draft ExecPlan at
   `docs/execplans/upgrade-python-to-3-14-uuid7-for-storage-ids.md`.
-- [ ] Add failing tests for shared ID helper (UUIDv7 shape/properties).
-- [ ] Introduce a shared UUIDv7 string helper in common utilities.
-- [ ] Update storage model defaults to use the helper.
-- [ ] Confirm no schema changes are needed.
-- [ ] Run full quality gates.
+- [x] (2026-03-08 14:18Z) Add failing tests for shared ID helper (UUIDv7
+  shape/properties) and storage model defaults.
+- [x] (2026-03-08 14:19Z) Introduce a shared UUIDv7 string helper in
+  `ghillie/common/ids.py`.
+- [x] (2026-03-08 14:19Z) Update storage model defaults to use the helper.
+- [x] (2026-03-08 14:20Z) Confirm no schema changes are needed; all affected
+  primary-key columns remain `String(36)` with canonical UUID text.
+- [x] (2026-03-08 14:30Z) Run full quality gates:
+  `make check-fmt`, `make lint`, `make markdownlint`, `make nixie`,
+  `make typecheck`, and `make test`.
 
 ## Surprises & discoveries
 
-- None yet. Record implementation details during execution.
+- (2026-03-08 14:18Z) The shell `python` on the host is 3.12.3, but `uv run`
+  resolves CPython 3.14.3 for this project. That means the repository can use
+  `uuid.uuid7()` directly in commit gates even though the host interpreter is
+  older.
+- (2026-03-08 14:18Z) SQLAlchemy stores column defaults as context-callable
+  wrappers, so tests must invoke `ColumnDefault.arg(None)` when checking
+  storage defaults directly.
+- (2026-03-08 14:22Z) `ty check` still used the project metadata baseline, so
+  adopting `uuid.uuid7()` also required updating `pyproject.toml` to
+  `requires-python = ">=3.14"` and Ruff `target-version = "py314"`.
+- (2026-03-08 14:24Z) The Python-baseline uplift exposed pre-existing typing
+  annotations and formatter drift in a handful of test and script files. Those
+  had to be normalized to satisfy the required commit gates.
 
 ## Decision log
 
@@ -80,21 +97,38 @@ Success is observable when:
   Rationale: keeps UUID policy in one place and reduces copy-paste drift.
 - Decision: preserve `String(36)` columns and canonical UUID text format.
   Rationale: avoids migrations and keeps external contracts stable.
+- Decision: call Python 3.14's built-in `uuid.uuid7()` directly in the helper.
+  Rationale: the project test/build toolchain already runs on Python 3.14, so
+  a compatibility shim would add unnecessary code and another UUID policy to
+  maintain.
+- Decision: align `pyproject.toml` metadata with the Python 3.14 toolchain used
+  by `uv`.
+  Rationale: keeps static analysis consistent with the executable environment
+  and prevents false negatives around 3.14-only stdlib APIs.
 
 ## Outcomes & retrospective
 
-Not started. Populate after implementation.
+- Introduced `ghillie.common.ids.new_uuid7_str()` and reused it across
+  catalogue, Silver, and Gold storage models.
+- Added unit tests covering UUIDv7 format, version, timestamp-prefix behavior,
+  and direct inspection of storage model ID defaults.
+- Updated project metadata to Python 3.14 and refreshed the lockfile so
+  typecheck/build tooling matches the runtime used by `uv`.
+- Preserved schema compatibility: all affected primary keys remain
+  `String(36)`, no migration files were added, and existing UUIDv4 rows remain
+  valid.
+- Updated the users' guide to document the UUIDv7 generation change and the
+  unchanged storage/API contract.
 
 ## Context and orientation
 
-Current UUID defaults in storage models:
+Storage UUID defaults were previously defined in:
 
 - `ghillie/catalogue/storage.py`
 - `ghillie/silver/storage.py`
 - `ghillie/gold/storage.py`
 
-Each currently uses `default=lambda: str(uuid.uuid4())`. This activity replaces
-those call sites with a shared UUIDv7 generator.
+Those call sites have now been replaced with a shared UUIDv7 generator.
 
 ## Plan of work
 

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import datetime as dt  # noqa: TC003
 import typing as typ
-import uuid
 
 from sqlalchemy import (
     JSON,
@@ -23,6 +22,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from ghillie.common.ids import new_uuid7_str
 from ghillie.common.slug import repo_slug
 from ghillie.common.time import utcnow
 
@@ -44,7 +44,7 @@ class Estate(Base):
     id: Mapped[str] = mapped_column(
         String(36),
         primary_key=True,
-        default=lambda: str(uuid.uuid4()),
+        default=new_uuid7_str,
     )
     key: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(255))
@@ -70,7 +70,7 @@ class ProjectRecord(Base):
     id: Mapped[str] = mapped_column(
         String(36),
         primary_key=True,
-        default=lambda: str(uuid.uuid4()),
+        default=new_uuid7_str,
     )
     estate_id: Mapped[str] = mapped_column(ForeignKey("estates.id", ondelete="CASCADE"))
     key: Mapped[str] = mapped_column(String(64), index=True)
@@ -101,9 +101,7 @@ class RepositoryRecord(Base):
         UniqueConstraint("owner", "name", name="uq_catalogue_repository_slug"),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid7_str)
     owner: Mapped[str] = mapped_column(String(255))
     name: Mapped[str] = mapped_column(String(255))
     default_branch: Mapped[str] = mapped_column(String(255))
@@ -137,7 +135,7 @@ class ComponentRecord(Base):
     id: Mapped[str] = mapped_column(
         String(36),
         primary_key=True,
-        default=lambda: str(uuid.uuid4()),
+        default=new_uuid7_str,
     )
     project_id: Mapped[str] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE")

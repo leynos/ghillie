@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import datetime as dt
 import typing as typ
-import uuid
 
 from sqlalchemy import (
     JSON,
@@ -18,6 +17,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ghillie.bronze.storage import Base, RawEvent, UTCDateTime
+from ghillie.common.ids import new_uuid7_str
 from ghillie.common.slug import repo_slug
 from ghillie.common.time import utcnow
 
@@ -40,9 +40,7 @@ class Repository(Base):
         Index("ix_repositories_catalogue_id", "catalogue_repository_id"),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid7_str)
     estate_id: Mapped[str | None] = mapped_column(String(36), default=None)
     github_owner: Mapped[str] = mapped_column(String(255))
     github_name: Mapped[str] = mapped_column(String(255))

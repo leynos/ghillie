@@ -328,6 +328,7 @@ class TestOpenAIResponseParsingViaPublicAPI:
                 await model.summarize_repository(feature_evidence)
 
         assert expected_fragment in str(exc_info.value)
+        assert expected_fragment in str(exc_info.value)
 
 
 class TestOpenAIHTTPErrorHandling:
