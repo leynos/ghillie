@@ -62,7 +62,7 @@ def test_transformer_is_idempotent(
     """Transformer produces one fact and marks raw event processed."""
     writer = RawEventWriter(session_factory)
     transformer = RawEventTransformer(session_factory)
-    payload = {"id": "evt-dup", "value": 3}
+    payload: dict[str, object] = {"id": "evt-dup", "value": 3}
     occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.UTC)
 
     async def _ingest_and_transform() -> RawEvent:
@@ -104,7 +104,7 @@ def test_transformer_handles_concurrent_insert(
     """Treat existing EventFacts as processed even if a race already wrote one."""
     writer = RawEventWriter(session_factory)
     transformer = RawEventTransformer(session_factory)
-    payload = {"id": "evt-race"}
+    payload: dict[str, object] = {"id": "evt-race"}
     occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.UTC)
 
     async def _run() -> None:
@@ -140,8 +140,8 @@ def test_transformer_marks_failed_on_payload_mismatch(
     writer = RawEventWriter(session_factory)
     transformer = RawEventTransformer(session_factory)
 
-    original_payload = {"id": "evt-conflict", "value": 1}
-    conflicting_payload = {"id": "evt-conflict", "value": 999}
+    original_payload: dict[str, object] = {"id": "evt-conflict", "value": 1}
+    conflicting_payload: dict[str, object] = {"id": "evt-conflict", "value": 999}
     occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.UTC)
 
     async def _setup_conflict() -> RawEvent:
@@ -175,7 +175,7 @@ def test_transformer_treats_concurrent_insert_as_processed(
     writer = RawEventWriter(session_factory)
     transformer = RawEventTransformer(session_factory)
 
-    payload = {"id": "evt-concurrent-insert", "value": 42}
+    payload: dict[str, object] = {"id": "evt-concurrent-insert", "value": 42}
     occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.UTC)
 
     async def _setup() -> RawEvent:
@@ -226,7 +226,7 @@ def test_process_events_integrity_error_does_not_rollback_prior_events(
     writer = RawEventWriter(session_factory)
     transformer = RawEventTransformer(session_factory)
 
-    payload = {"id": "evt-batch"}
+    payload: dict[str, object] = {"id": "evt-batch"}
     occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.UTC)
 
     async def _ingest() -> list[RawEvent]:

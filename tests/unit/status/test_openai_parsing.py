@@ -237,7 +237,7 @@ class TestOpenAIResponseExtraction:
         self, model: OpenAIStatusModel
     ) -> None:
         """Content extraction works for valid OpenAI response shape."""
-        response_data = {
+        response_data: dict[str, object] = {
             "id": "chatcmpl-123",
             "object": "chat.completion",
             "choices": [
@@ -256,28 +256,35 @@ class TestOpenAIResponseExtraction:
 
     def test_extract_content_missing_choices(self, model: OpenAIStatusModel) -> None:
         """Missing 'choices' field raises OpenAIResponseShapeError."""
-        response_data = {"id": "chatcmpl-123", "object": "chat.completion"}
+        response_data: dict[str, object] = {
+            "id": "chatcmpl-123",
+            "object": "chat.completion",
+        }
         with pytest.raises(OpenAIResponseShapeError) as exc_info:
             model._extract_content(response_data)
         assert "choices" in str(exc_info.value)
 
     def test_extract_content_empty_choices(self, model: OpenAIStatusModel) -> None:
         """Empty 'choices' array raises OpenAIResponseShapeError."""
-        response_data = {"choices": []}
+        response_data: dict[str, object] = {"choices": []}
         with pytest.raises(OpenAIResponseShapeError) as exc_info:
             model._extract_content(response_data)
         assert "choices" in str(exc_info.value)
 
     def test_extract_content_missing_message(self, model: OpenAIStatusModel) -> None:
         """Missing 'message' in choice raises OpenAIResponseShapeError."""
-        response_data = {"choices": [{"index": 0, "finish_reason": "stop"}]}
+        response_data: dict[str, object] = {
+            "choices": [{"index": 0, "finish_reason": "stop"}]
+        }
         with pytest.raises(OpenAIResponseShapeError) as exc_info:
             model._extract_content(response_data)
         assert "message" in str(exc_info.value)
 
     def test_extract_content_missing_content(self, model: OpenAIStatusModel) -> None:
         """Missing 'content' in message raises OpenAIResponseShapeError."""
-        response_data = {"choices": [{"index": 0, "message": {"role": "assistant"}}]}
+        response_data: dict[str, object] = {
+            "choices": [{"index": 0, "message": {"role": "assistant"}}]
+        }
         with pytest.raises(OpenAIResponseShapeError) as exc_info:
             model._extract_content(response_data)
         assert "content" in str(exc_info.value)
