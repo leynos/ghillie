@@ -94,7 +94,7 @@ def given_empty_store(bronze_context: BronzeContext) -> None:
 @given("a raw GitHub push event payload")
 def raw_github_payload(bronze_context: BronzeContext) -> None:
     """Capture a canonical GitHub push payload for reuse across steps."""
-    bronze_context["payload"] = {
+    payload: dict[str, object] = {
         "after": "abc123",
         "base_ref": None,
         "commits": [
@@ -105,16 +105,18 @@ def raw_github_payload(bronze_context: BronzeContext) -> None:
         "ref": "refs/heads/main",
         "pusher": {"name": "marina"},
     }
+    bronze_context["payload"] = payload
     bronze_context["occurred_at"] = dt.datetime(2024, 7, 1, 12, 0, tzinfo=dt.UTC)
 
 
 @given("a raw GitHub push event payload with a naive occurred_at")
 def raw_github_payload_naive(bronze_context: BronzeContext) -> None:
     """Capture a payload with naive occurred_at for error checks."""
-    bronze_context["payload"] = {
+    payload: dict[str, object] = {
         "after": "abc123",
         "repository": {"full_name": REPO_SLUG},
     }
+    bronze_context["payload"] = payload
     bronze_context["occurred_at"] = dt.datetime(2024, 7, 1, 12, 0)  # noqa: DTZ001 - intentional naive test payload
 
 
