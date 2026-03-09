@@ -1,7 +1,5 @@
 """GitHub ingestion errors."""
 
-from __future__ import annotations
-
 
 class GitHubAPIError(RuntimeError):
     """Raised when GitHub returns an error response."""

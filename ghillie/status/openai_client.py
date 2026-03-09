@@ -325,21 +325,21 @@ class OpenAIStatusModel:
 
     def _extract_usage_metrics(
         self,
-        data: dict[str, object],
+        data: dict[str, typ.Any],
     ) -> ModelInvocationMetrics:
         """Extract token usage metrics from the API response payload."""
         usage = data.get("usage")
         if not isinstance(usage, dict):
             return ModelInvocationMetrics()
 
-        usage_dict = typ.cast("dict[str, object]", usage)
+        usage_dict = typ.cast("dict[str, typ.Any]", usage)
         return ModelInvocationMetrics(
             prompt_tokens=_to_int_or_none(usage_dict.get("prompt_tokens")),
             completion_tokens=_to_int_or_none(usage_dict.get("completion_tokens")),
             total_tokens=_to_int_or_none(usage_dict.get("total_tokens")),
         )
 
-    def _extract_content(self, data: dict[str, object]) -> str:
+    def _extract_content(self, data: dict[str, typ.Any]) -> str:
         """Extract assistant message content from API response.
 
         Parameters
@@ -366,7 +366,7 @@ class OpenAIStatusModel:
         if not isinstance(first_choice, dict):
             raise OpenAIResponseShapeError.missing("choices[0]")
 
-        first_choice_dict = typ.cast("dict[str, object]", first_choice)
+        first_choice_dict = typ.cast("dict[str, typ.Any]", first_choice)
         content = _get_nested(first_choice_dict, "message", "content")
         if not isinstance(content, str):
             raise OpenAIResponseShapeError.missing("choices[0].message.content")

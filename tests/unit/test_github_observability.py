@@ -1,7 +1,5 @@
 """Unit tests for the GitHub ingestion observability module."""
 
-from __future__ import annotations
-
 import datetime as dt
 import typing as typ
 

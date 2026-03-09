@@ -1,7 +1,5 @@
 """Step definitions for status model BDD scenarios."""
 
-from __future__ import annotations
-
 import asyncio
 import datetime as dt
 import typing as typ

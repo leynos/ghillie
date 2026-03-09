@@ -4,8 +4,6 @@ This private module encapsulates the broker detection and configuration logic
 used at actor invocation time to ensure a Dramatiq broker is available.
 """
 
-from __future__ import annotations
-
 import os
 import sys
 import threading

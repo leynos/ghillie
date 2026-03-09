@@ -1,7 +1,5 @@
 """Unit tests for the catalogue importer and reconciler."""
 
-from __future__ import annotations
-
 import asyncio
 import typing as typ
 from pathlib import Path

@@ -1,7 +1,5 @@
 """Command-line helpers for catalogue validation and schema export."""
 
-from __future__ import annotations
-
 import argparse
 from pathlib import Path
 

@@ -1,7 +1,5 @@
 """Behavioural regression tests for catalogue linting."""
 
-from __future__ import annotations
-
 import shutil
 import subprocess
 import typing as typ

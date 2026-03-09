@@ -4,8 +4,6 @@ Tests the ``validate_repository_report`` function that checks generated
 reports for basic correctness before persistence.
 """
 
-from __future__ import annotations
-
 import datetime as dt
 
 import pytest

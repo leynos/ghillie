@@ -1,7 +1,5 @@
 """Configuration for the local k3d preview environment."""
 
-from __future__ import annotations
-
 import dataclasses
 from pathlib import Path
 

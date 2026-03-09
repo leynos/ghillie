@@ -27,8 +27,6 @@ These constants are used by:
 
 """
 
-from __future__ import annotations
-
 # Validation bounds for temperature (OpenAI API range)
 MIN_TEMPERATURE: float = 0.0
 MAX_TEMPERATURE: float = 2.0

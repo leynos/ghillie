@@ -1,7 +1,5 @@
 """Data transfer objects for the repository registry."""
 
-from __future__ import annotations
-
 import dataclasses
 
 from ghillie.common.slug import repo_slug

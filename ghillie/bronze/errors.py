@@ -1,7 +1,5 @@
 """Shared Bronze-layer error types."""
 
-from __future__ import annotations
-
 
 class TimezoneAwareRequiredError(ValueError):
     """Raised when datetime inputs lack timezone information."""

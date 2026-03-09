@@ -1,7 +1,5 @@
 """Unit tests for OpenAI status model configuration."""
 
-from __future__ import annotations
-
 import os
 import typing as typ
 from unittest import mock

@@ -1,7 +1,5 @@
 """Unit tests for local_k8s utility functions."""
 
-from __future__ import annotations
-
 import shutil
 import sys
 from pathlib import Path

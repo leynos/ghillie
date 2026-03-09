@@ -4,8 +4,6 @@ Run with:
     pytest tests/unit/test_logging.py
 """
 
-from __future__ import annotations
-
 import pytest
 
 from ghillie.logging import (

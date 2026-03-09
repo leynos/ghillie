@@ -1,7 +1,5 @@
 """Unit tests for status model factory."""
 
-from __future__ import annotations
-
 import os
 from unittest import mock
 

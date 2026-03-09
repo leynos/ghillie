@@ -1,7 +1,5 @@
 """Model invocation metrics shared by status model adapters and reporting."""
 
-from __future__ import annotations
-
 import dataclasses as dc
 
 

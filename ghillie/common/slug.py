@@ -5,8 +5,6 @@ filesystem paths, even though they use ``/`` as a separator, so they should be
 parsed using these helpers rather than ``pathlib``.
 """
 
-from __future__ import annotations
-
 
 def repo_slug(owner: str, name: str) -> str:
     """Build a repository slug from owner and name.

@@ -1,7 +1,5 @@
 """Bronze layer primitives: raw event storage and ingestion services."""
 
-from __future__ import annotations
-
 from .errors import TimezoneAwareRequiredError
 from .services import (
     RawEventEnvelope,

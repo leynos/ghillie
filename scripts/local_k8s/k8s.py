@@ -22,8 +22,6 @@ Read a database connection URI from a secret:
 
 """
 
-from __future__ import annotations
-
 import re
 import subprocess
 

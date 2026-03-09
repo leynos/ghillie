@@ -1,7 +1,5 @@
 """Unit tests for work type classification logic."""
 
-from __future__ import annotations
-
 from unittest import mock
 
 from ghillie.evidence import (

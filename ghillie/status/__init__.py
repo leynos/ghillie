@@ -49,8 +49,6 @@ Examples
 
 """
 
-from __future__ import annotations
-
 from ghillie.status.config import OpenAIStatusModelConfig
 from ghillie.status.errors import (
     OpenAIAPIError,

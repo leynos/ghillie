@@ -1,6 +1,6 @@
-# Advanced Typing and Language Features (Python 3.13)
+# Advanced Typing and Language Features (Python 3.14)
 
-> This section documents forward-looking Python 3.13 typing features and best
+> This section documents forward-looking Python 3.14 typing features and best
 > practices to improve clarity, correctness, and tooling support. Use these
 > features to write expressive, modern Python.
 
@@ -161,17 +161,14 @@ When compatibility with Python < 3.12 is required, keep the older
 Place alias definitions after the import block and group shared aliases in
 `bournemouth.types` to avoid duplication.
 
-## `from __future__ import annotations`
+## Lazy annotations
 
-Use this import in modules with type annotations to defer evaluation of
-annotation expressions to runtime. This prevents issues with forward references
-and circular imports.
+Python 3.14 evaluates annotations lazily by default, so
+`from __future__ import annotations` is no longer part of the standard module
+template for this repository.
 
-```python
-from __future__ import annotations
-```
-
-Recommended in all modern Python files using type hints.
+When maintaining compatibility with Python 3.13 or older, add the future
+import only when deferred annotation evaluation is required for that module.
 
 ## `if typing.TYPE_CHECKING`
 

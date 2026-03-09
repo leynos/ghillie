@@ -39,8 +39,6 @@ Decode a secret value retrieved from Kubernetes:
 
 """
 
-from __future__ import annotations
-
 import base64
 import shutil
 import socket

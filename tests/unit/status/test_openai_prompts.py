@@ -1,7 +1,5 @@
 """Unit tests for OpenAI prompt templates."""
 
-from __future__ import annotations
-
 import datetime as dt
 
 import pytest

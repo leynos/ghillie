@@ -5,8 +5,6 @@ to reduce duplication while maintaining comprehensive coverage.
 
 """
 
-from __future__ import annotations
-
 import typing as typ
 
 import pytest

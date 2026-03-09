@@ -1,7 +1,5 @@
 """Unit tests for StatusModel protocol compliance."""
 
-from __future__ import annotations
-
 from ghillie.status import MockStatusModel, StatusModel
 
 

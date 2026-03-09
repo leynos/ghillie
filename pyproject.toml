@@ -47,7 +47,6 @@ select = [
     "I",        # Sort imports properly
     "UP",       # Warn if certain things can changed due to newer Python versions
     "C4",       # Catch incorrect use of comprehensions, dict, list, etc
-    "FA",       # Enforce from __future__ import annotations
     "ISC",      # Good use of string concatenation
     "ICN",      # Use common import conventions
     "RET",      # Good return practices

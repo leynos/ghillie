@@ -1,7 +1,5 @@
 """GitHub API client implementations used by ingestion workers."""
 
-from __future__ import annotations
-
 import collections.abc as cabc
 import dataclasses
 import datetime as dt

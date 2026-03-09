@@ -1,7 +1,5 @@
 """Unit tests for reporting observability logging."""
 
-from __future__ import annotations
-
 import datetime as dt
 
 import pytest

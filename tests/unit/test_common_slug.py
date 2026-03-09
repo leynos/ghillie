@@ -1,7 +1,5 @@
 """Unit tests for repository slug utility."""
 
-from __future__ import annotations
-
 import pytest
 
 from ghillie.common.slug import parse_repo_slug, repo_slug

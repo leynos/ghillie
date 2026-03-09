@@ -1,7 +1,5 @@
 """Unit tests for the ghillie.runtime module."""
 
-from __future__ import annotations
-
 from http import HTTPStatus
 
 import falcon.asgi

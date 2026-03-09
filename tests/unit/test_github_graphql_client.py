@@ -1,7 +1,5 @@
 """Unit tests for the GitHub GraphQL client."""
 
-from __future__ import annotations
-
 import dataclasses
 import datetime as dt
 import json

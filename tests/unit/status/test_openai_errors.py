@@ -1,7 +1,5 @@
 """Unit tests for OpenAI status model error classes."""
 
-from __future__ import annotations
-
 from http import HTTPStatus
 
 from ghillie.status.errors import (

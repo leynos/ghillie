@@ -1,7 +1,5 @@
 """Unit tests for documentation path classification helpers."""
 
-from __future__ import annotations
-
 import pytest
 
 from ghillie.github.client import _classify_documentation_path

@@ -1,7 +1,5 @@
 """API surface tests for ghillie.catalogue."""
 
-from __future__ import annotations
-
 import shutil
 import subprocess
 from pathlib import Path

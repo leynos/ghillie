@@ -28,7 +28,7 @@ as a default.
 
 ## Language and runtime
 
-- Target Python 3.13 for all new scripts. Older versions may only be used when
+- Target Python 3.14 for all new scripts. Older versions may only be used when
   integration constraints require them, and any exception must be documented
   inline.
 - Each script starts with an `uv` script block so runtime and dependency
@@ -46,11 +46,9 @@ as a default.
 ```python
 #!/usr/bin/env -S uv run python
 # /// script
-# requires-python = ">=3.13"
+# requires-python = ">=3.14"
 # dependencies = ["plumbum", "cmd-mox"]
 # ///
-
-from __future__ import annotations
 
 from pathlib import Path
 from plumbum import local
@@ -76,11 +74,9 @@ Employ Cyclopts when a script requires parameters, particularly under CI with
 ```python
 #!/usr/bin/env -S uv run python
 # /// script
-# requires-python = ">=3.13"
+# requires-python = ">=3.14"
 # dependencies = ["cyclopts>=2.9", "plumbum", "cmd-mox"]
 # ///
-
-from __future__ import annotations
 
 from pathlib import Path
 from typing import Optional, Annotated
@@ -233,7 +229,6 @@ count = (git["--no-pager", "log", "--oneline"] | grep["chore"] | wc["-l"])().str
 ### Project roots, joins, and ensuring directories
 
 ```python
-from __future__ import annotations
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -287,11 +282,9 @@ except FileNotFoundError:
 ```python
 #!/usr/bin/env -S uv run python
 # /// script
-# requires-python = ">=3.13"
+# requires-python = ">=3.14"
 # dependencies = ["cyclopts>=2.9", "plumbum", "cmd-mox"]
 # ///
-
-from __future__ import annotations
 from pathlib import Path
 from typing import Optional, Annotated
 

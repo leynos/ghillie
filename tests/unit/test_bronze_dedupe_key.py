@@ -1,7 +1,5 @@
 """Unit tests for Bronze dedupe key generation."""
 
-from __future__ import annotations
-
 import datetime as dt
 
 import pytest

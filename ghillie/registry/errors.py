@@ -1,7 +1,5 @@
 """Errors specific to the repository registry."""
 
-from __future__ import annotations
-
 
 class RegistryError(Exception):
     """Base class for registry errors."""
