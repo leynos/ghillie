@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & discoveries`, `Decision log`, and
 `Outcomes & retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 No `PLANS.md` file exists in this repository.
 
@@ -66,15 +66,30 @@ Success is observable when:
 
 - [x] (2026-02-24 00:00Z) Draft ExecPlan at
   `docs/execplans/upgrade-python-to-3-14-type-guards-in-openai-client.md`.
-- [ ] Confirm current cast locations and narrowing branches.
-- [ ] Add or refine tests first to lock expected parsing and error behaviour.
-- [ ] Implement private `TypeIs` helpers and remove casts.
-- [ ] Run targeted status parsing tests.
-- [ ] Run full quality gates.
+- [x] (2026-03-09 00:00Z) Confirmed current cast locations and narrowing
+  branches in `_get_nested`, `_extract_usage_metrics`, and `_extract_content`.
+- [x] (2026-03-09 00:00Z) Added parsing tests for malformed `choices`,
+  malformed `usage`, and helper-level nested traversal.
+- [x] (2026-03-09 00:00Z) Implemented private `TypeIs` helper
+  `_is_object_dict` and removed cast-based narrowing from the OpenAI client.
+- [x] (2026-03-09 00:00Z) Targeted OpenAI parsing and error tests pass after
+  the refactor.
+- [x] (2026-03-09 00:00Z) Full quality gates pass, including Markdown gates
+  for the updated ExecPlan.
 
 ## Surprises & discoveries
 
-- None yet. Record concrete findings while implementing.
+- The existing parsing tests already covered missing-field cases well; the
+  remaining gaps were malformed-choice typing, malformed-usage typing, and
+  direct nested traversal behaviour.
+- Adding a helper-level test first provided the intended red phase cleanly via
+  import failure before any production code changed.
+- `typing.TypeIs` was unavailable to `ty` until project metadata was aligned
+  with the repository's effective Python 3.13 baseline. This required updating
+  `pyproject.toml` `requires-python` and Ruff's `target-version`.
+- Full-gate orchestration must remain sequential for this repo: `make test` and
+  `make typecheck` both rebuild `.venv`, so parallel execution can fail with
+  `uv venv --clear` races.
 
 ## Decision log
 
@@ -82,10 +97,22 @@ Success is observable when:
   a high-value, low-risk pilot before broader adoption in GitHub parsers.
 - Decision: keep behaviour-led tests authoritative over static-style goals.
   Rationale: runtime correctness matters more than eliminating every cast.
+- Decision: align repository Python metadata to 3.13 while landing this
+  change. Rationale: CI workflows and scripting guidance already target 3.13,
+  and `typing.TypeIs` requires at least that baseline for static analysis.
 
 ## Outcomes & retrospective
 
-Not started. Populate after implementation with outcomes and follow-ups.
+- `ghillie/status/openai_client.py` now narrows JSON-shaped values with the
+  private `TypeIs` helper `_is_object_dict` instead of `typ.cast(...)`.
+- Tests now pin malformed `choices`, malformed `usage`, and nested traversal
+  behaviour directly, which reduces the risk of refactors weakening response
+  validation.
+- `pyproject.toml` now reflects the repository's effective Python 3.13
+  baseline, which unblocks `typing.TypeIs` in `ty` and matches the configured
+  CI workflows.
+- Validation completed with `make fmt`, `make check-fmt`, `make lint`,
+  `make typecheck`, `make test`, `make markdownlint`, and `make nixie`.
 
 ## Context and orientation
 

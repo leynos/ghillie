@@ -24,7 +24,13 @@ if typ.TYPE_CHECKING:
 
     from ghillie.evidence.models import RepositoryEvidenceBundle
 
-type ResponseData = dict[str, object]
+
+class _ExpectedMetrics(typ.NamedTuple):
+    """Expected token-count values for a parametrised metrics assertion."""
+
+    prompt_tokens: int | None
+    completion_tokens: int | None
+    total_tokens: int | None
 
 
 @contextlib.asynccontextmanager
@@ -98,7 +104,7 @@ class _SuccessfulCompletionTransport(httpx.AsyncBaseTransport):
     def __init__(
         self,
         *,
-        usage_payloads: tuple[ResponseData | None, ...],
+        usage_payloads: tuple[object | None, ...],
     ) -> None:
         self._usage_payloads = usage_payloads or (None,)
         self._index = 0
@@ -108,7 +114,7 @@ class _SuccessfulCompletionTransport(httpx.AsyncBaseTransport):
         usage = self._usage_payloads[min(self._index, len(self._usage_payloads) - 1)]
         self._index += 1
 
-        body: ResponseData = {
+        body: dict[str, object] = {
             "id": "chatcmpl-123",
             "object": "chat.completion",
             "choices": [
@@ -126,6 +132,17 @@ class _SuccessfulCompletionTransport(httpx.AsyncBaseTransport):
             body["usage"] = usage
 
         return httpx.Response(status_code=HTTPStatus.OK, json=body)
+
+
+class _JSONBodyTransport(httpx.AsyncBaseTransport):
+    """Transport that returns a caller-provided JSON response body."""
+
+    def __init__(self, *, body: object) -> None:
+        self._body = body
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        """Return the configured JSON payload as the response body."""
+        return httpx.Response(status_code=HTTPStatus.OK, json=self._body)
 
 
 class TestLLMStatusResponseParsing:
@@ -226,20 +243,25 @@ class TestStatusEnumParsing:
         assert _parse_status("good") == ReportStatus.UNKNOWN
 
 
-class TestOpenAIResponseExtraction:
-    """Tests for extracting content from OpenAI API responses."""
+class TestOpenAIResponseParsingViaPublicAPI:
+    """Tests for response parsing through ``summarize_repository``."""
 
     @pytest.fixture
-    def model(self) -> OpenAIStatusModel:
-        """Create model instance for testing internal methods."""
-        config = OpenAIStatusModelConfig(api_key="test-key")
-        return OpenAIStatusModel(config)
+    def config(self) -> OpenAIStatusModelConfig:
+        """Create config for response parsing tests."""
+        return OpenAIStatusModelConfig(
+            api_key="test-key",
+            endpoint="http://test.local/v1/chat/completions",
+        )
 
-    def test_extract_content_from_valid_response(
-        self, model: OpenAIStatusModel
+    @pytest.mark.asyncio
+    async def test_summarize_repository_parses_valid_response(
+        self,
+        config: OpenAIStatusModelConfig,
+        feature_evidence: RepositoryEvidenceBundle,
     ) -> None:
-        """Content extraction works for valid OpenAI response shape."""
-        response_data: ResponseData = {
+        """A valid response body produces the expected status result."""
+        response_data: dict[str, object] = {
             "id": "chatcmpl-123",
             "object": "chat.completion",
             "choices": [
@@ -253,43 +275,59 @@ class TestOpenAIResponseExtraction:
                 }
             ],
         }
-        content = model._extract_content(response_data)
-        assert content == '{"status": "on_track", "summary": "Test"}'
+        transport = _JSONBodyTransport(body=response_data)
+        async with create_model_with_transport(config, transport) as model:
+            result = await model.summarize_repository(feature_evidence)
 
-    def test_extract_content_missing_choices(self, model: OpenAIStatusModel) -> None:
-        """Missing 'choices' field raises OpenAIResponseShapeError."""
-        response_data: ResponseData = {
-            "id": "chatcmpl-123",
-            "object": "chat.completion",
-        }
-        with pytest.raises(OpenAIResponseShapeError) as exc_info:
-            model._extract_content(response_data)
-        assert "choices" in str(exc_info.value)
+        assert result.status == ReportStatus.ON_TRACK
+        assert result.summary == "Test"
 
-    def test_extract_content_empty_choices(self, model: OpenAIStatusModel) -> None:
-        """Empty 'choices' array raises OpenAIResponseShapeError."""
-        response_data: ResponseData = {"choices": []}
-        with pytest.raises(OpenAIResponseShapeError) as exc_info:
-            model._extract_content(response_data)
-        assert "choices" in str(exc_info.value)
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("response_data", "expected_fragment"),
+        [
+            (
+                {
+                    "id": "chatcmpl-123",
+                    "object": "chat.completion",
+                },
+                "choices",
+            ),
+            ({"choices": []}, "choices"),
+            ({"choices": [{"index": 0, "finish_reason": "stop"}]}, "message"),
+            (
+                {"choices": [{"index": 0, "message": {"role": "assistant"}}]},
+                "content",
+            ),
+            ({"choices": ["not-a-dict"]}, "choices[0]"),
+            (
+                {"choices": [{"message": {"role": "assistant", "content": ["bad"]}}]},
+                "choices[0].message.content",
+            ),
+        ],
+        ids=[
+            "missing_choices",
+            "empty_choices",
+            "missing_message",
+            "missing_content",
+            "non_mapping_choice",
+            "non_string_content",
+        ],
+    )
+    async def test_summarize_repository_rejects_invalid_response_shapes(
+        self,
+        config: OpenAIStatusModelConfig,
+        feature_evidence: RepositoryEvidenceBundle,
+        response_data: dict[str, object],
+        expected_fragment: str,
+    ) -> None:
+        """Malformed response bodies surface shape errors via the public API."""
+        transport = _JSONBodyTransport(body=response_data)
+        async with create_model_with_transport(config, transport) as model:
+            with pytest.raises(OpenAIResponseShapeError) as exc_info:
+                await model.summarize_repository(feature_evidence)
 
-    def test_extract_content_missing_message(self, model: OpenAIStatusModel) -> None:
-        """Missing 'message' in choice raises OpenAIResponseShapeError."""
-        response_data: ResponseData = {
-            "choices": [{"index": 0, "finish_reason": "stop"}]
-        }
-        with pytest.raises(OpenAIResponseShapeError) as exc_info:
-            model._extract_content(response_data)
-        assert "message" in str(exc_info.value)
-
-    def test_extract_content_missing_content(self, model: OpenAIStatusModel) -> None:
-        """Missing 'content' in message raises OpenAIResponseShapeError."""
-        response_data: ResponseData = {
-            "choices": [{"index": 0, "message": {"role": "assistant"}}]
-        }
-        with pytest.raises(OpenAIResponseShapeError) as exc_info:
-            model._extract_content(response_data)
-        assert "content" in str(exc_info.value)
+        assert expected_fragment in str(exc_info.value)
 
 
 class TestOpenAIHTTPErrorHandling:
@@ -365,21 +403,42 @@ class TestOpenAIInvocationMetrics:
             await model.aclose()
 
     @pytest.mark.asyncio
-    async def test_extracts_token_usage_from_response(
+    @pytest.mark.parametrize(
+        ("usage_payload", "expected_metrics"),
+        [
+            (
+                {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
+                _ExpectedMetrics(100, 50, 150),
+            ),
+            (None, _ExpectedMetrics(None, None, None)),
+            (
+                {
+                    "prompt_tokens": "100",
+                    "completion_tokens": 50.0,
+                    "total_tokens": "150.0",
+                },
+                _ExpectedMetrics(None, None, None),
+            ),
+            (["bad-usage"], _ExpectedMetrics(None, None, None)),
+            ({1: 10, 2: 20, 3: 30}, _ExpectedMetrics(None, None, None)),
+        ],
+        ids=[
+            "valid_integer_tokens",
+            "missing_usage",
+            "non_integer_usage_values",
+            "non_mapping_usage",
+            "non_string_key_dict",
+        ],
+    )
+    async def test_usage_payload_produces_expected_metrics(
         self,
         config: OpenAIStatusModelConfig,
         feature_evidence: RepositoryEvidenceBundle,
+        usage_payload: object,
+        expected_metrics: _ExpectedMetrics,
     ) -> None:
-        """Token usage is captured when the API returns a ``usage`` payload."""
-        transport = _SuccessfulCompletionTransport(
-            usage_payloads=(
-                {
-                    "prompt_tokens": 100,
-                    "completion_tokens": 50,
-                    "total_tokens": 150,
-                },
-            )
-        )
+        """Usage payloads map to the expected invocation metrics."""
+        transport = _SuccessfulCompletionTransport(usage_payloads=(usage_payload,))
         async with create_model_with_transport(config, transport) as model:
             await model.summarize_repository(feature_evidence)
 
@@ -387,39 +446,18 @@ class TestOpenAIInvocationMetrics:
             assert metrics is not None, (
                 "Expected invocation metrics after successful model call"
             )
-            assert metrics.prompt_tokens == 100, (
-                "Expected prompt token count to match usage payload"
+            assert metrics.prompt_tokens == expected_metrics.prompt_tokens, (
+                f"Expected prompt_tokens to equal {expected_metrics.prompt_tokens!r} for "
+                f"usage_payload={usage_payload!r}"
             )
-            assert metrics.completion_tokens == 50, (
-                "Expected completion token count to match usage payload"
+            assert metrics.completion_tokens == expected_metrics.completion_tokens, (
+                f"Expected completion_tokens to equal "
+                f"{expected_metrics.completion_tokens!r} for "
+                f"usage_payload={usage_payload!r}"
             )
-            assert metrics.total_tokens == 150, (
-                "Expected total token count to match usage payload"
-            )
-
-    @pytest.mark.asyncio
-    async def test_missing_usage_sets_empty_metrics(
-        self,
-        config: OpenAIStatusModelConfig,
-        feature_evidence: RepositoryEvidenceBundle,
-    ) -> None:
-        """Missing usage payload yields metrics with ``None`` token fields."""
-        transport = _SuccessfulCompletionTransport(usage_payloads=(None,))
-        async with create_model_with_transport(config, transport) as model:
-            await model.summarize_repository(feature_evidence)
-
-            metrics = model.last_invocation_metrics
-            assert metrics is not None, (
-                "Expected metrics object even when usage payload is absent"
-            )
-            assert metrics.prompt_tokens is None, (
-                "Expected missing prompt token usage to remain None"
-            )
-            assert metrics.completion_tokens is None, (
-                "Expected missing completion token usage to remain None"
-            )
-            assert metrics.total_tokens is None, (
-                "Expected missing total token usage to remain None"
+            assert metrics.total_tokens == expected_metrics.total_tokens, (
+                f"Expected total_tokens to equal {expected_metrics.total_tokens!r} for "
+                f"usage_payload={usage_payload!r}"
             )
 
     @pytest.mark.asyncio
@@ -459,37 +497,4 @@ class TestOpenAIInvocationMetrics:
             )
             assert metrics.total_tokens == 28, (
                 "Expected latest total token count to overwrite previous value"
-            )
-
-    @pytest.mark.asyncio
-    async def test_non_integer_usage_values_are_ignored(
-        self,
-        config: OpenAIStatusModelConfig,
-        feature_evidence: RepositoryEvidenceBundle,
-    ) -> None:
-        """Non-integer usage values are coerced to ``None`` in metrics output."""
-        transport = _SuccessfulCompletionTransport(
-            usage_payloads=(
-                {
-                    "prompt_tokens": "100",
-                    "completion_tokens": 50.0,
-                    "total_tokens": "150.0",
-                },
-            )
-        )
-        async with create_model_with_transport(config, transport) as model:
-            await model.summarize_repository(feature_evidence)
-
-            metrics = model.last_invocation_metrics
-            assert metrics is not None, (
-                "Expected metrics object after successful completion response"
-            )
-            assert metrics.prompt_tokens is None, (
-                "Expected non-integer prompt tokens to coerce to None"
-            )
-            assert metrics.completion_tokens is None, (
-                "Expected non-integer completion tokens to coerce to None"
-            )
-            assert metrics.total_tokens is None, (
-                "Expected non-integer total tokens to coerce to None"
             )
