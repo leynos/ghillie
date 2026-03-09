@@ -1,4 +1,4 @@
-# Define and scaffold the operator CLI contract
+# Define and scaffold the operator command-line interface (CLI) contract
 
 This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
@@ -8,11 +8,11 @@ Status: DRAFT
 
 ## Purpose / big picture
 
-Task 2.5.a establishes the operator-facing command surface for the MVP. After
-this change, Ghillie has a packaged `ghillie` command that exposes the noun and
-verb tree defined in `docs/mvp-cli-specification.md`, accepts shared global
-options for control-plane access, and routes those options into two stable
-seams:
+Task 2.5.a establishes the operator-facing command surface for the minimum
+viable product (MVP). After this change, Ghillie has a packaged `ghillie`
+command that exposes the noun and verb tree defined in
+`docs/mvp-cli-specification.md`, accepts shared global options for
+control-plane access, and routes those options into two stable seams:
 
 1. an `httpx` control-plane client for HTTP APIs, and
 2. a local runtime adapter selector for `cuprum` and `python-api` stack
@@ -67,8 +67,9 @@ Success is observable when:
 - Do not add a new external dependency for Task 2.5.a unless the user approves
   it. The scaffold can model `cuprum` as a selectable backend name without
   implementing concrete `cuprum` command execution yet.
-- Follow the repository TDD policy from `AGENTS.md`: write the new unit tests
-  and behavioural tests first, confirm they fail, then implement.
+- Follow the repository test-driven development (TDD) policy from
+  `AGENTS.md`: write the new unit tests and behavioural tests first, confirm
+  they fail, then implement.
 - Keep documentation wrapped and lint-clean under the repo markdown rules.
 
 ## Tolerances (exception triggers)
@@ -130,8 +131,8 @@ Success is observable when:
 - [x] 2026-03-08 Draft this ExecPlan.
 - [ ] Add failing unit tests for CLI packaging, command tree shape, shared
   global options, control-plane client config, and runtime adapter selection.
-- [ ] Add failing `pytest-bdd` scenarios for operator-visible help and option
-  parsing.
+- [ ] Add failing behaviour-driven development (BDD) scenarios via
+  `pytest-bdd` for operator-visible help and option parsing.
 - [ ] Implement the packaged CLI scaffold under `ghillie/cli/`.
 - [ ] Update docs and mark Task 2.5.a done in `docs/roadmap.md`.
 - [ ] Run all quality gates and record the results.
@@ -208,7 +209,7 @@ It specifies:
 - and the backend names `cuprum` and `python-api`.
 
 `ghillie/api/app.py` and `ghillie/api/factory.py` provide the first reusable
-control-plane HTTP surface and service factory. Today the only concrete
+control-plane HTTP surface and service factory. Today, the only concrete
 operator API is on-demand repository reporting through
 `POST /reports/repositories/{owner}/{name}`.
 
@@ -278,7 +279,7 @@ UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools uv run pytest tests/features/steps/
 ## Milestone 2: Build the packaged CLI core
 
 Add a proper CLI package under `ghillie/cli/`. Keep the package small and
-composed from explicit modules.
+composed of explicit modules.
 
 Create or update these files:
 
