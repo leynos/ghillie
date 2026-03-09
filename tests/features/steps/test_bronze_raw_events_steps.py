@@ -39,7 +39,7 @@ class BronzeContext(typ.TypedDict, total=False):
     session_factory: async_sessionmaker[AsyncSession]
     writer: RawEventWriter
     transformer: RawEventTransformer
-    payload: dict[str, object]
+    payload: dict[str, typ.Any]
     occurred_at: dt.datetime
     raw_event_id: int
     error: Exception

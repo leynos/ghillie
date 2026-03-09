@@ -649,7 +649,7 @@ make docker-build
 
 This produces an image tagged `ghillie:local` using a multi-stage build. The
 build stage creates a wheel from the source, and the runtime stage installs it
-into a minimal Python 3.12 slim image with a non-root user.
+into a minimal Python 3.14 slim image with a non-root user.
 
 Alternatively, build directly with Docker:
 

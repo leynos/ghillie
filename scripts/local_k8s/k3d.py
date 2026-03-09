@@ -78,7 +78,7 @@ def _run_k3d_json(
             text=True,
             timeout=timeout or _K3D_SUBPROCESS_TIMEOUT,
         )
-    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+    except OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired:
         return None
     try:
         parsed = json.loads(result.stdout)

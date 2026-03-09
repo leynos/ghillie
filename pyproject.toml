@@ -3,7 +3,7 @@ name = "ghillie"
 version = "0.1.0"
 description = "ghillie package"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 license = { text = "MIT" }
 dependencies = [
     "femtologging @ git+https://github.com/leynos/femtologging@7c139fb7aca18f9277e00b88604b8bf5eb471be0",
@@ -37,7 +37,7 @@ dev = [
 
 [tool.ruff]
 line-length = 88
-target-version = "py312"
+target-version = "py314"
 
 [tool.ruff.lint]
 select = [

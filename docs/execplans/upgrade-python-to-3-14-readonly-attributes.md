@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & discoveries`, `Decision log`, and
 `Outcomes & retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 No `PLANS.md` file exists in this repository.
 
@@ -29,6 +29,8 @@ Success is observable when:
 - Prioritize production code contracts first (for example
   `ghillie/gold/storage.py`) before optional test-context cleanup.
 - Do not change runtime payload shape, database schema, or JSON serialization.
+- Treat Python 3.14 project metadata/tooling as a prerequisite for using
+  `typing.ReadOnly` in checked code.
 - Do not add external dependencies.
 - Keep scope focused on type annotations and related test adjustments only.
 - Preserve backwards-compatible APIs and data formats.
@@ -63,15 +65,25 @@ Success is observable when:
 
 - [x] (2026-02-24 00:00Z) Draft ExecPlan at
   `docs/execplans/upgrade-python-to-3-14-readonly-attributes.md`.
-- [ ] Audit all `TypedDict` definitions in production and tests.
-- [ ] Decide the minimal safe first set of readonly keys.
-- [ ] Update `TypedDict` annotations with `typing.ReadOnly`.
-- [ ] Add or adjust tests/type assertions where useful.
-- [ ] Run full quality gates.
+- [x] (2026-03-09 00:00Z) Audited `TypedDict` definitions in production and
+  tests.
+- [x] (2026-03-09 00:00Z) Chose a minimal first set: production
+  `ValidationIssuePayload.code` and `.message`.
+- [x] (2026-03-09 00:00Z) Updated `ValidationIssuePayload` to use
+  `typing.ReadOnly`.
+- [x] (2026-03-09 00:00Z) Added a focused unit test for readonly metadata and
+  adjusted nearby test typing so `make typecheck` can exercise the new contract.
+- [x] (2026-03-09 00:00Z) Ran `make fmt`, `make check-fmt`, `make lint`,
+  `make typecheck`, `make test`, `make markdownlint`, and `make nixie`.
 
 ## Surprises & discoveries
 
-- None yet. Record implementation-time findings here.
+- `uv` resolves and builds the project with CPython 3.14.3 in this
+  environment, but `ty` still treated `typing.ReadOnly` as unavailable until
+  `pyproject.toml` moved from `requires-python = ">=3.12"` to `>=3.14`.
+- Baseline `make typecheck` was already failing in a few test modules due to
+  `dict[str, object]` invariance. Fixing those annotations was required before
+  the readonly change could be validated cleanly.
 
 ## Decision log
 
@@ -80,10 +92,28 @@ Success is observable when:
   behaviour-driven test contexts that are intentionally mutable.
 - Decision: avoid introducing runtime wrappers for immutability in this task.
   Rationale: objective is static typing improvement, not runtime redesign.
+- Decision: fold in the minimal Python 3.14 metadata uplift
+  (`requires-python`, Ruff target version, and container base image/docs)
+  needed to make `typing.ReadOnly` a supported checked contract. Rationale:
+  without that prerequisite, the feature plan could not pass type checking.
 
 ## Outcomes & retrospective
 
-Not started. Populate after implementation.
+Completed.
+
+- `ValidationIssuePayload.code` and `.message` now use `typing.ReadOnly`.
+- `pyproject.toml` now declares Python 3.14 and Ruff `py314`, allowing `ty` to
+  validate the new contract.
+- Test-only typing annotations that previously failed `ty` under the refreshed
+  baseline were narrowed or widened appropriately without runtime changes.
+- Quality gates passed:
+  - `make fmt`
+  - `make check-fmt`
+  - `make lint`
+  - `make typecheck`
+  - `make test`
+  - `make markdownlint`
+  - `make nixie`
 
 ## Context and orientation
 

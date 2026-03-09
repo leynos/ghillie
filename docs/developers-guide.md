@@ -5,7 +5,7 @@ for contributors to the Ghillie project.
 
 ## Prerequisites
 
-- Python 3.12+
+- Python 3.14+
 - [uv](https://docs.astral.sh/uv/) for dependency management
 - Docker (for k3d local previews)
 - Helm 3.x (for chart development and testing)
