@@ -10,11 +10,11 @@ No `PLANS.md` file exists in this repository.
 
 ## Purpose / big picture
 
-Python 3.14 evaluates annotations lazily by default. Ghillie previously
-carried many `from __future__ import annotations` statements and Ruff enforced
-them via rule `FA`. This activity removes those future imports where Python
-3.14 semantics make them redundant, aligns lint and packaging metadata with
-Python 3.14, and keeps future imports only in modules where runtime annotation
+Python 3.14 evaluates annotations lazily by default. Ghillie previously carried
+many `from __future__ import annotations` statements and Ruff enforced them via
+rule `FA`. This activity removes those future imports where Python 3.14
+semantics make them redundant, aligns lint and packaging metadata with Python
+3.14, and keeps future imports only in modules where runtime annotation
 inspection still requires them to preserve behaviour.
 
 Success is observable when:
@@ -154,11 +154,10 @@ Key files and references:
   - `tests/unit/test_reporting_run_for_repository.py`
   - `tests/unit/status/test_openai_parsing.py`
 
-This migration remained behaviour-preserving, but it was not purely
-mechanical. Python 3.14 exposed two compatibility classes that still require
-stringified annotations today: `msgspec` struct definitions and modules whose
-annotations are inspected at runtime while referenced names live under
-`TYPE_CHECKING`.
+This migration remained behaviour-preserving, but it was not purely mechanical.
+Python 3.14 exposed two compatibility classes that still require stringified
+annotations today: `msgspec` struct definitions and modules whose annotations
+are inspected at runtime while referenced names live under `TYPE_CHECKING`.
 
 ## Plan of work
 
@@ -227,7 +226,7 @@ The activity is complete when all of the following are true:
 
 The migration is idempotent: removing an already-removed future import,
 reinstating it in a compatibility-critical module, and re-running gates are
-safe operations. If behaviour changes unexpectedly, restore the affected
-files, re-run baseline tests, and re-apply the migration in smaller batches by
+safe operations. If behaviour changes unexpectedly, restore the affected files,
+re-run baseline tests, and re-apply the migration in smaller batches by
 compatibility class (`msgspec`, runtime annotation inspection, then simple
 modules).

@@ -17,14 +17,14 @@ from ghillie.bronze.errors import (
     UnsupportedPayloadTypeError,
 )
 from ghillie.bronze.storage import RawEvent
+from ghillie.common.json import JSONLike
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-type Payload = dict[str, typ.Any]
-type JSONValue = dict[str, typ.Any] | list[typ.Any] | str | int | float | bool | None
+type Payload = JSONLike
 
 
 def _convert_dict(value: dict, converter: cabc.Callable[[object], object]) -> dict:

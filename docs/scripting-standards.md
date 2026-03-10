@@ -79,7 +79,7 @@ Employ Cyclopts when a script requires parameters, particularly under CI with
 # ///
 
 from pathlib import Path
-from typing import Optional, Annotated
+from typing import Annotated
 
 import cyclopts
 from cyclopts import App, Parameter
@@ -98,9 +98,9 @@ def main(
     version: Annotated[str, Parameter(required=True)],
 
     # Optional scalars
-    package_name: Optional[str] = None,
-    target: Optional[str] = None,
-    outdir: Optional[Path] = None,
+    package_name: str | None = None,
+    target: str | None = None,
+    outdir: Path | None = None,
     dry_run: bool = False,
 
     # Lists (whitespace/newline separated by default)
@@ -142,7 +142,7 @@ Guidance:
   must remain available, add an alias:
 
   ```python
-  package_name: Annotated[Optional[str], Parameter(aliases=["--name"])] = None
+  package_name: Annotated[str | None, Parameter(aliases=["--name"])] = None
   ```
 
 - Where a specific delimiter is required for an environment list (for example,
@@ -155,7 +155,7 @@ Guidance:
 - Per‑parameter environment names can be pinned for backwards compatibility:
 
   ```python
-  config_out: Annotated[Optional[Path], Parameter(env_var="INPUT_CONFIG_PATH")] = None
+  config_out: Annotated[Path | None, Parameter(env_var="INPUT_CONFIG_PATH")] = None
   ```
 
 ## plumbum: command calling and pipelines
@@ -286,7 +286,7 @@ except FileNotFoundError:
 # dependencies = ["cyclopts>=2.9", "plumbum", "cmd-mox"]
 # ///
 from pathlib import Path
-from typing import Optional, Annotated
+from typing import Annotated
 
 import cyclopts
 from cyclopts import App, Parameter
@@ -301,7 +301,7 @@ def main(
     bin_name: Annotated[str, Parameter(required=True)],
     version: Annotated[str, Parameter(required=True)],
     formats: list[str] | None = None,
-    outdir: Optional[Path] = None,
+    outdir: Path | None = None,
     dry_run: bool = False,
 ):
     project_root = Path(__file__).resolve().parents[1]
