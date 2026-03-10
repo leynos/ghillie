@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & discoveries`, `Decision log`, and
 `Outcomes & retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 No `PLANS.md` file exists in this repository.
 
@@ -64,17 +64,27 @@ Success is observable when:
 
 - [x] (2026-02-24 00:00Z) Draft ExecPlan at
   `docs/execplans/upgrade-python-to-3-14-template-strings-in-prompts.md`.
-- [ ] Confirm Python-baseline uplift is complete (`requires-python >=3.14` and
-  Ruff `target-version = "py314"`).
-- [ ] Prototype template-string rendering approach in tests first.
-- [ ] Add failing regression tests for prompt output equivalence.
-- [ ] Refactor prompt construction to template strings.
-- [ ] Verify exact prompt-output stability.
-- [ ] Run full quality gates.
+- [x] (2026-03-10 00:00Z) Confirm Python-baseline uplift is complete
+  (`requires-python >=3.14` and Ruff `target-version = "py314"`).
+- [x] (2026-03-10 00:00Z) Prototype template-string rendering approach and
+  confirm `t"..."` returns `string.templatelib.Template`.
+- [x] (2026-03-10 00:00Z) Add failing regression tests for prompt output
+  equivalence and explicit template rendering.
+- [x] (2026-03-10 00:00Z) Refactor prompt construction to template strings.
+- [x] (2026-03-10 00:00Z) Verify exact prompt-output stability.
+- [x] (2026-03-10 00:00Z) Run full quality gates.
 
 ## Surprises & discoveries
 
-- None yet. Update with concrete findings from the prototype and refactor.
+- 2026-03-10: the host `python` command is still Python 3.12.3, so raw
+  `t"..."` syntax only parses under the repo-managed 3.14 interpreter
+  (`uv run python` / `.venv/bin/python`).
+- 2026-03-10: `string.templatelib.Template` iteration yields a mix of literal
+  `str` segments and `Interpolation` objects; prompt code must render the
+  template back to `str` before passing it to the OpenAI client.
+- 2026-03-10: moving `pyproject.toml` to `requires-python = ">=3.14"` exposed
+  existing `ty` strictness around `dict[str, object]` invariance in test code,
+  so the implementation also needed small type-only test annotation fixes.
 
 ## Decision log
 
@@ -82,10 +92,23 @@ Success is observable when:
   Rationale: template strings are new and need validation in this codebase.
 - Decision: prioritize output equivalence over maximal template-string usage.
   Rationale: prompt stability is more important than feature saturation.
+- Decision: keep template rendering in a private `_render_template()` helper in
+  `ghillie/status/prompts.py`. Rationale: `build_user_prompt()` still returns
+  `str`, and centralizing the conversion avoids scattering `Template` handling
+  through prompt assembly.
 
 ## Outcomes & retrospective
 
-Not started. Populate after implementation.
+- Outcome: `ghillie/status/prompts.py` now uses Python 3.14 template strings in
+  the interpolated prompt sections while preserving byte-for-byte prompt output
+  through a private `_render_template()` helper.
+- Outcome: `pyproject.toml` now declares Python 3.14 and Ruff targets `py314`,
+  so static tooling matches the runtime baseline required for `t"..."` syntax.
+- Outcome: prompt tests now include explicit template rendering coverage and an
+  exact-output regression for a representative evidence bundle.
+- Retrospective: the code refactor itself was small; most of the incidental
+  work came from making the newly declared 3.14 baseline acceptable to `ty` in
+  a handful of existing tests.
 
 ## Context and orientation
 

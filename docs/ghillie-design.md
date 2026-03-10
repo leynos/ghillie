@@ -1018,6 +1018,11 @@ Environment variables:
    - Work type breakdown (feature, bug, documentation, etc.)
    - Pull request and issue details
 
+Prompt interpolation now uses Python 3.14 template strings in
+`ghillie/status/prompts.py`, but the module renders each
+`string.templatelib.Template` back to plain `str` before handing it to the
+OpenAI client so request payloads remain unchanged.
+
 The prompt explicitly requests `response_format: {"type": "json_object"}` to
 ensure structured output from models that support JSON mode.
 
