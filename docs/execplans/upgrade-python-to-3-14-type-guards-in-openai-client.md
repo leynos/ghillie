@@ -98,8 +98,9 @@ Success is observable when:
 - Decision: keep behaviour-led tests authoritative over static-style goals.
   Rationale: runtime correctness matters more than eliminating every cast.
 - Decision: align repository Python metadata to 3.13 while landing this
-  change. Rationale: CI workflows and scripting guidance already target 3.13,
-  and `typing.TypeIs` requires at least that baseline for static analysis.
+  change. Rationale: continuous integration (CI) workflows and scripting
+  guidance already target 3.13, and `typing.TypeIs` requires at least that
+  baseline for static analysis.
 
 ## Outcomes & retrospective
 
