@@ -177,8 +177,8 @@ Success is observable when:
    collapsing 2.5.b through 2.5.d into one oversized change.
 
 4. Backend selection for `cuprum` and `python-api` will be part of the stable
-   command contract even if only lightweight placeholder adapters exist in this
-   task.
+   command contract, even if only lightweight placeholder adapters exist in
+   this task.
 
    Rationale: validated option parsing is part of the completion criteria, and
    later tasks need a stable backend selector. Concrete backend execution can
@@ -210,7 +210,7 @@ It specifies:
 
 `ghillie/api/app.py` and `ghillie/api/factory.py` provide the first reusable
 control-plane HTTP surface and service factory. Today, the only concrete
-operator API is on-demand repository reporting through
+operator API provides on-demand repository reporting via
 `POST /reports/repositories/{owner}/{name}`.
 
 `scripts/local_k8s.py` is the existing Cyclopts-based local operator tool. It
@@ -353,7 +353,7 @@ Each handler should do only one of these things in Task 2.5.a:
 1. build the shared CLI context,
 2. select the right adapter or client,
 3. return a stable placeholder result for not-yet-implemented behaviours, or
-4. call a very small proven surface that already exists.
+4. call a small proven surface that already exists.
 
 Do not let placeholder handlers become unstructured print statements. Even the
 scaffold should return stable machine-readable output for `--output json` and a
@@ -446,4 +446,4 @@ operator contract executable and testable without overreaching into the later
 Step 2.5 tasks. A successful implementation leaves the command grammar stable,
 the adapter seams explicit, the docs aligned, and the repo ready for
 estate-management APIs, ingestion run orchestration, and report/export commands
-in the next milestones.
+in the subsequent milestones.
