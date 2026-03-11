@@ -20,6 +20,41 @@ from ghillie.evidence.models import (
 )
 from ghillie.status.prompts import SYSTEM_PROMPT, _render_template, build_user_prompt
 
+EXPECTED_REPRESENTATIVE_PROMPT = (
+    "# Repository Status Report: octo/reef\n"
+    "\n"
+    "Reporting window: 2024-07-08T00:00:00+00:00 to "
+    "2024-07-15T00:00:00+00:00\n"
+    "\n"
+    "## Previous Reports\n"
+    "\n"
+    "### Report from 2024-07-01 to 2024-07-08\n"
+    "- Status: at_risk\n"
+    "- Highlights: Delivered API v2, Reduced queue lag\n"
+    "- Risks: Database migration incomplete\n"
+    "\n"
+    "## Activity Summary\n"
+    "- Commits: 1\n"
+    "- Pull requests: 1\n"
+    "- Issues: 1\n"
+    "- Documentation changes: 1\n"
+    "\n"
+    "## Work Type Breakdown\n"
+    "- feature: 2 items\n"
+    "  - Add dashboard\n"
+    "  - Ship chart export\n"
+    "\n"
+    "## Pull Requests\n"
+    "- #42: Add new dashboard feature [merged]\n"
+    "\n"
+    "## Issues\n"
+    "- #10: Performance regression in search [open]\n"
+    "\n"
+    "## Instructions\n"
+    "Analyze the above evidence and respond with a JSON status report "
+    "following the schema in the system prompt."
+)
+
 
 class TestSystemPrompt:
     """Tests for the system prompt constant."""
@@ -70,34 +105,12 @@ class TestBuildUserPrompt:
             window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
         )
 
-    def test_includes_repository_slug(
-        self, minimal_evidence: RepositoryEvidenceBundle
-    ) -> None:
-        """User prompt includes repository slug."""
-        prompt = build_user_prompt(minimal_evidence)
-        assert "octo/reef" in prompt
-
-    def test_includes_window_dates(
-        self, minimal_evidence: RepositoryEvidenceBundle
-    ) -> None:
-        """User prompt includes reporting window dates."""
-        prompt = build_user_prompt(minimal_evidence)
-        assert "2024-07-01" in prompt
-        assert "2024-07-08" in prompt
-
-    def test_renders_template_string_to_plain_text(self) -> None:
-        """Template-string prompt fragments are rendered back to plain text."""
-        repository_name = "reef"
-
-        rendered = _render_template(t"Repository: {repository_name}")
-
-        assert rendered == "Repository: reef"
-
-    def test_preserves_exact_prompt_output_for_representative_bundle(
+    @pytest.fixture
+    def representative_evidence(
         self, repository_metadata: RepositoryMetadata
-    ) -> None:
-        """Representative prompt output remains byte-for-byte stable."""
-        evidence = RepositoryEvidenceBundle(
+    ) -> RepositoryEvidenceBundle:
+        """Provide representative evidence bundle."""
+        return RepositoryEvidenceBundle(
             repository=repository_metadata,
             window_start=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
             window_end=dt.datetime(2024, 7, 15, tzinfo=dt.UTC),
@@ -148,43 +161,37 @@ class TestBuildUserPrompt:
             ),
         )
 
-        prompt = build_user_prompt(evidence)
-        expected_prompt = (
-            "# Repository Status Report: octo/reef\n"
-            "\n"
-            "Reporting window: 2024-07-08T00:00:00+00:00 to "
-            "2024-07-15T00:00:00+00:00\n"
-            "\n"
-            "## Previous Reports\n"
-            "\n"
-            "### Report from 2024-07-01 to 2024-07-08\n"
-            "- Status: at_risk\n"
-            "- Highlights: Delivered API v2, Reduced queue lag\n"
-            "- Risks: Database migration incomplete\n"
-            "\n"
-            "## Activity Summary\n"
-            "- Commits: 1\n"
-            "- Pull requests: 1\n"
-            "- Issues: 1\n"
-            "- Documentation changes: 1\n"
-            "\n"
-            "## Work Type Breakdown\n"
-            "- feature: 2 items\n"
-            "  - Add dashboard\n"
-            "  - Ship chart export\n"
-            "\n"
-            "## Pull Requests\n"
-            "- #42: Add new dashboard feature [merged]\n"
-            "\n"
-            "## Issues\n"
-            "- #10: Performance regression in search [open]\n"
-            "\n"
-            "## Instructions\n"
-            "Analyze the above evidence and respond with a JSON status report "
-            "following the schema in the system prompt."
-        )
+    def test_includes_repository_slug(
+        self, minimal_evidence: RepositoryEvidenceBundle
+    ) -> None:
+        """User prompt includes repository slug."""
+        prompt = build_user_prompt(minimal_evidence)
+        assert "octo/reef" in prompt
 
-        assert prompt == expected_prompt
+    def test_includes_window_dates(
+        self, minimal_evidence: RepositoryEvidenceBundle
+    ) -> None:
+        """User prompt includes reporting window dates."""
+        prompt = build_user_prompt(minimal_evidence)
+        assert "2024-07-01" in prompt
+        assert "2024-07-08" in prompt
+
+    def test_renders_template_string_to_plain_text(self) -> None:
+        """Template-string prompt fragments are rendered back to plain text."""
+        repository_name = "reef"
+
+        rendered = _render_template(t"Repository: {repository_name}")
+
+        assert rendered == "Repository: reef"
+
+    def test_preserves_exact_prompt_output_for_representative_bundle(
+        self, representative_evidence: RepositoryEvidenceBundle
+    ) -> None:
+        """Representative prompt output remains byte-for-byte stable."""
+        assert (
+            build_user_prompt(representative_evidence)
+            == EXPECTED_REPRESENTATIVE_PROMPT
+        )
 
     def test_includes_activity_summary(
         self, repository_metadata: RepositoryMetadata
