@@ -292,11 +292,12 @@ Create or update these files:
 - `ghillie/cli/runtime/ports.py`
 - `ghillie/cli/runtime/factory.py`
 
-Update `pyproject.toml` to expose a console entry point:
+Update `pyproject.toml` to expose a console entry point that points at the
+module which actually defines `main`:
 
 ```toml
 [project.scripts]
-ghillie = "ghillie.cli:main"
+ghillie = "ghillie.cli.app:main"
 ```
 
 The CLI core should provide four stable types:
@@ -363,9 +364,13 @@ For the backend seam:
 
 - `ghillie/cli/runtime/factory.py` should map `cuprum` and `python-api` to
   concrete adapter classes.
-- For `python-api`, prefer reusing or wrapping the existing Python
-  orchestration modules under `scripts/local_k8s/` rather than duplicating
-  their logic.
+- Move reusable local orchestration logic into a package module such as
+  `ghillie.runtime.orchestration` rather than leaving it under `scripts/`.
+- For `python-api`, prefer adapters that import and reuse
+  `ghillie.runtime.orchestration` rather than duplicating orchestration logic.
+- Any entry points retained under `scripts/` should import from
+  `ghillie.runtime.orchestration` instead of owning orchestration logic
+  themselves.
 - For `cuprum`, it is acceptable in Task 2.5.a to provide a placeholder
   adapter class whose construction is validated even if its execution paths are
   left for later work.
@@ -410,7 +415,7 @@ set -o pipefail && make check-fmt 2>&1 | tee /tmp/ghillie-make-check-fmt.log
 set -o pipefail && make typecheck 2>&1 | tee /tmp/ghillie-make-typecheck.log
 set -o pipefail && make lint 2>&1 | tee /tmp/ghillie-make-lint.log
 set -o pipefail && make test 2>&1 | tee /tmp/ghillie-make-test.log
-set -o pipefail && MDLINT=/root/.bun/bin/markdownlint-cli2 make markdownlint 2>&1 | tee /tmp/ghillie-make-markdownlint.log
+set -o pipefail && make markdownlint 2>&1 | tee /tmp/ghillie-make-markdownlint.log
 set -o pipefail && make nixie 2>&1 | tee /tmp/ghillie-make-nixie.log
 ```
 
