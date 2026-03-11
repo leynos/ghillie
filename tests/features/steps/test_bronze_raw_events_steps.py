@@ -13,6 +13,8 @@ from sqlalchemy import select
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+    from ghillie.bronze.services import Payload
+
 from ghillie.bronze import (
     RawEvent,
     RawEventEnvelope,
@@ -39,7 +41,7 @@ class BronzeContext(typ.TypedDict, total=False):
     session_factory: async_sessionmaker[AsyncSession]
     writer: RawEventWriter
     transformer: RawEventTransformer
-    payload: dict[str, typ.Any]
+    payload: Payload
     occurred_at: dt.datetime
     raw_event_id: int
     error: Exception

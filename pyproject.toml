@@ -116,6 +116,10 @@ max-complexity = 9
 [tool.ruff.lint.pylint]
 max-args = 4
 
+[tool.pyright]
+pythonVersion = "3.14"
+typeCheckingMode = "strict"
+
 [tool.pytest.ini_options]
 # Tests automatically killed after seconds elapsed
 timeout = 30
