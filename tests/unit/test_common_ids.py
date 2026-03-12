@@ -6,6 +6,7 @@ import typing as typ
 import uuid
 
 import pytest
+from sqlalchemy import inspect as sa_inspect
 
 from ghillie.catalogue.storage import (
     ComponentRecord,
@@ -28,6 +29,14 @@ def _parse_uuid7(value: str) -> uuid.UUID:
 def _unix_ms_from_uuid7(value: uuid.UUID) -> int:
     """Extract the Unix-millisecond prefix from a UUIDv7 value."""
     return value.int >> 80
+
+
+def _generate_model_default_id(model_cls: type[object]) -> str:
+    """Invoke the mapped ``id`` column default for a storage model."""
+    id_column = sa_inspect(model_cls).columns["id"]
+    default_factory = id_column.default
+    assert default_factory is not None
+    return typ.cast("typ.Any", default_factory.arg)(None)
 
 
 def test_new_uuid7_str_returns_canonical_uuid7() -> None:
@@ -64,9 +73,6 @@ def test_new_uuid7_str_has_non_decreasing_timestamp_prefix() -> None:
 )
 def test_storage_model_id_defaults_generate_uuid7(model_cls: type[object]) -> None:
     """Storage primary-key defaults produce UUIDv7 strings."""
-    default_factory = typ.cast("typ.Any", model_cls).__table__.c.id.default
-    assert default_factory is not None
-
-    generated = default_factory.arg(None)
+    generated = _generate_model_default_id(model_cls)
 
     _parse_uuid7(generated)
