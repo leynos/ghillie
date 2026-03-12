@@ -78,9 +78,10 @@ Success is observable when:
 
 ## Surprises & discoveries
 
-- `uv` resolves and builds the project with CPython 3.14.3 in this
-  environment, but `ty` still treated `typing.ReadOnly` as unavailable until
-  `pyproject.toml` moved from `requires-python = ">=3.12"` to `>=3.14`.
+- `uv` (the Astral Python package manager) resolves and builds the project
+  with CPython 3.14.3 in this environment, but `ty` (the Astral type checker)
+  still treated `typing.ReadOnly` as unavailable until `pyproject.toml` moved
+  from `requires-python = ">=3.12"` to `>=3.14`.
 - Baseline `make typecheck` was already failing in a few test modules due to
   `dict[str, object]` invariance. Fixing those annotations was required before
   the readonly change could be validated cleanly.
