@@ -189,8 +189,7 @@ class TestBuildUserPrompt:
     ) -> None:
         """Representative prompt output remains byte-for-byte stable."""
         assert (
-            build_user_prompt(representative_evidence)
-            == EXPECTED_REPRESENTATIVE_PROMPT
+            build_user_prompt(representative_evidence) == EXPECTED_REPRESENTATIVE_PROMPT
         )
 
     def test_includes_activity_summary(

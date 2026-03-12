@@ -16,12 +16,13 @@ from ghillie.bronze import (
     RawEventState,
     RawEventWriter,
 )
-from ghillie.bronze.services import Payload
 from ghillie.silver import EventFact, RawEventTransformer
 from ghillie.silver.services import RawEventTransformError
 
 if typ.TYPE_CHECKING:
     from _pytest.monkeypatch import MonkeyPatch
+
+    from ghillie.bronze.services import Payload
 
     from ghillie.bronze.services import Payload
 

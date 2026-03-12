@@ -22,7 +22,6 @@ from ghillie.bronze import (
     RawEventWriter,
     TimezoneAwareRequiredError,
 )
-from ghillie.bronze.services import Payload
 from ghillie.silver import EventFact, RawEventTransformer
 
 EVENT_TYPE = "github.push"
