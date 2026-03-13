@@ -24,8 +24,6 @@ if typ.TYPE_CHECKING:
 
     from ghillie.bronze.services import Payload
 
-    from ghillie.bronze.services import Payload
-
 
 async def _insert_event_fact(
     session_factory: async_sessionmaker[AsyncSession],
