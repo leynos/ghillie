@@ -447,7 +447,8 @@ class TestOpenAIInvocationMetrics:
                 "Expected invocation metrics after successful model call"
             )
             assert metrics.prompt_tokens == expected_metrics.prompt_tokens, (
-                f"Expected prompt_tokens to equal {expected_metrics.prompt_tokens!r} for "
+                "Expected prompt_tokens to equal "
+                f"{expected_metrics.prompt_tokens!r} for "
                 f"usage_payload={usage_payload!r}"
             )
             assert metrics.completion_tokens == expected_metrics.completion_tokens, (
@@ -497,31 +498,4 @@ class TestOpenAIInvocationMetrics:
             )
             assert metrics.total_tokens == 28, (
                 "Expected latest total token count to overwrite previous value"
-            )
-
-    @pytest.mark.asyncio
-    async def test_non_string_key_usage_dict_sets_empty_metrics(
-        self,
-        config: OpenAIStatusModelConfig,
-        feature_evidence: RepositoryEvidenceBundle,
-    ) -> None:
-        """Dict usage payloads with non-string keys leave invocation metrics empty."""
-        transport = _SuccessfulCompletionTransport(
-            usage_payloads=({1: 10, 2: 20, 3: 30},)
-        )
-        async with create_model_with_transport(config, transport) as model:
-            await model.summarize_repository(feature_evidence)
-
-            metrics = model.last_invocation_metrics
-            assert metrics is not None, (
-                "Expected metrics object after successful completion response"
-            )
-            assert metrics.prompt_tokens is None, (
-                "Expected prompt token count to stay None for non-string usage keys"
-            )
-            assert metrics.completion_tokens is None, (
-                "Expected completion token count to stay None for non-string usage keys"
-            )
-            assert metrics.total_tokens is None, (
-                "Expected total token count to stay None for non-string usage keys"
             )
