@@ -140,7 +140,12 @@ def _verify_vidaimock_config(base_url: str) -> bool:
         content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
         # Check if content is JSON (configured) vs generic text
         json.loads(content)
-    except (httpx.RequestError, json.JSONDecodeError, KeyError, IndexError):
+    except (
+        httpx.RequestError,
+        json.JSONDecodeError,
+        KeyError,
+        IndexError,
+    ):
         return False
     else:
         return True

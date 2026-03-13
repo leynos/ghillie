@@ -12,7 +12,10 @@ from sqlalchemy.exc import IntegrityError
 from ghillie.bronze import RawEventEnvelope, RawEventWriter
 from ghillie.common.slug import parse_repo_slug
 from ghillie.gold import Report, ReportCoverage, ReportProject, ReportScope
-from ghillie.gold.storage import _ensure_report_metric_columns
+from ghillie.gold.storage import (
+    ValidationIssuePayload,
+    _ensure_report_metric_columns,
+)
 from ghillie.silver import EventFact, RawEventTransformer, Repository
 
 if typ.TYPE_CHECKING:
@@ -70,6 +73,16 @@ def test_ensure_report_metric_columns_updates_legacy_reports_table() -> None:
     assert "total_tokens" in column_names, (
         "Expected legacy reports table to gain total_tokens column"
     )
+
+
+def test_validation_issue_payload_marks_snapshot_fields_readonly() -> None:
+    """Validation issue payload keys are typed as readonly snapshots."""
+    type_hints = typ.get_type_hints(ValidationIssuePayload, include_extras=True)
+
+    assert typ.get_origin(type_hints["code"]) is typ.ReadOnly
+    assert typ.get_args(type_hints["code"]) == (str,)
+    assert typ.get_origin(type_hints["message"]) is typ.ReadOnly
+    assert typ.get_args(type_hints["message"]) == (str,)
 
 
 @pytest.mark.asyncio

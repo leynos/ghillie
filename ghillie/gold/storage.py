@@ -166,8 +166,8 @@ class ReportCoverage(Base):
 class ValidationIssuePayload(typ.TypedDict):
     """Serialized report validation issue persisted in ``ReportReview`` JSON."""
 
-    code: str
-    message: str
+    code: typ.ReadOnly[str]
+    message: typ.ReadOnly[str]
 
 
 class ReviewState(enum.StrEnum):

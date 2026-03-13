@@ -24,6 +24,8 @@ if typ.TYPE_CHECKING:
 
     from ghillie.evidence.models import RepositoryEvidenceBundle
 
+type ResponseData = dict[str, object]
+
 
 @contextlib.asynccontextmanager
 async def create_model_with_transport(
@@ -96,7 +98,7 @@ class _SuccessfulCompletionTransport(httpx.AsyncBaseTransport):
     def __init__(
         self,
         *,
-        usage_payloads: tuple[dict[str, object] | None, ...],
+        usage_payloads: tuple[ResponseData | None, ...],
     ) -> None:
         self._usage_payloads = usage_payloads or (None,)
         self._index = 0
@@ -106,7 +108,7 @@ class _SuccessfulCompletionTransport(httpx.AsyncBaseTransport):
         usage = self._usage_payloads[min(self._index, len(self._usage_payloads) - 1)]
         self._index += 1
 
-        body: dict[str, object] = {
+        body: ResponseData = {
             "id": "chatcmpl-123",
             "object": "chat.completion",
             "choices": [
@@ -237,7 +239,7 @@ class TestOpenAIResponseExtraction:
         self, model: OpenAIStatusModel
     ) -> None:
         """Content extraction works for valid OpenAI response shape."""
-        response_data: dict[str, object] = {
+        response_data: ResponseData = {
             "id": "chatcmpl-123",
             "object": "chat.completion",
             "choices": [
@@ -256,7 +258,7 @@ class TestOpenAIResponseExtraction:
 
     def test_extract_content_missing_choices(self, model: OpenAIStatusModel) -> None:
         """Missing 'choices' field raises OpenAIResponseShapeError."""
-        response_data: dict[str, object] = {
+        response_data: ResponseData = {
             "id": "chatcmpl-123",
             "object": "chat.completion",
         }
@@ -266,14 +268,14 @@ class TestOpenAIResponseExtraction:
 
     def test_extract_content_empty_choices(self, model: OpenAIStatusModel) -> None:
         """Empty 'choices' array raises OpenAIResponseShapeError."""
-        response_data: dict[str, object] = {"choices": []}
+        response_data: ResponseData = {"choices": []}
         with pytest.raises(OpenAIResponseShapeError) as exc_info:
             model._extract_content(response_data)
         assert "choices" in str(exc_info.value)
 
     def test_extract_content_missing_message(self, model: OpenAIStatusModel) -> None:
         """Missing 'message' in choice raises OpenAIResponseShapeError."""
-        response_data: dict[str, object] = {
+        response_data: ResponseData = {
             "choices": [{"index": 0, "finish_reason": "stop"}]
         }
         with pytest.raises(OpenAIResponseShapeError) as exc_info:
@@ -282,7 +284,7 @@ class TestOpenAIResponseExtraction:
 
     def test_extract_content_missing_content(self, model: OpenAIStatusModel) -> None:
         """Missing 'content' in message raises OpenAIResponseShapeError."""
-        response_data: dict[str, object] = {
+        response_data: ResponseData = {
             "choices": [{"index": 0, "message": {"role": "assistant"}}]
         }
         with pytest.raises(OpenAIResponseShapeError) as exc_info:

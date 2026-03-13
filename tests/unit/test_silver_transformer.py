@@ -22,11 +22,13 @@ from ghillie.silver.services import RawEventTransformError
 if typ.TYPE_CHECKING:
     from _pytest.monkeypatch import MonkeyPatch
 
+    from ghillie.bronze.services import Payload
+
 
 async def _insert_event_fact(
     session_factory: async_sessionmaker[AsyncSession],
     raw_event_id: int,
-    payload: dict[str, object] | None = None,
+    payload: Payload | None = None,
 ) -> None:
     async with session_factory() as session, session.begin():
         fact = EventFact(
