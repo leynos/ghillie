@@ -124,6 +124,29 @@ scale of modern software estates, which may generate thousands of events per
 minute, the gateway must be designed for high availability and asynchronous
 processing.
 
+### 3.0 Operator CLI scaffold boundary (Task 2.5.a)
+
+The packaged operator CLI is a driving adapter layered alongside the runtime
+server and background workers. Its responsibility in Task 2.5.a is to make the
+MVP control-plane contract executable without pulling estate, ingestion,
+export, metrics, and reporting implementation forward prematurely.
+
+The boundary is intentionally explicit:
+
+- `ghillie/cli/app.py` owns noun-first command registration and root-global
+  option parsing.
+- `ghillie/cli/config.py` resolves shared configuration once per invocation,
+  applying the documented precedence of flag, environment, profile file,
+  persisted state, then fallback URL.
+- `ghillie/cli/control_plane.py` is the driven adapter seam for API-backed
+  commands. It owns `httpx` base URL, timeout, and bearer-token setup.
+- `ghillie/cli/runtime_adapters.py` is the driven adapter seam for local stack
+  integration. Task 2.5.a validates selector names (`cuprum`, `python-api`) and
+  leaves concrete orchestration work to later tasks.
+
+This keeps the CLI thin and prevents command handlers from embedding HTTP or
+local-runtime details directly.
+
 ### 3.1 Webhook Reception and Verification
 
 The primary mechanism for real-time data acquisition is the webhook. Ghillie

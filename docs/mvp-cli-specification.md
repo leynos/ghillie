@@ -190,6 +190,28 @@ ghillie
     nice
 ```
 
+### Task 2.5.a scaffold status
+
+The first packaged operator CLI delivery is a scaffold, not a finished control
+plane. The implemented Task 2.5.a contract is:
+
+- `uv run ghillie --help` exposes the full root noun tree shown above.
+- Every documented noun and verb is registered under the packaged
+  `ghillie/cli/` entry point, even where later tasks still own the real backend
+  behaviour.
+- Root-global options are resolved before noun dispatch. The scaffold accepts
+  `--api-base-url`, `--auth-token`, `--output`, `--log-level`,
+  `--request-timeout-s`, `--non-interactive` or `--interactive`, and
+  `--dry-run` or `--no-dry-run`.
+- Valid placeholder invocations return deterministic structured output with
+  `status: not_implemented` and the message `not implemented in Task 2.5.a`.
+- Invalid CLI input still fails fast with exit code `2`.
+
+The `stack up` backend selector and the control-plane client seam are real in
+the scaffold: `cuprum` and `python-api` both resolve to distinct local runtime
+adapter placeholders, and API-facing commands resolve one `httpx` client from
+the shared root configuration.
+
 ## Stack commands (k3d/Helm lifecycle)
 
 ### `ghillie stack up`
@@ -510,6 +532,7 @@ Output contract:
 
 - `--output table` for operator readability.
 - `--output json` for automation.
+- `--output yaml` for YAML-oriented operator workflows.
 - Errors should include structured fields: `code`, `message`, and `hint`.
 
 ## Security constraints

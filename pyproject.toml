@@ -25,7 +25,11 @@ dependencies = [
     "httpx>=0.27.0",
     "falcon>=4.0.0,<5.0.0",
     "granian>=1.0.0,<3.0.0",
+    "cyclopts>=2.9,<3",
 ]
+
+[project.scripts]
+ghillie = "ghillie.cli:main"
 
 [dependency-groups]
 dev = [
@@ -40,7 +44,6 @@ dev = [
     "ty>=0.0.1a21",
     "pytest-timeout",
     # Script dependencies for type checking and testing
-    "cyclopts>=2.9,<3",
     "plumbum>=1.10,<2",
     "cmd-mox>=0.2,<1",
 ]

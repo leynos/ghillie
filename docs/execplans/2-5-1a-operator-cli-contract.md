@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -136,15 +136,18 @@ observable when:
 - [x] 2026-03-13 Inspected `pyproject.toml`, `scripts/local_k8s.py`, the
   existing local-k8s CLI tests, and the earlier Step 2.5 draft ExecPlan.
 - [x] 2026-03-13 Drafted this Task 2.5.a ExecPlan.
-- [ ] Add failing unit tests for the packaged CLI app, command tree, shared
-  root options, config precedence, control-plane client wiring, and runtime
-  adapter selection.
-- [ ] Add failing `pytest-bdd` scenarios for the operator-visible grammar and
-  validation rules.
-- [ ] Implement the packaged CLI scaffold under `ghillie/cli/` and expose it
-  as the `ghillie` console entry point.
-- [ ] Update the CLI spec, users' guide, design document, and roadmap entry.
-- [ ] Run all quality gates and capture concise evidence in this plan.
+- [x] 2026-03-14 Added failing unit tests for the packaged CLI app, command
+  tree, shared root options, config precedence, control-plane client wiring,
+  and runtime adapter selection. The red phase failed with
+  `ModuleNotFoundError: No module named 'ghillie.cli'`.
+- [x] 2026-03-14 Added failing `pytest-bdd` scenarios for the
+  operator-visible grammar and validation rules. The red phase failed with the
+  same missing-package error before implementation.
+- [x] 2026-03-14 Implemented the packaged CLI scaffold under `ghillie/cli/`
+  and exposed it as the `ghillie` console entry point in `pyproject.toml`.
+- [x] 2026-03-14 Updated the CLI spec, users' guide, design document, and
+  roadmap entry to match the scaffold.
+- [x] 2026-03-14 Ran all quality gates and captured the final evidence below.
 
 ## Surprises & Discoveries
 
@@ -168,6 +171,15 @@ observable when:
   multi-repository project can produce a complete project evidence bundle from
   catalogue and repository data", does not match Task 2.5.a and should be
   treated as out of scope unless the roadmap itself is changed.
+- Cyclopts `2.9.x` evaluates function annotations at import time via
+  `inspect.signature(..., eval_str=True)`. That means command modules cannot
+  hide runtime annotation imports such as `Path` behind `TYPE_CHECKING` guards
+  without breaking app import and help rendering.
+- The installed Cyclopts version does not expose newer root-dispatch hooks
+  that would make shared option propagation trivial. The scaffold therefore
+  uses a small explicit pre-parser at the app boundary to collect root-global
+  options before dispatching to the noun tree. This preserves the documented
+  contract while keeping handlers thin and testable.
 
 ## Decision Log
 
@@ -492,10 +504,56 @@ Error: invalid value for --backend
 
 ## Outcomes & Retrospective
 
-This section remains incomplete until Task 2.5.a is implemented.
+Task 2.5.a is implemented.
 
-The intended outcome is a repo-owned, packaged CLI scaffold that makes the
-documented operator contract executable and testable without overreaching into
-the later Step 2.5 tasks. A successful implementation leaves the grammar
-stable, the adapter boundaries explicit, the documentation aligned, and the
-repository ready for Task 2.5.b through Task 2.5.e.
+The repo now carries a packaged operator CLI scaffold under `ghillie/cli/` with
+a console entry point named `ghillie`. The root app exposes the six documented
+nouns, accepts shared configuration once at the root, resolves that
+configuration into one typed context object, constructs a real `httpx`
+control-plane client wrapper, and selects a local runtime adapter named
+`cuprum` or `python-api`.
+
+The command handlers intentionally remain deterministic placeholders for later
+Step 2.5 tasks. Valid invocations return a stable
+`not implemented in Task 2.5.a` status through a shared output policy, while
+invalid options fail during parsing.
+
+Operator-visible evidence captured during implementation:
+
+```plaintext
+$ uv run ghillie --help
+... stack ...
+... estate ...
+... ingest ...
+... export ...
+... report ...
+... metrics ...
+
+$ uv run ghillie --api-base-url http://127.0.0.1:9999 report run --help
+Usage: ghillie report run [OPTIONS]
+
+$ uv run ghillie stack up --backend invalid
+Error: invalid choice for --backend: "invalid"
+```
+
+Test and gate evidence captured during implementation:
+
+- Targeted red phase:
+  `uv run pytest tests/unit/cli -v` failed with
+  `ModuleNotFoundError: No module named 'ghillie.cli'`.
+- Targeted red phase:
+  `uv run pytest tests/features/steps/test_operator_cli_steps.py -v` failed
+  with the same missing-package error.
+- Targeted green phase: `uv run pytest tests/unit/cli -v` passed with
+  `14 passed`.
+- Targeted green phase:
+  `uv run pytest tests/features/steps/test_operator_cli_steps.py -v` passed
+  with `4 passed`.
+- Full repository gates passed:
+  `make fmt`, `make check-fmt`, `make typecheck`, `make lint`, `make test`,
+  `MDLINT=/root/.bun/bin/markdownlint-cli2 make markdownlint`, and `make nixie`.
+- Final test suite result during the full gate run: `730 passed, 35 skipped`.
+
+This leaves the grammar stable, the adapter boundaries explicit, the
+documentation aligned, and the repository ready for the follow-on Task 2.5 work
+without dragging later runtime behaviour into this entry task.
