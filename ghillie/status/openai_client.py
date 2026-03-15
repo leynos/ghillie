@@ -333,6 +333,8 @@ class OpenAIStatusModel:
         data: JSONLike,
     ) -> ModelInvocationMetrics:
         """Extract token usage metrics from the API response payload."""
+        if not _is_object_dict(data):
+            raise OpenAIResponseShapeError.missing("data")
         usage = data.get("usage")
         if not _is_object_dict(usage):
             return ModelInvocationMetrics()
@@ -362,6 +364,8 @@ class OpenAIStatusModel:
             If the response is missing expected fields.
 
         """
+        if not _is_object_dict(data):
+            raise OpenAIResponseShapeError.missing("data")
         choices = data.get("choices")
         if not isinstance(choices, list) or not choices:
             raise OpenAIResponseShapeError.missing("choices")

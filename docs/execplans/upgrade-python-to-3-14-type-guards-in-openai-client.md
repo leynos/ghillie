@@ -84,9 +84,10 @@ Success is observable when:
   direct nested traversal behaviour.
 - Adding a helper-level test first provided the intended red phase cleanly via
   import failure before any production code changed.
-- `typing.TypeIs` was unavailable to `ty` until project metadata was aligned
-  with the repository's effective Python 3.13 baseline. This required updating
-  `pyproject.toml` `requires-python` and Ruff's `target-version`.
+- `typing.TypeIs` was unavailable to the type checker (ty) until project
+  metadata was aligned with the repository's effective Python 3.13 baseline.
+  This required updating `pyproject.toml` `requires-python` and Ruff's
+  `target-version`.
 - Full-gate orchestration must remain sequential for this repo: `make test` and
   `make typecheck` both rebuild `.venv`, so parallel execution can fail with
   `uv venv --clear` races.
@@ -110,8 +111,8 @@ Success is observable when:
   behaviour directly, which reduces the risk of refactors weakening response
   validation.
 - `pyproject.toml` now reflects the repository's effective Python 3.13
-  baseline, which unblocks `typing.TypeIs` in `ty` and matches the configured
-  CI workflows.
+  baseline, which unblocks `typing.TypeIs` in the type checker (ty) and matches
+  the configured CI workflows.
 - Validation completed with `make fmt`, `make check-fmt`, `make lint`,
   `make typecheck`, `make test`, `make markdownlint`, and `make nixie`.
 
