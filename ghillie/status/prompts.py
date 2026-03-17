@@ -8,6 +8,8 @@ from string import templatelib
 if typ.TYPE_CHECKING:
     from ghillie.evidence.models import RepositoryEvidenceBundle
 
+TemplateLike = str | templatelib.Template
+
 SYSTEM_PROMPT = """\
 You are a technical status reporter for software repositories. Your role is to \
 analyze repository activity evidence and produce concise, accurate status reports.
@@ -56,85 +58,91 @@ they remain unresolved.
 """
 
 
-def _render_template(template: templatelib.Template) -> str:
-    """Render a template string back to plain text.
+# Python 3.14 template strings preserve interpolation structure instead of
+# eagerly producing `str`. Prompt construction still needs plain text for the
+# OpenAI payload, so keep the conversion explicit and local to this module.
+def _render_template(template: TemplateLike) -> str:
+    """Render plain text or a template string back to plain text."""
+    if isinstance(template, str):
+        return template
 
-    Python 3.14 template strings preserve interpolation structure instead of
-    eagerly producing `str`. Prompt construction still needs plain text for the
-    OpenAI payload, so keep the conversion explicit and local to this module.
-    """
     rendered_parts: list[str] = []
     for item in template:
         if isinstance(item, str):
             rendered_parts.append(item)
             continue
+        if not isinstance(item, templatelib.Interpolation):
+            msg = (
+                "Expected template segment to be str or templatelib.Interpolation, "
+                f"got {type(item).__name__}"
+            )
+            raise TypeError(msg)
         converted_value = templatelib.convert(item.value, item.conversion)
         rendered_parts.append(format(converted_value, item.format_spec))
     return "".join(rendered_parts)
 
 
-def _format_previous_reports(evidence: RepositoryEvidenceBundle) -> list[str]:
+def _render_lines(lines: typ.Iterable[TemplateLike]) -> list[str]:
+    """Render a sequence of prompt fragments to plain text."""
+    return [_render_template(line) for line in lines]
+
+
+def _format_previous_reports(evidence: RepositoryEvidenceBundle) -> list[TemplateLike]:
     """Format previous reports section."""
     if not evidence.previous_reports:
         return []
 
-    sections: list[str] = ["", "## Previous Reports"]
+    sections: list[TemplateLike] = ["", "## Previous Reports"]
     for prev in evidence.previous_reports:
         sections.append("")
         sections.append(
-            _render_template(
-                t"### Report from {prev.window_start.date()} to "
-                t"{prev.window_end.date()}"
-            )
+            t"### Report from {prev.window_start.date()} to {prev.window_end.date()}"
         )
-        sections.append(_render_template(t"- Status: {prev.status.value}"))
+        sections.append(t"- Status: {prev.status.value}")
         if prev.highlights:
             highlights_str = ", ".join(prev.highlights[:3])
-            sections.append(_render_template(t"- Highlights: {highlights_str}"))
+            sections.append(t"- Highlights: {highlights_str}")
         if prev.risks:
             risks_str = ", ".join(prev.risks[:3])
-            sections.append(_render_template(t"- Risks: {risks_str}"))
+            sections.append(t"- Risks: {risks_str}")
     return sections
 
 
-def _format_work_type_breakdown(evidence: RepositoryEvidenceBundle) -> list[str]:
+def _format_work_type_breakdown(
+    evidence: RepositoryEvidenceBundle,
+) -> list[TemplateLike]:
     """Format work type breakdown section."""
     if not evidence.work_type_groupings:
         return []
 
-    sections: list[str] = ["", "## Work Type Breakdown"]
+    sections: list[TemplateLike] = ["", "## Work Type Breakdown"]
     for grouping in evidence.work_type_groupings:
         total = grouping.commit_count + grouping.pr_count + grouping.issue_count
-        sections.append(
-            _render_template(t"- {grouping.work_type.value}: {total} items")
-        )
-        sections.extend(
-            _render_template(t"  - {title}") for title in grouping.sample_titles[:2]
-        )
+        sections.append(t"- {grouping.work_type.value}: {total} items")
+        sections.extend(t"  - {title}" for title in grouping.sample_titles[:2])
     return sections
 
 
-def _format_pull_requests(evidence: RepositoryEvidenceBundle) -> list[str]:
+def _format_pull_requests(evidence: RepositoryEvidenceBundle) -> list[TemplateLike]:
     """Format pull requests section."""
     if not evidence.pull_requests:
         return []
 
-    sections: list[str] = ["", "## Pull Requests"]
+    sections: list[TemplateLike] = ["", "## Pull Requests"]
     sections.extend(
-        _render_template(t"- #{pr.number}: {pr.title} [{pr.state}]")
-        for pr in evidence.pull_requests[:10]
+        t"- #{pr.number}: {pr.title} [{pr.state}]" for pr in evidence.pull_requests[:10]
     )
     return sections
 
 
-def _format_issues(evidence: RepositoryEvidenceBundle) -> list[str]:
+def _format_issues(evidence: RepositoryEvidenceBundle) -> list[TemplateLike]:
     """Format issues section."""
     if not evidence.issues:
         return []
 
-    sections: list[str] = ["", "## Issues"]
+    sections: list[TemplateLike] = ["", "## Issues"]
     sections.extend(
-        _render_template(t"- #{issue.number}: {issue.title} [{issue.state}]")
+        t"- #{issue.number}: {issue.title} [{issue.state}]"
         for issue in evidence.issues[:10]
     )
     return sections
@@ -154,13 +162,11 @@ def build_user_prompt(evidence: RepositoryEvidenceBundle) -> str:
         Formatted user prompt for the LLM.
 
     """
-    sections: list[str] = [
-        _render_template(t"# Repository Status Report: {evidence.repository.slug}"),
+    sections: list[TemplateLike] = [
+        t"# Repository Status Report: {evidence.repository.slug}",
         "",
-        _render_template(
-            t"Reporting window: {evidence.window_start.isoformat()} to "
-            t"{evidence.window_end.isoformat()}"
-        ),
+        t"Reporting window: {evidence.window_start.isoformat()} to "
+        t"{evidence.window_end.isoformat()}",
     ]
 
     # Add optional sections
@@ -171,12 +177,10 @@ def build_user_prompt(evidence: RepositoryEvidenceBundle) -> str:
         [
             "",
             "## Activity Summary",
-            _render_template(t"- Commits: {len(evidence.commits)}"),
-            _render_template(t"- Pull requests: {len(evidence.pull_requests)}"),
-            _render_template(t"- Issues: {len(evidence.issues)}"),
-            _render_template(
-                t"- Documentation changes: {len(evidence.documentation_changes)}"
-            ),
+            t"- Commits: {len(evidence.commits)}",
+            t"- Pull requests: {len(evidence.pull_requests)}",
+            t"- Issues: {len(evidence.issues)}",
+            t"- Documentation changes: {len(evidence.documentation_changes)}",
         ]
     )
 
@@ -196,4 +200,4 @@ def build_user_prompt(evidence: RepositoryEvidenceBundle) -> str:
         ]
     )
 
-    return "\n".join(sections)
+    return "\n".join(_render_lines(sections))

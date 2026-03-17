@@ -18,7 +18,7 @@ from ghillie.evidence.models import (
     WorkType,
     WorkTypeGrouping,
 )
-from ghillie.status.prompts import SYSTEM_PROMPT, _render_template, build_user_prompt
+from ghillie.status.prompts import SYSTEM_PROMPT, build_user_prompt
 
 EXPECTED_REPRESENTATIVE_PROMPT = (
     "# Repository Status Report: octo/reef\n"
@@ -177,12 +177,35 @@ class TestBuildUserPrompt:
         assert "2024-07-08" in prompt
 
     def test_renders_template_string_to_plain_text(self) -> None:
-        """Template-string prompt fragments are rendered back to plain text."""
-        repository_name = "reef"
+        """Prompt rendering resolves template fragments to plain text."""
+        evidence = RepositoryEvidenceBundle(
+            repository=RepositoryMetadata(
+                id="repo-123",
+                owner="octo",
+                name="reef",
+                default_branch="main",
+                estate_id="wildside",
+            ),
+            window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+            window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+            previous_reports=(
+                PreviousReportSummary(
+                    report_id="prev-1",
+                    window_start=dt.datetime(2024, 6, 24, tzinfo=dt.UTC),
+                    window_end=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                    status=ReportStatus.ON_TRACK,
+                    highlights=("Kept {{raw}} formatting stable",),
+                    risks=(),
+                    event_count=3,
+                ),
+            ),
+        )
 
-        rendered = _render_template(t"Repository: {repository_name}")
+        rendered = build_user_prompt(evidence)
 
-        assert rendered == "Repository: reef"
+        assert "octo/reef" in rendered
+        assert "{evidence.repository.slug}" not in rendered
+        assert "{prev.window_start" not in rendered
 
     def test_preserves_exact_prompt_output_for_representative_bundle(
         self, representative_evidence: RepositoryEvidenceBundle
