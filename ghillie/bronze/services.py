@@ -1,7 +1,5 @@
 """Services for persisting Bronze raw events."""
 
-from __future__ import annotations
-
 import copy
 import dataclasses as dc
 import datetime as dt

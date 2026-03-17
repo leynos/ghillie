@@ -42,7 +42,7 @@ def _get_retry_after(response: httpx.Response) -> int | None:
     return None
 
 
-def _get_nested(data: dict[str, object], *keys: str) -> object:
+def _get_nested(data: JSONLike, *keys: str) -> object:
     """Traverse nested dict path, returning None for missing keys."""
     current: object = data
     for key in keys:

@@ -22,15 +22,13 @@ from ghillie.silver.services import RawEventTransformError
 if typ.TYPE_CHECKING:
     from _pytest.monkeypatch import MonkeyPatch
 
-type JsonValue = (
-    dict[str, "JsonValue"] | list["JsonValue"] | str | int | float | bool | None
-)
+    from ghillie.common.json import JSONValue
 
 
 async def _insert_event_fact(
     session_factory: async_sessionmaker[AsyncSession],
     raw_event_id: int,
-    payload: dict[str, JsonValue] | None = None,
+    payload: dict[str, JSONValue] | None = None,
 ) -> None:
     async with session_factory() as session, session.begin():
         fact = EventFact(
@@ -108,7 +106,7 @@ def test_transformer_handles_concurrent_insert(
     """Treat existing EventFacts as processed even if a race already wrote one."""
     writer = RawEventWriter(session_factory)
     transformer = RawEventTransformer(session_factory)
-    payload: dict[str, JsonValue] = {"id": "evt-race"}
+    payload: dict[str, JSONValue] = {"id": "evt-race"}
     occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.UTC)
 
     async def _run() -> None:
@@ -144,8 +142,8 @@ def test_transformer_marks_failed_on_payload_mismatch(
     writer = RawEventWriter(session_factory)
     transformer = RawEventTransformer(session_factory)
 
-    original_payload: dict[str, JsonValue] = {"id": "evt-conflict", "value": 1}
-    conflicting_payload: dict[str, JsonValue] = {
+    original_payload: dict[str, JSONValue] = {"id": "evt-conflict", "value": 1}
+    conflicting_payload: dict[str, JSONValue] = {
         "id": "evt-conflict",
         "value": 999,
     }
@@ -182,7 +180,7 @@ def test_transformer_treats_concurrent_insert_as_processed(
     writer = RawEventWriter(session_factory)
     transformer = RawEventTransformer(session_factory)
 
-    payload: dict[str, JsonValue] = {"id": "evt-concurrent-insert", "value": 42}
+    payload: dict[str, JSONValue] = {"id": "evt-concurrent-insert", "value": 42}
     occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.UTC)
 
     async def _setup() -> RawEvent:

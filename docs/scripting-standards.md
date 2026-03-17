@@ -163,7 +163,6 @@ Guidance:
 ### Basics: command calls, capturing output, handling failures
 
 ```python
-from __future__ annotations
 from plumbum import local
 from plumbum.cmd import git, grep
 
