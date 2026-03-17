@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import sys
-import typing as typ
 
 from cyclopts import App
 from cyclopts.exceptions import CycloptsError
@@ -45,17 +44,19 @@ app.command(report_app)
 app.command(metrics_app)
 
 
-def parse_global_options(  # noqa: C901, PLR0912, PLR0915
+def parse_global_options(
     argv: list[str],
 ) -> tuple[GlobalOptions, list[str]]:
     """Parse root-global options before handing off to the noun command tree."""
-    api_base_url: str | None = None
-    auth_token: str | None = None
-    output: typ.Literal["table", "json", "yaml"] | None = None
-    log_level: typ.Literal["debug", "info", "warn", "error"] | None = None
-    request_timeout_s: float | None = None
-    non_interactive: bool | None = None
-    dry_run: bool | None = None
+    state: dict[str, object] = {
+        "api_base_url": None,
+        "auth_token": None,
+        "output": None,
+        "log_level": None,
+        "request_timeout_s": None,
+        "non_interactive": None,
+        "dry_run": None,
+    }
     remaining: list[str] = []
     index = 0
     while index < len(argv):
@@ -66,19 +67,7 @@ def parse_global_options(  # noqa: C901, PLR0912, PLR0915
             if next_index >= len(argv):
                 msg = f"{token} requires a value"
                 raise ValueError(msg)
-            value = _coerce_root_value(field_name, argv[next_index])
-            if field_name == "api_base_url":
-                api_base_url = typ.cast("str", value)
-            elif field_name == "auth_token":
-                auth_token = typ.cast("str", value)
-            elif field_name == "output":
-                output = typ.cast('typ.Literal["table", "json", "yaml"]', value)
-            elif field_name == "log_level":
-                log_level = typ.cast(
-                    'typ.Literal["debug", "info", "warn", "error"]', value
-                )
-            else:
-                request_timeout_s = typ.cast("float", value)
+            _apply_valued_option(field_name, argv[next_index], state)
             index += 2
             continue
         if option_with_value := _split_option_with_value(token):
@@ -87,27 +76,12 @@ def parse_global_options(  # noqa: C901, PLR0912, PLR0915
             if field_name is None:
                 remaining = argv[index:]
                 break
-            value = _coerce_root_value(field_name, option_value)
-            if field_name == "api_base_url":
-                api_base_url = typ.cast("str", value)
-            elif field_name == "auth_token":
-                auth_token = typ.cast("str", value)
-            elif field_name == "output":
-                output = typ.cast('typ.Literal["table", "json", "yaml"]', value)
-            elif field_name == "log_level":
-                log_level = typ.cast(
-                    'typ.Literal["debug", "info", "warn", "error"]', value
-                )
-            else:
-                request_timeout_s = typ.cast("float", value)
+            _apply_valued_option(field_name, option_value, state)
             index += 1
             continue
         if token in _BOOLEAN_OPTION_VALUES:
             field_name, field_value = _BOOLEAN_OPTION_VALUES[token]
-            if field_name == "non_interactive":
-                non_interactive = field_value
-            else:
-                dry_run = field_value
+            state[field_name] = field_value
             index += 1
             continue
         remaining = argv[index:]
@@ -115,18 +89,7 @@ def parse_global_options(  # noqa: C901, PLR0912, PLR0915
     else:
         remaining = []
 
-    return (
-        GlobalOptions(
-            api_base_url=api_base_url,
-            auth_token=auth_token,
-            output=output,
-            log_level=log_level,
-            request_timeout_s=request_timeout_s,
-            non_interactive=non_interactive,
-            dry_run=dry_run,
-        ),
-        remaining,
-    )
+    return GlobalOptions(**state), remaining  # type: ignore[arg-type]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -169,6 +132,13 @@ def _coerce_root_value(field_name: str, raw_value: str) -> object:
     return raw_value
 
 
+def _apply_valued_option(
+    field_name: str, raw_value: str, state: dict[str, object]
+) -> None:
+    """Coerce *raw_value* and store it in the accumulator *state*."""
+    state[field_name] = _coerce_root_value(field_name, raw_value)
+
+
 def _coerce_result_to_exit_code(result: object) -> int:
     if result is None:
         return 0
@@ -180,9 +150,14 @@ def _coerce_result_to_exit_code(result: object) -> int:
     return 0
 
 
+def _is_invalid_backend_choice(message: str) -> bool:
+    """Return True when the cyclopts error describes an invalid --backend value."""
+    return "--backend" in message and "Literal" in message and "python-api" in message
+
+
 def _format_cyclopts_error(error: CycloptsError) -> str:
     message = str(error)
-    if "--backend" in message and "Literal" in message and "python-api" in message:
+    if _is_invalid_backend_choice(message):
         invalid_value = message.split('"')[1]
         return f'invalid choice for --backend: "{invalid_value}"'
     return message

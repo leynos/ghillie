@@ -57,26 +57,23 @@ def default_state_path() -> Path:
     return Path.home() / ".config" / "ghillie" / "state.json"
 
 
-def resolve_cli_config(
-    options: GlobalOptions,
-    *,
-    env: typ.Mapping[str, str] | None = None,
-    profile_path: Path | None = None,
-    state_path: Path | None = None,
-) -> ResolvedCliConfig:
-    """Resolve the effective CLI configuration using documented precedence."""
-    environment = dict(env or {})
-    profile = _load_profile(profile_path or default_profile_path())
-    state = _load_state(state_path or default_state_path())
-    profile_global = profile.get("global", {})
+@dataclasses.dataclass(frozen=True, slots=True)
+class _ScalarFields:
+    """Intermediate scalar configuration fields."""
 
-    api_base_url, api_base_url_source = _resolve_api_base_url(
-        options,
-        environment,
-        profile_global,
-        state,
-    )
-    auth_token = _resolve_auth_token(options, environment, profile_global)
+    output: OutputFormat
+    log_level: LogLevel
+    request_timeout_s: float
+    non_interactive: bool
+    dry_run: bool
+
+
+def _resolve_scalar_fields(
+    options: GlobalOptions,
+    environment: typ.Mapping[str, str],
+    profile_global: typ.Mapping[str, object],
+) -> _ScalarFields:
+    """Resolve scalar configuration fields using documented precedence."""
     output = _coerce_output(
         _first_non_none(
             options.output,
@@ -120,16 +117,48 @@ def resolve_cli_config(
         ),
         field="dry_run",
     )
-
-    return ResolvedCliConfig(
-        api_base_url=api_base_url,
-        api_base_url_source=api_base_url_source,
-        auth_token=auth_token,
+    return _ScalarFields(
         output=output,
         log_level=log_level,
         request_timeout_s=request_timeout_s,
         non_interactive=non_interactive,
         dry_run=dry_run,
+    )
+
+
+def resolve_cli_config(
+    options: GlobalOptions,
+    *,
+    env: typ.Mapping[str, str] | None = None,
+    profile_path: Path | None = None,
+    state_path: Path | None = None,
+) -> ResolvedCliConfig:
+    """Resolve the effective CLI configuration using documented precedence."""
+    environment = dict(env or {})
+    profile = _load_profile(profile_path or default_profile_path())
+    state = _load_state(state_path or default_state_path())
+    profile_global = typ.cast(
+        typ.Mapping[str, object], profile.get("global", {})
+    )
+
+    api_base_url, api_base_url_source = _resolve_api_base_url(
+        options,
+        environment,
+        profile_global,
+        state,
+    )
+    auth_token = _resolve_auth_token(options, environment, profile_global)
+    scalars = _resolve_scalar_fields(options, environment, profile_global)
+
+    return ResolvedCliConfig(
+        api_base_url=api_base_url,
+        api_base_url_source=api_base_url_source,
+        auth_token=auth_token,
+        output=scalars.output,
+        log_level=scalars.log_level,
+        request_timeout_s=scalars.request_timeout_s,
+        non_interactive=scalars.non_interactive,
+        dry_run=scalars.dry_run,
     )
 
 
@@ -208,7 +237,7 @@ def _coerce_log_level(value: object) -> LogLevel:
 
 def _coerce_float(value: object, *, field: str) -> float:
     try:
-        return float(value)
+        return float(value)  # type: ignore[arg-type]
     except (TypeError, ValueError) as exc:
         msg = f"{field} must be a float"
         raise ValueError(msg) from exc
