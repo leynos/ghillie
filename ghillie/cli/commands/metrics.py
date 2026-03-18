@@ -55,24 +55,15 @@ def required_metrics(  # noqa: PLR0913
 
 
 @metrics_app.command(name="nice")
-def nice_metrics(  # noqa: PLR0913
+def nice_metrics(
     *,
-    scope: ResourceScope,
-    estate_key: str | None = None,
-    owner: str | None = None,
-    name: str | None = None,
+    target: ResourceTarget,
     window_days: int = 14,
-    include_comments: bool = False,
-    include_commit_counts: bool = False,
-    include_sloc_breakdown: bool = False,
+    opts: NiceMetricsOptions | None = None,
 ) -> str:
     """Return optional MVP metrics when data is available."""
-    target = ResourceTarget(scope=scope, estate_key=estate_key, owner=owner, name=name)
-    opts = NiceMetricsOptions(
-        include_comments=include_comments,
-        include_commit_counts=include_commit_counts,
-        include_sloc_breakdown=include_sloc_breakdown,
-    )
+    if opts is None:
+        opts = NiceMetricsOptions()
     return _api_placeholder(
         "nice",
         scope=target.scope,
