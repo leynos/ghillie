@@ -1,7 +1,5 @@
 """Pytest fixtures for Helm chart testing."""
 
-from __future__ import annotations
-
 import shutil
 from pathlib import Path
 

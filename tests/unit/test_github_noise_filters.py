@@ -1,7 +1,5 @@
 """Unit tests for GitHub ingestion noise filters."""
 
-from __future__ import annotations
-
 import dataclasses as dc
 import datetime as dt
 

@@ -1,7 +1,5 @@
 """Unit tests for project evidence bundle model structures."""
 
-from __future__ import annotations
-
 import collections.abc as cabc
 import datetime as dt
 import typing as typ

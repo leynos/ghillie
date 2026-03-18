@@ -1,7 +1,5 @@
 """Behavioural tests for the catalogue importer."""
 
-from __future__ import annotations
-
 import asyncio
 import typing as typ
 from pathlib import Path

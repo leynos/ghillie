@@ -21,8 +21,6 @@ Or load from environment variables:
 
 """
 
-from __future__ import annotations
-
 import dataclasses as dc
 import os
 from pathlib import Path

@@ -46,8 +46,6 @@ Run via Dramatiq actor from a watcher::
     >>> watcher.tick()  # enqueues import_catalogue_job with the latest commit
 """
 
-from __future__ import annotations
-
 from .importer import (
     CatalogueImporter,
     CatalogueImportResult,

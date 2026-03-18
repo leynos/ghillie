@@ -1,7 +1,5 @@
 """Internal port-parsing utilities for k3d cluster ingress resolution."""
 
-from __future__ import annotations
-
 _MIN_PORT = 1024
 _MAX_PORT = 65535
 

@@ -1,7 +1,5 @@
 """Helpers for capturing femtologging output in tests."""
 
-from __future__ import annotations
-
 import contextlib
 import dataclasses
 import os

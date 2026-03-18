@@ -1,7 +1,5 @@
 """Unit tests for local_k8s Config dataclass."""
 
-from __future__ import annotations
-
 import dataclasses
 import typing as typ
 from pathlib import Path

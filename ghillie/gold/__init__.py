@@ -1,7 +1,5 @@
 """Gold layer primitives: report metadata and coverage tracking."""
 
-from __future__ import annotations
-
 from .storage import (
     Report,
     ReportCoverage,

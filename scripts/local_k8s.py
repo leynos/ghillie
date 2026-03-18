@@ -20,8 +20,6 @@ Environment variables:
     GHILLIE_K3D_PORT      - Host port for ingress (default: auto-selected)
 """
 
-from __future__ import annotations
-
 import functools
 import subprocess
 import sys

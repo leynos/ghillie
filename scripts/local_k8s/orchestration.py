@@ -1,7 +1,5 @@
 """High-level orchestration for CLI commands."""
 
-from __future__ import annotations
-
 import dataclasses as dc
 import subprocess
 import sys

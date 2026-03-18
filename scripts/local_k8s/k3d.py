@@ -41,8 +41,6 @@ All k3d subprocess calls have configurable timeouts to prevent hangs.
 
 """
 
-from __future__ import annotations
-
 import json
 import os
 import subprocess

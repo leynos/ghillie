@@ -19,8 +19,6 @@ For lower-level operations, import directly from submodules:
 
 """
 
-from __future__ import annotations
-
 from .config import Config, HelmOperatorSpec
 from .orchestration import (
     setup_environment,

@@ -1,7 +1,5 @@
 """YAML loaders for catalogue configuration files."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import msgspec

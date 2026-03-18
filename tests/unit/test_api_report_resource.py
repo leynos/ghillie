@@ -8,8 +8,6 @@ Run with pytest::
 
 """
 
-from __future__ import annotations
-
 import dataclasses as dc
 import datetime as dt
 from http import HTTPStatus

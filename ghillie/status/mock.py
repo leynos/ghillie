@@ -1,7 +1,5 @@
 """Mock implementation of StatusModel for testing and development."""
 
-from __future__ import annotations
-
 import typing as typ
 
 from ghillie.evidence.models import (

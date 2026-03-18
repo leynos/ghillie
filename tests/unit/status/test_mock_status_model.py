@@ -35,8 +35,6 @@ Running the tests::
 
 """
 
-from __future__ import annotations
-
 import asyncio
 import datetime as dt
 import typing as typ

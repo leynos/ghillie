@@ -1,7 +1,5 @@
 """Evidence bundle generation for repository status reporting."""
 
-from __future__ import annotations
-
 from .classification import (
     DEFAULT_CLASSIFICATION_CONFIG,
     Classifiable,

@@ -1,7 +1,5 @@
 """Unit tests for Markdown report rendering."""
 
-from __future__ import annotations
-
 import dataclasses as dc
 import datetime as dt
 import typing as typ

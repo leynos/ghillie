@@ -1,7 +1,5 @@
 """Silver staging helpers for transforming Bronze raw events."""
 
-from __future__ import annotations
-
 from .errors import RawEventTransformError
 from .services import RawEventTransformer
 from .storage import (

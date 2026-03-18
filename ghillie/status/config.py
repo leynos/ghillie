@@ -1,7 +1,5 @@
 """Configuration for OpenAI status model client."""
 
-from __future__ import annotations
-
 import dataclasses
 import os
 

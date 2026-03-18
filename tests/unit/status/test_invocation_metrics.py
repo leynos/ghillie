@@ -1,7 +1,5 @@
 """Unit tests for model invocation metrics value object."""
 
-from __future__ import annotations
-
 import dataclasses as dc
 import typing as typ
 
