@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-import typing as typ
-
 from cyclopts import App
 
+from ghillie.cli.commands.params import (
+    ModelBackend,
+    ReportRunOptions,
+    ResourceScope,
+    ResourceTarget,
+)
 from ghillie.cli.context import get_current_context
 from ghillie.cli.control_plane import ControlPlaneClient
 from ghillie.cli.output import render_output
-
-ReportScope = typ.Literal["repository", "estate"]
-ModelBackend = typ.Literal["mock", "openai"]
 
 report_app = App(name="report", help="Trigger and observe reporting runs.")
 
@@ -34,7 +35,7 @@ def _api_placeholder(verb: str, **fields: object) -> str:
 @report_app.command
 def run(  # noqa: PLR0913
     *,
-    scope: ReportScope,
+    scope: ResourceScope,
     estate_key: str | None = None,
     owner: str | None = None,
     name: str | None = None,
@@ -44,16 +45,18 @@ def run(  # noqa: PLR0913
     wait: bool = True,
 ) -> str:
     """Start a scaffolded reporting run."""
+    target = ResourceTarget(scope=scope, estate_key=estate_key, owner=owner, name=name)
+    opts = ReportRunOptions(as_of=as_of, model_backend=model_backend, wait=wait)
     return _api_placeholder(
         "run",
-        scope=scope,
-        estate_key=estate_key or "",
-        owner=owner or "",
-        name=name or "",
+        scope=target.scope,
+        estate_key=target.estate_key or "",
+        owner=target.owner or "",
+        name=target.name or "",
         window_days=window_days,
-        as_of=as_of or "",
-        model_backend=model_backend,
-        wait=wait,
+        as_of=opts.as_of or "",
+        model_backend=opts.model_backend,
+        wait=opts.wait,
     )
 
 

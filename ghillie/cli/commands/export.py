@@ -6,12 +6,16 @@ import typing as typ
 
 from cyclopts import App, Parameter
 
+from ghillie.cli.commands.params import (
+    ExportFormat,
+    ExportSinkOptions,
+    ResourceScope,
+    ResourceTarget,
+    WindowOptions,
+)
 from ghillie.cli.context import get_current_context
 from ghillie.cli.control_plane import ControlPlaneClient
 from ghillie.cli.output import render_output
-
-ExportScope = typ.Literal["repository", "estate"]
-ExportFormat = typ.Literal["json", "jsonl", "csv"]
 
 export_app = App(name="export", help="Export structured MVP data artefacts.")
 
@@ -31,37 +35,31 @@ def _api_placeholder(verb: str, **fields: object) -> str:
         )
 
 
-def _export_command(  # noqa: PLR0913
+def _export_command(
     kind: str,
     *,
-    scope: ExportScope,
-    estate_key: str | None = None,
-    owner: str | None = None,
-    name: str | None = None,
-    window_days: int | None = 14,
-    window_start: str | None = None,
-    window_end: str | None = None,
-    export_format: typ.Annotated[ExportFormat, Parameter(name="--format")] = "json",
-    output_path: str,
+    target: ResourceTarget,
+    window: WindowOptions,
+    sink: ExportSinkOptions,
 ) -> str:
     return _api_placeholder(
         kind,
-        scope=scope,
-        estate_key=estate_key or "",
-        owner=owner or "",
-        name=name or "",
-        window_days=window_days if window_days is not None else "",
-        window_start=window_start or "",
-        window_end=window_end or "",
-        format=export_format,
-        output_path=output_path,
+        scope=target.scope,
+        estate_key=target.estate_key or "",
+        owner=target.owner or "",
+        name=target.name or "",
+        window_days=window.window_days if window.window_days is not None else "",
+        window_start=window.window_start or "",
+        window_end=window.window_end or "",
+        format=sink.export_format,
+        output_path=sink.output_path,
     )
 
 
 @export_app.command
 def events(  # noqa: PLR0913
     *,
-    scope: ExportScope,
+    scope: ResourceScope,
     estate_key: str | None = None,
     owner: str | None = None,
     name: str | None = None,
@@ -72,24 +70,18 @@ def events(  # noqa: PLR0913
     output_path: str,
 ) -> str:
     """Export Bronze and Silver event data."""
-    return _export_command(
-        "events",
-        scope=scope,
-        estate_key=estate_key,
-        owner=owner,
-        name=name,
-        window_days=window_days,
-        window_start=window_start,
-        window_end=window_end,
-        export_format=export_format,
-        output_path=output_path,
+    target = ResourceTarget(scope=scope, estate_key=estate_key, owner=owner, name=name)
+    window = WindowOptions(
+        window_days=window_days, window_start=window_start, window_end=window_end
     )
+    sink = ExportSinkOptions(export_format=export_format, output_path=output_path)
+    return _export_command("events", target=target, window=window, sink=sink)
 
 
 @export_app.command
 def evidence(  # noqa: PLR0913
     *,
-    scope: ExportScope,
+    scope: ResourceScope,
     estate_key: str | None = None,
     owner: str | None = None,
     name: str | None = None,
@@ -101,17 +93,22 @@ def evidence(  # noqa: PLR0913
     include_previous_reports: bool = False,
 ) -> str:
     """Export derived evidence bundles."""
+    target = ResourceTarget(scope=scope, estate_key=estate_key, owner=owner, name=name)
+    window = WindowOptions(
+        window_days=window_days, window_start=window_start, window_end=window_end
+    )
+    sink = ExportSinkOptions(export_format=export_format, output_path=output_path)
     return _api_placeholder(
         "evidence",
-        scope=scope,
-        estate_key=estate_key or "",
-        owner=owner or "",
-        name=name or "",
-        window_days=window_days if window_days is not None else "",
-        window_start=window_start or "",
-        window_end=window_end or "",
-        format=export_format,
-        output_path=output_path,
+        scope=target.scope,
+        estate_key=target.estate_key or "",
+        owner=target.owner or "",
+        name=target.name or "",
+        window_days=window.window_days if window.window_days is not None else "",
+        window_start=window.window_start or "",
+        window_end=window.window_end or "",
+        format=sink.export_format,
+        output_path=sink.output_path,
         include_previous_reports=include_previous_reports,
     )
 
@@ -119,7 +116,7 @@ def evidence(  # noqa: PLR0913
 @export_app.command
 def reports(  # noqa: PLR0913
     *,
-    scope: ExportScope,
+    scope: ResourceScope,
     estate_key: str | None = None,
     owner: str | None = None,
     name: str | None = None,
@@ -131,17 +128,22 @@ def reports(  # noqa: PLR0913
     include_coverage: bool = False,
 ) -> str:
     """Export report metadata and lineage."""
+    target = ResourceTarget(scope=scope, estate_key=estate_key, owner=owner, name=name)
+    window = WindowOptions(
+        window_days=window_days, window_start=window_start, window_end=window_end
+    )
+    sink = ExportSinkOptions(export_format=export_format, output_path=output_path)
     return _api_placeholder(
         "reports",
-        scope=scope,
-        estate_key=estate_key or "",
-        owner=owner or "",
-        name=name or "",
-        window_days=window_days if window_days is not None else "",
-        window_start=window_start or "",
-        window_end=window_end or "",
-        format=export_format,
-        output_path=output_path,
+        scope=target.scope,
+        estate_key=target.estate_key or "",
+        owner=target.owner or "",
+        name=target.name or "",
+        window_days=window.window_days if window.window_days is not None else "",
+        window_start=window.window_start or "",
+        window_end=window.window_end or "",
+        format=sink.export_format,
+        output_path=sink.output_path,
         include_coverage=include_coverage,
     )
 
@@ -149,7 +151,7 @@ def reports(  # noqa: PLR0913
 @export_app.command
 def bundle(  # noqa: PLR0913
     *,
-    scope: ExportScope,
+    scope: ResourceScope,
     estate_key: str | None = None,
     owner: str | None = None,
     name: str | None = None,
@@ -160,13 +162,15 @@ def bundle(  # noqa: PLR0913
     output_path: str,
 ) -> str:
     """Export a combined bundle artefact."""
+    target = ResourceTarget(scope=scope, estate_key=estate_key, owner=owner, name=name)
+    sink = ExportSinkOptions(export_format=export_format, output_path=output_path)
     return _api_placeholder(
         "bundle",
-        scope=scope,
-        estate_key=estate_key or "",
-        owner=owner or "",
-        name=name or "",
+        scope=target.scope,
+        estate_key=target.estate_key or "",
+        owner=target.owner or "",
+        name=target.name or "",
         window_days=window_days,
-        format=export_format,
-        output_path=output_path,
+        format=sink.export_format,
+        output_path=sink.output_path,
     )

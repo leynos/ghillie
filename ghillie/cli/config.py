@@ -137,9 +137,7 @@ def resolve_cli_config(
     environment = dict(env or {})
     profile = _load_profile(profile_path or default_profile_path())
     state = _load_state(state_path or default_state_path())
-    profile_global = typ.cast(
-        typ.Mapping[str, object], profile.get("global", {})
-    )
+    profile_global = typ.cast("typ.Mapping[str, object]", profile.get("global", {}))
 
     api_base_url, api_base_url_source = _resolve_api_base_url(
         options,

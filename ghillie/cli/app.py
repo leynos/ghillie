@@ -44,6 +44,43 @@ app.command(report_app)
 app.command(metrics_app)
 
 
+def _consume_value_option(
+    token: str, argv: list[str], index: int, state: dict[str, object]
+) -> int:
+    """Handle a ``--flag VALUE`` pair.
+
+    Returns the advanced index (``index + 2``) if matched, or *index* if the
+    token is not a recognised value-bearing option.
+    Raises ``ValueError`` when the flag appears at the end of *argv*.
+    """
+    if token not in _OPTION_REQUIRES_VALUE:
+        return index
+    field_name = _OPTION_REQUIRES_VALUE[token]
+    next_index = index + 1
+    if next_index >= len(argv):
+        msg = f"{token} requires a value"
+        raise ValueError(msg)
+    _apply_valued_option(field_name, argv[next_index], state)
+    return index + 2
+
+
+def _consume_inline_option(token: str, state: dict[str, object]) -> bool:
+    """Handle a ``--flag=VALUE`` token.
+
+    Returns ``True`` if the token was consumed, ``False`` otherwise —
+    including when the flag name is not in ``_OPTION_REQUIRES_VALUE``.
+    """
+    parsed = _split_option_with_value(token)
+    if parsed is None:
+        return False
+    option_name, option_value = parsed
+    field_name = _OPTION_REQUIRES_VALUE.get(option_name)
+    if field_name is None:
+        return False
+    _apply_valued_option(field_name, option_value, state)
+    return True
+
+
 def parse_global_options(
     argv: list[str],
 ) -> tuple[GlobalOptions, list[str]]:
@@ -57,26 +94,14 @@ def parse_global_options(
         "non_interactive": None,
         "dry_run": None,
     }
-    remaining: list[str] = []
     index = 0
     while index < len(argv):
         token = argv[index]
-        if token in _OPTION_REQUIRES_VALUE:
-            field_name = _OPTION_REQUIRES_VALUE[token]
-            next_index = index + 1
-            if next_index >= len(argv):
-                msg = f"{token} requires a value"
-                raise ValueError(msg)
-            _apply_valued_option(field_name, argv[next_index], state)
-            index += 2
+        new_index = _consume_value_option(token, argv, index, state)
+        if new_index != index:
+            index = new_index
             continue
-        if option_with_value := _split_option_with_value(token):
-            option_name, option_value = option_with_value
-            field_name = _OPTION_REQUIRES_VALUE.get(option_name)
-            if field_name is None:
-                remaining = argv[index:]
-                break
-            _apply_valued_option(field_name, option_value, state)
+        if _consume_inline_option(token, state):
             index += 1
             continue
         if token in _BOOLEAN_OPTION_VALUES:
@@ -84,12 +109,9 @@ def parse_global_options(
             state[field_name] = field_value
             index += 1
             continue
-        remaining = argv[index:]
-        break
-    else:
-        remaining = []
+        return GlobalOptions(**state), argv[index:]  # type: ignore[arg-type]
 
-    return GlobalOptions(**state), remaining  # type: ignore[arg-type]
+    return GlobalOptions(**state), []  # type: ignore[arg-type]
 
 
 def main(argv: list[str] | None = None) -> int:

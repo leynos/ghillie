@@ -6,14 +6,18 @@ import typing as typ
 
 from cyclopts import App, Parameter
 
+from ghillie.cli.commands.params import (
+    ClusterOptions,
+    ModelBackend,
+    ProviderOptions,
+    RuntimeBackend,
+    StackProfile,
+    StackRunOptions,
+)
 from ghillie.cli.context import get_current_context
 from ghillie.cli.control_plane import ControlPlaneClient
 from ghillie.cli.output import render_output
 from ghillie.cli.runtime_adapters import select_runtime_adapter
-
-StackProfile = typ.Literal["api-only", "ingestion-worker", "reporting-worker"]
-ModelBackend = typ.Literal["mock", "openai"]
-RuntimeBackend = typ.Literal["cuprum", "python-api"]
 
 stack_app = App(name="stack", help="Manage the local MVP stack lifecycle.")
 
@@ -39,7 +43,24 @@ def up(  # noqa: PLR0913
 ) -> str:
     """Start the local stack scaffold without executing real integrations."""
     context = get_current_context()
-    adapter = select_runtime_adapter(backend)
+    run_opts = StackRunOptions(
+        profile=profile,
+        backend=backend,
+        background_workers=background_workers,
+        wait=wait,
+    )
+    cluster = ClusterOptions(
+        cluster_name=cluster_name,
+        namespace=namespace,
+        ingress_port=ingress_port,
+        image=image,
+    )
+    provider = ProviderOptions(
+        provider_github_token_env=provider_github_token_env,
+        provider_model_backend=provider_model_backend,
+        provider_openai_key_env=provider_openai_key_env,
+    )
+    adapter = select_runtime_adapter(run_opts.backend)
     return render_output(
         {
             "noun": "stack",
@@ -47,16 +68,16 @@ def up(  # noqa: PLR0913
             "status": "not_implemented",
             "message": "not implemented in Task 2.5.a",
             "backend": adapter.name,
-            "profile": profile,
-            "cluster_name": cluster_name,
-            "namespace": namespace,
-            "ingress_port": ingress_port or "auto",
-            "image": image,
-            "provider_github_token_env": provider_github_token_env,
-            "provider_model_backend": provider_model_backend,
-            "provider_openai_key_env": provider_openai_key_env,
-            "background_workers": background_workers,
-            "wait": wait,
+            "profile": run_opts.profile,
+            "cluster_name": cluster.cluster_name,
+            "namespace": cluster.namespace,
+            "ingress_port": cluster.ingress_port or "auto",
+            "image": cluster.image,
+            "provider_github_token_env": provider.provider_github_token_env,
+            "provider_model_backend": provider.provider_model_backend,
+            "provider_openai_key_env": provider.provider_openai_key_env,
+            "background_workers": run_opts.background_workers,
+            "wait": run_opts.wait,
             "dry_run": context.config.dry_run,
         },
         output=context.config.output,
