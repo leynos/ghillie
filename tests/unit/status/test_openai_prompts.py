@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
 
 import pytest
 
@@ -219,8 +220,6 @@ class TestBuildUserPrompt:
         self, repository_metadata: RepositoryMetadata
     ) -> None:
         """User prompt includes activity counts."""
-        import re
-
         evidence = RepositoryEvidenceBundle(
             repository=repository_metadata,
             window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),

@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import typing as typ
-from string import templatelib
+from string.templatelib import Interpolation, Template, convert
 
 if typ.TYPE_CHECKING:
     from ghillie.evidence.models import RepositoryEvidenceBundle
 
-TemplateLike = str | templatelib.Template
+type TemplateLike = str | Template
 
 SYSTEM_PROMPT = """\
 You are a technical status reporter for software repositories. Your role is to \
@@ -71,13 +71,13 @@ def _render_template(template: TemplateLike) -> str:
         if isinstance(item, str):
             rendered_parts.append(item)
             continue
-        if not isinstance(item, templatelib.Interpolation):
+        if not isinstance(item, Interpolation):
             msg = (
-                "Expected template segment to be str or templatelib.Interpolation, "
+                "Expected template segment to be str or Interpolation, "
                 f"got {type(item).__name__}"
             )
             raise TypeError(msg)
-        converted_value = templatelib.convert(item.value, item.conversion)
+        converted_value = convert(item.value, item.conversion)
         rendered_parts.append(format(converted_value, item.format_spec))
     return "".join(rendered_parts)
 
