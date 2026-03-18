@@ -334,7 +334,7 @@ class OpenAIStatusModel:
     ) -> ModelInvocationMetrics:
         """Extract token usage metrics from the API response payload."""
         if not _is_object_dict(data):
-            raise OpenAIResponseShapeError.missing("data")
+            return ModelInvocationMetrics()
         usage = data.get("usage")
         if not _is_object_dict(usage):
             return ModelInvocationMetrics()
@@ -344,6 +344,36 @@ class OpenAIStatusModel:
             completion_tokens=_to_int_or_none(usage.get("completion_tokens")),
             total_tokens=_to_int_or_none(usage.get("total_tokens")),
         )
+
+    def _extract_first_choice(self, data: object) -> dict[str, object]:
+        """Validate and return the first choice dict from parsed response data.
+
+        Parameters
+        ----------
+        data
+            Parsed JSON response from the API.
+
+        Returns
+        -------
+        dict[str, object]
+            The first element of the ``choices`` list.
+
+        Raises
+        ------
+        OpenAIResponseShapeError
+            If ``data`` is not a string-keyed dict, ``choices`` is absent or
+            empty, or the first choice is not a string-keyed dict.
+
+        """
+        if not _is_object_dict(data):
+            raise OpenAIResponseShapeError.missing("data")
+        choices = data.get("choices")
+        if not isinstance(choices, list) or not choices:
+            raise OpenAIResponseShapeError.missing("choices")
+        first_choice = choices[0]
+        if not _is_object_dict(first_choice):
+            raise OpenAIResponseShapeError.missing("choices[0]")
+        return first_choice
 
     def _extract_content(self, data: JSONLike) -> str:
         """Extract assistant message content from API response.
@@ -364,20 +394,10 @@ class OpenAIStatusModel:
             If the response is missing expected fields.
 
         """
-        if not _is_object_dict(data):
-            raise OpenAIResponseShapeError.missing("data")
-        choices = data.get("choices")
-        if not isinstance(choices, list) or not choices:
-            raise OpenAIResponseShapeError.missing("choices")
-
-        first_choice = choices[0]
-        if not _is_object_dict(first_choice):
-            raise OpenAIResponseShapeError.missing("choices[0]")
-
+        first_choice = self._extract_first_choice(data)
         content = _get_nested(first_choice, "message", "content")
         if not isinstance(content, str):
             raise OpenAIResponseShapeError.missing("choices[0].message.content")
-
         return content
 
     def _parse_response(self, content: str) -> LLMStatusResponse:
