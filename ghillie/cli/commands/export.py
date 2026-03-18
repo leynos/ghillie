@@ -57,24 +57,17 @@ def _export_command(
 
 
 @export_app.command
-def events(  # noqa: PLR0913
+def events(
     *,
-    scope: ResourceScope,
-    estate_key: str | None = None,
-    owner: str | None = None,
-    name: str | None = None,
-    window_days: int | None = 14,
-    window_start: str | None = None,
-    window_end: str | None = None,
-    export_format: typ.Annotated[ExportFormat, Parameter(name="--format")] = "json",
-    output_path: str,
+    target: ResourceTarget,
+    window: WindowOptions | None = None,
+    sink: ExportSinkOptions | None = None,
 ) -> str:
     """Export Bronze and Silver event data."""
-    target = ResourceTarget(scope=scope, estate_key=estate_key, owner=owner, name=name)
-    window = WindowOptions(
-        window_days=window_days, window_start=window_start, window_end=window_end
-    )
-    sink = ExportSinkOptions(export_format=export_format, output_path=output_path)
+    if window is None:
+        window = WindowOptions()
+    if sink is None:
+        sink = ExportSinkOptions()
     return _export_command("events", target=target, window=window, sink=sink)
 
 

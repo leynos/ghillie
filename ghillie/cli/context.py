@@ -34,7 +34,7 @@ def get_current_context() -> CommandContext:
 @contextlib.contextmanager
 def use_context(
     context: CommandContext,
-) -> typ.Generator[CommandContext, None, None]:
+) -> typ.Generator[CommandContext]:
     """Temporarily set the current command context."""
     token = _CURRENT_CONTEXT.set(context)
     try:
