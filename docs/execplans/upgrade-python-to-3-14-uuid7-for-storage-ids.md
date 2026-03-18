@@ -79,7 +79,7 @@ Success is observable when:
 
 - (2026-03-08 14:18Z) The shell `python` on the host is 3.12.3, but `uv run`
   resolves CPython 3.14.3 for this project. That means the repository can use
-  `uuid.uuid7()` directly in commit gates even though the host interpreter is
+  `uuid.uuid7()` directly in commit gates, even though the host interpreter is
   older.
 - (2026-03-08 14:18Z) SQLAlchemy stores column defaults as context-callable
   wrappers, so tests must invoke `ColumnDefault.arg(None)` when checking
