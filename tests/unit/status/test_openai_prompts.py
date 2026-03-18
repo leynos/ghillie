@@ -1,6 +1,7 @@
 """Unit tests for OpenAI prompt templates."""
 
 import datetime as dt
+import re
 
 import pytest
 
@@ -17,6 +18,41 @@ from ghillie.evidence.models import (
     WorkTypeGrouping,
 )
 from ghillie.status.prompts import SYSTEM_PROMPT, build_user_prompt
+
+EXPECTED_REPRESENTATIVE_PROMPT = (
+    "# Repository Status Report: octo/reef\n"
+    "\n"
+    "Reporting window: 2024-07-08T00:00:00+00:00 to "
+    "2024-07-15T00:00:00+00:00\n"
+    "\n"
+    "## Previous Reports\n"
+    "\n"
+    "### Report from 2024-07-01 to 2024-07-08\n"
+    "- Status: at_risk\n"
+    "- Highlights: Delivered API v2, Reduced queue lag\n"
+    "- Risks: Database migration incomplete\n"
+    "\n"
+    "## Activity Summary\n"
+    "- Commits: 1\n"
+    "- Pull requests: 1\n"
+    "- Issues: 1\n"
+    "- Documentation changes: 1\n"
+    "\n"
+    "## Work Type Breakdown\n"
+    "- feature: 2 items\n"
+    "  - Add dashboard\n"
+    "  - Ship chart export\n"
+    "\n"
+    "## Pull Requests\n"
+    "- #42: Add new dashboard feature [merged]\n"
+    "\n"
+    "## Issues\n"
+    "- #10: Performance regression in search [open]\n"
+    "\n"
+    "## Instructions\n"
+    "Analyze the above evidence and respond with a JSON status report "
+    "following the schema in the system prompt."
+)
 
 
 class TestSystemPrompt:
@@ -68,6 +104,62 @@ class TestBuildUserPrompt:
             window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
         )
 
+    @pytest.fixture
+    def representative_evidence(
+        self, repository_metadata: RepositoryMetadata
+    ) -> RepositoryEvidenceBundle:
+        """Provide representative evidence bundle."""
+        return RepositoryEvidenceBundle(
+            repository=repository_metadata,
+            window_start=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+            window_end=dt.datetime(2024, 7, 15, tzinfo=dt.UTC),
+            commits=(CommitEvidence(sha="abc123", message="feat: add feature"),),
+            pull_requests=(
+                PullRequestEvidence(
+                    id=101,
+                    number=42,
+                    title="Add new dashboard feature",
+                    state="merged",
+                ),
+            ),
+            issues=(
+                IssueEvidence(
+                    id=201,
+                    number=10,
+                    title="Performance regression in search",
+                    state="open",
+                ),
+            ),
+            documentation_changes=(
+                DocumentationEvidence(
+                    path="docs/usage.md",
+                    change_type="modified",
+                    commit_sha="abc123",
+                    occurred_at=dt.datetime(2024, 7, 9, tzinfo=dt.UTC),
+                ),
+            ),
+            previous_reports=(
+                PreviousReportSummary(
+                    report_id="prev-1",
+                    window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                    window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+                    status=ReportStatus.AT_RISK,
+                    highlights=("Delivered API v2", "Reduced queue lag"),
+                    risks=("Database migration incomplete",),
+                    event_count=10,
+                ),
+            ),
+            work_type_groupings=(
+                WorkTypeGrouping(
+                    work_type=WorkType.FEATURE,
+                    commit_count=1,
+                    pr_count=1,
+                    issue_count=0,
+                    sample_titles=("Add dashboard", "Ship chart export"),
+                ),
+            ),
+        )
+
     def test_includes_repository_slug(
         self, minimal_evidence: RepositoryEvidenceBundle
     ) -> None:
@@ -83,12 +175,49 @@ class TestBuildUserPrompt:
         assert "2024-07-01" in prompt
         assert "2024-07-08" in prompt
 
+    def test_renders_template_string_to_plain_text(self) -> None:
+        """Prompt rendering resolves template fragments to plain text."""
+        evidence = RepositoryEvidenceBundle(
+            repository=RepositoryMetadata(
+                id="repo-123",
+                owner="octo",
+                name="reef",
+                default_branch="main",
+                estate_id="wildside",
+            ),
+            window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+            window_end=dt.datetime(2024, 7, 8, tzinfo=dt.UTC),
+            previous_reports=(
+                PreviousReportSummary(
+                    report_id="prev-1",
+                    window_start=dt.datetime(2024, 6, 24, tzinfo=dt.UTC),
+                    window_end=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
+                    status=ReportStatus.ON_TRACK,
+                    highlights=("Kept {{raw}} formatting stable",),
+                    risks=(),
+                    event_count=3,
+                ),
+            ),
+        )
+
+        rendered = build_user_prompt(evidence)
+
+        assert "octo/reef" in rendered
+        assert "{evidence.repository.slug}" not in rendered
+        assert "{prev.window_start" not in rendered
+
+    def test_preserves_exact_prompt_output_for_representative_bundle(
+        self, representative_evidence: RepositoryEvidenceBundle
+    ) -> None:
+        """Representative prompt output remains byte-for-byte stable."""
+        assert (
+            build_user_prompt(representative_evidence) == EXPECTED_REPRESENTATIVE_PROMPT
+        )
+
     def test_includes_activity_summary(
         self, repository_metadata: RepositoryMetadata
     ) -> None:
         """User prompt includes activity counts."""
-        import re
-
         evidence = RepositoryEvidenceBundle(
             repository=repository_metadata,
             window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
