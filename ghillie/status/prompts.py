@@ -10,6 +10,15 @@ if typ.TYPE_CHECKING:
 
 type TemplateLike = str | Template
 
+
+class _NumberedItem(typ.Protocol):
+    """Structural type for evidence items with a number, title and state."""
+
+    number: int
+    title: str
+    state: str
+
+
 SYSTEM_PROMPT = """\
 You are a technical status reporter for software repositories. Your role is to \
 analyze repository activity evidence and produce concise, accurate status reports.
@@ -123,29 +132,31 @@ def _format_work_type_breakdown(
     return sections
 
 
-def _format_pull_requests(evidence: RepositoryEvidenceBundle) -> list[TemplateLike]:
-    """Format pull requests section."""
-    if not evidence.pull_requests:
+def _format_numbered_items(
+    heading: str,
+    items: typ.Sequence[_NumberedItem],
+    *,
+    limit: int = 10,
+) -> list[TemplateLike]:
+    """Format a section of numbered items (pull requests or issues)."""
+    if not items:
         return []
 
-    sections: list[TemplateLike] = ["", "## Pull Requests"]
+    sections: list[TemplateLike] = ["", heading]
     sections.extend(
-        t"- #{pr.number}: {pr.title} [{pr.state}]" for pr in evidence.pull_requests[:10]
+        t"- #{item.number}: {item.title} [{item.state}]" for item in items[:limit]
     )
     return sections
+
+
+def _format_pull_requests(evidence: RepositoryEvidenceBundle) -> list[TemplateLike]:
+    """Format pull requests section."""
+    return _format_numbered_items("## Pull Requests", evidence.pull_requests)
 
 
 def _format_issues(evidence: RepositoryEvidenceBundle) -> list[TemplateLike]:
     """Format issues section."""
-    if not evidence.issues:
-        return []
-
-    sections: list[TemplateLike] = ["", "## Issues"]
-    sections.extend(
-        t"- #{issue.number}: {issue.title} [{issue.state}]"
-        for issue in evidence.issues[:10]
-    )
-    return sections
+    return _format_numbered_items("## Issues", evidence.issues)
 
 
 def build_user_prompt(evidence: RepositoryEvidenceBundle) -> str:
