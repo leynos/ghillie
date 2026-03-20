@@ -413,9 +413,9 @@ class TestOpenAIInvocationMetrics:
             (None, _ExpectedMetrics(None, None, None)),
             (
                 {
-                    "prompt_tokens": "100",
+                    "prompt_tokens": True,
                     "completion_tokens": 50.0,
-                    "total_tokens": "150.0",
+                    "total_tokens": False,
                 },
                 _ExpectedMetrics(None, None, None),
             ),

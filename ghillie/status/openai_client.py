@@ -34,6 +34,8 @@ def _is_object_dict(value: object) -> typ.TypeIs[dict[str, object]]:
 
 def _to_int_or_none(value: object) -> int | None:
     """Return ``int`` for integer values, else ``None``."""
+    if isinstance(value, bool):
+        return None
     if isinstance(value, int):
         return value
     return None
