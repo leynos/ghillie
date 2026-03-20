@@ -346,27 +346,9 @@ class OpenAIStatusModel:
         )
 
     def _extract_first_choice(self, data: object) -> dict[str, object]:
-        """Validate and return the first choice dict from parsed response data.
-
-        Parameters
-        ----------
-        data
-            Parsed JSON response from the API.
-
-        Returns
-        -------
-        dict[str, object]
-            The first element of the ``choices`` list.
-
-        Raises
-        ------
-        OpenAIResponseShapeError
-            If ``data`` is not a string-keyed dict, ``choices`` is absent or
-            empty, or the first choice is not a string-keyed dict.
-
-        """
+        """Return the first choice dict or raise on invalid response shape."""
         if not _is_object_dict(data):
-            raise OpenAIResponseShapeError.missing("data")
+            raise OpenAIResponseShapeError.missing("choices")
         choices = data.get("choices")
         if not isinstance(choices, list) or not choices:
             raise OpenAIResponseShapeError.missing("choices")
@@ -376,24 +358,7 @@ class OpenAIStatusModel:
         return first_choice
 
     def _extract_content(self, data: JSONLike) -> str:
-        """Extract assistant message content from API response.
-
-        Parameters
-        ----------
-        data
-            Parsed JSON response from the API.
-
-        Returns
-        -------
-        str
-            Content string from the assistant message.
-
-        Raises
-        ------
-        OpenAIResponseShapeError
-            If the response is missing expected fields.
-
-        """
+        """Extract and return content from a choice dict or raise on invalid shape."""
         first_choice = self._extract_first_choice(data)
         content = _get_nested(first_choice, "message", "content")
         if not isinstance(content, str):
