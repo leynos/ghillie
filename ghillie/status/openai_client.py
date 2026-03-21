@@ -27,8 +27,15 @@ _HTTP_ERROR_STATUS_THRESHOLD = int(HTTPStatus.BAD_REQUEST)
 _HTTP_RATE_LIMITED = int(HTTPStatus.TOO_MANY_REQUESTS)
 
 
+def _is_object_dict(value: object) -> typ.TypeIs[dict[str, object]]:
+    """Return ``True`` when ``value`` is a dict with string keys."""
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
 def _to_int_or_none(value: object) -> int | None:
     """Return ``int`` for integer values, else ``None``."""
+    if isinstance(value, bool):
+        return None
     if isinstance(value, int):
         return value
     return None
@@ -42,14 +49,13 @@ def _get_retry_after(response: httpx.Response) -> int | None:
     return None
 
 
-def _get_nested(data: JSONLike, *keys: str) -> object:
+def _get_nested(data: JSONLike, *keys: str) -> object | None:
     """Traverse nested dict path, returning None for missing keys."""
     current: object = data
     for key in keys:
-        if not isinstance(current, dict):
+        if not _is_object_dict(current):
             return None
-        current_dict = typ.cast("dict[str, object]", current)
-        current = current_dict.get(key)
+        current = current.get(key)
     return current
 
 
@@ -329,49 +335,36 @@ class OpenAIStatusModel:
         data: JSONLike,
     ) -> ModelInvocationMetrics:
         """Extract token usage metrics from the API response payload."""
+        if not _is_object_dict(data):
+            return ModelInvocationMetrics()
         usage = data.get("usage")
-        if not isinstance(usage, dict):
+        if not _is_object_dict(usage):
             return ModelInvocationMetrics()
 
-        usage_dict = typ.cast("JSONLike", usage)
         return ModelInvocationMetrics(
-            prompt_tokens=_to_int_or_none(usage_dict.get("prompt_tokens")),
-            completion_tokens=_to_int_or_none(usage_dict.get("completion_tokens")),
-            total_tokens=_to_int_or_none(usage_dict.get("total_tokens")),
+            prompt_tokens=_to_int_or_none(usage.get("prompt_tokens")),
+            completion_tokens=_to_int_or_none(usage.get("completion_tokens")),
+            total_tokens=_to_int_or_none(usage.get("total_tokens")),
         )
 
-    def _extract_content(self, data: JSONLike) -> str:
-        """Extract assistant message content from API response.
-
-        Parameters
-        ----------
-        data
-            Parsed JSON response from the API.
-
-        Returns
-        -------
-        str
-            Content string from the assistant message.
-
-        Raises
-        ------
-        OpenAIResponseShapeError
-            If the response is missing expected fields.
-
-        """
+    def _extract_first_choice(self, data: object) -> dict[str, object]:
+        """Return the first choice dict or raise on invalid response shape."""
+        if not _is_object_dict(data):
+            raise OpenAIResponseShapeError.missing("choices")
         choices = data.get("choices")
         if not isinstance(choices, list) or not choices:
             raise OpenAIResponseShapeError.missing("choices")
-
         first_choice = choices[0]
-        if not isinstance(first_choice, dict):
+        if not _is_object_dict(first_choice):
             raise OpenAIResponseShapeError.missing("choices[0]")
+        return first_choice
 
-        first_choice_dict = typ.cast("JSONLike", first_choice)
-        content = _get_nested(first_choice_dict, "message", "content")
+    def _extract_content(self, data: JSONLike) -> str:
+        """Extract and return content from a choice dict or raise on invalid shape."""
+        first_choice = self._extract_first_choice(data)
+        content = _get_nested(first_choice, "message", "content")
         if not isinstance(content, str):
             raise OpenAIResponseShapeError.missing("choices[0].message.content")
-
         return content
 
     def _parse_response(self, content: str) -> LLMStatusResponse:
