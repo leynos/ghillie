@@ -254,7 +254,11 @@ class TestOpenAIResponseExtraction:
             ],
         }
         content = model._extract_content(response_data)
-        assert content == '{"status": "on_track", "summary": "Test"}'
+        expected_content = '{"status": "on_track", "summary": "Test"}'
+        assert content == expected_content, (
+            f"unexpected content from _extract_content: "
+            f"expected {expected_content!r}, got {content!r}"
+        )
 
     @pytest.mark.parametrize(
         ("response_data", "expected_message"),
