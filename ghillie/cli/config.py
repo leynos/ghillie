@@ -137,7 +137,12 @@ def resolve_cli_config(
     environment = dict(env or {})
     profile = _load_profile(profile_path or default_profile_path())
     state = _load_state(state_path or default_state_path())
-    profile_global = typ.cast("typ.Mapping[str, object]", profile.get("global", {}))
+    global_section = profile.get("global", {})
+    if not isinstance(global_section, dict):
+        type_name = type(global_section).__name__
+        msg = f"[global] section in profile must be a table, found {type_name}"
+        raise TypeError(msg)
+    profile_global = typ.cast("typ.Mapping[str, object]", global_section)
 
     api_base_url, api_base_url_source = _resolve_api_base_url(
         options,
@@ -206,7 +211,12 @@ def _load_profile(path: Path) -> dict[str, object]:
 def _load_state(path: Path) -> dict[str, object]:
     if not path.exists():
         return {}
-    return json.loads(path.read_text(encoding="utf-8"))
+    content = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(content, dict):
+        type_name = type(content).__name__
+        msg = f"state.json must contain a JSON object, found {type_name}"
+        raise TypeError(msg)
+    return content
 
 
 def _validate_api_base_url(value: str) -> str:

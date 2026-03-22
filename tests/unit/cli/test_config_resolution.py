@@ -241,3 +241,36 @@ auth_token_env = "PROFILE_TOKEN"
     )
 
     assert config.auth_token == "flag-token"  # noqa: S105
+
+
+def test_config_rejects_non_object_state_json(tmp_path: Path) -> None:
+    """Non-object state.json should raise TypeError instead of crashing."""
+    profile_path = tmp_path / "cli.toml"
+    state_path = tmp_path / "state.json"
+    state_path.write_text("[]", encoding="utf-8")
+
+    with pytest.raises(TypeError, match=r"state\.json must contain a JSON object"):
+        resolve_cli_config(
+            GlobalOptions(),
+            env={},
+            profile_path=profile_path,
+            state_path=state_path,
+        )
+
+
+def test_config_rejects_non_table_global_section(tmp_path: Path) -> None:
+    """Non-table [global] section should raise TypeError instead of crashing."""
+    profile_path = tmp_path / "cli.toml"
+    state_path = tmp_path / "state.json"
+    profile_path.write_text(
+        'global = "oops"\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(TypeError, match=r"\[global\] section.*must be a table"):
+        resolve_cli_config(
+            GlobalOptions(),
+            env={},
+            profile_path=profile_path,
+            state_path=state_path,
+        )

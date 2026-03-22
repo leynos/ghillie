@@ -120,7 +120,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         global_options, remaining = parse_global_options(tokens)
         config = resolve_cli_config(global_options, env=os.environ)
-    except ValueError as exc:
+    except (ValueError, TypeError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
 
