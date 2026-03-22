@@ -55,7 +55,7 @@ def _get_nested(data: JSONLike, *keys: str) -> object | None:
     for key in keys:
         if not _is_object_dict(current):
             return None
-        current = current.get(key)
+        current = typ.cast("dict[str, object]", current).get(key)
     return current
 
 

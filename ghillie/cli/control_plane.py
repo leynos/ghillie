@@ -11,7 +11,14 @@ if typ.TYPE_CHECKING:
 
 
 class ControlPlaneClient:
-    """Thin `httpx` wrapper configured from resolved CLI settings."""
+    """Thin `httpx` wrapper configured from resolved CLI settings.
+
+    Note:
+        When a custom ``http_client`` is provided, it is used directly and
+        must include the necessary ``User-Agent`` and ``Authorization`` headers.
+        Callers are responsible for ensuring custom clients are properly configured.
+
+    """
 
     def __init__(
         self,
@@ -19,7 +26,18 @@ class ControlPlaneClient:
         *,
         http_client: httpx.Client | None = None,
     ) -> None:
-        """Build a control-plane client from resolved CLI configuration."""
+        """Build a control-plane client from resolved CLI configuration.
+
+        Parameters
+        ----------
+        config
+            Resolved CLI configuration containing API URL, timeout, and auth.
+        http_client
+            Optional pre-configured httpx.Client. If provided, it must already
+            include appropriate ``User-Agent`` and ``Authorization`` headers.
+            If not provided, a new client will be created with these headers.
+
+        """
         self._owns_client = http_client is None
         self._http_client = http_client or httpx.Client(
             base_url=config.api_base_url,

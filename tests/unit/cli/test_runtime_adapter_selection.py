@@ -13,15 +13,21 @@ from ghillie.cli.runtime_adapters import (
 
 def test_select_runtime_adapter_accepts_cuprum() -> None:
     """The documented `cuprum` backend should resolve successfully."""
-    assert isinstance(select_runtime_adapter("cuprum"), CuprumRuntimeAdapter)
+    adapter = select_runtime_adapter("cuprum")
+    assert isinstance(adapter, CuprumRuntimeAdapter)
+    assert adapter.name == "cuprum"
 
 
 def test_select_runtime_adapter_accepts_python_api() -> None:
     """The documented `python-api` backend should resolve successfully."""
-    assert isinstance(select_runtime_adapter("python-api"), PythonApiRuntimeAdapter)
+    adapter = select_runtime_adapter("python-api")
+    assert isinstance(adapter, PythonApiRuntimeAdapter)
+    assert adapter.name == "python-api"
 
 
 def test_select_runtime_adapter_rejects_unknown_backend() -> None:
     """Unknown runtime backends should fail fast before any side effects."""
+    import typing as typ
+
     with pytest.raises(ValueError, match="Unsupported runtime backend"):
-        select_runtime_adapter("invalid")
+        select_runtime_adapter(typ.cast("typ.Any", "invalid"))

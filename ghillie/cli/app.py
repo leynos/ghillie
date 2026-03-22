@@ -169,7 +169,8 @@ def _coerce_result_to_exit_code(result: object) -> int:
     if isinstance(result, str):
         print(result)
         return 0
-    return 0
+    print(f"Unexpected command result: {result!r}", file=sys.stderr)
+    return 1
 
 
 def _is_invalid_backend_choice(message: str) -> bool:

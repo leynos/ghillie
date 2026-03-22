@@ -28,7 +28,7 @@ class PythonApiRuntimeAdapter:
     name: RuntimeBackend = "python-api"
 
 
-def select_runtime_adapter(backend: str) -> LocalRuntimeAdapter:
+def select_runtime_adapter(backend: RuntimeBackend) -> LocalRuntimeAdapter:
     """Select a local runtime adapter by the documented backend name."""
     if backend == "cuprum":
         return CuprumRuntimeAdapter()
