@@ -27,6 +27,8 @@ def _api_placeholder(verb: str, **fields: object) -> str:
         )
 
 
+# @codescene(disable:"Excess Number of Function Arguments")
+# 2026-03-22: CLI command entry point keeps explicit options for operator UX.
 @ingest_app.command
 def run(  # noqa: PLR0913
     *,

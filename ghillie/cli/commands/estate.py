@@ -66,6 +66,8 @@ def list_estates(*, active: bool = True, inactive: bool = False) -> str:
     )
 
 
+# @codescene(disable:"Excess Number of Function Arguments")
+# 2026-03-22: CLI command entry point keeps explicit options for operator UX.
 @repo_app.command(name="list")
 def list_repositories(  # noqa: PLR0913
     *,

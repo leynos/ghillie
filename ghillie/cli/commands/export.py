@@ -71,6 +71,8 @@ def events(
     return _export_command("events", target=target, window=window, sink=sink)
 
 
+# @codescene(disable:"Excess Number of Function Arguments")
+# 2026-03-22: CLI command entry point keeps explicit options for operator UX.
 @export_app.command
 def evidence(  # noqa: PLR0913
     *,
@@ -106,6 +108,8 @@ def evidence(  # noqa: PLR0913
     )
 
 
+# @codescene(disable:"Excess Number of Function Arguments")
+# 2026-03-22: CLI command entry point keeps explicit options for operator UX.
 @export_app.command
 def reports(  # noqa: PLR0913
     *,
@@ -141,6 +145,8 @@ def reports(  # noqa: PLR0913
     )
 
 
+# @codescene(disable:"Excess Number of Function Arguments")
+# 2026-03-22: CLI command entry point keeps explicit options for operator UX.
 @export_app.command
 def bundle(  # noqa: PLR0913
     *,

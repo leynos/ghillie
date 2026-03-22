@@ -22,6 +22,8 @@ from ghillie.cli.runtime_adapters import select_runtime_adapter
 stack_app = App(name="stack", help="Manage the local MVP stack lifecycle.")
 
 
+# @codescene(disable:"Excess Number of Function Arguments")
+# 2026-03-22: CLI command entry point keeps explicit options for operator UX.
 @stack_app.command
 def up(  # noqa: PLR0913
     *,
