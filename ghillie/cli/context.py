@@ -8,6 +8,8 @@ import dataclasses
 import typing as typ
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
     from .config import ResolvedCliConfig
 
 _CURRENT_CONTEXT: contextvars.ContextVar[CommandContext | None] = (
@@ -34,7 +36,7 @@ def get_current_context() -> CommandContext:
 @contextlib.contextmanager
 def use_context(
     context: CommandContext,
-) -> typ.Generator[CommandContext]:
+) -> cabc.Generator[CommandContext]:
     """Temporarily set the current command context."""
     token = _CURRENT_CONTEXT.set(context)
     try:
