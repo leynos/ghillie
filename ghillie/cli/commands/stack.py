@@ -27,8 +27,12 @@ stack_app = App(name="stack", help="Manage the local MVP stack lifecycle.")
 @stack_app.command
 def up(  # noqa: PLR0913
     *,
-    profile: StackProfile = "api-only",
-    backend: RuntimeBackend = "cuprum",
+    profile: typ.Annotated[
+        StackProfile, Parameter(env_var="GHILLIE_PROFILE")
+    ] = "api-only",
+    backend: typ.Annotated[
+        RuntimeBackend, Parameter(env_var="GHILLIE_BACKEND")
+    ] = "cuprum",
     cluster_name: typ.Annotated[
         str, Parameter(env_var="GHILLIE_CLUSTER_NAME")
     ] = "ghillie-local",

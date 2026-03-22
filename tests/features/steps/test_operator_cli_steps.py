@@ -8,7 +8,7 @@ import shlex
 import typing as typ
 
 import pytest
-from pytest_bdd import parsers, scenario, then, when
+from pytest_bdd import given, parsers, scenario, then, when
 
 from ghillie.cli import main
 
@@ -19,6 +19,7 @@ class OperatorCliContext(typ.TypedDict, total=False):
     exit_code: int
     stdout: str
     stderr: str
+    env: dict[str, str]
 
 
 @scenario(
@@ -53,17 +54,55 @@ def test_invalid_stack_backend_fails_fast() -> None:
     """Wrap the invalid-backend scenario."""
 
 
+@scenario(
+    "../operator_cli_contract.feature",
+    "GHILLIE_BACKEND environment variable sets default backend",
+)
+def test_ghillie_backend_env_var_sets_default() -> None:
+    """Wrap the GHILLIE_BACKEND environment variable scenario."""
+
+
+@scenario(
+    "../operator_cli_contract.feature",
+    "GHILLIE_PROFILE environment variable sets default profile",
+)
+def test_ghillie_profile_env_var_sets_default() -> None:
+    """Wrap the GHILLIE_PROFILE environment variable scenario."""
+
+
+@scenario(
+    "../operator_cli_contract.feature",
+    "Explicit stack options override environment defaults",
+)
+def test_explicit_options_override_env_defaults() -> None:
+    """Wrap the explicit override scenario."""
+
+
 @pytest.fixture
 def operator_cli_context() -> OperatorCliContext:
     """Create mutable scenario state for a CLI invocation."""
-    return {}
+    return {"env": {}}
+
+
+@given(parsers.parse('the environment variable "{key}" is set to "{value}"'))
+def given_environment_variable(
+    operator_cli_context: OperatorCliContext, key: str, value: str
+) -> None:
+    """Set an environment variable for the CLI invocation."""
+    operator_cli_context["env"][key] = value
 
 
 @when(parsers.parse('I run the operator CLI with "{arguments}"'))
 def when_run_operator_cli(
-    operator_cli_context: OperatorCliContext, arguments: str
+    operator_cli_context: OperatorCliContext,
+    arguments: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Invoke the operator CLI and capture its stdout and stderr streams."""
+    # Apply environment variables
+    for key, value in operator_cli_context.get("env", {}).items():
+        monkeypatch.setenv(key, value)
+
     argv = shlex.split(arguments)
     stdout = io.StringIO()
     stderr = io.StringIO()

@@ -31,3 +31,23 @@ Feature: Operator CLI contract
     When I run the operator CLI with "stack up --backend invalid"
     Then the operator CLI exits with code 2
     And the operator CLI error mentions "invalid choice"
+
+  Scenario: GHILLIE_BACKEND environment variable sets default backend
+    Given the environment variable "GHILLIE_BACKEND" is set to "python-api"
+    When I run the operator CLI with "stack up"
+    Then the operator CLI exits with code 0
+    And the operator CLI output mentions "python-api"
+
+  Scenario: GHILLIE_PROFILE environment variable sets default profile
+    Given the environment variable "GHILLIE_PROFILE" is set to "reporting-worker"
+    When I run the operator CLI with "stack up"
+    Then the operator CLI exits with code 0
+    And the operator CLI output mentions "reporting-worker"
+
+  Scenario: Explicit stack options override environment defaults
+    Given the environment variable "GHILLIE_BACKEND" is set to "python-api"
+    And the environment variable "GHILLIE_PROFILE" is set to "reporting-worker"
+    When I run the operator CLI with "stack up --backend cuprum --profile api-only"
+    Then the operator CLI exits with code 0
+    And the operator CLI output mentions "cuprum"
+    And the operator CLI output mentions "api-only"
