@@ -203,15 +203,23 @@ def _resolve_auth_token(
 def _load_profile(path: Path) -> dict[str, object]:
     if not path.exists():
         return {}
-    with path.open("rb") as file_obj:
-        content = tomllib.load(file_obj)
+    try:
+        with path.open("rb") as file_obj:
+            content = tomllib.load(file_obj)
+    except OSError as err:
+        msg = f"Failed to read profile from {path}"
+        raise ValueError(msg) from err
     return content if isinstance(content, dict) else {}
 
 
 def _load_state(path: Path) -> dict[str, object]:
     if not path.exists():
         return {}
-    content = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        content = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as err:
+        msg = f"Failed to read state from {path}"
+        raise ValueError(msg) from err
     if not isinstance(content, dict):
         type_name = type(content).__name__
         msg = f"state.json must contain a JSON object, found {type_name}"

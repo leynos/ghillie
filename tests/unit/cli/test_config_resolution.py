@@ -133,13 +133,13 @@ def test_config_uses_state_then_fallback_when_higher_sources_absent(
         pytest.param(
             GlobalOptions(),
             {"GHILLIE_NON_INTERACTIVE": "definitely-not-a-bool"},
-            r"non_interactive|dry_run",
+            r"non_interactive",
             id="invalid_non_interactive_env",
         ),
         pytest.param(
             GlobalOptions(),
             {"GHILLIE_DRY_RUN": "definitely-not-a-bool"},
-            r"non_interactive|dry_run",
+            r"dry_run",
             id="invalid_dry_run_env",
         ),
     ],
