@@ -109,9 +109,9 @@ def parse_global_options(
             state[field_name] = field_value
             index += 1
             continue
-        return GlobalOptions(**state), argv[index:]  # type: ignore[arg-type]
+        return GlobalOptions(**state), argv[index:]  # type: ignore[arg-type]  # safe: state values are validated/normalized to match GlobalOptions fields, argv[index:] is List[str]
 
-    return GlobalOptions(**state), []  # type: ignore[arg-type]
+    return GlobalOptions(**state), []  # type: ignore[arg-type]  # safe: state values are validated/normalized to match GlobalOptions fields
 
 
 def main(argv: list[str] | None = None) -> int:

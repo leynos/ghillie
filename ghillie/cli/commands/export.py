@@ -36,6 +36,24 @@ def _api_placeholder(verb: str, **fields: object) -> str:
         )
 
 
+def _flatten_target(target: ResourceTarget) -> dict[str, str]:
+    """Flatten ResourceTarget fields for serialization."""
+    return {
+        "scope": target.scope,
+        "estate_key": target.estate_key or "",
+        "owner": target.owner or "",
+        "name": target.name or "",
+    }
+
+
+def _flatten_sink(sink: ExportSinkOptions) -> dict[str, str]:
+    """Flatten ExportSinkOptions fields for serialization."""
+    return {
+        "format": sink.export_format,
+        "output_path": str(sink.output_path),
+    }
+
+
 def _export_command(  # noqa: PLR0913
     kind: str,
     *,
@@ -46,15 +64,11 @@ def _export_command(  # noqa: PLR0913
 ) -> str:
     return _api_placeholder(
         kind,
-        scope=target.scope,
-        estate_key=target.estate_key or "",
-        owner=target.owner or "",
-        name=target.name or "",
+        **_flatten_target(target),
         window_days=window.window_days if window.window_days is not None else "",
         window_start=window.window_start or "",
         window_end=window.window_end or "",
-        format=sink.export_format,
-        output_path=str(sink.output_path),
+        **_flatten_sink(sink),
         **(extra_fields or {}),
     )
 
@@ -77,7 +91,7 @@ def events(
 # @codescene(disable:"Excess Number of Function Arguments")
 # 2026-03-22: CLI command entry point keeps explicit options for operator UX.
 @export_app.command
-def evidence(  # noqa: PLR0913
+def evidence(  # noqa: PLR0913  # FIXME: CLI entry point must expose all options explicitly for operator UX
     *,
     scope: ResourceScope,
     estate_key: str | None = None,
@@ -110,7 +124,7 @@ def evidence(  # noqa: PLR0913
 # @codescene(disable:"Excess Number of Function Arguments")
 # 2026-03-22: CLI command entry point keeps explicit options for operator UX.
 @export_app.command
-def reports(  # noqa: PLR0913
+def reports(  # noqa: PLR0913  # FIXME: CLI entry point must expose all options explicitly for operator UX
     *,
     scope: ResourceScope,
     estate_key: str | None = None,
@@ -143,7 +157,7 @@ def reports(  # noqa: PLR0913
 # @codescene(disable:"Excess Number of Function Arguments")
 # 2026-03-22: CLI command entry point keeps explicit options for operator UX.
 @export_app.command
-def bundle(  # noqa: PLR0913
+def bundle(  # noqa: PLR0913  # FIXME: CLI entry point must expose all options explicitly for operator UX
     *,
     scope: ResourceScope,
     estate_key: str | None = None,
@@ -160,11 +174,7 @@ def bundle(  # noqa: PLR0913
     sink = ExportSinkOptions(export_format=export_format, output_path=Path(output_path))
     return _api_placeholder(
         "bundle",
-        scope=target.scope,
-        estate_key=target.estate_key or "",
-        owner=target.owner or "",
-        name=target.name or "",
+        **_flatten_target(target),
         window_days=window_days,
-        format=sink.export_format,
-        output_path=str(sink.output_path),
+        **_flatten_sink(sink),
     )
