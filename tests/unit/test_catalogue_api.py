@@ -56,13 +56,11 @@ def test_example_catalogue_json_matches_schema(tmp_path: Path) -> None:
     pajv_path = shutil.which("pajv")
     if pajv_path is None:
         pytest.skip("pajv must be installed to validate the catalogue schema")
-    else:
-        assert pajv_path is not None
+    assert pajv_path is not None
 
     try:
         subprocess.run(  # noqa: S603 - static pajv invocation
             [pajv_path, "-s", str(schema_path), "-d", str(json_path)],
-            text=True,
             capture_output=True,
             encoding="utf-8",
             check=True,

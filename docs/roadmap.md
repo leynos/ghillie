@@ -388,7 +388,7 @@ operationally safe to run.
 **Goal:** Make the full MVP workflow executable through stable HTTP APIs and a
 single `cyclopts` CLI, without ad hoc scripts.
 
-- [ ] **Task 2.5.a – Define and scaffold the operator CLI contract**
+- [x] **Task 2.5.a – Define and scaffold the operator CLI contract**
   Define the command grammar and command groups in
   `docs/mvp-cli-specification.md`, and scaffold a `cyclopts` CLI with the
   following features:
@@ -402,6 +402,14 @@ single `cyclopts` CLI, without ad hoc scripts.
 
   *Completion criteria:* A runnable CLI skeleton exists with the specified root
   command tree and validated option parsing.
+
+  *Implemented:* The packaged `ghillie` console entry point now lives under
+  `ghillie/cli/` and exposes the full MVP noun tree (`stack`, `estate`,
+  `ingest`, `export`, `report`, `metrics`). Task 2.5.a added root-global option
+  parsing and precedence resolution, a reusable `httpx` control-plane client
+  wrapper, runtime adapter selection for `cuprum` and `python-api`, unit tests
+  for the CLI scaffold, and `pytest-bdd` coverage for help output, root option
+  parsing, and invalid backend rejection.
 
 - [ ] **Task 2.5.b – Add estate-management APIs and CLI commands**
   Implement API endpoints and CLI commands for the following estate operations:

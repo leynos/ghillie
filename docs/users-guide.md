@@ -1,5 +1,49 @@
 # ghillie Users' Guide
 
+## Operator CLI scaffold (Task 2.5.a)
+
+Ghillie now ships a packaged operator CLI entry point:
+
+```bash
+uv run ghillie --help
+```
+
+The scaffolded root nouns are `stack`, `estate`, `ingest`, `export`, `report`,
+and `metrics`. The CLI grammar is noun-first:
+
+```text
+ghillie <noun> <verb> [selectors] [predicates] [options]
+```
+
+Shared root configuration is resolved before noun dispatch with this precedence:
+
+1. Explicit root CLI flags such as `--api-base-url`.
+2. Environment variables such as `GHILLIE_API_BASE_URL`.
+3. `~/.config/ghillie/cli.toml`.
+4. `~/.config/ghillie/state.json`.
+5. Fallback `http://127.0.0.1:8080`.
+
+Task 2.5.a delivers the command contract, shared config resolution, control
+plane client wiring, and local runtime adapter selection for `cuprum` and
+`python-api`. Most verbs still return deterministic placeholder payloads until
+later roadmap tasks attach the real estate, ingestion, export, metrics, and
+reporting backends.
+
+Two useful checks:
+
+```bash
+uv run ghillie stack up --help
+```
+
+This shows the documented stack scaffold options, including `--backend` and
+`--wait` or `--no-wait`.
+
+```bash
+uv run ghillie --api-base-url http://127.0.0.1:9999 report run --help
+```
+
+This proves the shared root options are accepted before the noun command.
+
 ## Estate catalogue (Phase 1.1)
 
 Ghillie now ships a YAML 1.2 catalogue describing programmes, projects,

@@ -193,6 +193,7 @@ version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiosqlite" },
+    { name = "cyclopts" },
     { name = "dramatiq" },
     { name = "falcon" },
     { name = "femtologging" },
@@ -207,7 +208,6 @@ dependencies = [
 dev = [
     { name = "asyncpg" },
     { name = "cmd-mox" },
-    { name = "cyclopts" },
     { name = "plumbum" },
     { name = "py-pglite", extra = ["asyncpg"] },
     { name = "pyright" },
@@ -223,6 +223,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiosqlite", specifier = ">=0.20.0" },
+    { name = "cyclopts", specifier = ">=2.9,<3" },
     { name = "dramatiq", specifier = ">=1.16.0" },
     { name = "falcon", specifier = ">=4.0.0,<5.0.0" },
     { name = "femtologging", git = "https://github.com/leynos/femtologging?rev=7c139fb7aca18f9277e00b88604b8bf5eb471be0" },
@@ -237,7 +238,6 @@ requires-dist = [
 dev = [
     { name = "asyncpg", specifier = ">=0.20.0,<1.0" },
     { name = "cmd-mox", specifier = ">=0.2,<1" },
-    { name = "cyclopts", specifier = ">=2.9,<3" },
     { name = "plumbum", specifier = ">=1.10,<2" },
     { name = "py-pglite", extras = ["asyncpg"], specifier = ">=0.1.0" },
     { name = "pyright" },

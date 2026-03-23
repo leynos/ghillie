@@ -65,7 +65,7 @@ class Config:
     app_secret_name: str = ""
 
     def __post_init__(self) -> None:
-        """Default derived fields after initialization."""
+        """Populate derived fields after initialization."""
         if not self.app_secret_name:
             object.__setattr__(self, "app_secret_name", self.app_name)
 

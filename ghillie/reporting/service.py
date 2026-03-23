@@ -453,7 +453,7 @@ class ReportingService:
         model = self._get_model_identifier()
         attempt_count = self._config.validation_max_attempts
         validation_issues: list[ValidationIssuePayload] = [
-            {"code": issue.code, "message": issue.message}
+            ValidationIssuePayload(code=issue.code, message=issue.message)
             for issue in validation.issues
         ]
         review = ReportReview(
