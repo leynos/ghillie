@@ -181,6 +181,8 @@ def _is_invalid_backend_choice(message: str) -> bool:
 def _format_cyclopts_error(error: CycloptsError) -> str:
     message = str(error)
     if _is_invalid_backend_choice(message):
-        invalid_value = message.split('"')[1]
-        return f'invalid choice for --backend: "{invalid_value}"'
+        parts = message.split('"')
+        if len(parts) > 1:
+            invalid_value = parts[1]
+            return f'invalid choice for --backend: "{invalid_value}"'
     return message

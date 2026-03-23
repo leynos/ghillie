@@ -122,7 +122,8 @@ def then_operator_cli_exit_code(
     operator_cli_context: OperatorCliContext, expected: int
 ) -> None:
     """Assert the CLI exit code for the current scenario."""
-    assert operator_cli_context["exit_code"] == expected
+    actual = operator_cli_context["exit_code"]
+    assert actual == expected, f"Expected exit code {expected}, got {actual}"
 
 
 @then(parsers.parse('the operator CLI output mentions "{expected}"'))
@@ -130,7 +131,8 @@ def then_operator_cli_output_mentions(
     operator_cli_context: OperatorCliContext, expected: str
 ) -> None:
     """Assert the CLI stdout stream contains the expected fragment."""
-    assert expected in operator_cli_context["stdout"]
+    stdout = operator_cli_context["stdout"]
+    assert expected in stdout, f'Expected "{expected}" in stdout, got: {stdout!r}'
 
 
 @then(parsers.parse('the operator CLI error mentions "{expected}"'))
@@ -138,4 +140,5 @@ def then_operator_cli_error_mentions(
     operator_cli_context: OperatorCliContext, expected: str
 ) -> None:
     """Assert the CLI stderr stream contains the expected fragment."""
-    assert expected in operator_cli_context["stderr"]
+    stderr = operator_cli_context["stderr"]
+    assert expected in stderr, f'Expected "{expected}" in stderr, got: {stderr!r}'

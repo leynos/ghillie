@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 OutputFormat = typ.Literal["table", "json", "yaml"]
-LogLevel = typ.Literal["debug", "info", "warn", "error"]
+CliLogLevel = typ.Literal["debug", "info", "warn", "error"]
 ApiBaseUrlSource = typ.Literal["flag", "env", "profile", "state", "fallback"]
 
 _OUTPUT_VALUES = {"table", "json", "yaml"}
@@ -27,7 +27,7 @@ class GlobalOptions:
     api_base_url: str | None = None
     auth_token: str | None = None
     output: OutputFormat | None = None
-    log_level: LogLevel | None = None
+    log_level: CliLogLevel | None = None
     request_timeout_s: float | None = None
     non_interactive: bool | None = None
     dry_run: bool | None = None
@@ -41,7 +41,7 @@ class ResolvedCliConfig:
     api_base_url_source: ApiBaseUrlSource
     auth_token: str | None
     output: OutputFormat
-    log_level: LogLevel
+    log_level: CliLogLevel
     request_timeout_s: float
     non_interactive: bool
     dry_run: bool
@@ -62,7 +62,7 @@ class _ScalarFields:
     """Intermediate scalar configuration fields."""
 
     output: OutputFormat
-    log_level: LogLevel
+    log_level: CliLogLevel
     request_timeout_s: float
     non_interactive: bool
     dry_run: bool
@@ -235,12 +235,12 @@ def _coerce_output(value: object) -> OutputFormat:
     return typ.cast("OutputFormat", text)
 
 
-def _coerce_log_level(value: object) -> LogLevel:
+def _coerce_log_level(value: object) -> CliLogLevel:
     text = str(value)
     if text not in _LOG_LEVEL_VALUES:
         msg = f"log_level must be one of: {', '.join(sorted(_LOG_LEVEL_VALUES))}"
         raise ValueError(msg)
-    return typ.cast("LogLevel", text)
+    return typ.cast("CliLogLevel", text)
 
 
 def _coerce_float(value: object, *, field: str) -> float:

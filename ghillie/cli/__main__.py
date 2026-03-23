@@ -1,7 +1,5 @@
 """Module entry point for `python -m ghillie.cli`."""
 
-from __future__ import annotations
-
 import sys
 
 from .app import main

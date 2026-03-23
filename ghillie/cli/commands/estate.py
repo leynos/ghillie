@@ -6,7 +6,6 @@ from pathlib import Path  # noqa: TC003
 
 from cyclopts import App
 
-from ghillie.cli.commands.params import PaginationFilter
 from ghillie.cli.context import get_current_context
 from ghillie.cli.control_plane import ControlPlaneClient
 from ghillie.cli.output import render_output
@@ -78,17 +77,14 @@ def list_repositories(  # noqa: PLR0913
     offset: int = 0,
 ) -> str:
     """List repositories for one estate."""
-    pagination = PaginationFilter(
-        active=active, inactive=inactive, limit=limit, offset=offset
-    )
     return _api_placeholder(
         "estate repo",
         "list",
         estate_key=estate_key,
-        active=pagination.active,
-        inactive=pagination.inactive,
-        limit=pagination.limit,
-        offset=pagination.offset,
+        active=active,
+        inactive=inactive,
+        limit=limit,
+        offset=offset,
     )
 
 
