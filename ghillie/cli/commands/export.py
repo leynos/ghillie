@@ -54,13 +54,13 @@ def _flatten_sink(sink: ExportSinkOptions) -> dict[str, str]:
     }
 
 
-def _export_command(  # noqa: PLR0913
+def _export_command(
     kind: str,
     *,
     target: ResourceTarget,
     window: WindowOptions,
     sink: ExportSinkOptions,
-    extra_fields: typ.Mapping[str, object] | None = None,
+    **extra_fields: object,
 ) -> str:
     return _api_placeholder(
         kind,
@@ -69,7 +69,7 @@ def _export_command(  # noqa: PLR0913
         window_start=window.window_start or "",
         window_end=window.window_end or "",
         **_flatten_sink(sink),
-        **(extra_fields or {}),
+        **extra_fields,
     )
 
 
@@ -91,7 +91,7 @@ def events(
 # @codescene(disable:"Excess Number of Function Arguments")
 # 2026-03-22: CLI command entry point keeps explicit options for operator UX.
 @export_app.command
-def evidence(  # noqa: PLR0913  # FIXME: CLI entry point must expose all options explicitly for operator UX
+def evidence(  # noqa: PLR0913
     *,
     scope: ResourceScope,
     estate_key: str | None = None,
@@ -117,14 +117,14 @@ def evidence(  # noqa: PLR0913  # FIXME: CLI entry point must expose all options
         target=target,
         window=window,
         sink=sink,
-        extra_fields={"include_previous_reports": include_previous_reports},
+        include_previous_reports=include_previous_reports,
     )
 
 
 # @codescene(disable:"Excess Number of Function Arguments")
 # 2026-03-22: CLI command entry point keeps explicit options for operator UX.
 @export_app.command
-def reports(  # noqa: PLR0913  # FIXME: CLI entry point must expose all options explicitly for operator UX
+def reports(  # noqa: PLR0913
     *,
     scope: ResourceScope,
     estate_key: str | None = None,
@@ -150,23 +150,23 @@ def reports(  # noqa: PLR0913  # FIXME: CLI entry point must expose all options 
         target=target,
         window=window,
         sink=sink,
-        extra_fields={"include_coverage": include_coverage},
+        include_coverage=include_coverage,
     )
 
 
 # @codescene(disable:"Excess Number of Function Arguments")
 # 2026-03-22: CLI command entry point keeps explicit options for operator UX.
 @export_app.command
-def bundle(  # noqa: PLR0913  # FIXME: CLI entry point must expose all options explicitly for operator UX
+def bundle(  # noqa: PLR0913
     *,
     scope: ResourceScope,
     estate_key: str | None = None,
     owner: str | None = None,
     name: str | None = None,
     window_days: int = 14,
-    export_format: typ.Annotated[
-        typ.Literal[ExportFormat.JSON], Parameter(name="--format")
-    ] = ExportFormat.JSON,
+    export_format: typ.Annotated[ExportFormat, Parameter(name="--format")] = (
+        ExportFormat.JSON
+    ),
     output_path: str,
 ) -> str:
     """Export a combined bundle artefact."""

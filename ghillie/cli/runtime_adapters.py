@@ -31,9 +31,9 @@ class PythonApiRuntimeAdapter:
 def select_runtime_adapter(backend: RuntimeBackend) -> LocalRuntimeAdapter:
     """Select a local runtime adapter by the documented backend name."""
     match backend:
-        case "cuprum":
+        case RuntimeBackend.CUPRUM:
             return CuprumRuntimeAdapter()
-        case "python-api":
+        case RuntimeBackend.PYTHON_API:
             return PythonApiRuntimeAdapter()
         case _:
             msg = f"Unsupported runtime backend: {backend}"
