@@ -190,6 +190,11 @@ documentation changes from Bronze raw events. The transformer recognizes
 `github.commit`, `github.pull_request`, `github.issue`, and `github.doc_change`
 event types and applies deterministic upserts so reprocessing is safe.
 
+Storage-generated primary keys in the catalogue, Silver, and Gold relational
+models remain canonical `String(36)` UUID text, but newly inserted rows now
+use UUIDv7 values. Existing UUIDv4 rows remain valid because column types and
+API field shapes are unchanged.
+
 - Repositories are auto-created with a default branch of `main` when no prior
   record exists. If a payload supplies `default_branch`, it updates the stored
   value to keep downstream consumers aligned with GitHub.
