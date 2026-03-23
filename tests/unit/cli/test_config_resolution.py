@@ -97,98 +97,66 @@ def test_config_uses_state_then_fallback_when_higher_sources_absent(
     assert from_fallback.api_base_url_source == "fallback"
 
 
-def test_config_invalid_api_base_url_scheme_raises_value_error(tmp_path: Path) -> None:
-    """Non-HTTP(S) API URLs should be rejected."""
-    profile_path = tmp_path / "cli.toml"
-    state_path = tmp_path / "state.json"
-
-    with pytest.raises(ValueError, match="api_base_url"):
-        resolve_cli_config(
-            GlobalOptions(api_base_url="ftp://example.com"),
-            env={},
-            profile_path=profile_path,
-            state_path=state_path,
-        )
-
-
-def test_config_invalid_api_base_url_missing_netloc_raises_value_error(
-    tmp_path: Path,
-) -> None:
-    """API URLs without netloc should be rejected."""
-    profile_path = tmp_path / "cli.toml"
-    state_path = tmp_path / "state.json"
-
-    with pytest.raises(ValueError, match="api_base_url"):
-        resolve_cli_config(
-            GlobalOptions(api_base_url="http://"),
-            env={},
-            profile_path=profile_path,
-            state_path=state_path,
-        )
-
-
-def test_config_invalid_request_timeout_env_raises_value_error(tmp_path: Path) -> None:
-    """Non-numeric GHILLIE_REQUEST_TIMEOUT_S should raise ValueError."""
-    profile_path = tmp_path / "cli.toml"
-    state_path = tmp_path / "state.json"
-
-    with pytest.raises(ValueError, match="request_timeout_s"):
-        resolve_cli_config(
-            GlobalOptions(),
-            env={"GHILLIE_REQUEST_TIMEOUT_S": "abc"},
-            profile_path=profile_path,
-            state_path=state_path,
-        )
-
-
-def test_config_invalid_output_env_raises_value_error(tmp_path: Path) -> None:
-    """Invalid GHILLIE_OUTPUT should raise ValueError."""
-    profile_path = tmp_path / "cli.toml"
-    state_path = tmp_path / "state.json"
-
-    with pytest.raises(ValueError, match="output"):
-        resolve_cli_config(
-            GlobalOptions(),
-            env={"GHILLIE_OUTPUT": "xml"},
-            profile_path=profile_path,
-            state_path=state_path,
-        )
-
-
-def test_config_invalid_log_level_env_raises_value_error(tmp_path: Path) -> None:
-    """Invalid GHILLIE_LOG_LEVEL should raise ValueError."""
-    profile_path = tmp_path / "cli.toml"
-    state_path = tmp_path / "state.json"
-
-    with pytest.raises(ValueError, match="log_level"):
-        resolve_cli_config(
-            GlobalOptions(),
-            env={"GHILLIE_LOG_LEVEL": "verbose"},
-            profile_path=profile_path,
-            state_path=state_path,
-        )
-
-
 @pytest.mark.parametrize(
-    "env_key",
+    ("options", "env", "match"),
     [
-        "GHILLIE_NON_INTERACTIVE",
-        "GHILLIE_DRY_RUN",
+        pytest.param(
+            GlobalOptions(api_base_url="ftp://example.com"),
+            {},
+            "api_base_url",
+            id="invalid_scheme",
+        ),
+        pytest.param(
+            GlobalOptions(api_base_url="http://"),
+            {},
+            "api_base_url",
+            id="missing_netloc",
+        ),
+        pytest.param(
+            GlobalOptions(),
+            {"GHILLIE_REQUEST_TIMEOUT_S": "abc"},
+            "request_timeout_s",
+            id="invalid_request_timeout_env",
+        ),
+        pytest.param(
+            GlobalOptions(),
+            {"GHILLIE_OUTPUT": "xml"},
+            "output",
+            id="invalid_output_env",
+        ),
+        pytest.param(
+            GlobalOptions(),
+            {"GHILLIE_LOG_LEVEL": "verbose"},
+            "log_level",
+            id="invalid_log_level_env",
+        ),
+        pytest.param(
+            GlobalOptions(),
+            {"GHILLIE_NON_INTERACTIVE": "definitely-not-a-bool"},
+            r"non_interactive|dry_run",
+            id="invalid_non_interactive_env",
+        ),
+        pytest.param(
+            GlobalOptions(),
+            {"GHILLIE_DRY_RUN": "definitely-not-a-bool"},
+            r"non_interactive|dry_run",
+            id="invalid_dry_run_env",
+        ),
     ],
 )
-def test_config_invalid_bool_env_raises_value_error(
-    tmp_path: Path, env_key: str
+def test_config_invalid_value_raises_value_error(
+    tmp_path: Path,
+    options: GlobalOptions,
+    env: dict[str, str],
+    match: str,
 ) -> None:
-    """Non-boolean toggles in env should raise ValueError."""
-    profile_path = tmp_path / "cli.toml"
-    state_path = tmp_path / "state.json"
-
-    with pytest.raises(ValueError, match=r"non_interactive|dry_run"):
+    """Invalid configuration values should raise ValueError."""
+    with pytest.raises(ValueError, match=match):
         resolve_cli_config(
-            GlobalOptions(),
-            env={env_key: "definitely-not-a-bool"},
-            profile_path=profile_path,
-            state_path=state_path,
+            options,
+            env=env,
+            profile_path=tmp_path / "cli.toml",
+            state_path=tmp_path / "state.json",
         )
 
 
@@ -243,31 +211,38 @@ auth_token_env = "PROFILE_TOKEN"
     assert config.auth_token == "flag-token"  # noqa: S105
 
 
-def test_config_rejects_non_object_state_json(tmp_path: Path) -> None:
-    """Non-object state.json should raise TypeError instead of crashing."""
+@pytest.mark.parametrize(
+    ("state_content", "profile_content", "match"),
+    [
+        pytest.param(
+            "[]",
+            None,
+            r"state\.json must contain a JSON object",
+            id="non_object_state_json",
+        ),
+        pytest.param(
+            None,
+            'global = "oops"\n',
+            r"\[global\] section.*must be a table",
+            id="non_table_global_section",
+        ),
+    ],
+)
+def test_config_invalid_file_content_raises_type_error(
+    tmp_path: Path,
+    state_content: str | None,
+    profile_content: str | None,
+    match: str,
+) -> None:
+    """Malformed profile or state file content should raise TypeError."""
     profile_path = tmp_path / "cli.toml"
     state_path = tmp_path / "state.json"
-    state_path.write_text("[]", encoding="utf-8")
+    if state_content is not None:
+        state_path.write_text(state_content, encoding="utf-8")
+    if profile_content is not None:
+        profile_path.write_text(profile_content, encoding="utf-8")
 
-    with pytest.raises(TypeError, match=r"state\.json must contain a JSON object"):
-        resolve_cli_config(
-            GlobalOptions(),
-            env={},
-            profile_path=profile_path,
-            state_path=state_path,
-        )
-
-
-def test_config_rejects_non_table_global_section(tmp_path: Path) -> None:
-    """Non-table [global] section should raise TypeError instead of crashing."""
-    profile_path = tmp_path / "cli.toml"
-    state_path = tmp_path / "state.json"
-    profile_path.write_text(
-        'global = "oops"\n',
-        encoding="utf-8",
-    )
-
-    with pytest.raises(TypeError, match=r"\[global\] section.*must be a table"):
+    with pytest.raises(TypeError, match=match):
         resolve_cli_config(
             GlobalOptions(),
             env={},
