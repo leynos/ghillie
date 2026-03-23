@@ -8,6 +8,8 @@ import pytest
 
 from ghillie.cli.context import CommandContext, get_current_context, use_context
 
+_TEST_AUTH_TOKEN = "test-token"  # noqa: S105  # nosec B105 - test fixture value only
+
 
 def test_get_current_context_without_active_context_raises() -> None:
     """get_current_context() should raise when no context has been set."""
@@ -36,7 +38,7 @@ def test_use_context_sets_and_restores_context() -> None:
         config=ResolvedCliConfig(
             api_base_url="http://127.0.0.1:9999",
             api_base_url_source="flag",
-            auth_token="token",  # noqa: S106
+            auth_token=_TEST_AUTH_TOKEN,
             output="json",
             log_level="debug",
             request_timeout_s=10.0,
@@ -57,7 +59,7 @@ def test_use_context_sets_and_restores_context() -> None:
         assert get_current_context() is base_ctx
 
     # After exiting outer context, there should be no active context
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match="CLI command context"):
         get_current_context()
 
 
@@ -105,7 +107,7 @@ def test_use_context_restores_context_on_exception() -> None:
         assert get_current_context() is outer_ctx
 
     # No active context after exiting outer block
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match="CLI command context"):
         get_current_context()
 
 
@@ -161,5 +163,5 @@ def test_use_context_is_reentrant_and_nestable() -> None:
         assert get_current_context() is ctx3
 
     # After all are closed, there should be no active context
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match="CLI command context"):
         get_current_context()

@@ -175,7 +175,10 @@ def _coerce_result_to_exit_code(result: object) -> int:
 
 def _is_invalid_backend_choice(message: str) -> bool:
     """Return True when the cyclopts error describes an invalid --backend value."""
-    return "--backend" in message and "Literal" in message and "python-api" in message
+    return "--backend" in message and (
+        ("Literal" in message and "python-api" in message)
+        or "RuntimeBackend" in message
+    )
 
 
 def _format_cyclopts_error(error: CycloptsError) -> str:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from ghillie.cli.commands.params import RuntimeBackend
 from ghillie.cli.runtime_adapters import (
     CuprumRuntimeAdapter,
     PythonApiRuntimeAdapter,
@@ -13,16 +14,16 @@ from ghillie.cli.runtime_adapters import (
 
 def test_select_runtime_adapter_accepts_cuprum() -> None:
     """The documented `cuprum` backend should resolve successfully."""
-    adapter = select_runtime_adapter("cuprum")
+    adapter = select_runtime_adapter(RuntimeBackend.CUPRUM)
     assert isinstance(adapter, CuprumRuntimeAdapter)
-    assert adapter.name == "cuprum"
+    assert adapter.name == RuntimeBackend.CUPRUM
 
 
 def test_select_runtime_adapter_accepts_python_api() -> None:
     """The documented `python-api` backend should resolve successfully."""
-    adapter = select_runtime_adapter("python-api")
+    adapter = select_runtime_adapter(RuntimeBackend.PYTHON_API)
     assert isinstance(adapter, PythonApiRuntimeAdapter)
-    assert adapter.name == "python-api"
+    assert adapter.name == RuntimeBackend.PYTHON_API
 
 
 def test_select_runtime_adapter_rejects_unknown_backend() -> None:

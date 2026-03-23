@@ -3,15 +3,48 @@
 from __future__ import annotations
 
 import dataclasses
+import enum
 import typing as typ
+from pathlib import Path
 
 from cyclopts import Parameter
 
-ResourceScope = typ.Literal["repository", "estate"]
-ExportFormat = typ.Literal["json", "jsonl", "csv"]
-ModelBackend = typ.Literal["mock", "openai"]
-StackProfile = typ.Literal["api-only", "ingestion-worker", "reporting-worker"]
-RuntimeBackend = typ.Literal["cuprum", "python-api"]
+
+class ResourceScope(enum.StrEnum):
+    """Scope for resource-targeted commands."""
+
+    REPOSITORY = "repository"
+    ESTATE = "estate"
+
+
+class ExportFormat(enum.StrEnum):
+    """Export output format."""
+
+    JSON = "json"
+    JSONL = "jsonl"
+    CSV = "csv"
+
+
+class ModelBackend(enum.StrEnum):
+    """LLM backend provider."""
+
+    MOCK = "mock"
+    OPENAI = "openai"
+
+
+class StackProfile(enum.StrEnum):
+    """Stack component profile."""
+
+    API_ONLY = "api-only"
+    INGESTION_WORKER = "ingestion-worker"
+    REPORTING_WORKER = "reporting-worker"
+
+
+class RuntimeBackend(enum.StrEnum):
+    """Local runtime orchestration backend."""
+
+    CUPRUM = "cuprum"
+    PYTHON_API = "python-api"
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -37,8 +70,10 @@ class WindowOptions:
 class ExportSinkOptions:
     """Export output format and destination configuration."""
 
-    export_format: typ.Annotated[ExportFormat, Parameter(name="--format")] = "json"
-    output_path: str = ""
+    export_format: typ.Annotated[ExportFormat, Parameter(name="--format")] = (
+        ExportFormat.JSON
+    )
+    output_path: Path = dataclasses.field(default_factory=Path)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -65,7 +100,7 @@ class ReportRunOptions:
     """Report execution configuration."""
 
     as_of: str | None = None
-    model_backend: ModelBackend = "mock"
+    model_backend: ModelBackend = ModelBackend.MOCK
     wait: bool = True
 
 
@@ -73,8 +108,8 @@ class ReportRunOptions:
 class StackRunOptions:
     """Stack lifecycle profile and execution configuration."""
 
-    profile: StackProfile = "api-only"
-    backend: RuntimeBackend = "cuprum"
+    profile: StackProfile = StackProfile.API_ONLY
+    backend: RuntimeBackend = RuntimeBackend.CUPRUM
     background_workers: bool = False
     wait: bool = True
 
@@ -98,5 +133,5 @@ class ProviderOptions:
     """External provider credential and backend configuration."""
 
     provider_github_token_env: str = "GHILLIE_GITHUB_TOKEN"  # noqa: S105
-    provider_model_backend: ModelBackend = "mock"
+    provider_model_backend: ModelBackend = ModelBackend.MOCK
     provider_openai_key_env: str = "GHILLIE_OPENAI_API_KEY"

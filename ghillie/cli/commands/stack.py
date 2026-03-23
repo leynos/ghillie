@@ -29,10 +29,10 @@ def up(  # noqa: PLR0913
     *,
     profile: typ.Annotated[
         StackProfile, Parameter(env_var="GHILLIE_PROFILE")
-    ] = "api-only",
+    ] = StackProfile.API_ONLY,
     backend: typ.Annotated[
         RuntimeBackend, Parameter(env_var="GHILLIE_BACKEND")
-    ] = "cuprum",
+    ] = RuntimeBackend.CUPRUM,
     cluster_name: typ.Annotated[
         str, Parameter(env_var="GHILLIE_CLUSTER_NAME")
     ] = "ghillie-local",
@@ -42,7 +42,7 @@ def up(  # noqa: PLR0913
     ] = None,
     image: typ.Annotated[str, Parameter(env_var="GHILLIE_IMAGE")] = "ghillie:local",
     provider_github_token_env: str = "GHILLIE_GITHUB_TOKEN",  # noqa: S107
-    provider_model_backend: ModelBackend = "mock",
+    provider_model_backend: ModelBackend = ModelBackend.MOCK,
     provider_openai_key_env: str = "GHILLIE_OPENAI_API_KEY",
     background_workers: bool = False,
     wait: bool = True,

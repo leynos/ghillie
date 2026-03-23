@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import typing as typ
+from pathlib import Path
 
 from cyclopts import App, Parameter
 
@@ -35,12 +36,13 @@ def _api_placeholder(verb: str, **fields: object) -> str:
         )
 
 
-def _export_command(
+def _export_command(  # noqa: PLR0913
     kind: str,
     *,
     target: ResourceTarget,
     window: WindowOptions,
     sink: ExportSinkOptions,
+    extra_fields: typ.Mapping[str, object] | None = None,
 ) -> str:
     return _api_placeholder(
         kind,
@@ -52,7 +54,8 @@ def _export_command(
         window_start=window.window_start or "",
         window_end=window.window_end or "",
         format=sink.export_format,
-        output_path=sink.output_path,
+        output_path=str(sink.output_path),
+        **(extra_fields or {}),
     )
 
 
@@ -83,7 +86,9 @@ def evidence(  # noqa: PLR0913
     window_days: int | None = 14,
     window_start: str | None = None,
     window_end: str | None = None,
-    export_format: typ.Annotated[ExportFormat, Parameter(name="--format")] = "json",
+    export_format: typ.Annotated[ExportFormat, Parameter(name="--format")] = (
+        ExportFormat.JSON
+    ),
     output_path: str,
     include_previous_reports: bool = False,
 ) -> str:
@@ -92,19 +97,13 @@ def evidence(  # noqa: PLR0913
     window = WindowOptions(
         window_days=window_days, window_start=window_start, window_end=window_end
     )
-    sink = ExportSinkOptions(export_format=export_format, output_path=output_path)
-    return _api_placeholder(
+    sink = ExportSinkOptions(export_format=export_format, output_path=Path(output_path))
+    return _export_command(
         "evidence",
-        scope=target.scope,
-        estate_key=target.estate_key or "",
-        owner=target.owner or "",
-        name=target.name or "",
-        window_days=window.window_days if window.window_days is not None else "",
-        window_start=window.window_start or "",
-        window_end=window.window_end or "",
-        format=sink.export_format,
-        output_path=sink.output_path,
-        include_previous_reports=include_previous_reports,
+        target=target,
+        window=window,
+        sink=sink,
+        extra_fields={"include_previous_reports": include_previous_reports},
     )
 
 
@@ -120,7 +119,9 @@ def reports(  # noqa: PLR0913
     window_days: int | None = 14,
     window_start: str | None = None,
     window_end: str | None = None,
-    export_format: typ.Annotated[ExportFormat, Parameter(name="--format")] = "json",
+    export_format: typ.Annotated[ExportFormat, Parameter(name="--format")] = (
+        ExportFormat.JSON
+    ),
     output_path: str,
     include_coverage: bool = False,
 ) -> str:
@@ -129,19 +130,13 @@ def reports(  # noqa: PLR0913
     window = WindowOptions(
         window_days=window_days, window_start=window_start, window_end=window_end
     )
-    sink = ExportSinkOptions(export_format=export_format, output_path=output_path)
-    return _api_placeholder(
+    sink = ExportSinkOptions(export_format=export_format, output_path=Path(output_path))
+    return _export_command(
         "reports",
-        scope=target.scope,
-        estate_key=target.estate_key or "",
-        owner=target.owner or "",
-        name=target.name or "",
-        window_days=window.window_days if window.window_days is not None else "",
-        window_start=window.window_start or "",
-        window_end=window.window_end or "",
-        format=sink.export_format,
-        output_path=sink.output_path,
-        include_coverage=include_coverage,
+        target=target,
+        window=window,
+        sink=sink,
+        extra_fields={"include_coverage": include_coverage},
     )
 
 
@@ -156,13 +151,13 @@ def bundle(  # noqa: PLR0913
     name: str | None = None,
     window_days: int = 14,
     export_format: typ.Annotated[
-        typ.Literal["json"], Parameter(name="--format")
-    ] = "json",
+        typ.Literal[ExportFormat.JSON], Parameter(name="--format")
+    ] = ExportFormat.JSON,
     output_path: str,
 ) -> str:
     """Export a combined bundle artefact."""
     target = ResourceTarget(scope=scope, estate_key=estate_key, owner=owner, name=name)
-    sink = ExportSinkOptions(export_format=export_format, output_path=output_path)
+    sink = ExportSinkOptions(export_format=export_format, output_path=Path(output_path))
     return _api_placeholder(
         "bundle",
         scope=target.scope,
@@ -171,5 +166,5 @@ def bundle(  # noqa: PLR0913
         name=target.name or "",
         window_days=window_days,
         format=sink.export_format,
-        output_path=sink.output_path,
+        output_path=str(sink.output_path),
     )

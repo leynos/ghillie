@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import typing as typ
 
-RuntimeBackend = typ.Literal["cuprum", "python-api"]
+from ghillie.cli.commands.params import RuntimeBackend
 
 
 class LocalRuntimeAdapter(typ.Protocol):
@@ -18,21 +18,23 @@ class LocalRuntimeAdapter(typ.Protocol):
 class CuprumRuntimeAdapter:
     """Placeholder adapter for shell-oriented local orchestration."""
 
-    name: RuntimeBackend = "cuprum"
+    name: RuntimeBackend = RuntimeBackend.CUPRUM
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class PythonApiRuntimeAdapter:
     """Placeholder adapter for direct Python integrations."""
 
-    name: RuntimeBackend = "python-api"
+    name: RuntimeBackend = RuntimeBackend.PYTHON_API
 
 
 def select_runtime_adapter(backend: RuntimeBackend) -> LocalRuntimeAdapter:
     """Select a local runtime adapter by the documented backend name."""
-    if backend == "cuprum":
-        return CuprumRuntimeAdapter()
-    if backend == "python-api":
-        return PythonApiRuntimeAdapter()
-    msg = f"Unsupported runtime backend: {backend}"
-    raise ValueError(msg)
+    match backend:
+        case "cuprum":
+            return CuprumRuntimeAdapter()
+        case "python-api":
+            return PythonApiRuntimeAdapter()
+        case _:
+            msg = f"Unsupported runtime backend: {backend}"
+            raise ValueError(msg)

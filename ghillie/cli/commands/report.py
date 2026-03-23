@@ -43,7 +43,7 @@ def run(  # noqa: PLR0913
     name: str | None = None,
     window_days: int = 14,
     as_of: str | None = None,
-    model_backend: ModelBackend = "mock",
+    model_backend: ModelBackend = ModelBackend.MOCK,
     wait: bool = True,
 ) -> str:
     """Start a scaffolded reporting run."""
