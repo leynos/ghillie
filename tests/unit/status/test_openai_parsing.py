@@ -1,7 +1,5 @@
 """Unit tests for OpenAI response parsing."""
 
-from __future__ import annotations
-
 import contextlib
 import typing as typ
 from http import HTTPStatus
