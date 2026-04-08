@@ -141,9 +141,9 @@ Silver layers with controlled noise and back-pressure.
   with Ghillie's async architecture and supporting the structured logging
   patterns required for observability.
 
-  *Prerequisites:* Femtologging provides `exc_info`/`stack_info` support in the
-  snapshot commit `7c139fb7aca18f9277e00b88604b8bf5eb471be0`. See ADR-001 for
-  details.
+  *Prerequisites:* Femtologging provides `exc_info`/`stack_info` support and
+  the `v0.1.0` stdlib-compatibility methods in commit
+  `691a73962df8f99308a82348d99c4f707c245e63`. See ADR-001 for details.
 
   *Completion criteria:* All logging usage in ingestion, observability, runtime
   startup, and tests is migrated to femtologging. Logging configuration is

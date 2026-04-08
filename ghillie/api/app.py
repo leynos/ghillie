@@ -109,7 +109,7 @@ def create_app(
         sf = typ.cast("async_sessionmaker[AsyncSession]", deps.session_factory)
         middleware.append(SQLAlchemySessionManager(sf))
 
-    app = falcon.asgi.App(middleware=middleware)  # type: ignore[no-matching-overload]  # Falcon stubs
+    app = falcon.asgi.App(middleware=typ.cast("typ.Any", middleware))
 
     # Health endpoints are always available
     app.add_route("/health", HealthResource())

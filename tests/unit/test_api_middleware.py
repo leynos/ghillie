@@ -8,6 +8,7 @@ Run with pytest::
 
 """
 
+import typing as typ
 from http import HTTPStatus
 from unittest import mock
 
@@ -71,7 +72,7 @@ def client(session: _MockSession) -> falcon.testing.TestClient:
 
     factory = mock.MagicMock(return_value=session)
     mw = SQLAlchemySessionManager(factory)
-    app = falcon.asgi.App(middleware=[mw])  # type: ignore[no-matching-overload]  # Falcon stubs
+    app = falcon.asgi.App(middleware=typ.cast("typ.Any", [mw]))
     app.add_route("/echo", _EchoResource())
     app.add_route("/error", _ErrorResource())
     app.add_route("/bad-request", _BadRequestResource())

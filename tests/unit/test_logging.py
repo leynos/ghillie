@@ -4,7 +4,10 @@ Run with:
     pytest tests/unit/test_logging.py
 """
 
+import importlib
+
 import pytest
+from femtologging import get_logger
 
 from ghillie.logging import (
     configure_logging,
@@ -15,6 +18,7 @@ from ghillie.logging import (
     log_warning,
     normalize_log_level,
 )
+from tests.helpers.femtologging_capture import capture_femto_logs
 
 
 class _FakeLogger:
@@ -115,6 +119,56 @@ def test_log_exception_passes_exc_info() -> None:
     assert logger.calls == [("ERROR", "failed", exc, False)], (
         "Expected ERROR log entry with exc_info."
     )
+
+
+def test_femtologging_exposes_get_logger_alias() -> None:
+    """The target femtologging snapshot exposes ``getLogger``."""
+    femtologging = importlib.import_module("femtologging")
+
+    assert hasattr(femtologging, "getLogger")
+    assert femtologging.getLogger("ghillie.test.alias") is get_logger(
+        "ghillie.test.alias"
+    )
+
+
+def test_femtologging_logger_exposes_is_enabled_for() -> None:
+    """The target femtologging snapshot exposes ``isEnabledFor``."""
+    logger = get_logger("ghillie.test.is-enabled")
+
+    assert hasattr(logger, "isEnabledFor")
+    is_enabled_for = logger.isEnabledFor
+    assert callable(is_enabled_for)
+    assert is_enabled_for("INFO") is True
+
+
+def test_femtologging_logger_exception_captures_exc_info() -> None:
+    """The target femtologging snapshot exposes ``exception``."""
+    logger = get_logger("ghillie.test.exception-method")
+
+    with capture_femto_logs("ghillie.test.exception-method") as capture:
+        error = ValueError("boom")
+        logger.exception("failed via method", exc_info=error)
+        capture.wait_for_count(1)
+
+    assert len(capture.records) == 1
+    record = capture.records[0]
+    assert record.level == "ERROR"
+    assert record.message == "failed via method"
+    assert record.exc_info is not None
+
+
+def test_femtologging_logger_warning_method_uses_warn_level() -> None:
+    """The target femtologging snapshot exposes ``warning``."""
+    logger = get_logger("ghillie.test.warning-method")
+
+    with capture_femto_logs("ghillie.test.warning-method") as capture:
+        logger.warning("careful now")
+        capture.wait_for_count(1)
+
+    assert len(capture.records) == 1
+    record = capture.records[0]
+    assert record.level == "WARN"
+    assert record.message == "careful now"
 
 
 @pytest.mark.parametrize(

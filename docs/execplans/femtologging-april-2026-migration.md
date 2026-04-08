@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -102,14 +102,21 @@ If any constraint cannot be met, stop and escalate.
   dependency pin, wrapper module, tests, and bundled docs.
 - [x] (2026-04-08 UTC) Drafted this ExecPlan in
   `docs/execplans/femtologging-april-2026-migration.md`.
-- [ ] Add focused failing tests that codify the target SHA's new Python API
-  surface and Ghillie's compatibility expectations.
-- [ ] Update `pyproject.toml` and `uv.lock` to the target SHA.
-- [ ] Make the smallest compatible code changes needed in Ghillie's wrappers or
-  test helpers.
-- [ ] Update repository docs that still describe the old snapshot or removed
-  builder names.
-- [ ] Run the full sequential quality gates and capture evidence.
+- [x] (2026-04-08 UTC) Added focused red/green logging tests proving the old
+  pin lacked `getLogger`, `isEnabledFor`, and convenience methods, then
+  verifying those surfaces after the upgrade.
+- [x] (2026-04-08 UTC) Updated `pyproject.toml` and `uv.lock` to femtologging
+  commit `691a73962df8f99308a82348d99c4f707c245e63`.
+- [x] (2026-04-08 UTC) Kept `ghillie/logging.py` and
+  `tests/helpers/femtologging_capture.py` unchanged because they remained
+  compatible; only small type-checking cleanups were needed elsewhere to pass
+  repository gates.
+- [x] (2026-04-08 UTC) Updated current docs (`docs/femtologging-users-guide.md`,
+  `docs/adr-001-adoption-of-femtologging-library.md`, and `docs/roadmap.md`) so
+  they describe the new API and dependency reality.
+- [x] (2026-04-08 UTC) Ran the full sequential quality gates and captured
+  passing evidence for `make fmt`, `make markdownlint`, `make nixie`,
+  `make check-fmt`, `make lint`, `make typecheck`, and `make test`.
 
 ## Surprises & Discoveries
 
@@ -130,6 +137,13 @@ If any constraint cannot be met, stop and escalate.
 - Discovery: `docs/adr-001-adoption-of-femtologging-library.md` and
   `docs/roadmap.md` still pin the old snapshot commit and describe the old API
   limitations as current facts.
+- Discovery: the femtologging upgrade itself did not require runtime wrapper or
+  capture-helper changes; the target SHA was backward-compatible with Ghillie's
+  existing integration boundary.
+- Discovery: recreating `.venv` for `make typecheck` surfaced three unrelated
+  strict-typing issues in Falcon constructor calls and CLI float coercion.
+  Minimal `typing.Any` casts replaced ineffective inline ignore comments so the
+  repository gates stayed green.
 
 ## Decision Log
 
@@ -366,6 +380,30 @@ git+https://github.com/leynos/femtologging@691a73962df8f99308a82348d99c4f707c245
 
 ## Outcomes & Retrospective
 
-Not started yet. Update this section after implementation with the exact code
-changes, test evidence, and any lessons about depending on pre-release
-femtologging commits.
+- The dependency now resolves to femtologging commit
+  `691a73962df8f99308a82348d99c4f707c245e63` in both `pyproject.toml` and
+  `uv.lock`.
+- Focused tests were added to `tests/unit/test_logging.py` to prove the new
+  upstream surface exists: `getLogger`, `FemtoLogger.isEnabledFor()`,
+  `FemtoLogger.exception()`, and `FemtoLogger.warning()` preserving `WARN`
+  records. These tests failed before the bump and passed after it.
+- Existing observability behaviour stayed intact. Focused post-upgrade
+  validation passed for: `tests/unit/test_logging.py`,
+  `tests/unit/test_github_observability.py`,
+  `tests/unit/test_github_ingestion_observability.py`, and
+  `tests/unit/test_reporting_observability.py`.
+- Current documentation now matches the target upstream guide for the changed
+  Python API surface and builder names, while the historical
+  `docs/execplans/adopt-femtologging.md` record was intentionally left
+  unchanged.
+- Full gate evidence on 2026-04-08 UTC:
+  - `make fmt`
+  - `MDLINT=/root/.bun/bin/markdownlint-cli2 make markdownlint`
+  - `make nixie`
+  - `make check-fmt`
+  - `make lint`
+  - `make typecheck`
+  - `make test` (`775 passed, 35 skipped`)
+- Lesson: for dependency upgrades that rebuild `.venv`, expect current static
+  analysis tools to re-evaluate nearby type suppressions. Keep compatibility
+  fixes minimal and separate from the functional migration intent.

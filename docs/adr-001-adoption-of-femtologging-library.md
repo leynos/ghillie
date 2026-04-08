@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (implementation in progress; 2026-01-31)
+Accepted (updated for femtologging v0.1.0 on 2026-04-08)
 
 ## Context
 
@@ -37,7 +37,7 @@ Femtologging[^femtologging] is a lightweight alternative to stdlib logging with
 the following characteristics:
 
 - Async-friendly with bounded queues (1024 capacity) and worker threads
-- Uses `get_logger(name)` instead of `getLogger(name)`
+- Supports both `get_logger(name)` and stdlib-style `getLogger(name)`
 - Primary method is `logger.log(level, message)`
 - Handlers: `FemtoStreamHandler`, `FemtoFileHandler`,
   `FemtoRotatingFileHandler`, `FemtoSocketHandler`
@@ -45,28 +45,29 @@ the following characteristics:
 
 ### Exception support update
 
-Femtologging now supports `exc_info` and `stack_info` on `logger.log()` in the
-snapshot commit used for dogfooding. The `logger.exception()` convenience
-method is still not implemented, but equivalent behaviour is achieved by
-calling `logger.log("ERROR", message, exc_info=exc)`. Structured `extra` fields
-remain unsupported.
+Femtologging v0.1.0 supports `exc_info` and `stack_info` on `logger.log()` and
+also exposes stdlib-style convenience methods such as `logger.info()`,
+`logger.warning()`, `logger.exception()`, and `logger.isEnabledFor()`.
+Structured `extra` fields remain unsupported, so Ghillie continues to
+pre-format messages before calling the logger.
 
 ## Decision
 
-Adopt femtologging as Ghillie's logging library using the snapshot commit
-`7c139fb7aca18f9277e00b88604b8bf5eb471be0` while the library is pre-release.
+Adopt femtologging as Ghillie's logging library using upstream commit
+`691a73962df8f99308a82348d99c4f707c245e63` (`v0.1.0`).
 
 ### Hard dependencies
 
 The following must be in place before migration can proceed:
 
 1. Femtologging provides `exc_info`/`stack_info` support on `logger.log()`
-2. The application can depend on the snapshot commit until a release lands
+2. The application can depend on the `v0.1.0` API surface exposed by commit
+   `691a73962df8f99308a82348d99c4f707c245e63`
 
 ### Migration approach
 
-1. Add femtologging to project dependencies in `pyproject.toml` using the
-   snapshot commit.
+1. Add femtologging to project dependencies in `pyproject.toml` using commit
+   `691a73962df8f99308a82348d99c4f707c245e63`.
 2. Introduce `ghillie/logging.py` to centralize `get_logger`, log formatting,
    and `exc_info` usage.
 3. Update `ghillie/silver/services.py`, `ghillie/github/ingestion.py`,
@@ -94,7 +95,7 @@ The following must be in place before migration can proceed:
 
 ### Negative
 
-- New dependency to maintain and version (pinned to a snapshot commit)
+- New dependency to maintain and version (currently pinned to a Git commit)
 - Team must learn femtologging API differences
 - Ruff LOG rules may need adjustment (femtologging uses different patterns)
 
