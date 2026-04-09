@@ -118,7 +118,7 @@ If any constraint cannot be met, stop and escalate.
   passing evidence for `make fmt`, `make markdownlint`, `make nixie`,
   `make check-fmt`, `make lint`, `make typecheck`, and `make test`.
 
-## Surprises & Discoveries
+## Surprises & discoveries
 
 - Discovery: `git cat-file -t 691a73962df8f99308a82348d99c4f707c245e63`
   fails in this repository because the SHA is not a `ghillie` object. A GitHub
@@ -145,7 +145,7 @@ If any constraint cannot be met, stop and escalate.
   Minimal `typing.Any` casts replaced ineffective inline ignore comments so the
   repository gates stayed green.
 
-## Decision Log
+## Decision log
 
 - Decision: treat this work as an upgrade of the existing femtologging
   adoption, not a fresh migration away from stdlib logging. Rationale: Ghillie
@@ -378,7 +378,7 @@ git+https://github.com/leynos/femtologging@691a73962df8f99308a82348d99c4f707c245
   repo references to point only at the current SHA, that policy needs explicit
   confirmation first.
 
-## Outcomes & Retrospective
+## Outcomes & retrospective
 
 - The dependency now resolves to femtologging commit
   `691a73962df8f99308a82348d99c4f707c245e63` in both `pyproject.toml` and
