@@ -326,10 +326,16 @@ Use grep checks to confirm stale documentation and dependency pins are gone:
 PATTERN="7c139fb7aca18f9277e00b88604b8bf5eb471be0"
 PATTERN="$PATTERN|with_flush_timeout_ms|with_flush_record_interval"
 PATTERN="$PATTERN|Convenience methods .*not implemented yet"
-rg -n "$PATTERN" pyproject.toml uv.lock docs
+rg -n "$PATTERN" \
+  pyproject.toml \
+  uv.lock \
+  docs/adr-001-adoption-of-femtologging-library.md \
+  docs/roadmap.md \
+  docs/femtologging-users-guide.md
 ```
 
-The final grep should return no matches in current docs or dependency files.
+The final grep should return no matches in those current docs or dependency
+files.
 
 ## Validation and acceptance
 
@@ -351,9 +357,9 @@ The migration is complete only when all of the following are true:
 Expected high-signal evidence includes:
 
 ```plaintext
-tests/unit/test_logging.py::test_getLogger_alias_matches_get_logger PASSED
-tests/unit/test_logging.py::test_femtologger_exposes_isEnabledFor PASSED
-tests/unit/test_logging.py::test_logger_exception_captures_exc_info PASSED
+tests/unit/test_logging.py::test_femtologging_exposes_get_logger_alias PASSED
+tests/unit/test_logging.py::test_femtologging_logger_exposes_is_enabled_for PASSED
+tests/unit/test_logging.py::test_femtologging_logger_exception_captures_exc_info PASSED
 ```
 
 ```plaintext
