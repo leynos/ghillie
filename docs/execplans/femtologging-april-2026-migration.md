@@ -311,8 +311,7 @@ uv lock | tee /tmp/ghillie-femtologging-uv-lock.log
 ```bash
 set -o pipefail
 make fmt | tee /tmp/ghillie-femtologging-fmt.log
-MDLINT=/root/.bun/bin/markdownlint-cli2 make markdownlint \
-  | tee /tmp/ghillie-femtologging-markdownlint.log
+make markdownlint | tee /tmp/ghillie-femtologging-markdownlint.log
 make nixie | tee /tmp/ghillie-femtologging-nixie.log
 make check-fmt | tee /tmp/ghillie-femtologging-check-fmt.log
 make lint | tee /tmp/ghillie-femtologging-lint.log
@@ -360,6 +359,7 @@ Expected high-signal evidence includes:
 tests/unit/test_logging.py::test_femtologging_exposes_get_logger_alias PASSED
 tests/unit/test_logging.py::test_femtologging_logger_exposes_is_enabled_for PASSED
 tests/unit/test_logging.py::test_femtologging_logger_exception_captures_exc_info PASSED
+tests/unit/test_logging.py::test_femtologging_logger_warning_method_uses_warn_level PASSED
 ```
 
 ```plaintext
