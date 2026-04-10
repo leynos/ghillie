@@ -1,8 +1,8 @@
 # Upgrade Ghillie to femtologging SHA 691a73962df8f99308a82348d99c4f707c245e63
 
 This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
+`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`,
+`Decision log`, and `Outcomes & retrospective` must be kept up to date as work
 proceeds.
 
 Status: COMPLETE
@@ -404,7 +404,7 @@ git+https://github.com/leynos/femtologging@691a73962df8f99308a82348d99c4f707c245
   unchanged.
 - Full gate evidence on 2026-04-08 UTC:
   - `make fmt`
-  - `MDLINT=/root/.bun/bin/markdownlint-cli2 make markdownlint`
+  - `make markdownlint`
   - `make nixie`
   - `make check-fmt`
   - `make lint`
