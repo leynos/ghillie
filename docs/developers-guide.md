@@ -49,6 +49,33 @@ Run all gates before committing:
 make check-fmt && make lint && make typecheck && make test && make helm-lint
 ```
 
+## Code style and type handling
+
+Prefer code and type signatures that the checker can prove without help. Use
+`typ.cast(...)` only at boundaries where a third-party API or framework returns
+values that are correct at runtime but too loose for static analysis.
+
+Typical cases in this repository include framework constructor parameters and
+validated values pulled from generic dictionaries. Keep the cast narrow and
+close to the boundary instead of spreading `Any` through the rest of the code.
+
+```python
+from __future__ import annotations
+
+import typing as typ
+
+middleware = build_middleware_stack()
+app = falcon.asgi.App(middleware=typ.cast("typ.Any", middleware))
+
+raw_timeout = config_data["timeout_seconds"]
+timeout_seconds = float(typ.cast("str | float | int", raw_timeout))
+```
+
+Use `typ.cast(...)` to document intent, not to silence the checker blindly. If
+the value can be validated or narrowed with normal control flow, prefer that
+over a cast. When a cast is necessary, add it at the smallest possible scope
+and keep the surrounding code explicit about why the cast is safe.
+
 ## Helm chart for local and GitOps (Git-driven operations) previews
 
 The `charts/ghillie` Helm chart deploys Ghillie to Kubernetes clusters for both
