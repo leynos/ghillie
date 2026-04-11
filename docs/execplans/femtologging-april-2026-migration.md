@@ -169,9 +169,9 @@ If any constraint cannot be met, stop and escalate.
 
 ## Context and orientation
 
-The current dependency pin lives in `pyproject.toml` and `uv.lock`, both of
-which point at the older femtologging snapshot
-`7c139fb7aca18f9277e00b88604b8bf5eb471be0`.
+The dependency pin previously lived in `pyproject.toml` and `uv.lock` at the
+older femtologging snapshot `7c139fb7aca18f9277e00b88604b8bf5eb471be0`. Those
+files now resolve to `691a73962df8f99308a82348d99c4f707c245e63`.
 
 All production call sites already funnel through `ghillie/logging.py`. The
 relevant consumers are:
@@ -235,7 +235,7 @@ The local repository docs that are known to require attention are:
 
    Run only these focused tests first and confirm they fail against the old
    snapshot. If they already pass unexpectedly, document that in
-   `Surprises & Discoveries` before proceeding, because it would mean the
+   `Surprises & discoveries` before proceeding, because it would mean the
    current dependency already contains more of the target surface than the
    repository docs claim.
 
