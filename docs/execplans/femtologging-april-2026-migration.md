@@ -122,7 +122,8 @@ If any constraint cannot be met, stop and escalate.
 
 - Discovery: `git cat-file -t 691a73962df8f99308a82348d99c4f707c245e63`
   fails in this repository because the SHA is not a `ghillie` object. A GitHub
-  API lookup confirms it is a `femtologging` commit dated 2026-04-05.
+  API lookup confirms it is a `femtologging` commit dated
+  2026-04-05.[^femtologging-sha]
 - Discovery: Ghillie's production code does not call
   `StreamHandlerBuilder.with_flush_timeout_ms()` or
   `FileHandlerBuilder.with_flush_record_interval()` directly. The concrete
@@ -144,6 +145,13 @@ If any constraint cannot be met, stop and escalate.
   strict-typing issues in Falcon constructor calls and CLI float coercion.
   Minimal `typing.Any` casts replaced ineffective inline ignore comments so the
   repository gates stayed green.
+
+[^femtologging-sha]:
+    GitHub API lookup:
+    `https://api.github.com/repos/leynos/femtologging/commits/691a73962df8f99308a82348d99c4f707c245e63`.
+    The response identifies the commit as
+    `https://github.com/leynos/femtologging/commit/691a73962df8f99308a82348d99c4f707c245e63`
+    with author date `2026-04-05T17:29:10Z`.
 
 ## Decision log
 
@@ -369,7 +377,7 @@ git+https://github.com/leynos/femtologging@691a73962df8f99308a82348d99c4f707c245
 
 ## Open questions and gaps
 
-- The user request says "plan the migration of `ghillie` to `femtologging` at
+- The user request says, "plan the migration of `ghillie` to `femtologging` at
   SHA `691a73962df8f99308a82348d99c4f707c245e63`", but does not name the repo
   that SHA belongs to. Research shows it is a `femtologging` commit, not a
   `ghillie` commit. Implementation should proceed with that interpretation
