@@ -20,6 +20,12 @@ from ghillie.logging import (
 )
 from tests.helpers.femtologging_capture import capture_femto_logs
 
+# The target femtologging snapshot exposes no public INFO/WARN/ERROR constants,
+# so these assertions use the literal payload values emitted by the library.
+_INFO_LEVEL = "INFO"
+_ERROR_LEVEL = "ERROR"
+_WARN_LEVEL = "WARN"
+
 
 class _FakeLogger:
     """Collects log calls for assertions."""
@@ -156,9 +162,9 @@ def test_femtologging_logger_exposes_is_enabled_for() -> None:
         "test_femtologging_logger_exposes_is_enabled_for expected "
         "logger.isEnabledFor to be callable."
     )
-    assert is_enabled_for("INFO") is True, (
+    assert is_enabled_for(_INFO_LEVEL) is True, (
         "test_femtologging_logger_exposes_is_enabled_for expected "
-        "logger.isEnabledFor('INFO') to report INFO as enabled."
+        "logger.isEnabledFor(INFO) to report INFO as enabled."
     )
 
 
@@ -176,7 +182,7 @@ def test_femtologging_logger_exception_captures_exc_info() -> None:
         "capture_femto_logs to record exactly one exception log."
     )
     record = capture.records[0]
-    assert record.level == "ERROR", (
+    assert record.level == _ERROR_LEVEL, (
         "test_femtologging_logger_exception_captures_exc_info expected "
         "capture_femto_logs to preserve ERROR level."
     )
@@ -203,7 +209,7 @@ def test_femtologging_logger_warning_method_uses_warn_level() -> None:
         "capture_femto_logs to record exactly one warning log."
     )
     record = capture.records[0]
-    assert record.level == "WARN", (
+    assert record.level == _WARN_LEVEL, (
         "test_femtologging_logger_warning_method_uses_warn_level expected "
         "capture_femto_logs to normalize warning() to WARN."
     )

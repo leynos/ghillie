@@ -16,6 +16,9 @@ import falcon.asgi
 import falcon.testing
 import pytest
 
+if typ.TYPE_CHECKING:
+    from falcon._typing import AsyncMiddleware as FalconAsyncMiddleware
+
 
 class _MockSession:
     """Lightweight mock of an AsyncSession for middleware tests."""
@@ -72,7 +75,8 @@ def client(session: _MockSession) -> falcon.testing.TestClient:
 
     factory = mock.MagicMock(return_value=session)
     mw = SQLAlchemySessionManager(factory)
-    app = falcon.asgi.App(middleware=typ.cast("typ.Any", [mw]))
+    middleware: list[FalconAsyncMiddleware] = [typ.cast("FalconAsyncMiddleware", mw)]
+    app = falcon.asgi.App(middleware=middleware)
     app.add_route("/echo", _EchoResource())
     app.add_route("/error", _ErrorResource())
     app.add_route("/bad-request", _BadRequestResource())

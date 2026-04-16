@@ -253,7 +253,10 @@ def _coerce_log_level(value: object) -> CliLogLevel:
 
 def _coerce_float(value: object, *, field: str) -> float:
     try:
-        coercible_value = typ.cast("typ.Any", value)
+        coercible_value = typ.cast(
+            "str | bytes | bytearray | typ.SupportsFloat",
+            value,
+        )
         return float(coercible_value)
     except (TypeError, ValueError) as exc:
         msg = f"{field} must be a float"

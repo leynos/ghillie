@@ -40,6 +40,7 @@ from ghillie.api.health.resources import HealthResource, ReadyResource
 from ghillie.reporting.errors import ReportValidationError
 
 if typ.TYPE_CHECKING:
+    from falcon._typing import AsyncMiddleware as FalconAsyncMiddleware
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from ghillie.reporting.service import ReportingService
@@ -99,7 +100,7 @@ def create_app(
         Configured Falcon ASGI application.
 
     """
-    middleware: list[object] = []
+    middleware: list[FalconAsyncMiddleware] = []
 
     # Narrow once: _has_domain_deps guarantees non-None fields.
     deps = dependencies if _has_domain_deps(dependencies) else None
@@ -107,9 +108,9 @@ def create_app(
         from ghillie.api.middleware import SQLAlchemySessionManager
 
         sf = typ.cast("async_sessionmaker[AsyncSession]", deps.session_factory)
-        middleware.append(SQLAlchemySessionManager(sf))
+        middleware.append(typ.cast("FalconAsyncMiddleware", SQLAlchemySessionManager(sf)))
 
-    app = falcon.asgi.App(middleware=typ.cast("typ.Any", middleware))
+    app = falcon.asgi.App(middleware=middleware)
 
     # Health endpoints are always available
     app.add_route("/health", HealthResource())
