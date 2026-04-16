@@ -16,8 +16,23 @@ import falcon.asgi
 import falcon.testing
 import pytest
 
-if typ.TYPE_CHECKING:
-    from falcon._typing import AsyncMiddleware as FalconAsyncMiddleware
+
+class _AsyncMiddlewareProto(typ.Protocol):
+    """Minimal Falcon ASGI middleware shape used by the fixture app."""
+
+    async def process_request(
+        self,
+        req: falcon.asgi.Request,
+        resp: falcon.asgi.Response,
+    ) -> None: ...
+
+    async def process_response(
+        self,
+        req: falcon.asgi.Request,
+        resp: falcon.asgi.Response,
+        resource: object,
+        req_succeeded: bool,  # noqa: FBT001
+    ) -> None: ...
 
 
 class _MockSession:
@@ -75,7 +90,7 @@ def client(session: _MockSession) -> falcon.testing.TestClient:
 
     factory = mock.MagicMock(return_value=session)
     mw = SQLAlchemySessionManager(factory)
-    middleware: list[FalconAsyncMiddleware] = [typ.cast("FalconAsyncMiddleware", mw)]
+    middleware: list[_AsyncMiddlewareProto] = [typ.cast("_AsyncMiddlewareProto", mw)]
     app = falcon.asgi.App(middleware=middleware)
     app.add_route("/echo", _EchoResource())
     app.add_route("/error", _ErrorResource())

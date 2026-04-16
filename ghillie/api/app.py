@@ -40,12 +40,29 @@ from ghillie.api.health.resources import HealthResource, ReadyResource
 from ghillie.reporting.errors import ReportValidationError
 
 if typ.TYPE_CHECKING:
-    from falcon._typing import AsyncMiddleware as FalconAsyncMiddleware
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from ghillie.reporting.service import ReportingService
 
 __all__ = ["AppDependencies", "create_app"]
+
+
+class AsyncMiddlewareProto(typ.Protocol):
+    """Minimal Falcon ASGI middleware shape used by the app factory."""
+
+    async def process_request(
+        self,
+        req: falcon.asgi.Request,
+        resp: falcon.asgi.Response,
+    ) -> None: ...
+
+    async def process_response(
+        self,
+        req: falcon.asgi.Request,
+        resp: falcon.asgi.Response,
+        resource: object,
+        req_succeeded: bool,  # noqa: FBT001
+    ) -> None: ...
 
 
 @dc.dataclass(frozen=True, slots=True)
@@ -100,7 +117,7 @@ def create_app(
         Configured Falcon ASGI application.
 
     """
-    middleware: list[FalconAsyncMiddleware] = []
+    middleware: list[AsyncMiddlewareProto] = []
 
     # Narrow once: _has_domain_deps guarantees non-None fields.
     deps = dependencies if _has_domain_deps(dependencies) else None
@@ -108,7 +125,12 @@ def create_app(
         from ghillie.api.middleware import SQLAlchemySessionManager
 
         sf = typ.cast("async_sessionmaker[AsyncSession]", deps.session_factory)
-        middleware.append(typ.cast("FalconAsyncMiddleware", SQLAlchemySessionManager(sf)))
+        middleware.append(
+            typ.cast(
+                "AsyncMiddlewareProto",
+                SQLAlchemySessionManager(sf),
+            )
+        )
 
     app = falcon.asgi.App(middleware=middleware)
 
