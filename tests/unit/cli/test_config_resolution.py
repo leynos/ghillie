@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import decimal
 import json
 import typing as typ
 
@@ -11,6 +12,38 @@ if typ.TYPE_CHECKING:
     from pathlib import Path
 
 from ghillie.cli.config import GlobalOptions, resolve_cli_config
+
+
+class TestCoerceFloat:
+    """Unit tests for the internal float coercion helper."""
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            pytest.param("3.14", 3.14, id="str"),
+            pytest.param(b"2.71", 2.71, id="bytes"),
+            pytest.param(bytearray(b"1.0"), 1.0, id="bytearray"),
+            pytest.param(decimal.Decimal("0.5"), 0.5, id="supports-float"),
+            pytest.param(42, 42.0, id="int"),
+        ],
+    )
+    def test_coerce_float_accepts_supported_inputs(
+        self,
+        value: object,
+        expected: float,
+    ) -> None:
+        """Supported float-like values should be converted directly."""
+        from ghillie.cli.config import _coerce_float
+
+        assert _coerce_float(value, field="request_timeout_s") == expected
+
+    def test_coerce_float_rejects_invalid_input(self) -> None:
+        """Invalid values should raise ValueError that names the field."""
+        from ghillie.cli.config import _coerce_float
+
+        field = "request_timeout_s"
+        with pytest.raises(ValueError, match=field):
+            _coerce_float("nope", field=field)
 
 
 def _write_profile(path: Path) -> None:

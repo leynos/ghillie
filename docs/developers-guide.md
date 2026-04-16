@@ -64,17 +64,61 @@ from __future__ import annotations
 
 import typing as typ
 
-middleware = build_middleware_stack()
-app = falcon.asgi.App(middleware=typ.cast("typ.Any", middleware))
+if typ.TYPE_CHECKING:
+    from falcon._typing import AsyncMiddleware as FalconAsyncMiddleware
+
+middleware: list[FalconAsyncMiddleware] = []
+middleware.append(typ.cast("FalconAsyncMiddleware", build_middleware()))
 
 raw_timeout = config_data["timeout_seconds"]
-timeout_seconds = float(typ.cast("str | float | int", raw_timeout))
+timeout_seconds = float(
+    typ.cast("str | bytes | bytearray | typ.SupportsFloat", raw_timeout)
+)
 ```
 
 Use `typ.cast(...)` to document intent, not to silence the checker blindly. If
 the value can be validated or narrowed with normal control flow, prefer that
 over a cast. When a cast is necessary, add it at the smallest possible scope
 and keep the surrounding code explicit about why the cast is safe.
+
+Use `if typ.TYPE_CHECKING:` when the type checker needs a private or
+heavyweight framework symbol that should never be imported at runtime. The
+Falcon middleware alias is the concrete pattern in this repository: guard the
+`falcon._typing.AsyncMiddleware` import, then reference it only in annotations
+or stringified `typ.cast(...)` targets. Do not dereference guarded imports in
+runtime expressions.
+
+```python
+from __future__ import annotations
+
+import typing as typ
+
+if typ.TYPE_CHECKING:
+    from falcon._typing import AsyncMiddleware as FalconAsyncMiddleware
+
+middleware: list[FalconAsyncMiddleware] = []
+middleware.append(typ.cast("FalconAsyncMiddleware", build_middleware()))
+```
+
+### Logging integration
+
+Application code should obtain loggers through `ghillie.logging`, which wraps
+the underlying `femtologging` logger and preserves the repository's
+percent-formatting, level normalization, and `exc_info` handling rules. Call
+sites should go through that wrapper instead of importing `femtologging`
+directly.
+
+When you need a named logger, use `get_logger(name)` from `femtologging` or the
+stdlib-compatible `getLogger(name)` alias only at the integration boundary.
+Application code should still prefer the helpers in `ghillie.logging` so the
+wrapper remains the single place that translates call-site intent into
+femtologging behavior.
+
+Tests that need to inspect emitted logs should use the
+`capture_femto_logs(name)` context manager from
+`tests.helpers.femtologging_capture`. It captures the records emitted by the
+named logger without routing through `logging.getLogger`, which would bypass
+the femtologging integration entirely.
 
 ## Helm chart for local and GitOps (Git-driven operations) previews
 

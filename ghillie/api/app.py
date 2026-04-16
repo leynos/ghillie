@@ -61,7 +61,7 @@ class AsyncMiddlewareProto(typ.Protocol):
         req: falcon.asgi.Request,
         resp: falcon.asgi.Response,
         resource: object,
-        req_succeeded: bool,  # noqa: FBT001
+        req_succeeded: bool,  # noqa: FBT001 - Falcon ASGI middleware requires a positional bool here; FIXME: ghillie#60 revisit if Falcon exposes a public typed middleware contract.
     ) -> None: ...
 
 
