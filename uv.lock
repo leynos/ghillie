@@ -240,7 +240,7 @@ requires-dist = [
 dev = [
     { name = "asyncpg", specifier = ">=0.20.0,<1.0" },
     { name = "cmd-mox", specifier = ">=0.2,<1" },
-    { name = "hypothesis" },
+    { name = "hypothesis", specifier = ">=6.150.0,<7" },
     { name = "plumbum", specifier = ">=1.10,<2" },
     { name = "py-pglite", extras = ["asyncpg"], specifier = ">=0.1.0" },
     { name = "pyright" },
@@ -250,7 +250,7 @@ dev = [
     { name = "pytest-timeout" },
     { name = "pytest-xdist" },
     { name = "ruff" },
-    { name = "syrupy" },
+    { name = "syrupy", specifier = ">=5.0.0,<6" },
     { name = "ty", specifier = ">=0.0.1a21" },
 ]
 

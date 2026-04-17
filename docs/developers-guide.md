@@ -108,11 +108,9 @@ percent-formatting, level normalization, and `exc_info` handling rules. Call
 sites should go through that wrapper instead of importing `femtologging`
 directly.
 
-When you need a named logger, use `get_logger(name)` from `femtologging` or the
-stdlib-compatible `getLogger(name)` alias only at the integration boundary.
-Application code should still prefer the helpers in `ghillie.logging` so the
-wrapper remains the single place that translates call-site intent into
-femtologging behavior.
+To obtain a named logger, use the helpers in `ghillie.logging`. Keep named
+logger acquisition behind that wrapper so the module remains the single
+translation layer for the femtologging integration boundary.
 
 Tests that need to inspect emitted logs should use the
 `capture_femto_logs(name)` context manager from

@@ -15,7 +15,8 @@ from unittest import mock
 import falcon.asgi
 import falcon.testing
 import pytest
-from falcon._typing import AsyncMiddleware as FalconAsyncMiddleware
+
+from ghillie.api.app import AsyncMiddlewareProto
 
 
 class _MockSession:
@@ -73,8 +74,8 @@ def client(session: _MockSession) -> falcon.testing.TestClient:
 
     factory = mock.MagicMock(return_value=session)
     mw = SQLAlchemySessionManager(factory)
-    middleware: list[FalconAsyncMiddleware] = [typ.cast("FalconAsyncMiddleware", mw)]
-    typ.assert_type(middleware, list[FalconAsyncMiddleware])
+    middleware: list[AsyncMiddlewareProto] = [typ.cast("AsyncMiddlewareProto", mw)]
+    typ.assert_type(middleware, list[AsyncMiddlewareProto])
     app = falcon.asgi.App(middleware=middleware)
     app.add_route("/echo", _EchoResource())
     app.add_route("/error", _ErrorResource())
