@@ -54,7 +54,9 @@ class AsyncMiddlewareProto(typ.Protocol):
         self,
         req: falcon.asgi.Request,
         resp: falcon.asgi.Response,
-    ) -> None: ...
+    ) -> None:
+        """Handle an incoming ASGI request before routing."""
+        ...
 
     async def process_response(
         self,
@@ -62,7 +64,9 @@ class AsyncMiddlewareProto(typ.Protocol):
         resp: falcon.asgi.Response,
         resource: object,
         req_succeeded: bool,  # noqa: FBT001 - Falcon ASGI middleware requires a positional bool here; FIXME: ghillie#60 revisit if Falcon exposes a public typed middleware contract.
-    ) -> None: ...
+    ) -> None:
+        """Handle an outgoing ASGI response after routing."""
+        ...
 
 
 @dc.dataclass(frozen=True, slots=True)
