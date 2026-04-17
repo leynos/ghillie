@@ -60,8 +60,6 @@ validated values pulled from generic dictionaries. Keep the cast narrow and
 close to the boundary instead of spreading `Any` through the rest of the code.
 
 ```python
-from __future__ import annotations
-
 import typing as typ
 
 if typ.TYPE_CHECKING:
@@ -89,8 +87,6 @@ or stringified `typ.cast(...)` targets. Do not dereference guarded imports in
 runtime expressions.
 
 ```python
-from __future__ import annotations
-
 import typing as typ
 
 if typ.TYPE_CHECKING:
