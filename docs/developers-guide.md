@@ -86,15 +86,8 @@ Falcon middleware alias is the concrete pattern in this repository: guard the
 or stringified `typ.cast(...)` targets. Do not dereference guarded imports in
 runtime expressions.
 
-```python
-import typing as typ
-
-if typ.TYPE_CHECKING:
-    from falcon._typing import AsyncMiddleware as FalconAsyncMiddleware
-
-middleware: list[FalconAsyncMiddleware] = []
-middleware.append(typ.cast("FalconAsyncMiddleware", build_middleware()))
-```
+See the canonical `FalconAsyncMiddleware` example above for the exact
+`middleware` and `build_middleware()` pattern.
 
 ### Logging integration
 
