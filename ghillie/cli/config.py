@@ -171,6 +171,7 @@ def _resolve_api_base_url(
     profile_global: typ.Mapping[str, object],
     state: typ.Mapping[str, object],
 ) -> tuple[str, ApiBaseUrlSource]:
+    """Resolve the API base URL from the source chain."""
     sources: tuple[tuple[ApiBaseUrlSource, object], ...] = (
         ("flag", options.api_base_url),
         ("env", env.get("GHILLIE_API_BASE_URL")),
@@ -190,6 +191,7 @@ def _resolve_auth_token(
     env: typ.Mapping[str, str],
     profile_global: typ.Mapping[str, object],
 ) -> str | None:
+    """Resolve the auth token from options, environment, and profile."""
     if options.auth_token:
         return options.auth_token
     if env_token := env.get("GHILLIE_AUTH_TOKEN"):
@@ -201,6 +203,7 @@ def _resolve_auth_token(
 
 
 def _load_profile(path: Path) -> dict[str, object]:
+    """Load the TOML profile from *path*, returning an empty dict if absent."""
     if not path.exists():
         return {}
     try:
@@ -213,6 +216,7 @@ def _load_profile(path: Path) -> dict[str, object]:
 
 
 def _load_state(path: Path) -> dict[str, object]:
+    """Load the JSON state from *path*, returning an empty dict if absent."""
     if not path.exists():
         return {}
     try:
@@ -228,6 +232,7 @@ def _load_state(path: Path) -> dict[str, object]:
 
 
 def _validate_api_base_url(value: str) -> str:
+    """Validate that *value* is an absolute HTTP(S) URL."""
     parsed = urlparse(value)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         msg = f"api_base_url must be an absolute HTTP(S) URL: {value}"
@@ -236,6 +241,7 @@ def _validate_api_base_url(value: str) -> str:
 
 
 def _coerce_output(value: object) -> OutputFormat:
+    """Coerce *value* to a valid OutputFormat literal."""
     text = str(value)
     if text not in _OUTPUT_VALUES:
         msg = f"output must be one of: {', '.join(sorted(_OUTPUT_VALUES))}"
@@ -244,6 +250,7 @@ def _coerce_output(value: object) -> OutputFormat:
 
 
 def _coerce_log_level(value: object) -> CliLogLevel:
+    """Coerce *value* to a valid CliLogLevel literal."""
     text = str(value)
     if text not in _LOG_LEVEL_VALUES:
         msg = f"log_level must be one of: {', '.join(sorted(_LOG_LEVEL_VALUES))}"
@@ -252,14 +259,20 @@ def _coerce_log_level(value: object) -> CliLogLevel:
 
 
 def _coerce_float(value: object, *, field: str) -> float:
+    """Coerce *value* to float, raising ValueError with *field* on failure."""
     try:
-        return float(value)  # type: ignore[arg-type]
+        coercible_value = typ.cast(
+            "str | bytes | bytearray | typ.SupportsFloat",
+            value,
+        )
+        return float(coercible_value)
     except (TypeError, ValueError) as exc:
         msg = f"{field} must be a float"
         raise ValueError(msg) from exc
 
 
 def _coerce_bool(value: object, *, field: str) -> bool:
+    """Coerce *value* to bool, accepting common truthy/falsy strings."""
     if isinstance(value, bool):
         return value
     text = str(value).strip().lower()
@@ -272,6 +285,7 @@ def _coerce_bool(value: object, *, field: str) -> bool:
 
 
 def _first_non_none(*values: object) -> object:
+    """Return the first non-None value from *values*."""
     for value in values:
         if value is not None:
             return value

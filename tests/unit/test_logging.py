@@ -4,7 +4,10 @@ Run with:
     pytest tests/unit/test_logging.py
 """
 
+import importlib
+
 import pytest
+from femtologging import get_logger
 
 from ghillie.logging import (
     configure_logging,
@@ -15,6 +18,13 @@ from ghillie.logging import (
     log_warning,
     normalize_log_level,
 )
+from tests.helpers.femtologging_capture import capture_femto_logs
+
+# The target femtologging snapshot exposes no public INFO/WARN/ERROR constants,
+# so these assertions use the literal payload values emitted by the library.
+_INFO_LEVEL = "INFO"
+_ERROR_LEVEL = "ERROR"
+_WARN_LEVEL = "WARN"
 
 
 class _FakeLogger:
@@ -114,6 +124,98 @@ def test_log_exception_passes_exc_info() -> None:
 
     assert logger.calls == [("ERROR", "failed", exc, False)], (
         "Expected ERROR log entry with exc_info."
+    )
+
+
+def test_femtologging_exposes_get_logger_alias() -> None:
+    """The target femtologging snapshot exposes ``getLogger``."""
+    femtologging = importlib.import_module("femtologging")
+
+    assert hasattr(
+        femtologging,
+        "getLogger",
+    ), (
+        "test_femtologging_exposes_get_logger_alias expected "
+        "femtologging.getLogger to exist alongside get_logger."
+    )
+    assert femtologging.getLogger("ghillie.test.alias") is get_logger(
+        "ghillie.test.alias"
+    ), (
+        "test_femtologging_exposes_get_logger_alias expected getLogger to "
+        "return the same logger singleton as get_logger."
+    )
+
+
+def test_femtologging_logger_exposes_is_enabled_for() -> None:
+    """The target femtologging snapshot exposes ``isEnabledFor``."""
+    logger = get_logger("ghillie.test.is-enabled")
+
+    assert hasattr(
+        logger,
+        "isEnabledFor",
+    ), (
+        "test_femtologging_logger_exposes_is_enabled_for expected get_logger "
+        "to return a logger with isEnabledFor."
+    )
+    is_enabled_for = logger.isEnabledFor
+    assert callable(is_enabled_for), (
+        "test_femtologging_logger_exposes_is_enabled_for expected "
+        "logger.isEnabledFor to be callable."
+    )
+    assert is_enabled_for(_INFO_LEVEL) is True, (
+        "test_femtologging_logger_exposes_is_enabled_for expected "
+        "logger.isEnabledFor(INFO) to report INFO as enabled."
+    )
+
+
+def test_femtologging_logger_exception_captures_exc_info() -> None:
+    """The target femtologging snapshot exposes ``exception``."""
+    logger = get_logger("ghillie.test.exception-method")
+
+    with capture_femto_logs("ghillie.test.exception-method") as capture:
+        error = ValueError("boom")
+        logger.exception("failed via method", exc_info=error)
+        capture.wait_for_count(1)
+
+    assert len(capture.records) == 1, (
+        "test_femtologging_logger_exception_captures_exc_info expected "
+        "capture_femto_logs to record exactly one exception log."
+    )
+    record = capture.records[0]
+    assert record.level == _ERROR_LEVEL, (
+        "test_femtologging_logger_exception_captures_exc_info expected "
+        "capture_femto_logs to preserve ERROR level."
+    )
+    assert record.message == "failed via method", (
+        "test_femtologging_logger_exception_captures_exc_info expected "
+        "capture_femto_logs to preserve the exception message."
+    )
+    assert record.exc_info is not None, (
+        "test_femtologging_logger_exception_captures_exc_info expected "
+        "capture_femto_logs to include exc_info from logger.exception."
+    )
+
+
+def test_femtologging_logger_warning_method_uses_warn_level() -> None:
+    """The target femtologging snapshot exposes ``warning``."""
+    logger = get_logger("ghillie.test.warning-method")
+
+    with capture_femto_logs("ghillie.test.warning-method") as capture:
+        logger.warning("careful now")
+        capture.wait_for_count(1)
+
+    assert len(capture.records) == 1, (
+        "test_femtologging_logger_warning_method_uses_warn_level expected "
+        "capture_femto_logs to record exactly one warning log."
+    )
+    record = capture.records[0]
+    assert record.level == _WARN_LEVEL, (
+        "test_femtologging_logger_warning_method_uses_warn_level expected "
+        "capture_femto_logs to normalize warning() to WARN."
+    )
+    assert record.message == "careful now", (
+        "test_femtologging_logger_warning_method_uses_warn_level expected "
+        "capture_femto_logs to preserve the warning message."
     )
 
 

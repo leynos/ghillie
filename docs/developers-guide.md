@@ -49,6 +49,64 @@ Run all gates before committing:
 make check-fmt && make lint && make typecheck && make test && make helm-lint
 ```
 
+## Code style and type handling
+
+Prefer code and type signatures that the checker can prove without help. Use
+`typ.cast(...)` only at boundaries where a third-party API or framework returns
+values that are correct at runtime but too loose for static analysis.
+
+Typical cases in this repository include framework constructor parameters and
+validated values pulled from generic dictionaries. Keep the cast narrow and
+close to the boundary instead of spreading `Any` through the rest of the code.
+
+```python
+import typing as typ
+
+if typ.TYPE_CHECKING:
+    from falcon._typing import AsyncMiddleware as FalconAsyncMiddleware
+
+middleware: list[FalconAsyncMiddleware] = []
+middleware.append(typ.cast("FalconAsyncMiddleware", build_middleware()))
+
+raw_timeout = config_data["timeout_seconds"]
+timeout_seconds = float(
+    typ.cast("str | bytes | bytearray | typ.SupportsFloat", raw_timeout)
+)
+```
+
+Use `typ.cast(...)` to document intent, not to silence the checker blindly. If
+the value can be validated or narrowed with normal control flow, prefer that
+over a cast. When a cast is necessary, add it at the smallest possible scope
+and keep the surrounding code explicit about why the cast is safe.
+
+Use `if typ.TYPE_CHECKING:` when the type checker needs a private or
+heavyweight framework symbol that should never be imported at runtime. The
+Falcon middleware alias is the concrete pattern in this repository: guard the
+`falcon._typing.AsyncMiddleware` import, then reference it only in annotations
+or stringified `typ.cast(...)` targets. Do not dereference guarded imports in
+runtime expressions.
+
+See the canonical `FalconAsyncMiddleware` example above for the exact
+`middleware` and `build_middleware()` pattern.
+
+### Logging integration
+
+Application code should obtain loggers through `ghillie.logging`, which wraps
+the underlying `femtologging` logger and preserves the repository's
+percent-formatting, level normalization, and `exc_info` handling rules. Call
+sites should go through that wrapper instead of importing `femtologging`
+directly.
+
+To obtain a named logger, use the helpers in `ghillie.logging`. Keep named
+logger acquisition behind that wrapper so the module remains the single
+translation layer for the femtologging integration boundary.
+
+Tests that need to inspect emitted logs should use the
+`capture_femto_logs(name)` context manager from
+`tests.helpers.femtologging_capture`. It captures the records emitted by the
+named logger without routing through `logging.getLogger`, which would bypass
+the femtologging integration entirely.
+
 ## Helm chart for local and GitOps (Git-driven operations) previews
 
 The `charts/ghillie` Helm chart deploys Ghillie to Kubernetes clusters for both

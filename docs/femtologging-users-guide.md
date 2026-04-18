@@ -69,8 +69,17 @@ your process exits.
   (default format is `"{logger} [LEVEL] message"`), or `None` when the record
   is filtered out. This differs from `logging.Logger.log()`, which always
   returns `None`.
-- Convenience methods (`logger.info`, `logger.warning`, and so on) are not
-  implemented yet; call `log()` directly or wrap it in a helper.
+- Convenience methods `logger.debug(message)`, `logger.info(message)`,
+  `logger.warning(message)`, `logger.error(message)`,
+  `logger.critical(message)`, and `logger.exception(message)` are available.
+  Each accepts a pre-formatted `message` string plus optional `exc_info` and
+  `stack_info` keyword arguments, identical to `log()`. `exception()` behaves
+  like `error()` but defaults `exc_info` to `True`.
+- `logger.isEnabledFor(level)` returns `True` when the logger would process a
+  record at the given level. Use it when expensive message construction should
+  be skipped.
+- `getLogger(name)` is an alias for `get_logger(name)`, provided for drop-in
+  compatibility with code written against `logging.getLogger`.
 - `FemtoLogger` sends the message text to handlers; structured payloads are
   available through `handle_record`. There is no equivalent to `extra` or lazy
   formatting. Build the final message string yourself before calling `log()`.
@@ -102,7 +111,7 @@ your process exits.
   buffered writes and returns `True` on success. `handler.close()` shuts down
   the worker thread and should be called before process exit.
 - To tune capacity, flush timeout, or formatters use `StreamHandlerBuilder`. It
-  provides `.with_capacity(n)`, `.with_flush_timeout_ms(ms)`, and
+  provides `.with_capacity(n)`, `.with_flush_after_ms(ms)`, and
   `.with_formatter(callable_or_id)` fluent methods before calling `.build()`.
 
 ### FemtoFileHandler
@@ -396,9 +405,8 @@ stream = StreamHandlerBuilder.stdout().with_formatter(json_formatter).build()
 
 ## Deviations from stdlib logging
 
-- No shorthand methods (`info`, `debug`, `warning`, …) or `LoggerAdapter`.
-- `log()` returns the formatted string instead of `None`, and there is no
-  `Logger.isEnabledFor()` helper.
+- `LoggerAdapter` is not implemented.
+- `log()` returns the formatted string instead of `None`.
 - Records lack `extra` and stdlib-style `LogRecord` objects. Exception and
   stack payloads are only available through the structured `handle_record`
   interface.

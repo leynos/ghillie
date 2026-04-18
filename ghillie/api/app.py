@@ -47,6 +47,28 @@ if typ.TYPE_CHECKING:
 __all__ = ["AppDependencies", "create_app"]
 
 
+class AsyncMiddlewareProto(typ.Protocol):
+    """Minimal Falcon ASGI middleware shape used by the app factory."""
+
+    async def process_request(
+        self,
+        req: falcon.asgi.Request,
+        resp: falcon.asgi.Response,
+    ) -> None:
+        """Handle an incoming ASGI request before routing."""
+        ...
+
+    async def process_response(
+        self,
+        req: falcon.asgi.Request,
+        resp: falcon.asgi.Response,
+        resource: object,
+        req_succeeded: bool,  # noqa: FBT001 - Falcon ASGI middleware requires a positional bool here; FIXME: ghillie#60 revisit if Falcon exposes a public typed middleware contract.
+    ) -> None:
+        """Handle an outgoing ASGI response after routing."""
+        ...
+
+
 @dc.dataclass(frozen=True, slots=True)
 class AppDependencies:
     """Dependencies for the Falcon ASGI application.
@@ -99,7 +121,7 @@ def create_app(
         Configured Falcon ASGI application.
 
     """
-    middleware: list[object] = []
+    middleware: list[AsyncMiddlewareProto] = []
 
     # Narrow once: _has_domain_deps guarantees non-None fields.
     deps = dependencies if _has_domain_deps(dependencies) else None
@@ -107,9 +129,14 @@ def create_app(
         from ghillie.api.middleware import SQLAlchemySessionManager
 
         sf = typ.cast("async_sessionmaker[AsyncSession]", deps.session_factory)
-        middleware.append(SQLAlchemySessionManager(sf))
+        middleware.append(
+            typ.cast(
+                "AsyncMiddlewareProto",
+                SQLAlchemySessionManager(sf),
+            )
+        )
 
-    app = falcon.asgi.App(middleware=middleware)  # type: ignore[no-matching-overload]  # Falcon stubs
+    app = falcon.asgi.App(middleware=middleware)
 
     # Health endpoints are always available
     app.add_route("/health", HealthResource())

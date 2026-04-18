@@ -8,12 +8,15 @@ Run with pytest::
 
 """
 
+import typing as typ
 from http import HTTPStatus
 from unittest import mock
 
 import falcon.asgi
 import falcon.testing
 import pytest
+
+from ghillie.api.app import AsyncMiddlewareProto
 
 
 class _MockSession:
@@ -71,7 +74,9 @@ def client(session: _MockSession) -> falcon.testing.TestClient:
 
     factory = mock.MagicMock(return_value=session)
     mw = SQLAlchemySessionManager(factory)
-    app = falcon.asgi.App(middleware=[mw])  # type: ignore[no-matching-overload]  # Falcon stubs
+    middleware: list[AsyncMiddlewareProto] = [typ.cast("AsyncMiddlewareProto", mw)]
+    typ.assert_type(middleware, list[AsyncMiddlewareProto])
+    app = falcon.asgi.App(middleware=middleware)
     app.add_route("/echo", _EchoResource())
     app.add_route("/error", _ErrorResource())
     app.add_route("/bad-request", _BadRequestResource())

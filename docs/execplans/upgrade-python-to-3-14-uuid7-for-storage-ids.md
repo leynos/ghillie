@@ -98,13 +98,12 @@ Success is observable when:
 - Decision: preserve `String(36)` columns and canonical UUID text format.
   Rationale: avoids migrations and keeps external contracts stable.
 - Decision: call Python 3.14's built-in `uuid.uuid7()` directly in the helper.
-  Rationale: the project test/build toolchain already runs on Python 3.14, so
-  a compatibility shim would add unnecessary code and another UUID policy to
+  Rationale: the project test/build toolchain already runs on Python 3.14, so a
+  compatibility shim would add unnecessary code and another UUID policy to
   maintain.
 - Decision: align `pyproject.toml` metadata with the Python 3.14 toolchain used
-  by `uv`.
-  Rationale: keeps static analysis consistent with the executable environment
-  and prevents false negatives around 3.14-only stdlib APIs.
+  by `uv`. Rationale: keeps static analysis consistent with the executable
+  environment and prevents false negatives around 3.14-only stdlib APIs.
 
 ## Outcomes & retrospective
 
