@@ -283,4 +283,4 @@ class ReportingMetricsService:
 
         async with self._session_factory() as session:
             rows = (await session.execute(stmt)).tuples().all()
-        return [typ.cast("MetricsRow", row) for row in rows]
+        return list(rows)
