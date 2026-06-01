@@ -4,10 +4,11 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: IMPLEMENTING
+Status: COMPLETE
 
 The user approved implementation on 2026-06-01. The branch now carries the
-plan, prior review material, and incremental implementation commits.
+plan, prior review material, the Hecate architecture gate, documentation
+updates, validation results, and incremental implementation commits.
 
 ## Purpose / big picture
 
@@ -179,10 +180,15 @@ making changes.
   commit: `make check-fmt`, `make lint`, `make typecheck`, `make test`,
   `make markdownlint`, `make nixie`, and `mbake validate Makefile` all exit
   `0`; tests report 809 passed, 11 skipped, and 24 warnings.
-- [ ] Implement Hecate adoption after approval.
-- [ ] Validate implementation with local gates, CodeRabbit, and review.
-- [ ] Mark the relevant roadmap entry done only after implementation is
-  complete.
+- [x] (2026-06-01T22:08:04Z) Committed the documentation and roadmap milestone
+  as `6e60b16 Document Hecate architecture checks`.
+- [x] (2026-06-01T22:08:04Z) Ran `coderabbit review --agent` after the
+  documentation milestone gates; CodeRabbit reported 0 findings.
+- [x] (2026-06-01T22:08:04Z) Implemented Hecate adoption after approval.
+- [x] (2026-06-01T22:08:04Z) Validated implementation with local gates,
+  CodeRabbit, and review.
+- [x] (2026-06-01T22:08:04Z) Marked the relevant roadmap entry done after
+  implementation, validation, and review.
 
 ## Surprises & discoveries
 
@@ -261,7 +267,23 @@ making changes.
 
 ## Outcomes & retrospective
 
-Implementation is in progress. No final outcome exists yet.
+Implementation is complete.
+
+Ghillie now pins Hecate to
+`46f8c8798e7a80a3a1ab5a13c2a000a4423ffc12`, stores the import-direction policy
+in `[tool.hecate]`, exposes `make check-architecture`, and runs that gate before
+Ruff through `make lint` and CI. The pinned Hecate CLI requires Cyclopts 3 and a
+small repository wrapper for the remaining `result_action` compatibility gap.
+
+No public Ghillie CLI command, HTTP route, Python API, storage schema, runtime
+configuration, or user-facing behaviour changed. Existing behaviour tests were
+kept because the Stage C review found no tests that solely duplicated Hecate's
+static import-boundary responsibility.
+
+Validation completed with `make check-fmt`, `make lint`, `make typecheck`,
+`make test`, `make markdownlint`, `make nixie`, and
+`mbake validate Makefile`, all exiting `0`. CodeRabbit reviewed both the Hecate
+gate milestone and the documentation milestone with 0 findings.
 
 ## Context and orientation
 
