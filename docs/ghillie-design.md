@@ -713,6 +713,14 @@ This structure maintains clear separation between:
 - **Outbound adapters** (status queries, on-demand reports): Read/write path
   to Gold layer
 
+Static import-direction drift is enforced with Hecate. The repository policy
+lives in `[tool.hecate]` in `pyproject.toml` and is exposed through
+`make check-architecture`, which runs before Ruff as part of `make lint`. Hecate
+classifies modules into composition roots, domain ports, application modules,
+inbound adapters, and outbound adapters. The decision and rollback path are
+recorded in
+`docs/adr-003-adopt-hecate-for-architecture-checks.md`.
+
 **Design decisions:**
 
 - Health probe endpoints remain in a separate resource module from domain

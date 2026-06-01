@@ -1,9 +1,8 @@
 # Adopt Hecate for hexagonal architecture checks
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: IMPLEMENTING
 
@@ -26,8 +25,8 @@ Integration (CI) will run the same gate before tests. Behavioural tests will
 remain responsible for runtime behaviour, while Hecate will own static
 dependency-direction drift detection.
 
-This work uses the `leta`, `hexagonal-architecture`, and `execplans` skills.
-Use `leta` for code navigation, the `hexagonal-architecture` skill for boundary
+This work uses the `leta`, `hexagonal-architecture`, and `execplans` skills. Use
+`leta` for code navigation, the `hexagonal-architecture` skill for boundary
 decisions, and the `execplans` skill for keeping this plan current. If Rust
 code is touched unexpectedly, route through the `rust-router` skill before
 making changes.
@@ -151,8 +150,35 @@ making changes.
   `make build`, `make check-architecture`, and `make lint` all exit `0`.
 - [x] (2026-06-01T21:44:55Z) Milestone gate passed before commit:
   `make check-fmt`, `make lint`, `make typecheck`, `make test`,
-  `make markdownlint`, `make nixie`, and `mbake validate Makefile` all
-  exit `0`; tests report 809 passed, 11 skipped, and 24 warnings.
+  `make markdownlint`, `make nixie`, and `mbake validate Makefile` all exit
+  `0`; tests report 809 passed, 11 skipped, and 24 warnings.
+- [x] (2026-06-01T21:44:55Z) Committed Stage B as
+      `d9a5078 Add Hecate architecture gate`.
+- [x] (2026-06-01T21:44:55Z) Ran `coderabbit review --agent` after Stage B
+  gates; CodeRabbit reported 0 findings.
+- [x] (2026-06-01T21:44:55Z) Reviewed candidate structural tests named in
+  Stage C. They cover runtime selection, status model factory behaviour,
+  runtime-checkable protocols, report sink effects, CLI command shape, config
+  precedence, context handling, and control-plane client behaviour. No tests
+  were removed because none solely duplicated Hecate import-boundary checks.
+- [x] (2026-06-01T21:44:55Z) Added
+  `docs/adr-003-adopt-hecate-for-architecture-checks.md` for the Hecate
+  adoption decision.
+- [x] (2026-06-01T21:44:55Z) Updated `docs/ghillie-design.md`,
+  `docs/ghillie-bronze-silver-architecture-design.md`,
+  `docs/developers-guide.md`, and `docs/roadmap.md` for the Hecate gate, policy
+  maintenance rules, and completed roadmap task.
+- [x] (2026-06-01T21:44:55Z) Confirmed `docs/users-guide.md` does not need a
+  change because this implementation adds a development/CI gate and does not
+  change public runtime behaviour, CLI commands, or library APIs.
+- [x] (2026-06-01T21:44:55Z) Documentation validation passed with
+  `make markdownlint` and `make nixie`. `make fmt` was attempted but failed on
+  pre-existing repository-wide Markdown line-length findings outside this
+  change; unrelated formatter edits were restored.
+- [x] (2026-06-01T21:44:55Z) Documentation milestone gate passed before
+  commit: `make check-fmt`, `make lint`, `make typecheck`, `make test`,
+  `make markdownlint`, `make nixie`, and `mbake validate Makefile` all exit
+  `0`; tests report 809 passed, 11 skipped, and 24 warnings.
 - [ ] Implement Hecate adoption after approval.
 - [ ] Validate implementation with local gates, CodeRabbit, and review.
 - [ ] Mark the relevant roadmap entry done only after implementation is
@@ -161,12 +187,12 @@ making changes.
 ## Surprises & discoveries
 
 - Observation: The repository does not currently contain a dedicated
-  automated hexagonal architecture check. Evidence: Searches across
-  `Makefile`, `.github`, `scripts`, `tests`, `ghillie`, and `docs` found
-  protocol and behaviour tests, but no Hecate, check-architecture target,
-  or import-boundary script. Impact: The migration is best treated as adding
-  a new canonical static gate and retiring only any future-discovered
-  structural assertions, not as a one-for-one script replacement.
+  automated hexagonal architecture check. Evidence: Searches across `Makefile`,
+  `.github`, `scripts`, `tests`, `ghillie`, and `docs` found protocol and
+  behaviour tests, but no Hecate, check-architecture target, or import-boundary
+  script. Impact: The migration is best treated as adding a new canonical
+  static gate and retiring only any future-discovered structural assertions,
+  not as a one-for-one script replacement.
 
 - Observation: One reconnaissance pass initially found report correctness
   checks rather than architecture-boundary checks. Evidence: The referenced
@@ -177,13 +203,20 @@ making changes.
 
 - Observation: Hecate `0.1.0` at
   `46f8c8798e7a80a3a1ab5a13c2a000a4423ffc12` declares an unbounded
-  `Requires-Dist: cyclopts`, but its CLI uses `cyclopts.App(...,
-  result_action=...)`. Evidence: the first local `make check-architecture`
-  run raised `TypeError: App.__init__() got an unexpected keyword argument
-  'result_action'` with Cyclopts `2.9.9`; preserving Cyclopts `2.9.9` then
-  failed on callable `cyclopts.Parameter`. Impact: this adoption needs a
-  Cyclopts 3 compatibility update plus a shim until Hecate's declared
-  dependency range and CLI code are aligned.
+  `Requires-Dist: cyclopts`, but its CLI uses
+  `cyclopts.App(..., result_action=...)`. Evidence: the first local
+  `make check-architecture` run raised
+  `TypeError: App.__init__() got an unexpected keyword argument 'result_action'`
+  with Cyclopts `2.9.9`; preserving Cyclopts `2.9.9` then failed on callable
+  `cyclopts.Parameter`. Impact: this adoption needs a Cyclopts 3 compatibility
+  update plus a shim until Hecate's declared dependency range and CLI code are
+  aligned.
+
+- Observation: Stage C did not identify an existing repository-local
+  architecture test to delete. Evidence: the candidate tests assert runtime
+  behaviour and public contracts rather than parsing imports or enforcing layer
+  direction. Impact: Hecate adoption adds a new canonical static gate and keeps
+  the existing behaviour coverage intact.
 
 ## Decision log
 
@@ -220,6 +253,11 @@ making changes.
   2.9. Cyclopts 3 satisfies Hecate's callable `Parameter` usage, and the
   wrapper removes the remaining unsupported `result_action` keyword before
   importing Hecate's CLI. Date/Author: 2026-06-01T21:44:55Z / AI-proposed.
+
+- Decision: Do not update `docs/users-guide.md` for this adoption. Rationale:
+  the new gate is a developer and CI practice. It does not change Ghillie's
+  runtime behaviour, public Python APIs, HTTP routes, CLI command surface, or
+  user configuration. Date/Author: 2026-06-01T21:44:55Z / AI-proposed.
 
 ## Outcomes & retrospective
 
@@ -312,9 +350,9 @@ The exact policy may differ after inventory. If a module is both a port and an
 adapter today, record that ambiguity in the decision log before choosing a
 group.
 
-Stage A validation is documentary: update this plan with any discoveries and
-do not proceed if the group map is ambiguous enough to change public
-behaviour or require broad refactoring.
+Stage A validation is documentary: update this plan with any discoveries and do
+not proceed if the group map is ambiguous enough to change public behaviour or
+require broad refactoring.
 
 ### Stage B: add the Hecate gate
 
