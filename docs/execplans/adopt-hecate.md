@@ -5,10 +5,10 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: IMPLEMENTING
 
-This plan must be explicitly approved before implementation starts. The current
-branch carries only the plan and review material.
+The user approved implementation on 2026-06-01. The branch now carries the
+plan, prior review material, and incremental implementation commits.
 
 ## Purpose / big picture
 
@@ -101,6 +101,14 @@ making changes.
   existing `uv` dependency workflow, commit the lockfile update if one is
   produced, and validate in a clean `make build`.
 
+- Risk: Hecate's pinned CLI uses Cyclopts APIs that are incompatible with
+  Ghillie's previous `cyclopts>=2.9,<3` runtime constraint, while Cyclopts
+  `3.24.0` still lacks Hecate's `result_action` keyword. Severity: medium.
+  Likelihood: high. Mitigation: update the existing Cyclopts dependency to
+  `cyclopts>=3,<4` and run Hecate through a narrow repository-local
+  compatibility wrapper that strips only the unsupported keyword before
+  importing Hecate's CLI.
+
 - Risk: developers may not know how to update the policy when adding modules.
   Severity: medium. Likelihood: medium. Mitigation: update
   `docs/developers-guide.md` with the new gate, group ordering convention, and
@@ -120,7 +128,31 @@ making changes.
 - [x] (2026-05-24T19:03:55Z) Confirmed there is no existing `hecate` target,
   dedicated check-architecture target, or repo-local check-architecture script.
 - [x] (2026-05-24T19:03:55Z) Drafted this pre-implementation ExecPlan.
-- [ ] Obtain approval for this ExecPlan before implementation.
+- [x] (2026-06-01T21:44:55Z) User approved implementation and requested work
+  proceed from this ExecPlan.
+- [x] (2026-06-01T21:44:55Z) Reloaded `leta` and
+  `hexagonal-architecture`, confirmed the Leta workspace already exists, and
+  re-opened the pinned Hecate documentation.
+- [x] (2026-06-01T21:44:55Z) Added the pinned Hecate dependency, initial
+  `[tool.hecate]` policy, `make check-architecture`, and CI lint-step naming
+  update.
+- [x] (2026-06-01T21:44:55Z) Ran `make build`; it installed Hecate from the
+  pinned commit and updated the lockfile.
+- [x] (2026-06-01T21:44:55Z) First `make check-architecture` attempt failed
+  before checking imports because Hecate's CLI passes `result_action` to
+  Cyclopts while Ghillie still constrained Cyclopts to `<3`.
+- [x] (2026-06-01T21:44:55Z) Tested preserving Cyclopts `2.9.9`; this failed
+  because Hecate also uses callable `cyclopts.Parameter`, which is unavailable
+  in that version.
+- [x] (2026-06-01T21:44:55Z) Updated the existing Cyclopts dependency to
+  `cyclopts>=3,<4` and kept `scripts/check_architecture.py` for the remaining
+  `result_action` compatibility gap.
+- [x] (2026-06-01T21:44:55Z) Stage B validation passed:
+  `make build`, `make check-architecture`, and `make lint` all exit `0`.
+- [x] (2026-06-01T21:44:55Z) Milestone gate passed before commit:
+  `make check-fmt`, `make lint`, `make typecheck`, `make test`,
+  `make markdownlint`, `make nixie`, and `mbake validate Makefile` all
+  exit `0`; tests report 809 passed, 11 skipped, and 24 warnings.
 - [ ] Implement Hecate adoption after approval.
 - [ ] Validate implementation with local gates, CodeRabbit, and review.
 - [ ] Mark the relevant roadmap entry done only after implementation is
@@ -142,6 +174,16 @@ making changes.
   report validation text, which cover LLM report validation, not Python import
   boundaries. Impact: Do not update report correctness behaviour unless
   implementation work independently touches it.
+
+- Observation: Hecate `0.1.0` at
+  `46f8c8798e7a80a3a1ab5a13c2a000a4423ffc12` declares an unbounded
+  `Requires-Dist: cyclopts`, but its CLI uses `cyclopts.App(...,
+  result_action=...)`. Evidence: the first local `make check-architecture`
+  run raised `TypeError: App.__init__() got an unexpected keyword argument
+  'result_action'` with Cyclopts `2.9.9`; preserving Cyclopts `2.9.9` then
+  failed on callable `cyclopts.Parameter`. Impact: this adoption needs a
+  Cyclopts 3 compatibility update plus a shim until Hecate's declared
+  dependency range and CLI code are aligned.
 
 ## Decision log
 
@@ -167,10 +209,21 @@ making changes.
   retry semantics, or storage effects. Date/Author: 2026-05-24T19:03:55Z /
   AI-proposed.
 
+- Decision: Proceed with implementation on this branch. Rationale: The user
+  explicitly requested implementation of `docs/execplans/adopt-hecate.md` on
+  2026-06-01, satisfying the plan approval constraint. Date/Author:
+  2026-06-01T21:44:55Z / User-approved, AI-recorded.
+
+- Decision: Raise Ghillie's existing Cyclopts constraint from `>=2.9,<3` to
+  `>=3,<4` and call Hecate through `scripts/check_architecture.py`. Rationale:
+  Hecate is the only new dependency, but the pinned CLI cannot run on Cyclopts
+  2.9. Cyclopts 3 satisfies Hecate's callable `Parameter` usage, and the
+  wrapper removes the remaining unsupported `result_action` keyword before
+  importing Hecate's CLI. Date/Author: 2026-06-01T21:44:55Z / AI-proposed.
+
 ## Outcomes & retrospective
 
-The plan is currently drafted and awaiting approval. No implementation outcome
-exists yet.
+Implementation is in progress. No final outcome exists yet.
 
 ## Context and orientation
 
@@ -540,11 +593,19 @@ domain and port modules do not import adapters; application modules depend on
 ports and other application modules; adapters depend inward on application and
 ports; composition roots may wire across groups.
 
-The Makefile interface must be:
+The Makefile interface was expected to be:
 
 ```make
 check-architecture: build ## Run hexagonal architecture import checks
 	$(UV_ENV) uv run hecate check --show-ignored --fail-on-unmatched-ignore
+```
+
+Implementation uses this equivalent repository wrapper because the pinned
+Hecate CLI passes a Cyclopts keyword unsupported by Cyclopts `3.24.0`:
+
+```make
+check-architecture: build ## Run hexagonal architecture import checks
+	$(UV_ENV) uv run scripts/check_architecture.py
 ```
 
 The dependency must be pinned exactly:

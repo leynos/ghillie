@@ -25,7 +25,7 @@ dependencies = [
     "httpx>=0.27.0",
     "falcon>=4.0.0,<5.0.0",
     "granian>=1.0.0,<3.0.0",
-    "cyclopts>=2.9,<3",
+    "cyclopts>=3,<4",
 ]
 
 [project.scripts]
@@ -33,6 +33,7 @@ ghillie = "ghillie.cli:main"
 
 [dependency-groups]
 dev = [
+    "hecate @ git+https://github.com/leynos/hecate@46f8c8798e7a80a3a1ab5a13c2a000a4423ffc12",
     "hypothesis>=6.150.0,<7",
     "pytest",
     "pytest-bdd",
@@ -148,6 +149,117 @@ markers = [
 
 [tool.uv]
 package = true
+
+[tool.hecate]
+root_packages = ["ghillie"]
+
+[[tool.hecate.groups]]
+name = "composition_root"
+prefixes = [
+    "ghillie.api.app",
+    "ghillie.api.factory",
+    "ghillie.cli.app",
+    "ghillie.reporting.actor",
+    "ghillie.runtime",
+    "ghillie.status.factory",
+]
+allowed = [
+    "application",
+    "composition_root",
+    "domain_ports",
+    "inbound_adapter",
+    "outbound_adapter",
+]
+
+[[tool.hecate.groups]]
+name = "domain_ports"
+prefixes = [
+    "ghillie.common",
+    "ghillie.catalogue.models",
+    "ghillie.evidence.models",
+    "ghillie.registry.models",
+    "ghillie.reporting.sink",
+    "ghillie.status.metrics",
+    "ghillie.status.models",
+    "ghillie.status.protocol",
+]
+allowed = ["domain_ports"]
+
+[[tool.hecate.groups]]
+name = "application"
+prefixes = [
+    "ghillie.bronze.errors",
+    "ghillie.bronze.services",
+    "ghillie.catalogue.importer",
+    "ghillie.catalogue.loader",
+    "ghillie.catalogue.schema",
+    "ghillie.catalogue.validation",
+    "ghillie.catalogue.watch",
+    "ghillie.evidence.classification",
+    "ghillie.evidence.event_targets",
+    "ghillie.evidence.project_service",
+    "ghillie.evidence.service",
+    "ghillie.github.errors",
+    "ghillie.github.ingestion",
+    "ghillie.github.lag",
+    "ghillie.github.models",
+    "ghillie.github.noise",
+    "ghillie.github.observability",
+    "ghillie.logging",
+    "ghillie.registry",
+    "ghillie.reporting.config",
+    "ghillie.reporting.errors",
+    "ghillie.reporting.markdown",
+    "ghillie.reporting.metrics_service",
+    "ghillie.reporting.observability",
+    "ghillie.reporting.service",
+    "ghillie.reporting.validation",
+    "ghillie.silver.errors",
+    "ghillie.silver.services",
+    "ghillie.silver.transformers",
+    "ghillie.status.config",
+    "ghillie.status.constants",
+    "ghillie.status.errors",
+    "ghillie.status.prompts",
+]
+allowed = [
+    "application",
+    "domain_ports",
+    "outbound_adapter",
+]
+
+[[tool.hecate.groups]]
+name = "inbound_adapter"
+prefixes = [
+    "ghillie.api",
+    "ghillie.catalogue.cli",
+    "ghillie.cli",
+]
+allowed = [
+    "application",
+    "composition_root",
+    "domain_ports",
+    "inbound_adapter",
+    "outbound_adapter",
+]
+
+[[tool.hecate.groups]]
+name = "outbound_adapter"
+prefixes = [
+    "ghillie.bronze.storage",
+    "ghillie.catalogue.storage",
+    "ghillie.github.client",
+    "ghillie.gold.storage",
+    "ghillie.reporting.filesystem_sink",
+    "ghillie.silver.storage",
+    "ghillie.status.mock",
+    "ghillie.status.openai_client",
+]
+allowed = [
+    "application",
+    "domain_ports",
+    "outbound_adapter",
+]
 
 [tool.setuptools.packages.find]
 include = ["ghillie*"]
