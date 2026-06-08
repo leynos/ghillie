@@ -70,8 +70,8 @@ or moving modules:
   group classification;
 - keep composition-root prefixes narrow and explicit;
 - prefer refactoring a dependency edge over adding `ignore_imports`;
-- if an ignore is unavoidable, include a precise reason that explains why the
-  edge is intentional; and
+- if an ignore rule is unavoidable, include a precise reason that explains why
+  the edge is intentional; and
 - run `make check-architecture` before opening a pull request.
 
 The current policy groups modules as composition roots, domain ports,

@@ -309,11 +309,11 @@ flowchart LR
 ```
 
 Static architecture checks treat Bronze and Silver transformation services as
-application modules and their SQLAlchemy model/storage modules as outbound
-adapters. This reflects the current implementation: services orchestrate
-domain-specific ingestion and transformation work, while storage modules own
-database table definitions and initialization. Keep this classification in
-`[tool.hecate]` current when adding Bronze or Silver modules.
+application modules and `ghillie.bronze.storage` and `ghillie.silver.storage`
+as outbound storage adapters. This reflects the current implementation:
+services orchestrate domain-specific ingestion and transformation work, while
+storage modules own database table definitions and initialization. Keep this
+classification in `[tool.hecate]` current when adding Bronze or Silver modules.
 
 ______________________________________________________________________
 
