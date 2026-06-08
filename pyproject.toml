@@ -169,6 +169,7 @@ allowed = [
     "domain_ports",
     "inbound_adapter",
     "outbound_adapter",
+    "package_facade",
 ]
 
 [[tool.hecate.groups]]
@@ -245,6 +246,7 @@ allowed = [
     "domain_ports",
     "inbound_adapter",
     "outbound_adapter",
+    "package_facade",
 ]
 
 [[tool.hecate.groups]]
@@ -262,6 +264,22 @@ prefixes = [
 allowed = [
     "application",
     "domain_ports",
+    "outbound_adapter",
+]
+
+[[tool.hecate.groups]]
+name = "package_facade"
+# Package facades re-export mixed boundary objects. Keep this group after all
+# leaf-module groups so it catches only ghillie.status and ghillie.reporting.
+prefixes = [
+    "ghillie.reporting",
+    "ghillie.status",
+]
+allowed = [
+    "application",
+    "composition_root",
+    "domain_ports",
+    "inbound_adapter",
     "outbound_adapter",
 ]
 
