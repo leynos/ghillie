@@ -15,17 +15,17 @@ import cyclopts
 _OriginalApp: typ.Any = cyclopts.App
 
 
-def _compat_app(*args: object, **kwargs: object) -> cyclopts.App:
+def _compat_app(*args: typ.Any, **kwargs: typ.Any) -> cyclopts.App:  # noqa: ANN401
     """Ignore Hecate's unsupported Cyclopts keyword during app construction."""
     kwargs.pop("result_action", None)
-    return typ.cast("cyclopts.App", _OriginalApp(*args, **kwargs))
+    return _OriginalApp(*args, **kwargs)  # type: ignore[return-value]
 
 
 @contextmanager
 def _patched_cyclopts_app() -> typ.Iterator[None]:
     """Temporarily install the Hecate compatibility constructor."""
     original_app = cyclopts.App
-    cyclopts.App = typ.cast("typ.Any", _compat_app)
+    cyclopts.App = _compat_app  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
     try:
         yield
     finally:

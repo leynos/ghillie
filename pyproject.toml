@@ -209,7 +209,7 @@ prefixes = [
     "ghillie.github.noise",
     "ghillie.github.observability",
     "ghillie.logging",
-    "ghillie.registry",
+    "ghillie.registry",  # generic — all ghillie.registry.* leaf entries must precede this
     "ghillie.reporting.config",
     "ghillie.reporting.errors",
     "ghillie.reporting.markdown",
@@ -236,7 +236,7 @@ name = "inbound_adapter"
 # Keep composition-root prefixes such as ghillie.api.app and
 # ghillie.api.factory above this generic ghillie.api adapter prefix.
 prefixes = [
-    "ghillie.api",
+    "ghillie.api",  # generic — ghillie.api.app and ghillie.api.factory must remain above this
     "ghillie.catalogue.cli",
     "ghillie.cli",
 ]
@@ -272,8 +272,8 @@ name = "package_facade"
 # Package facades re-export mixed boundary objects. Keep this group after all
 # leaf-module groups so it catches only ghillie.status and ghillie.reporting.
 prefixes = [
-    "ghillie.reporting",
-    "ghillie.status",
+    "ghillie.reporting",  # generic — all ghillie.reporting.* leaf entries must precede this
+    "ghillie.status",  # generic — all ghillie.status.* leaf entries must precede this
 ]
 allowed = [
     "application",
