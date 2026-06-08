@@ -8,6 +8,7 @@ dependency range.
 """
 
 import typing as typ
+from contextlib import contextmanager
 
 import cyclopts
 
@@ -17,18 +18,26 @@ _OriginalApp: typ.Any = cyclopts.App
 def _compat_app(*args: object, **kwargs: object) -> cyclopts.App:
     """Ignore Hecate's unsupported Cyclopts keyword during app construction."""
     kwargs.pop("result_action", None)
-    return typ.cast(
-        "cyclopts.App",
-        _OriginalApp(*typ.cast("typ.Any", args), **typ.cast("typ.Any", kwargs)),
-    )
+    return typ.cast("cyclopts.App", _OriginalApp(*args, **kwargs))
+
+
+@contextmanager
+def _patched_cyclopts_app() -> typ.Iterator[None]:
+    """Temporarily install the Hecate compatibility constructor."""
+    original_app = cyclopts.App
+    cyclopts.App = typ.cast("typ.Any", _compat_app)
+    try:
+        yield
+    finally:
+        cyclopts.App = original_app
 
 
 def main() -> int:
     """Run the Hecate CLI entry point with repository defaults."""
-    cyclopts.App = typ.cast("typ.Any", _compat_app)
-    from hecate.cli import main as hecate_main
+    with _patched_cyclopts_app():
+        from hecate.cli import main as hecate_main
 
-    return hecate_main(["check", "--show-ignored", "--fail-on-unmatched-ignore"])
+        return hecate_main(["check", "--show-ignored", "--fail-on-unmatched-ignore"])
 
 
 if __name__ == "__main__":

@@ -187,6 +187,8 @@ allowed = ["domain_ports"]
 
 [[tool.hecate.groups]]
 name = "application"
+# Hecate uses first-match semantics. Keep narrower prefixes above generic
+# package prefixes such as ghillie.registry.
 prefixes = [
     "ghillie.bronze.errors",
     "ghillie.bronze.services",
@@ -230,6 +232,8 @@ allowed = [
 
 [[tool.hecate.groups]]
 name = "inbound_adapter"
+# Keep composition-root prefixes such as ghillie.api.app and
+# ghillie.api.factory above this generic ghillie.api adapter prefix.
 prefixes = [
     "ghillie.api",
     "ghillie.catalogue.cli",
