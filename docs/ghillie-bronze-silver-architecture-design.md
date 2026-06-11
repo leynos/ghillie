@@ -308,11 +308,13 @@ flowchart LR
 
 ```
 
-Static architecture checks treat Bronze and Silver transformation services as
-application modules and `ghillie.bronze.storage` and `ghillie.silver.storage`
-as outbound storage adapters. This reflects the current implementation:
-services orchestrate domain-specific ingestion and transformation work, while
-storage modules own database table definitions and initialization. Keep this
+Static architecture checks treat Bronze and Silver transformation services and
+errors as application modules, including `ghillie.bronze.errors` and
+`ghillie.silver.errors`; `ghillie.bronze.storage` and
+`ghillie.silver.storage` remain outbound storage adapters. This reflects the
+current implementation: services orchestrate domain-specific ingestion and
+transformation work, errors define application failure contracts, and storage
+modules own database table definitions and initialization. Keep this
 classification in `[tool.hecate]` current when adding Bronze or Silver modules.
 
 ______________________________________________________________________
