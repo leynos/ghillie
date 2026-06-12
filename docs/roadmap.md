@@ -225,6 +225,19 @@ ephemeral previews platform and supports the Ghillie Helm chart.
   *Completion criteria:* The users' guide includes a local preview section with
   validated commands and expected outcomes.
 
+### Step 1.6: Guard architecture boundaries
+
+**Goal:** Make architecture drift visible before it reaches review or CI.
+
+- [x] **Task 1.6.a – Adopt Hecate architecture checks**
+  Add Hecate as the repository's static import-direction gate for the
+  hexagonal architecture policy.
+
+  *Completion criteria:* `make check-architecture` runs the pinned Hecate
+  checker against `[tool.hecate]`, `make lint` runs the architecture gate
+  before Ruff, CI uses the combined lint target, and the adoption is recorded
+  in ADR-003.
+
 ______________________________________________________________________
 
 ## Phase 2: Deliver repository-level status reporting (MVP)

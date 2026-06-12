@@ -5,7 +5,7 @@ TOOLS = $(MDFORMAT_ALL) ruff ty $(MDLINT) uv
 VENV_TOOLS = pytest
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
 
-.PHONY: help all clean build build-release lint fmt check-fmt \
+.PHONY: help all clean build build-release check-architecture lint fmt check-fmt \
         markdownlint nixie test typecheck helm-lint helm-test \
         docker-build docker-run $(TOOLS) $(VENV_TOOLS)
 
@@ -63,7 +63,10 @@ check-fmt: ruff ## Verify formatting
 	ruff format --check
 	# mdformat-all doesn't currently do checking
 
-lint: ruff ## Run linters
+check-architecture: build ## Run hexagonal architecture import checks
+	$(UV_ENV) uv run scripts/check_architecture.py
+
+lint: check-architecture ruff ## Run linters
 	ruff check
 
 typecheck: build ty ## Run typechecking

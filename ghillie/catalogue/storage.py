@@ -33,8 +33,6 @@ if typ.TYPE_CHECKING:
 class Base(DeclarativeBase):
     """Base declarative class for catalogue persistence."""
 
-    metadata: typ.Any
-
 
 class Estate(Base):
     """Logical grouping of projects under management."""

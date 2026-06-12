@@ -33,21 +33,50 @@ This runs formatting checks, linting, type checking, and tests.
 
 The project enforces these quality gates before commits:
 
-| Target           | Description                        |
-| ---------------- | ---------------------------------- |
-| `make fmt`       | Format Python and Markdown sources |
-| `make lint`      | Run ruff linter                    |
-| `make check-fmt` | Verify formatting without changes  |
-| `make typecheck` | Run the type checker               |
-| `make test`      | Run pytest with parallel execution |
-| `make helm-lint` | Lint the Ghillie Helm chart        |
-| `make helm-test` | Run Helm chart tests               |
+| Target                    | Description                                     |
+| ------------------------- | ----------------------------------------------- |
+| `make fmt`                | Format Python and Markdown sources              |
+| `make check-architecture` | Run Hecate import-direction architecture checks |
+| `make lint`               | Run Hecate and Ruff lint checks                 |
+| `make check-fmt`          | Verify formatting without changes               |
+| `make typecheck`          | Run the type checker                            |
+| `make test`               | Run pytest with parallel execution              |
+| `make helm-lint`          | Lint the Ghillie Helm chart                     |
+| `make helm-test`          | Run Helm chart tests                            |
 
 Run all gates before committing:
 
 ```bash
 make check-fmt && make lint && make typecheck && make test && make helm-lint
 ```
+
+## Architecture checks
+
+Ghillie uses Hecate as the static architecture fitness function for Python
+import direction. Run it directly with:
+
+```bash
+make check-architecture
+```
+
+The same check runs before Ruff as part of `make lint`, so CI and local linting
+share the same architecture gate.
+
+The Hecate policy is stored in `[tool.hecate]` in `pyproject.toml`. When adding
+or moving modules:
+
+- update the policy if the module introduces a new package boundary;
+- put specific prefixes before broad prefixes because Hecate uses first-match
+  group classification;
+- keep composition-root prefixes narrow and explicit;
+- prefer refactoring a dependency edge over adding `ignore_imports`;
+- if an ignore rule is unavoidable, include a precise reason that explains why
+  the edge is intentional; and
+- run `make check-architecture` before opening a pull request.
+
+The current policy groups modules as composition roots, domain ports,
+application modules, inbound adapters, and outbound adapters. The adoption
+rationale is recorded in `docs/adr-003-adopt-hecate-for-architecture-checks.md`.
 
 ## Code style and type handling
 

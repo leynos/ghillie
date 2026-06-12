@@ -282,5 +282,8 @@ class ReportingMetricsService:
             ).where(Repository.estate_id == estate_id)
 
         async with self._session_factory() as session:
-            rows = (await session.execute(stmt)).tuples().all()
-        return [typ.cast("MetricsRow", row) for row in rows]
+            rows = typ.cast(
+                "list[MetricsRow]",
+                (await session.execute(stmt)).tuples().all(),
+            )
+        return rows  # noqa: RET504
