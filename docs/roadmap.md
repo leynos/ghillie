@@ -14,15 +14,28 @@ governance integration and developer experience features. Work is structured
 into phases, steps, and tasks. Phases describe broad capability shifts, steps
 group related workstreams, and tasks describe concrete, measurable outcomes.
 
+## Early value and implementation guidance
+
+Phases 1 and 2 together constitute the initial Ghillie MVP: a system that
+reliably ingests GitHub activity for a managed set of repositories, constructs
+evidence bundles, and produces repository-level status reports on a regular
+cadence. Later phases build on this foundation to add project and estate views,
+governance integration, and richer developer experience support.
+
+The roadmap deliberately avoids calendar commitments. Each task is scoped to be
+achievable, measurable, and incrementally valuable, so that Ghillie can start
+delivering meaningful status reports early and evolve safely towards deeper
+integration with Concordat and wider organisational tooling.
+
 ______________________________________________________________________
 
-## Phase 1: Establish core estate model and ingestion pipeline
+## 1. Establish core estate model and ingestion pipeline
 
 Phase 1 creates the foundation on which all later reporting and governance
 features depend. The outcome is a reliable model of the engineering estate,
 backed by a durable ingestion and storage pipeline for GitHub events.
 
-### Step 1.1: Define estate catalogue and configuration
+### 1.1. Define estate catalogue and configuration
 
 **Goal:** Provide a single, version-controlled source of truth for projects,
 components, repositories, and their relationships.
@@ -64,7 +77,7 @@ components, repositories, and their relationships.
   documentation locations defined in the catalogue, and these settings are
   visible to downstream services.
 
-### Step 1.2: Implement core data model and Medallion layers
+### 1.2. Implement core data model and Medallion layers
 
 **Goal:** Provide a storage model that separates raw events from refined
 entities and reporting outputs, enabling replay and reprocessing.
@@ -97,7 +110,7 @@ entities and reporting outputs, enabling replay and reprocessing.
   or more report records, and the schema supports storing the IDs of events
   consumed by each report.
 
-### Step 1.3: Build GitHub ingestion service
+### 1.3. Build GitHub ingestion service
 
 **Goal:** Ingest GitHub activity for the managed estate into the Bronze and
 Silver layers with controlled noise and back-pressure.
@@ -152,7 +165,7 @@ Silver layers with controlled noise and back-pressure.
   `.rules/python-exception-design-raising-handling-and-logging.md` are updated
   to reflect femtologging patterns.
 
-### Step 1.4: Secure integration with GitHub
+### 1.4. Secure integration with GitHub
 
 **Goal:** Ensure Ghillie’s access to GitHub is secure, minimal, and
 operationally manageable.
@@ -176,7 +189,7 @@ operationally manageable.
   ingestion services, and failed authentication is surfaced as a clear
   operational alert.
 
-### Step 1.5: Provide local Kubernetes preview environment
+### 1.5. Provide local Kubernetes preview environment
 
 **Goal:** Provide a repeatable local k3d preview workflow that mirrors the
 ephemeral previews platform and supports the Ghillie Helm chart.
@@ -225,7 +238,7 @@ ephemeral previews platform and supports the Ghillie Helm chart.
   *Completion criteria:* The users' guide includes a local preview section with
   validated commands and expected outcomes.
 
-### Step 1.6: Guard architecture boundaries
+### 1.6. Guard architecture boundaries
 
 **Goal:** Make architecture drift visible before it reaches review or CI.
 
@@ -240,13 +253,13 @@ ephemeral previews platform and supports the Ghillie Helm chart.
 
 ______________________________________________________________________
 
-## Phase 2: Deliver repository-level status reporting (MVP)
+## 2. Deliver repository-level status reporting (MVP)
 
 Phase 2 delivers a minimum viable product: regular, repository-level status
 reports generated from ingested events and stored in the Gold layer. These
 reports represent the first directly consumable output of Ghillie.
 
-### Step 2.1: Implement evidence bundle generation
+### 2.1. Implement evidence bundle generation
 
 **Goal:** Provide structured, per-repository evidence bundles from Silver-layer
 data, ready for summarisation.
@@ -272,7 +285,7 @@ data, ready for summarisation.
   bundles include only new events. Re-running the reporting job does not change
   the bundle unless new events have arrived.
 
-### Step 2.2: Integrate large language models behind an abstraction
+### 2.2. Integrate large language models behind an abstraction
 
 **Goal:** Introduce LLM-backed summarisation while keeping vendor choices and
 context window sizes abstracted.
@@ -304,7 +317,7 @@ context window sizes abstracted.
   *Completion criteria:* The same reporting job can be run against two
   different model backends without code changes, by configuration alone.
 
-### Step 2.3: Generate and store repository reports
+### 2.3. Generate and store repository reports
 
 **Goal:** Produce and persist repository-level reports on a regular schedule,
 using the evidence and model integrations.
@@ -356,7 +369,7 @@ using the evidence and model integrations.
   repository and see the updated Markdown rendered through the same path as
   scheduled reports.
 
-### Step 2.4: Instrument quality and operational feedback
+### 2.4. Instrument quality and operational feedback
 
 **Goal:** Ensure repository reports are accurate enough to trust and
 operationally safe to run.
@@ -396,7 +409,7 @@ operationally safe to run.
   (total reports, average/p95 latency, token totals), and on-demand API report
   responses include a `metrics` payload.
 
-### Step 2.5: Provide an operator-facing MVP control plane and CLI
+### 2.5. Provide an operator-facing MVP control plane and CLI
 
 **Goal:** Make the full MVP workflow executable through stable HTTP APIs and a
 single `cyclopts` CLI, without ad hoc scripts.
@@ -465,7 +478,7 @@ single `cyclopts` CLI, without ad hoc scripts.
   *Completion criteria:* `api-only` startup with no background workers is a
   documented, repeatable command path with readiness checks.
 
-### Step 2.6: Deliver structured exports and required MVP metrics
+### 2.6. Deliver structured exports and required MVP metrics
 
 **Goal:** Expose required key performance indicator (KPI) and export
 capabilities through stable operator interfaces.
@@ -501,7 +514,7 @@ capabilities through stable operator interfaces.
   *Completion criteria:* API behaviour, OpenAPI definitions, and documented
   examples are consistent and validated in CI.
 
-### Step 2.7: Capture nice-to-have metrics inputs
+### 2.7. Capture nice-to-have metrics inputs
 
 **Goal:** Add the data model and ingestion signals needed for optional
 engineering insight metrics.
@@ -536,12 +549,12 @@ engineering insight metrics.
 
 ______________________________________________________________________
 
-## Phase 3: Add project and estate-level views
+## 3. Add project and estate-level views
 
 Phase 3 builds on repository-level reporting to provide narrative and metric
 views for projects and the entire estate, using the catalogue’s component graph.
 
-### Step 3.1: Implement project-level aggregation
+### 3.1. Implement project-level aggregation
 
 **Goal:** Generate project-level reports that combine repository summaries,
 component definitions, and cross-component dependencies.
@@ -584,7 +597,7 @@ component definitions, and cross-component dependencies.
   and consumers can navigate from a project report to its underlying repository
   reports.
 
-### Step 3.2: Represent components without repositories
+### 3.2. Represent components without repositories
 
 **Goal:** Ensure planned and non-code components are visible in project status,
 even when no GitHub repository exists yet.
@@ -605,7 +618,7 @@ even when no GitHub repository exists yet.
   *Completion criteria:* Project summaries explicitly mention planned
   components where relevant, distinguishing them from implemented services.
 
-### Step 3.3: Provide estate-level overview reports
+### 3.3. Provide estate-level overview reports
 
 **Goal:** Introduce estate-level reports that highlight cross-project risks,
 themes, and achievements.
@@ -627,13 +640,13 @@ themes, and achievements.
 
 ______________________________________________________________________
 
-## Phase 4: Integrate governance information from Concordat
+## 4. Integrate governance information from Concordat
 
 Phase 4 brings governance data from Concordat into Ghillie, making compliance
 violations first-class inputs to status reports and allowing Concordat
 enrolment to drive estate membership.
 
-### Step 4.1: Ingest Concordat CloudEvents
+### 4.1. Ingest Concordat CloudEvents
 
 **Goal:** Capture Concordat events in the Medallion pipeline, alongside GitHub
 events.
@@ -672,7 +685,7 @@ events.
   *Completion criteria:* Active violations and enrolment state can be queried
   per repository or project without examining raw events.
 
-### Step 4.2: Drive estate membership from Concordat enrolment
+### 4.2. Drive estate membership from Concordat enrolment
 
 **Goal:** Use Concordat to define the managed estate implicitly through
 enrolment.
@@ -686,7 +699,7 @@ enrolment.
   Ghillie to start ingesting events and generating reports. The inverse holds
   for unenrolment.
 
-### Step 4.3: Surface compliance state in reports
+### 4.3. Surface compliance state in reports
 
 **Goal:** Embed governance posture into repository, project, and estate-level
 reports.
@@ -709,12 +722,12 @@ reports.
 
 ______________________________________________________________________
 
-## Phase 5: Developer experience and Backstage integration
+## 5. Developer experience and Backstage integration
 
 Phase 5 focuses on making Ghillie’s outputs easy to consume through APIs and
 developer portals, with an emphasis on Backstage integration.
 
-### Step 5.1: Expose a read API for reports
+### 5.1. Expose a read API for reports
 
 **Goal:** Provide a stable, authenticated API for retrieving reports and
 related metadata.
@@ -735,7 +748,7 @@ related metadata.
   *Completion criteria:* Attempts to access reports for unauthorised estates or
   projects are denied and logged.
 
-### Step 5.2: Implement Backstage plugin
+### 5.2. Implement Backstage plugin
 
 **Goal:** Present Ghillie status information within Backstage’s component and
 system pages.
@@ -757,7 +770,7 @@ system pages.
   status for at least one pilot service, and updates as new reports are
   generated.
 
-### Step 5.3: Add optional push channels
+### 5.3. Add optional push channels
 
 **Goal:** Allow teams to receive status summaries through channels such as chat
 or email.
@@ -778,12 +791,12 @@ or email.
 
 ______________________________________________________________________
 
-## Phase 6: Advanced analysis and automation
+## 6. Advanced analysis and automation
 
 Phase 6 introduces more advanced capabilities that build on earlier phases
 without being required for an initial launch.
 
-### Step 6.1: Roadmap intent extraction and adherence metrics
+### 6.1. Roadmap intent extraction and adherence metrics
 
 **Goal:** Understand stated intent from roadmap documents and measure progress
 against it.
@@ -804,7 +817,7 @@ against it.
   about roadmap alignment, distinguishing between on-track, drifting, and
   stalled initiatives.
 
-### Step 6.2: Extended metrics and trend analysis
+### 6.2. Extended metrics and trend analysis
 
 **Goal:** Surface trends in delivery and governance metrics over time.
 
@@ -824,7 +837,7 @@ against it.
   trends, such as sustained improvement in lead time or persistent compliance
   issues.
 
-### Step 6.3: Prepare for agentic remediation (future-facing)
+### 6.3. Prepare for agentic remediation (future-facing)
 
 **Goal:** Make Ghillie’s architecture ready for a future where models can
 safely propose or initiate remediation actions.
@@ -844,18 +857,3 @@ safely propose or initiate remediation actions.
 
   *Completion criteria:* The data model supports, but does not yet require, the
   context needed for agentic remediation scenarios.
-
-______________________________________________________________________
-
-## Early value and implementation guidance
-
-Phases 1 and 2 together constitute the initial Ghillie MVP: a system that
-reliably ingests GitHub activity for a managed set of repositories, constructs
-evidence bundles, and produces repository-level status reports on a regular
-cadence. Later phases build on this foundation to add project and estate views,
-governance integration, and richer developer experience support.
-
-The roadmap deliberately avoids calendar commitments. Each task is scoped to be
-achievable, measurable, and incrementally valuable, so that Ghillie can start
-delivering meaningful status reports early and evolve safely towards deeper
-integration with Concordat and wider organisational tooling.
