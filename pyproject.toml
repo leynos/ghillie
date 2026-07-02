@@ -18,7 +18,7 @@ classifiers = [
 dependencies = [
     "femtologging @ git+https://github.com/leynos/femtologging@691a73962df8f99308a82348d99c4f707c245e63",
     "msgspec>=0.21.1",
-    "ruamel.yaml>=0.18.6",
+    "ruamel.yaml>=0.19.1",
     "sqlalchemy>=2.0.34",
     "aiosqlite>=0.20.0",
     "dramatiq>=1.16.0",
