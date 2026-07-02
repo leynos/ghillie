@@ -243,7 +243,7 @@ dev = [
     { name = "hecate", git = "https://github.com/leynos/hecate?rev=46f8c8798e7a80a3a1ab5a13c2a000a4423ffc12" },
     { name = "hypothesis", specifier = ">=6.150.0,<7" },
     { name = "plumbum", specifier = ">=1.10,<2" },
-    { name = "py-pglite", extras = ["asyncpg"], specifier = ">=0.1.0" },
+    { name = "py-pglite", extras = ["asyncpg"], specifier = ">=0.5.3" },
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
