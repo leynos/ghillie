@@ -47,7 +47,7 @@ dev = [
     "ty>=0.0.1a21",
     "pytest-timeout",
     # Script dependencies for type checking and testing
-    "plumbum>=1.10,<2",
+    "plumbum>=2.0.1,<3",
     "cmd-mox>=0.2,<1",
 ]
 
