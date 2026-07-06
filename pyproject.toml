@@ -49,6 +49,7 @@ dev = [
     # Script dependencies for type checking and testing
     "plumbum>=2.0.1,<3",
     "cmd-mox>=0.2,<1",
+    "pyyaml>=6.0.3",
 ]
 
 [tool.ruff]
@@ -134,6 +135,16 @@ max-args = 4
 [tool.pyright]
 pythonVersion = "3.14"
 typeCheckingMode = "strict"
+
+[tool.mutmut]
+# Flat layout: the package lives at the repository root.
+source_paths = ["ghillie/"]
+pytest_add_cli_args_test_selection = ["tests/"]
+# mutmut runs pytest from mutants/; copy the assets tests resolve
+# relative to the repository root: the docs snapshot tests read docs/,
+# the catalogue fixture reads examples/wildside-catalogue.yaml, and the
+# Helm chart tests read charts/ when helm is installed.
+also_copy = ["docs/", "examples/", "charts/"]
 
 [tool.pytest.ini_options]
 # Tests automatically killed after seconds elapsed
