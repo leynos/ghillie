@@ -260,7 +260,7 @@ This design covers:
 implemented using:
 
 - **Granian** + **async Falcon** – HTTP/API entrypoints for ingestion and admin,
-- **msgspec** – fast, typed serialisation and validation of event payloads,
+- **msgspec** – fast, typed serialization and validation of event payloads,
 - **Postgres** – storage for Bronze (append-only) and Silver (relational),
 - **async SQLAlchemy 2.x** – async ORM/SQL layer,
 - **async Dramatiq** – background workers for Bronze→Silver transformation,
@@ -365,7 +365,7 @@ Notes:
   This prevents duplicate Bronze events when webhooks retry or pollers overlap.
 - `transform_state` lets the Silver workers pick up pending events efficiently
   without locking the entire table.
-- No foreign keys: Bronze optimises for **write throughput** and
+- No foreign keys: Bronze optimizes for **write throughput** and
   **replayability**, not relational integrity.
 
 You will also want a little side-table for **polling offsets**:
@@ -979,13 +979,13 @@ This helps when Bronze ingestion is bulk-loaded, rather than one-at-a-time via
 
 ______________________________________________________________________
 
-## 7. msgspec schemas and event normalisation
+## 7. msgspec schemas and event normalization
 
 You will have three levels of structure:
 
 1. **Provider payloads** – whatever GitHub/Concordat send. These live as plain
    `dict[str, Any]` in `raw_events.payload`.
-2. **Bronze-normalised structs** – minimal `msgspec.Struct` types that adapt
+2. **Bronze-normalized structs** – minimal `msgspec.Struct` types that adapt
    provider differences but still reflect “event-level” granularity.
 3. **Silver entities** – ORM tables representing long-lived objects.
 
@@ -1207,7 +1207,7 @@ A few practical constraints you’ll want to bake into the design up front:
   captured via `exc_info` where errors occur.
 - **Timezone discipline and payload safety:** ingestion and hashing enforce
   timezone-aware datetimes. Naive values raise `TimezoneAwareRequiredError`,
-  payload datetimes are normalised to UTC ISO strings before persistence, and
+  payload datetimes are normalized to UTC ISO strings before persistence, and
   unsupported payload types raise `UnsupportedPayloadTypeError` to keep dedupe
   hashes deterministic and JSON-serializable.
 - **Concurrent transforms:** Silver transforms treat uniqueness races as

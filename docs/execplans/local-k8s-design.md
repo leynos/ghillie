@@ -50,7 +50,7 @@ Success is observable when:
 - Observation: CloudNativePG (CNPG) publishes a `uri` field in the `*-app`
   secret that is suitable as a single database URL for application config.
   Evidence: `docs/k3d-python-example.md` secret read logic.
-- Observation: The ephemeral previews design emphasises GitOps, HelmRelease,
+- Observation: The ephemeral previews design emphasizes GitOps, HelmRelease,
   and Kustomize overlays, with platform services (CNPG, Redis/Valkey, ingress,
   cert-manager, ExternalDNS) managed out-of-band. Evidence:
   `../wildside/docs/cloud-native-ephemeral-previews.md` executive summary and

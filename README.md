@@ -8,7 +8,7 @@ project, and estate levels.
 
 ## What is Ghillie?
 
-If you've ever tried to synthesise the velocity, health, and compliance posture
+If you've ever tried to synthesize the velocity, health, and compliance posture
 of dozens (or thousands) of software repositories into a coherent narrative,
 you'll know it's a thankless task. Ghillie automates that intelligence
 gathering.

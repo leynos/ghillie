@@ -11,7 +11,7 @@ of handling numerous I/O-bound operations efficiently. However, the
 introduction of asynchronous patterns brings new complexities to testing.
 Verifying the correctness of asynchronous code requires specialized tools and
 techniques to manage event loops and awaitables. pytest stands out as a widely
-adopted Python testing framework, favored for its simplicity and extensibility.
+adopted Python testing framework, favoured for its simplicity and extensibility.
 For testing asyncio-based applications, the pytest-asyncio plugin is
 indispensable, providing the necessary infrastructure to write and execute
 asynchronous tests seamlessly. This report aims to furnish a comprehensive
@@ -25,7 +25,7 @@ that become async def; this paradigm extends to hooks, middleware methods, and
 error handlers, all of which must be awaitable coroutine functions.
 Consequently, testing strategies must holistically address this "async
 everything" model to ensure comprehensive validation of the application's
-behavior.
+behaviour.
 
 ## **2\. Setting Up the Testing Environment**
 
@@ -120,7 +120,7 @@ default, enhances code readability and makes the test's asynchronous execution
 context immediately apparent. This explicitness is generally recommended for
 clarity, particularly in collaborative projects or when onboarding new team
 members. The decision between these modes reflects a balance between
-conciseness and the explicit declaration of asynchronous behavior.
+conciseness and the explicit declaration of asynchronous behaviour.
 
 ### **Virtual Environments**
 
@@ -311,7 +311,7 @@ While httpx.AsyncClient is suitable for many testing scenarios, Falcon provides
 falcon.testing.ASGIConductor for more fine-grained control over the ASGI
 application lifecycle.2 This tool is particularly valuable when testing
 streaming protocols like Server-Sent Events (SSE) or WebSockets, and for
-verifying the behavior of ASGI middleware lifespan events (process\_startup and
+verifying the behaviour of ASGI middleware lifespan events (process\_startup and
 process\_shutdown).3 The ASGIConductor uses coroutines for its operations,
 which means it integrates naturally with async def test functions. However,
 this also implies that pytest-asyncio is not merely a convenience but a strict
@@ -334,13 +334,13 @@ protocol:
 - **On exiting the context**, ASGIConductor sends the lifespan.shutdown event,
   triggering shutdown logic or process\_shutdown middleware methods.
 
-This behavior ensures that the entire application lifecycle, including these
+This behaviour ensures that the entire application lifecycle, including these
 critical startup and shutdown phases, is simulated within the test environment,
 mirroring how a real ASGI server would interact with the application.3 This
 capability is indispensable for accurately testing components like middleware
 that rely on these lifecycle events. For instance, middleware might establish
 database connections during process\_startup and close them during
-process\_shutdown; ASGIConductor facilitates the verification of such behavior.
+process\_shutdown; ASGIConductor facilitates the verification of such behaviour.
 An example of its usage:
 
 ```python
@@ -449,7 +449,7 @@ that the async def fixture coroutine is properly executed within the
 pytest-asyncio managed event loop, and its awaited result is supplied to the
 test function. Failure to use @pytest\_asyncio.fixture for an async def fixture
 is a common pitfall. If @pytest.fixture is used, the test function will receive
-the raw coroutine object, leading to AttributeError or unexpected behavior when
+the raw coroutine object, leading to AttributeError or unexpected behaviour when
 the test attempts to use it as the actual fixture value. This distinction is
 critical for the correct functioning of asynchronous tests. An example of a
 simple asynchronous fixture:
@@ -588,7 +588,7 @@ testing:
 - **Speed:** Avoid slow operations like real network requests or database
   access.
 - **Determinism:** Ensure tests produce consistent results by controlling
-  dependency behavior. The primary challenge in async mocking is that
+  dependency behaviour. The primary challenge in async mocking is that
   dependencies are often async def methods, which return coroutines
   (awaitables) rather than direct values.
 
@@ -622,9 +622,9 @@ from unittest.mock import AsyncMock  # Or from asyncmock import AsyncMock
 This replaces the actual get\_cat\_fact method with an AsyncMock that, when
 awaited, will return mock\_response.
 
-### **Configuring AsyncMock Behavior**
+### **Configuring AsyncMock Behaviour**
 
-The behavior of an AsyncMock can be configured primarily through its
+The behaviour of an AsyncMock can be configured primarily through its
 return\_value and side\_effect attributes:
 
 - **return\_value**: This attribute defines the value that the coroutine
@@ -658,7 +658,7 @@ my_mock = AsyncMock(side_effect=ValueError("Async operation failed"))
     mock's return\_value is used.  
 - An **asynchronous function (async def)**: This async function will be
     called and awaited. Its result becomes the resolved value of the mock's
-    awaitable. This is powerful for simulating more complex async behaviors.  
+    awaitable. This is powerful for simulating more complex async behaviours.
 - Another **AsyncMock instance**: If side\_effect is set to another AsyncMock
     instance, calling the patched function effectively calls this other
     AsyncMock instance. The return\_value should then be configured on this
@@ -666,7 +666,7 @@ my_mock = AsyncMock(side_effect=ValueError("Async operation failed"))
 
 Understanding the interplay between return\_value, side\_effect, and the
 awaitable nature of AsyncMock is crucial. For simple resolved values,
-return\_value is sufficient. For dynamic behavior, exceptions, or invoking
+return\_value is sufficient. For dynamic behaviour, exceptions, or invoking
 other async logic, side\_effect is the appropriate choice. Misconfiguration can
 lead to mocks not behaving as expected, for example, returning a coroutine
 where a resolved value is anticipated by the test logic.
@@ -784,7 +784,7 @@ of Mock and AsyncMock:
 | **Primary Use Case**        | Mocking synchronous dependencies.                          | Mocking asynchronous dependencies.                            |
 
 This table underscores why AsyncMock is essential for correctly simulating the
-behavior of asynchronous dependencies.
+behaviour of asynchronous dependencies.
 
 ## **7\. Testing Asynchronous Falcon Hooks (@falcon.before, @falcon.after)**
 
@@ -812,7 +812,7 @@ standard @falcon.before() or @falcon.after() decorators.5
 These hooks, being async def, are integral parts of the asynchronous request
 processing pipeline. They can await other coroutines, modify req.context or
 resp objects, or raise exceptions to alter the control flow. Thus, testing them
-involves not only their isolated logic but also their integrated behavior
+involves not only their isolated logic but also their integrated behaviour
 within Falcon's ASGI request-response cycle.
 
 ### **Strategies for Testing Hooks**
@@ -822,7 +822,7 @@ Testing asynchronous hooks generally involves:
 - **Verifying Side Effects:** If a hook modifies req.context, resp.context, or
   response headers, tests should assert these modifications after a request
   that triggers the hook.
-- **Verifying Behavior Modification:** If a hook is designed to alter control
+- **Verifying Behaviour Modification:** If a hook is designed to alter control
   flow, for instance, by raising an HTTP exception (e.g.,
   falcon.HTTPUnauthorized in an authentication hook), tests should use
   pytest.raises to confirm that the correct exception is raised under
@@ -933,7 +933,7 @@ async def test_protected_resource_valid_token(hooked_app_client):
 ```
 
 This testing pattern, adapted from synchronous examples and using
-httpx.AsyncClient 1, effectively validates the behavior of the asynchronous
+httpx.AsyncClient 1, effectively validates the behaviour of the asynchronous
 authentication hook.
 
 ### **Mocking Dependencies within Async Hooks**
@@ -988,7 +988,7 @@ These methods are tested similarly to asynchronous hooks. Tests involve making
 requests that pass through the middleware and asserting expected outcomes:
 
 - Modifications to req.context, resp.context, headers, or response data.  
-- Short-circuiting behavior (e.g., if resp.complete is set to True in
+- Short-circuiting behaviour (e.g., if resp.complete is set to True in
   process\_request, subsequent middleware and the resource responder should be
   skipped).
 - Interactions with mocked dependencies within the middleware methods, using
@@ -1315,7 +1315,7 @@ Falcon applications.
   single aspect of functionality. Leverage fixtures effectively to reduce
   boilerplate and enhance readability.
 - **Python Version Compatibility:** Be mindful of differences in asyncio
-  behavior across Python versions. Notably, unittest.mock.AsyncMock is standard
+  behaviour across Python versions. Notably, unittest.mock.AsyncMock is standard
   from Python 3.8 onwards; older versions require the asyncmock library.
 - **Choosing the Right Test Client/Tool:** The selection of a testing utility
   should align with the testing objective:
@@ -1364,7 +1364,7 @@ The adoption of these practices is crucial, especially given Falcon's common
 application in building mission-critical REST APIs and microservices where
 reliability is paramount. Comprehensive asynchronous testing provides the
 confidence needed to deploy and maintain these systems effectively.
-Asynchronous code, if not rigorously tested, can harbor subtle bugs related to
+Asynchronous code, if not rigorously tested, can harbour subtle bugs related to
 concurrency, state management, and resource handling. The techniques outlined
 serve as a foundation for mitigating these risks. The landscape of asynchronous
 Python and its testing ecosystem is continually evolving. Therefore, while this

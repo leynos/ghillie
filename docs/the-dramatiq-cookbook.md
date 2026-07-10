@@ -288,7 +288,7 @@ def export_k8s_cronjobs(namespace: str = "ghillie") -> list[dict[str, Any]]:
     return manifests
 ```
 
-A command-line wrapper can serialise the manifests to YAML and emit them for
+A command-line wrapper can serialize the manifests to YAML and emit them for
 continuous delivery pipelines to apply:
 
 ```plaintext
@@ -477,7 +477,7 @@ The following guidelines help prevent oversubscription and contention:
 - Prefer a small number of CPU-heavy actors in flight per process to avoid
   contention for CPU resources.
 
-Empirical observation of queue depth, latency, and CPU utilisation should
+Empirical observation of queue depth, latency, and CPU utilization should
 inform the final values.
 
 ### When not to use loky
@@ -505,5 +505,5 @@ scheduled work and CPU-bound tasks in Ghillie:
 - Async Dramatiq actors can safely offload CPU-bound work to a loky
   process pool, preserving a clear separation between I/O and computation.
 
-Both patterns prioritise configuration-driven behaviour, isolation of
+Both patterns prioritize configuration-driven behaviour, isolation of
 responsibilities, and operational observability.

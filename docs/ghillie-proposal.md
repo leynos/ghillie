@@ -13,7 +13,7 @@ ______________________________________________________________________
 
 Conceptually, the system uses three layers:
 
-1. **Ingest & normalise**
+1. **Ingest & normalize**
 Pull structured “events” from GitHub for each repo:
 
    - roadmap docs

@@ -528,16 +528,16 @@ without requiring schema migrations. It supports the **Open/Closed Principle**:
 the system is open for extension (new violation types) but closed for
 modification (no database schema changes needed).
 
-## 6. Data Modeling and Storage Strategy
+## 6. Data Modelling and Storage Strategy
 
-The data layer of Ghillie is designed to balance the structural rigor of an
+The data layer of Ghillie is designed to balance the structural rigour of an
 asset inventory with the flexibility of a document store. The choice of
 **PostgreSQL** as the primary persistence technology enables this hybrid
 approach.
 
 ### 6.1 Entity Relationship Design
 
-The schema is centered around the concept of the **Estate**, which acts as the
+The schema is centred around the concept of the **Estate**, which acts as the
 root of the hierarchy.
 
 - `estates`: Represents a logical grouping, such as a Business Unit or
@@ -605,7 +605,7 @@ The plugin communicates with the Ghillie backend via a standardized REST API.
 It uses the Backstage **Identity API** to pass the user’s credentials, ensuring
 that the user is authorized to view the status of the requested entity.37
 
-### 7.2 Catalog Ingestion and Mapping
+### 7.2 Catalogue Ingestion and Mapping
 
 To ensure seamless integration, Ghillie consumes the `catalog-info.yaml` files
 used by Backstage. This allows Ghillie to map the GitHub repository URL (e.g.,
@@ -614,7 +614,7 @@ used by Backstage. This allows Ghillie to map the GitHub repository URL (e.g.,
 
 This mapping is critical for the “Governance as Code” workflow. It allows
 Ghillie to report status not just by repository, but by “System” or “Domain” as
-defined in the Backstage catalog. If a System is composed of five
+defined in the Backstage catalogue. If a System is composed of five
 microservices, Ghillie can aggregate the status of all five repositories into a
 single System-level report using its Map-Reduce capability, providing
 high-level visibility to System Owners.13
@@ -1253,7 +1253,7 @@ flowchart TD
   model regeneration cycles, allowing transient LLM issues (hallucinations,
   formatting errors) to self-correct.
 - **Human review fallback**: Reports that remain invalid after max retries are
-  persisted as `ReportReview` markers with failure details, signaling operators
+  persisted as `ReportReview` markers with failure details, signalling operators
   that manual investigation is required.
 - **Caller-specific responses**: On-demand API callers receive a 422
   Unprocessable Entity response with validation failure details. Scheduled
