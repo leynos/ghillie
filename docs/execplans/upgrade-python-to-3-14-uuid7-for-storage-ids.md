@@ -109,7 +109,7 @@ Success is observable when:
 
 - Introduced `ghillie.common.ids.new_uuid7_str()` and reused it across
   catalogue, Silver, and Gold storage models.
-- Added unit tests covering UUIDv7 format, version, timestamp-prefix behavior,
+- Added unit tests covering UUIDv7 format, version, timestamp-prefix behaviour,
   and direct inspection of storage model ID defaults.
 - Updated project metadata to Python 3.14 and refreshed the lockfile so
   typecheck/build tooling matches the runtime used by `uv`.

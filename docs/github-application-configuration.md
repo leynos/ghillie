@@ -15,10 +15,10 @@ document, the following table summarizes the required GitHub App permissions:
 | Repository   | Contents      | Read-only            |
 | Repository   | Issues        | Read-only            |
 | Repository   | Pull requests | Read-only            |
-| Organisation | Members       | Read-only (optional) |
+| Organization | Members       | Read-only (optional) |
 
 **Installation scope:** Install on all repositories that Ghillie should
-monitor, or use organisation-wide installation with selective repository access.
+monitor, or use organization-wide installation with selective repository access.
 
 **Environment variable:** Set `GHILLIE_GITHUB_TOKEN` to the installation access
 token (not the private key).
@@ -32,13 +32,13 @@ production deployments:
 
 - **Scoped permissions:** Apps request only the permissions they need, reducing
   the blast radius if credentials are compromised.
-- **Installation-level access:** Permissions are granted per organisation or
+- **Installation-level access:** Permissions are granted per organization or
   repository, not tied to individual user accounts.
 - **Automatic token rotation:** Installation access tokens expire after one
   hour, limiting exposure from leaked credentials.
 - **Audit trail:** GitHub logs all App activity separately from user actions,
   simplifying compliance and security reviews.
-- **Organisational control:** Administrators can review, approve, and revoke App
+- **Organizational control:** Administrators can review, approve, and revoke App
   installations without affecting developer accounts.
 
 Ghillie operates in a strictly read-only mode. It never modifies repository
@@ -51,7 +51,7 @@ metadata, pull requests, issues, and documentation paths.
 Before creating a GitHub App for Ghillie, ensure the following prerequisites
 are met:
 
-- **Organisation administrator access** to create and install GitHub Apps, or
+- **Organization administrator access** to create and install GitHub Apps, or
   the ability to request installation approval from an administrator.
 - **A list of repositories** that Ghillie will monitor, either as an explicit
   allowlist or as membership in a catalogue configuration.
@@ -63,8 +63,8 @@ are met:
 
 ### Step 1: Navigate to GitHub App settings
 
-1. Sign in to GitHub as an organisation owner or administrator.
-2. Navigate to the organisation settings page:
+1. Sign in to GitHub as an organization owner or administrator.
+2. Navigate to the organization settings page:
    `https://github.com/organizations/<org-name>/settings`
 3. In the left sidebar, select **Developer settings** then **GitHub Apps**.
 4. Click **New GitHub App**.
@@ -75,7 +75,7 @@ Fill in the basic information for the App:
 
 | Field           | Recommended value                                                           |
 | --------------- | --------------------------------------------------------------------------- |
-| GitHub App name | `ghillie-status-reporter` (or include the organisation name for uniqueness) |
+| GitHub App name | `ghillie-status-reporter` (or include the organization name for uniqueness) |
 | Description     | Read-only status reporting for engineering estate monitoring                |
 | Homepage URL    | The Ghillie deployment URL or internal documentation page                   |
 
@@ -116,16 +116,16 @@ Do not request any other repository permissions. In particular, do not request:
 - **Webhooks:** Ghillie does not configure webhooks (even with incoming webhooks
   enabled, this permission is not required).
 
-### Step 5: Configure organisation permissions (optional)
+### Step 5: Configure organization permissions (optional)
 
-Organisation permissions are not required for basic Ghillie operation. To
-attribute activity to organisation members in reports, request:
+Organization permissions are not required for basic Ghillie operation. To
+attribute activity to organization members in reports, request:
 
 | Permission | Access level | Rationale                                                       |
 | ---------- | ------------ | --------------------------------------------------------------- |
-| Members    | Read-only    | Optional: enables author attribution by organisation membership |
+| Members    | Read-only    | Optional: enables author attribution by organization membership |
 
-Leave all other organisation permissions unselected.
+Leave all other organization permissions unselected.
 
 ### Step 6: Configure account permissions
 
@@ -135,8 +135,8 @@ empty.
 ### Step 7: Select where the App can be installed
 
 Choose **Only on this account** to restrict installation to the current
-organisation, or **Any account** if the App is intended to be shared across
-multiple organisations.
+organization, or **Any account** if the App is intended to be shared across
+multiple organizations.
 
 For most deployments, **Only on this account** is appropriate.
 
@@ -157,12 +157,12 @@ App ID and the private key are required to generate installation tokens.
 
 ## Installing the App on repositories
 
-### Organisation-wide installation
+### Organization-wide installation
 
 1. Navigate to the App's public page:
    `https://github.com/apps/<app-name>`
 2. Click **Install** or **Configure**.
-3. Select the target organisation.
+3. Select the target organization.
 4. Choose **All repositories** to grant access to every repository, or **Only
    select repositories** to choose specific repositories.
 5. Click **Install**.
@@ -172,7 +172,7 @@ App ID and the private key are required to generate installation tokens.
 If **Only select repositories** was selected during installation, the
 repository list can be modified at any time:
 
-1. Navigate to the organisation settings.
+1. Navigate to the organization settings.
 2. Select **Installed GitHub Apps** in the left sidebar.
 3. Click **Configure** next to the Ghillie App.
 4. Add or remove repositories as needed.
@@ -302,7 +302,7 @@ failures.
 
 ### Audit and monitoring
 
-- GitHub logs all App API activity in the organisation's audit log.
+- GitHub logs all App API activity in the organization's audit log.
 - Monitor rate limit headers in API responses to detect unusual usage patterns.
 - Set up alerts for authentication failures, which may indicate credential
   issues or permission changes.
@@ -316,7 +316,7 @@ failures.
 
 ## Permissions not granted
 
-Ghillie deliberately excludes several permissions to minimise its access
+Ghillie deliberately excludes several permissions to minimize its access
 footprint:
 
 | Permission      | Reason excluded                                                     |
@@ -347,7 +347,7 @@ set that enables the required functionality.
 - The installation access token has expired. Refresh the token and update
   `GHILLIE_GITHUB_TOKEN`.
 - The App is not installed on the target repository. Verify the installation in
-  organisation settings.
+  organization settings.
 - The JWT used for token exchange is malformed or expired. Ensure the `exp`
   claim is set correctly and the private key matches the App.
 
@@ -362,7 +362,7 @@ errors.
   Update the App permissions in GitHub settings.
 - The repository is not included in the App installation. Add the repository to
   the installation scope.
-- Organisation policies restrict App access. Check with the organisation
+- Organization policies restrict App access. Check with the organization
   administrator.
 
 ### Rate limiting
@@ -393,7 +393,7 @@ activity.
 **Possible causes:**
 
 - The repository is not included in the App installation. Add it via
-  organisation settings.
+  organization settings.
 - The repository has `ingestion_enabled: false` in the registry. Enable
   ingestion via `RepositoryRegistryService.enable_ingestion()`.
 - The catalogue has not been re-imported after adding the repository. Run the
@@ -456,7 +456,7 @@ roadmaps and Architecture Decision Records (ADRs). Ghillie does not read source
 code blobs; it only queries commit history filtered by configured documentation
 paths.
 
-If stricter controls are required by the organisation, consider the following
+If stricter controls are required by the organization, consider the following
 options:
 
 - Limit the App installation to repositories that contain documentation.
@@ -480,7 +480,7 @@ While fine-grained PATs offer similar permission scoping to GitHub Apps, they
 have limitations for production use:
 
 - **User binding:** PATs are tied to individual user accounts and may become
-  invalid when users leave the organisation.
+  invalid when users leave the organization.
 - **Manual rotation:** PATs require manual regeneration; Apps support automatic
   token refresh.
 - **Audit separation:** PAT activity appears in the user's audit trail; App

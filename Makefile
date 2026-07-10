@@ -1,17 +1,18 @@
 MDLINT ?= markdownlint-cli2
 NIXIE ?= nixie
 MDFORMAT_ALL ?= mdformat-all
-TOOLS = $(MDFORMAT_ALL) ruff ty $(MDLINT) uv
+TOOLS = $(MDFORMAT_ALL) ruff $(MDLINT) uv
 VENV_TOOLS = pytest
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
 
 .PHONY: help all clean build build-release check-architecture lint fmt check-fmt \
         markdownlint nixie test typecheck helm-lint helm-test \
-        docker-build docker-run $(TOOLS) $(VENV_TOOLS)
+        docker-build docker-run spelling spelling-helper-test \
+        $(TOOLS) $(VENV_TOOLS)
 
 .DEFAULT_GOAL := all
 
-all: build check-fmt lint typecheck test
+all: build check-fmt lint typecheck test spelling
 
 .venv: pyproject.toml
 	$(UV_ENV) uv venv --clear
@@ -69,12 +70,37 @@ check-architecture: build ## Run hexagonal architecture import checks
 lint: check-architecture ruff ## Run linters
 	ruff check
 
-typecheck: build ty ## Run typechecking
-	ty --version
-	ty check
+typecheck: build ## Run typechecking
+	$(UV_ENV) uv run ty --version
+	$(UV_ENV) uv run ty check
 
-markdownlint: $(MDLINT) ## Lint Markdown files
+markdownlint: spelling $(MDLINT) ## Lint Markdown files and enforce spelling
 	$(MDLINT) '**/*.md'
+
+TYPOS_VERSION ?= 1.48.0
+RUFF_VERSION ?= 0.15.12
+
+spelling: spelling-helper-test ## Enforce en-GB-oxendict spelling in Markdown prose
+	@$(UV_ENV) uv run scripts/generate_typos_config.py
+	@git ls-files -z '*.md' | \
+		xargs -0 -r env $(UV_ENV) uv tool run typos@$(TYPOS_VERSION) \
+		--config typos.toml --force-exclude
+
+spelling-helper-test: ## Validate the shared spelling-policy integration
+	@$(UV_ENV) uv tool run ruff@$(RUFF_VERSION) format --isolated \
+		--target-version py313 --check scripts/generate_typos_config.py \
+		scripts/typos_rollout.py scripts/typos_rollout_cache.py \
+		scripts/tests/test_typos_rollout.py
+	@$(UV_ENV) uv tool run ruff@$(RUFF_VERSION) check --isolated \
+		--target-version py313 scripts/generate_typos_config.py \
+		scripts/typos_rollout.py scripts/typos_rollout_cache.py \
+		scripts/tests/test_typos_rollout.py
+	@PYTHONPATH=scripts $(UV_ENV) uv run --no-project --python 3.13 \
+		--with pytest==9.0.2 --with pytest-cov==7.0.0 \
+		python -m pytest scripts/tests/test_typos_rollout.py \
+		-c /dev/null --rootdir=. -p no:cacheprovider \
+		--cov=generate_typos_config --cov=typos_rollout \
+		--cov=typos_rollout_cache --cov-fail-under=90
 
 nixie: ## Validate Mermaid diagrams
 	$(call ensure_tool,nixie)

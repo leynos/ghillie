@@ -125,7 +125,7 @@ The femtologging API and caveats are documented in
 `docs/femtologging-users-guide.md`. Validate the guide against the snapshot API
 and update the guide if it is now outdated on exception support.
 
-Behavioral tests live in `tests/features/*.feature` with step definitions in
+Behavioural tests live in `tests/features/*.feature` with step definitions in
 `tests/features/steps/*.py`. The ingestion observability feature file
 `tests/features/github_ingestion_observability.feature` and steps in
 `tests/features/steps/test_github_observability_steps.py` are the most likely

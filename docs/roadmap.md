@@ -25,7 +25,7 @@ governance integration, and richer developer experience support.
 The roadmap deliberately avoids calendar commitments. Each task is scoped to be
 achievable, measurable, and incrementally valuable, so that Ghillie can start
 delivering meaningful status reports early and evolve safely towards deeper
-integration with Concordat and wider organisational tooling.
+integration with Concordat and wider organizational tooling.
 
 ______________________________________________________________________
 
@@ -71,7 +71,7 @@ components, repositories, and their relationships.
   - any repository-specific documentation paths (for example,
     roadmap files, ADR directories),
   - project-level knobs that influence status generation
-    (for example, whether dependency PRs are summarised or ignored).
+    (for example, whether dependency PRs are summarized or ignored).
 
   *Completion criteria:* At least one project has custom noise rules and
   documentation locations defined in the catalogue, and these settings are
@@ -121,7 +121,7 @@ Silver layers with controlled noise and back-pressure.
   along with any metadata required by later stages.
 
   *Completion criteria:* The system maintains an accurate list of active
-  repositories for at least one organisation and can enable or disable
+  repositories for at least one organization and can enable or disable
   ingestion per repository.
 
 - [x] **Task 1.3.b – Implement incremental GitHub ingestion**  
@@ -262,7 +262,7 @@ reports represent the first directly consumable output of Ghillie.
 ### 2.1. Implement evidence bundle generation
 
 **Goal:** Provide structured, per-repository evidence bundles from Silver-layer
-data, ready for summarisation.
+data, ready for summarization.
 
 - [x] **Task 2.1.a – Define repository evidence structure**
   Design an in-memory representation for a repository reporting window that
@@ -287,11 +287,11 @@ data, ready for summarisation.
 
 ### 2.2. Integrate large language models behind an abstraction
 
-**Goal:** Introduce LLM-backed summarisation while keeping vendor choices and
+**Goal:** Introduce LLM-backed summarization while keeping vendor choices and
 context window sizes abstracted.
 
 - [x] **Task 2.2.a – Define status model interface**
-  Define an interface for a status model with operations to summarise a
+  Define an interface for a status model with operations to summarize a
   repository evidence bundle and return structured output, including summary
   text, status code (for example, on track, at risk, blocked, unknown),
   highlights, risks, and suggested next steps.
@@ -580,8 +580,8 @@ component definitions, and cross-component dependencies.
   construction, lifecycle filtering, repository summary aggregation, dependency
   edge capture, and previous report context.
 
-- [ ] **Task 3.1.b – Extend status model for project summarisation**  
-  Add a project-level summarisation method to the status model interface,
+- [ ] **Task 3.1.b – Extend status model for project summarization**
+  Add a project-level summarization method to the status model interface,
   prompting the model to produce project-level status, achievements, risks, and
   cross-repository dependencies.
 
@@ -610,7 +610,7 @@ even when no GitHub repository exists yet.
   *Completion criteria:* At least one project has a planned component with no
   repository, and its status appears in the project report.
 
-- [ ] **Task 3.2.b – Integrate non-code components into summarisation**  
+- [ ] **Task 3.2.b – Integrate non-code components into summarization**
   Ensure project evidence bundles include non-code components and their
   statuses, and prompt the model to incorporate these into the narrative
   without overstating progress.
@@ -626,12 +626,12 @@ themes, and achievements.
 - [ ] **Task 3.3.a – Define estate evidence structure**  
   Combine project-level machine summaries, high-level metrics, and any known
   estate-wide objectives into an evidence bundle suitable for estate
-  summarisation.
+  summarization.
 
   *Completion criteria:* An estate-level evidence bundle can be built from
   existing project reports without querying raw events.
 
-- [ ] **Task 3.3.b – Implement estate-level summarisation**  
+- [ ] **Task 3.3.b – Implement estate-level summarization**
   Extend the status model interface to produce an estate-level report that
   identifies top risks, top achievements, and notable themes across projects.
 
@@ -706,13 +706,13 @@ reports.
 
 - [ ] **Task 4.3.a – Compute per-repository compliance scorecards**  
   Derive a simple compliance score or grade per repository from active
-  violations, emphasising severity and recency, and store it alongside
+  violations, emphasizing severity and recency, and store it alongside
   repository metadata.
 
   *Completion criteria:* Each managed repository has a computed compliance
   score, and the underlying violations are queryable for drill-down.
 
-- [ ] **Task 4.3.b – Include governance context in summarisation prompts**  
+- [ ] **Task 4.3.b – Include governance context in summarization prompts**
   Extend evidence bundles and prompts so that models take compliance scores and
   active violations into account, calling out critical governance issues
   alongside feature delivery.
@@ -740,12 +740,12 @@ related metadata.
   *Completion criteria:* A client can fetch a repository’s latest report and a
   list of previous reports using stable, documented endpoints.
 
-- [ ] **Task 5.1.b – Enforce authorisation and tenancy boundaries**  
-  Implement authentication and authorisation suitable for the deployment
+- [ ] **Task 5.1.b – Enforce authorization and tenancy boundaries**
+  Implement authentication and authorization suitable for the deployment
   context, including any row-level security policies needed for multi-tenant
   use.
 
-  *Completion criteria:* Attempts to access reports for unauthorised estates or
+  *Completion criteria:* Attempts to access reports for unauthorized estates or
   projects are denied and logged.
 
 ### 5.2. Implement Backstage plugin
@@ -827,7 +827,7 @@ against it.
   them in a queryable form.
 
   *Completion criteria:* Metric time series exist for pilot repositories and
-  projects and can be visualised alongside narrative reports.
+  projects and can be visualized alongside narrative reports.
 
 - [ ] **Task 6.2.b – Incorporate trends into summaries**  
   Extend evidence bundles so that models can comment on improving or degrading

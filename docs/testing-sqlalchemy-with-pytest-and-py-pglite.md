@@ -191,7 +191,7 @@ with a blank database. By default, the provided `pglite_session` fixture has
 **function scope**, meaning **each test function gets its own fresh
 database**([1](https://github.com/wey-gu/py-pglite)). This is the safest
 approach to avoid cross-test interference. However, database scope and reset
-behavior can be adjusted:
+behaviour can be adjusted:
 
 - **Per test (function-scope)** – **Default**. Every test uses a new ephemeral
   Postgres instance. Migrations or table creation can run at the start of each
@@ -232,7 +232,7 @@ behavior can be adjusted:
 
 Choosing the scope often involves a **trade-off between performance and
 isolation**. When test suites are small or deterministic isolation is
-prioritised, function-scoped (fresh DB each test) is simplest. For large suites
+prioritized, function-scoped (fresh DB each test) is simplest. For large suites
 where DB setup is a bottleneck, consider a session-scoped database with careful
 cleaning. As a rule of thumb: **apply schema migrations once per test session
 and reuse the database for speed, but ensure each test starts from a known

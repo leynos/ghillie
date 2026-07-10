@@ -130,7 +130,7 @@ A single Python script (`scripts/local_k8s.py`) will provide subcommands:
 
 - `up` to create a cluster and deploy Ghillie
 - `down` to delete the cluster
-- `status` to summarise resources
+- `status` to summarize resources
 - `logs` to tail application logs
 
 ### Cluster creation and ingress

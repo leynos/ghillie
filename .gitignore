@@ -205,3 +205,5 @@ target/
 
 .crush/
 .grepai/
+.typos-oxendict-base.json
+.typos-oxendict-base.toml

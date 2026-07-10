@@ -442,7 +442,7 @@ If tests fail:
 1. Classify HTTP errors by status code (429 rate limit, 5xx server, 4xx client)
 2. Separate timeout from other request errors for clarity
 3. Validate response shape before JSON parsing
-4. Fall back to `UNKNOWN` status for unparseable values
+4. Fall back to `UNKNOWN` status for unparsable values
 5. Truncate long content in error messages for readability
 
 ## Interfaces and dependencies

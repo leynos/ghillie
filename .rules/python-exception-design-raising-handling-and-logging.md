@@ -90,7 +90,7 @@ def reciprocal(n: float) -> float:
         return result
 ```
 
-`else` emphasises the happy path and avoids odd control‑flow within `try`
+`else` emphasizes the happy path and avoids odd control‑flow within `try`
 blocks.
 
 ## 4) Message construction for raises (EM101/EM102) and logging practice (LOG004/LOG007/LOG009/LOG014/LOG015, TRY401)
