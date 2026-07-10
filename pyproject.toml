@@ -39,7 +39,7 @@ dev = [
     "pytest-bdd",
     "pytest-asyncio",
     "pytest-xdist",
-    "syrupy>=5.3.4,<6",
+    "syrupy>=5.4.0,<6",
     "py-pglite[asyncpg]>=0.5.3",
     "asyncpg>=0.20.0,<1.0",
     "ruff",
