@@ -34,7 +34,7 @@ ghillie = "ghillie.cli:main"
 [dependency-groups]
 dev = [
     "hecate @ git+https://github.com/leynos/hecate@46f8c8798e7a80a3a1ab5a13c2a000a4423ffc12",
-    "hypothesis>=6.155.7,<7",
+    "hypothesis>=6.156.1,<7",
     "pytest",
     "pytest-bdd",
     "pytest-asyncio",
