@@ -200,18 +200,16 @@ The specification defines:
 ## Evidence references
 
 This assessment references the local k3d bootstrap script[^scripts-local-k8s],
-Helm chart values[^charts-ghillie-values], runtime bootstrap
-path[^ghillie-runtime], API application wiring[^ghillie-api-app], the OpenAPI
-contract[^specs-openapi], GitHub ingestion worker
-behaviour[^ghillie-github-ingestion], ingestion observability
-signals[^ghillie-github-observability], lag analysis
-services[^ghillie-github-lag], registry
-orchestration[^ghillie-registry-service], Silver storage
-contracts[^ghillie-silver-storage], GitHub client
-integrations[^ghillie-github-client], evidence construction
-logic[^ghillie-evidence-service], reporting
-services[^ghillie-reporting-service], user guidance[^docs-users-guide], and the
-MVP CLI specification[^docs-mvp-cli-specification].
+Helm chart values[^charts-ghillie-values], runtime bootstrap path
+[^ghillie-runtime], API application wiring[^ghillie-api-app], the OpenAPI
+contract[^specs-openapi], GitHub ingestion worker behaviour
+[^ghillie-github-ingestion], ingestion observability signals
+[^ghillie-github-observability], lag analysis services[^ghillie-github-lag],
+registry orchestration[^ghillie-registry-service], Silver storage contracts
+[^ghillie-silver-storage], GitHub client integrations[^ghillie-github-client],
+evidence construction logic[^ghillie-evidence-service], reporting services
+[^ghillie-reporting-service], user guidance[^docs-users-guide], and the MVP CLI
+specification[^docs-mvp-cli-specification].
 
 [^scripts-local-k8s]: [scripts/local_k8s.py](../scripts/local_k8s.py)
 [^charts-ghillie-values]: [charts/ghillie/values.yaml](../charts/ghillie/values.yaml)

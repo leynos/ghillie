@@ -31,8 +31,8 @@ pytest unit tests and pytest-bdd scenarios pass, and `make check-fmt`,
   ADR, design documentation, and `docs/users-guide.md`.
 - Follow the documentation style guide and 80-column wrapping rules.
 - Run `make check-fmt`, `make typecheck`, `make lint`, and `make test` to
-  gate every commit. For Markdown-only changes, also run `make markdownlint`
-  and `make nixie`, plus `make fmt` after doc edits.
+  gate every commit. For Markdown-only changes, also run `make markdownlint` and
+  `make nixie`, plus `make fmt` after doc edits.
 
 If any constraint cannot be met, stop and escalate.
 
@@ -150,8 +150,8 @@ behavioural expectations:
 
 Stage A: Baseline discovery and alignment (no code changes).
 
-Review the ADR, the femtologging user guide, and current logging call sites.
-Use `grepai search "logger.warning"` and `grepai search "logger.exception"` to
+Review the ADR, the femtologging user guide, and current logging call sites. Use
+`grepai search "logger.warning"` and `grepai search "logger.exception"` to
 find all relevant usage. Identify application entry points (CLI, worker, web)
 where logging configuration is set or should be added. Confirm the snapshot API
 supports exception logging, and capture the exact usage pattern (e.g.,
@@ -265,7 +265,7 @@ Steps are re-runnable. If a stage fails, revert the affected files with
 before retrying. Re-running `uv lock`, `make fmt`, and the make-based quality
 gates is safe and should converge on a clean state.
 
-## Artifacts and Notes
+## Artefacts and Notes
 
 Expected log shape (update if the snapshot emits a different format):
 

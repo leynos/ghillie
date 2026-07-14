@@ -269,11 +269,11 @@ making changes.
 
 Implementation is complete.
 
-Ghillie now pins Hecate to
-`46f8c8798e7a80a3a1ab5a13c2a000a4423ffc12`, stores the import-direction policy
-in `[tool.hecate]`, exposes `make check-architecture`, and runs that gate before
-Ruff through `make lint` and CI. The pinned Hecate CLI requires Cyclopts 3 and a
-small repository wrapper for the remaining `result_action` compatibility gap.
+Ghillie now pins Hecate to `46f8c8798e7a80a3a1ab5a13c2a000a4423ffc12`, stores
+the import-direction policy in `[tool.hecate]`, exposes
+`make check-architecture`, and runs that gate before Ruff through `make lint`
+and CI. The pinned Hecate CLI requires Cyclopts 3 and a small repository
+wrapper for the remaining `result_action` compatibility gap.
 
 No public Ghillie CLI command, HTTP route, Python API, storage schema, runtime
 configuration, or user-facing behaviour changed. Existing behaviour tests were
@@ -281,9 +281,9 @@ kept because the Stage C review found no tests that solely duplicated Hecate's
 static import-boundary responsibility.
 
 Validation completed with `make check-fmt`, `make lint`, `make typecheck`,
-`make test`, `make markdownlint`, `make nixie`, and
-`mbake validate Makefile`, all exiting `0`. CodeRabbit reviewed both the Hecate
-gate milestone and the documentation milestone with 0 findings.
+`make test`, `make markdownlint`, `make nixie`, and `mbake validate Makefile`,
+all exiting `0`. CodeRabbit reviewed both the Hecate gate milestone and the
+documentation milestone with 0 findings.
 
 ## Context and orientation
 
@@ -608,7 +608,7 @@ dependency, and any tests or docs that depend on the new gate. Do not remove
 the ADR unless the decision itself is reversed; supersede it with a new ADR if
 needed.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Initial planning evidence:
 

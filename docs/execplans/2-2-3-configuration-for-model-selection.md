@@ -86,8 +86,9 @@ The StatusModel infrastructure is complete (Tasks 2.2.a and 2.2.b):
 
 ### Key patterns followed
 
-1. **Configuration dataclass**: Use `dataclasses.dataclass(frozen=True,
-   slots=True)` with `from_env()` classmethod
+1. **Configuration dataclass**: Use
+   `dataclasses.dataclass(frozen=True, slots=True)` with `from_env()`
+   classmethod
 2. **Custom exceptions**: Use classmethod factory constructors (e.g.,
    `cls.missing_backend()`, `cls.invalid_temperature()`)
 3. **Environment variables**: Follow `GHILLIE_*` naming convention

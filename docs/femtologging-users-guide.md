@@ -41,9 +41,9 @@ your process exits.
   (`FemtoLogger.get_dropped()` and handler-specific warnings) so you can
   monitor pressure.
 - Record metadata tracks logger name, level, message text, timestamps, and
-  thread identity, with optional exception and stack payloads when `exc_info`
-  or `stack_info` are supplied. The Python API does not yet expose the full
-  stdlib `LogRecord` surface or arbitrary `extra` fields.
+  thread identity, with optional exception and stack payloads when `exc_info` or
+  `stack_info` are supplied. The Python API does not yet expose the full stdlib
+  `LogRecord` surface or arbitrary `extra` fields.
 
 ## Working with loggers
 

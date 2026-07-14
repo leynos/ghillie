@@ -11,21 +11,21 @@ of handling numerous I/O-bound operations efficiently. However, the
 introduction of asynchronous patterns brings new complexities to testing.
 Verifying the correctness of asynchronous code requires specialized tools and
 techniques to manage event loops and awaitables. pytest stands out as a widely
-adopted Python testing framework, favoured for its simplicity and extensibility.
-For testing asyncio-based applications, the pytest-asyncio plugin is
-indispensable, providing the necessary infrastructure to write and execute
-asynchronous tests seamlessly. This report aims to furnish a comprehensive
-guide on best practices for testing asynchronous Falcon endpoints using pytest,
-covering environment setup, fundamental test structures, advanced control with
-Falcon's testing utilities, asynchronous fixtures, effective mocking
-strategies, and testing crucial components like hooks and middleware. A core
-consideration when working with Falcon's ASGI interface (falcon.asgi.App) is
-the pervasive nature of asynchronicity. It's not merely the endpoint responders
-that become async def; this paradigm extends to hooks, middleware methods, and
-error handlers, all of which must be awaitable coroutine functions.
-Consequently, testing strategies must holistically address this "async
-everything" model to ensure comprehensive validation of the application's
-behaviour.
+adopted Python testing framework, favoured for its simplicity and
+extensibility. For testing asyncio-based applications, the pytest-asyncio
+plugin is indispensable, providing the necessary infrastructure to write and
+execute asynchronous tests seamlessly. This report aims to furnish a
+comprehensive guide on best practices for testing asynchronous Falcon endpoints
+using pytest, covering environment setup, fundamental test structures, advanced
+control with Falcon's testing utilities, asynchronous fixtures, effective
+mocking strategies, and testing crucial components like hooks and middleware. A
+core consideration when working with Falcon's ASGI interface (falcon.asgi.App)
+is the pervasive nature of asynchronicity. It's not merely the endpoint
+responders that become async def; this paradigm extends to hooks, middleware
+methods, and error handlers, all of which must be awaitable coroutine
+functions. Consequently, testing strategies must holistically address this
+"async everything" model to ensure comprehensive validation of the
+application's behaviour.
 
 ## **2\. Setting Up the Testing Environment**
 
@@ -311,8 +311,8 @@ While httpx.AsyncClient is suitable for many testing scenarios, Falcon provides
 falcon.testing.ASGIConductor for more fine-grained control over the ASGI
 application lifecycle.2 This tool is particularly valuable when testing
 streaming protocols like Server-Sent Events (SSE) or WebSockets, and for
-verifying the behaviour of ASGI middleware lifespan events (process\_startup and
-process\_shutdown).3 The ASGIConductor uses coroutines for its operations,
+verifying the behaviour of ASGI middleware lifespan events (process\_startup
+and process\_shutdown).3 The ASGIConductor uses coroutines for its operations,
 which means it integrates naturally with async def test functions. However,
 this also implies that pytest-asyncio is not merely a convenience but a strict
 prerequisite for using ASGIConductor within a pytest environment. pytest itself
@@ -340,8 +340,8 @@ mirroring how a real ASGI server would interact with the application.3 This
 capability is indispensable for accurately testing components like middleware
 that rely on these lifecycle events. For instance, middleware might establish
 database connections during process\_startup and close them during
-process\_shutdown; ASGIConductor facilitates the verification of such behaviour.
-An example of its usage:
+process\_shutdown; ASGIConductor facilitates the verification of such
+behaviour. An example of its usage:
 
 ```python
 import asyncio
@@ -449,9 +449,9 @@ that the async def fixture coroutine is properly executed within the
 pytest-asyncio managed event loop, and its awaited result is supplied to the
 test function. Failure to use @pytest\_asyncio.fixture for an async def fixture
 is a common pitfall. If @pytest.fixture is used, the test function will receive
-the raw coroutine object, leading to AttributeError or unexpected behaviour when
-the test attempts to use it as the actual fixture value. This distinction is
-critical for the correct functioning of asynchronous tests. An example of a
+the raw coroutine object, leading to AttributeError or unexpected behaviour
+when the test attempts to use it as the actual fixture value. This distinction
+is critical for the correct functioning of asynchronous tests. An example of a
 simple asynchronous fixture:
 
 ```python
@@ -556,14 +556,14 @@ import pytest import pytest_asyncio
 ```
 
 pool \= await asyncpg.create\_pool( \#         user='your\_user',
-password='your\_password', \#         database='test\_db', host='localhost'
-\#     ) \#     yield pool \#     await pool.close()
+password='your\_password', \#         database='test\_db', host='localhost' \#
+) \#     yield pool \#     await pool.close()
 
 \# @pytest\_asyncio.fixture \# async def db\_conn(db\_pool): \# Depends on the
-session-scoped pool \#     async with db\_pool.acquire() as connection:
-\#         \# Start a transaction that will be rolled back after the test
-\#         async with connection.transaction(): \#             yield connection
-\#         \# Transaction is automatically rolled back here
+session-scoped pool \#     async with db\_pool.acquire() as connection: \# \#
+Start a transaction that will be rolled back after the test \# async with
+connection.transaction(): \#             yield connection \# \# Transaction is
+automatically rolled back here
 
 This illustrates how session-scoped connection pools and function-scoped
 transactional connections can be managed using async fixtures, ensuring test
@@ -1315,8 +1315,9 @@ Falcon applications.
   single aspect of functionality. Leverage fixtures effectively to reduce
   boilerplate and enhance readability.
 - **Python Version Compatibility:** Be mindful of differences in asyncio
-  behaviour across Python versions. Notably, unittest.mock.AsyncMock is standard
-  from Python 3.8 onwards; older versions require the asyncmock library.
+  behaviour across Python versions. Notably, unittest.mock.AsyncMock is
+  standard from Python 3.8 onwards; older versions require the asyncmock
+  library.
 - **Choosing the Right Test Client/Tool:** The selection of a testing utility
   should align with the testing objective:
   - httpx.AsyncClient with ASGITransport: Ideal for most endpoint

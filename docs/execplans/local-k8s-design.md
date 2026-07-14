@@ -24,8 +24,8 @@ Success is observable when:
   local preview scripts.
 - `docs/roadmap.md` is updated with implementation tasks aligned to the design
   and staged as an upcoming phase or step.
-- Markdown quality gates pass (`make fmt`, `make markdownlint`, and `make
-  nixie`).
+- Markdown quality gates pass (`make fmt`, `make markdownlint`, and
+  `make nixie`).
 
 ## Progress
 
@@ -202,11 +202,11 @@ The design must specify idempotence and recovery for the future scripts. It
 must state that the local script is safe to rerun, describe reuse or cleanup
 for existing clusters, and explain how to recover from failed Helm installs.
 
-## Artifacts and notes
+## Artefacts and notes
 
 The detailed Helm chart, Dockerfile, and local CLI sketches live in
 `docs/local-k8s-preview-design.md` and should be treated as the source of
-truth. This ExecPlan should only summarize the required artifacts so the design
+truth. This ExecPlan should only summarize the required artefacts so the design
 work stays centralized.
 
 - Helm chart layout plus template sketches for deployment, ingress, and

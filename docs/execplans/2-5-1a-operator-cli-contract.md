@@ -1,9 +1,8 @@
 # Define and scaffold the operator CLI contract
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -547,8 +546,8 @@ Test and gate evidence captured during implementation:
 - Targeted green phase: `uv run pytest tests/unit/cli -v` passed with
   `14 passed`.
 - Targeted green phase:
-  `uv run pytest tests/features/steps/test_operator_cli_steps.py -v` passed
-  with `4 passed`.
+  `uv run pytest tests/features/steps/test_operator_cli_steps.py -v` passed with
+  `4 passed`.
 - Full repository gates passed:
   `make fmt`, `make check-fmt`, `make typecheck`, `make lint`, `make test`,
   `MDLINT=/root/.bun/bin/markdownlint-cli2 make markdownlint`, and `make nixie`.

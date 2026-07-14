@@ -154,8 +154,8 @@ Silver layers with controlled noise and back-pressure.
   with Ghillie's async architecture and supporting the structured logging
   patterns required for observability.
 
-  *Prerequisites:* Femtologging provides `exc_info`/`stack_info` support and
-  the `v0.1.0` stdlib-compatibility methods in commit
+  *Prerequisites:* Femtologging provides `exc_info`/`stack_info` support and the
+  `v0.1.0` stdlib-compatibility methods in commit
   `691a73962df8f99308a82348d99c4f707c245e63`. See ADR-001 for details.
 
   *Completion criteria:* All logging usage in ingestion, observability, runtime
@@ -243,8 +243,8 @@ ephemeral previews platform and supports the Ghillie Helm chart.
 **Goal:** Make architecture drift visible before it reaches review or CI.
 
 - [x] **Task 1.6.a – Adopt Hecate architecture checks**
-  Add Hecate as the repository's static import-direction gate for the
-  hexagonal architecture policy.
+  Add Hecate as the repository's static import-direction gate for the hexagonal
+  architecture policy.
 
   *Completion criteria:* `make check-architecture` runs the pinned Hecate
   checker against `[tool.hecate]`, `make lint` runs the architecture gate
@@ -571,14 +571,14 @@ component definitions, and cross-component dependencies.
   complete project evidence bundle from catalogue and repository data.
 
   *Implemented:* `ghillie.evidence.models` module with five frozen msgspec
-  Structs (`ProjectMetadata`, `ComponentEvidence`,
-  `ComponentRepositorySummary`, `ComponentDependencyEvidence`,
-  `ProjectEvidenceBundle`). `ProjectEvidenceBundleService` in
-  `ghillie/evidence/project_service.py` queries catalogue storage and
-  silver/gold storage to build complete project evidence bundles. Unit tests
-  (31 model tests, 14 service tests) and pytest-bdd scenarios (4) validate
-  construction, lifecycle filtering, repository summary aggregation, dependency
-  edge capture, and previous report context.
+  Structs (`ProjectMetadata`, `ComponentEvidence`, `ComponentRepositorySummary`,
+  `ComponentDependencyEvidence`, `ProjectEvidenceBundle`).
+  `ProjectEvidenceBundleService` in `ghillie/evidence/project_service.py`
+  queries catalogue storage and silver/gold storage to build complete project
+  evidence bundles. Unit tests (31 model tests, 14 service tests) and
+  pytest-bdd scenarios (4) validate construction, lifecycle filtering,
+  repository summary aggregation, dependency edge capture, and previous report
+  context.
 
 - [ ] **Task 3.1.b – Extend status model for project summarization**
   Add a project-level summarization method to the status model interface,

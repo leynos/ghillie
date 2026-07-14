@@ -556,12 +556,12 @@ root of the hierarchy.
 
 #### Table 2: Core Schema Specifications
 
-| **Table Name** | **Primary Key**  | **Foreign Keys** | **Storage Strategy** | **Rationale**                                                                                                              |
-| -------------- | ---------------- | ---------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `repositories` | `repo_id` (UUID) | `team_id`        | Relational           | Strict referential integrity is required to ensure reports are linked to valid owners.33                                   |
-| `commits`      | `commit_sha`     | `repo_id`        | Relational           | High-volume transactional data; relational structure optimizes time-series queries (e.g., “commits in last 7 days”).29     |
-| `violations`   | `violation_id`   | `repo_id`        | Relational + JSONB   | Hybrid approach allows querying by severity (Relational) while storing diverse evidence payloads (JSONB).10                |
-| `raw_events`   | `event_id`       | None             | Append-Only Log      | The Bronze layer storage. No foreign keys to allow high-speed ingestion without locking.1                                  |
+| **Table Name** | **Primary Key**  | **Foreign Keys** | **Storage Strategy** | **Rationale**                                                                                                          |
+| -------------- | ---------------- | ---------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `repositories` | `repo_id` (UUID) | `team_id`        | Relational           | Strict referential integrity is required to ensure reports are linked to valid owners.33                               |
+| `commits`      | `commit_sha`     | `repo_id`        | Relational           | High-volume transactional data; relational structure optimizes time-series queries (e.g., “commits in last 7 days”).29 |
+| `violations`   | `violation_id`   | `repo_id`        | Relational + JSONB   | Hybrid approach allows querying by severity (Relational) while storing diverse evidence payloads (JSONB).10            |
+| `raw_events`   | `event_id`       | None             | Append-Only Log      | The Bronze layer storage. No foreign keys to allow high-speed ingestion without locking.1                              |
 
 ### 6.2 Metric Definitions and Calculation
 
@@ -572,7 +572,7 @@ text summaries.
   to the `main` branch or specific `release` tags within the reporting window.11
 - **Lead Time for Changes:** Measured as the duration between the first commit
   timestamp on a feature branch and the timestamp of the merge event into
-  `main`.34
+  `main` .34
 - **Compliance Score:** A weighted aggregate metric derived from the active
   violations in the `compliance_violations` table. The formula typically
   penalizes Critical violations heavily (e.g., -10 points) and Low violations
@@ -715,11 +715,10 @@ This structure maintains clear separation between:
 
 Static import-direction drift is enforced with Hecate. The repository policy
 lives in `[tool.hecate]` in `pyproject.toml` and is exposed through
-`make check-architecture`, which runs before Ruff as part of `make lint`. Hecate
-classifies modules into composition roots, domain ports, application modules,
-inbound adapters, and outbound adapters. The decision and rollback path are
-recorded in
-`docs/adr-003-adopt-hecate-for-architecture-checks.md`.
+`make check-architecture`, which runs before Ruff as part of `make lint`.
+Hecate classifies modules into composition roots, domain ports, application
+modules, inbound adapters, and outbound adapters. The decision and rollback
+path are recorded in `docs/adr-003-adopt-hecate-for-architecture-checks.md`.
 
 **Design decisions:**
 
@@ -727,8 +726,8 @@ recorded in
   endpoints. This allows Kubernetes operators to understand which endpoints
   serve operational purposes versus functional purposes.
 - `AppDependencies` frozen dataclass groups `session_factory` and
-  `reporting_service` to keep constructor argument counts within lint
-  thresholds (`max-args = 4`).
+  `reporting_service` to keep constructor argument counts within lint thresholds
+  (`max-args = 4`).
 - `ReportResource` reuses the request-scoped session from
   ``req.context.session`` for repository slug lookups, keeping all reads within
   the middleware's transaction.  The ``ReportingService`` manages its own
@@ -1201,8 +1200,8 @@ table pollution and makes the "no activity" state explicit to callers.
 
 **Coverage tracking:**
 
-Each generated report creates `ReportCoverage` records linking the report to
-the `EventFact` IDs from the evidence bundle. This preserves the Bronze→Silver→
+Each generated report creates `ReportCoverage` records linking the report to the
+`EventFact` IDs from the evidence bundle. This preserves the Bronze→Silver→
 Gold audit trail and enables downstream queries to identify which events
 contributed to which reports.
 
@@ -1253,8 +1252,8 @@ flowchart TD
   model regeneration cycles, allowing transient LLM issues (hallucinations,
   formatting errors) to self-correct.
 - **Human review fallback**: Reports that remain invalid after max retries are
-  persisted as `ReportReview` markers with failure details, signalling operators
-  that manual investigation is required.
+  persisted as `ReportReview` markers with failure details, signalling
+  operators that manual investigation is required.
 - **Caller-specific responses**: On-demand API callers receive a 422
   Unprocessable Entity response with validation failure details. Scheduled
   actors log the failure and record the review marker for operational
