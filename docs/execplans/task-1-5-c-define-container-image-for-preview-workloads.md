@@ -383,7 +383,7 @@ Recovery:
 - If tests fail, check logs in `/tmp/test-*.log`.
 - To reset: `docker rmi ghillie:local` and rebuild.
 
-## Artifacts and Notes
+## Artefacts and Notes
 
 Expected file structure after completion:
 

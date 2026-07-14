@@ -493,7 +493,7 @@ If tests fail:
 4. Check that `falcon.testing.TestClient` is used only in synchronous test
    functions (not inside `async def` tests).
 
-## Artifacts and notes
+## Artefacts and notes
 
 ### 200 response body
 

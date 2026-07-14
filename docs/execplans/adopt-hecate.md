@@ -608,7 +608,7 @@ dependency, and any tests or docs that depend on the new gate. Do not remove
 the ADR unless the decision itself is reversed; supersede it with a new ADR if
 needed.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Initial planning evidence:
 
