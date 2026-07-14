@@ -143,9 +143,8 @@ After this change:
 All acceptance criteria met:
 
 - 5 frozen msgspec domain models implemented in
-  `ghillie/evidence/models.py`: `ProjectMetadata`,
-  `ComponentRepositorySummary`, `ComponentEvidence`,
-  `ComponentDependencyEvidence`, `ProjectEvidenceBundle`.
+  `ghillie/evidence/models.py`: `ProjectMetadata`, `ComponentRepositorySummary`,
+  `ComponentEvidence`, `ComponentDependencyEvidence`, `ProjectEvidenceBundle`.
 - `ProjectEvidenceBundleService` in `ghillie/evidence/project_service.py`
   builds complete bundles from catalogue and gold storage.
 - 31 unit tests for domain models, 14 unit tests for service logic, and

@@ -163,10 +163,10 @@ async def test_async_insert_and_query():
 
 In this example, the PGlite lifecycle is managed manually with `PGliteManager`
 (usable as an async context manager). The manager is configured to listen on a
-TCP port, then an AsyncEngine is created to connect via `asyncpg`. The test
-runs `Base.metadata.create_all` inside an `engine.begin()` block to create
-tables (in production, migrations would typically be invoked instead). The test
-then performs async session operations (`await session.commit()`,
+TCP port, then an AsyncEngine is created to connect via `asyncpg`. The test runs
+`Base.metadata.create_all` inside an `engine.begin()` block to create tables
+(in production, migrations would typically be invoked instead). The test then
+performs async session operations (`await session.commit()`,
 `await session.execute(...)`) and assertions.
 
 **Key points for async usage:**
@@ -204,7 +204,7 @@ behaviour can be adjusted:
   the test run. Migrations typically run **once per session** (not for each
   test) for
   speed([3](https://hoop.dev/blog/the-simplest-way-to-make-postgresql-pytest-work-like-it-should/)).
-   This can significantly speed up a large test suite by avoiding redundant DB
+  This can significantly speed up a large test suite by avoiding redundant DB
   initialization. **However**, isolation *within* that shared database still
   needs to be enforced. Common strategies include:
 
@@ -235,8 +235,7 @@ isolation**. When test suites are small or deterministic isolation is
 prioritized, function-scoped (fresh DB each test) is simplest. For large suites
 where DB setup is a bottleneck, consider a session-scoped database with careful
 cleaning. As a rule of thumb: **apply schema migrations once per test session
-and reuse the database for speed, but ensure each test starts from a known
-empty
+and reuse the database for speed, but ensure each test starts from a known empty
 state**([3](https://hoop.dev/blog/the-simplest-way-to-make-postgresql-pytest-work-like-it-should/)).
 
 ## Applying Alembic Migrations in Tests
@@ -328,8 +327,8 @@ def test_create_user_api(pglite_engine):
     # ... further assertions ...
 ```
 
-In this snippet, a new Session bound to the `pglite_engine` is injected for
-each request.[^py-pglite-guide] The test client calls the override, using the
+In this snippet, a new Session bound to the `pglite_engine` is injected for each
+request.[^py-pglite-guide] The test client calls the override, using the
 in-memory Postgres. The API is therefore exercised against the ephemeral DB and
 **no data goes to the real database**. After the test, remove the override if
 needed (FastAPI’s `TestClient` typically resets overrides when disposed).
@@ -396,7 +395,7 @@ injected at test time.
   `UserFactory._meta.sqlalchemy_session = pglite_session`. Factory Boy’s docs
   suggest this
   approach([5](https://medium.com/@aasispaudelthp2/factoryboy-tutorial-with-sqlalchemy-and-pytest-1cda908d783a)).
-   For example:
+  For example:
 
 ```python
 @pytest.fixture(autouse=True)
@@ -414,7 +413,7 @@ Factory Boy commit automatically after creation).
   For example, Factory Boy allows creating batches:
   `UserFactory.create_batch(5)` will make five User records at
   once([5](https://medium.com/@aasispaudelthp2/factoryboy-tutorial-with-sqlalchemy-and-pytest-1cda908d783a)).
-   Each will have unique fake data for the fields. This is extremely handy for
+  Each will have unique fake data for the fields. This is extremely handy for
   populating a test database with sample data. Override specific fields per
   call (e.g., `UserFactory(name="Specific Name")`) to test particular
   scenarios([5](https://medium.com/@aasispaudelthp2/factoryboy-tutorial-with-sqlalchemy-and-pytest-1cda908d783a)).
@@ -432,7 +431,7 @@ tests maintainable. It is especially powerful in integration with py-pglite: it
 is possible to **create a complex object graph with one factory call** (thanks
 to Factory Boy’s support for SubFactory
 relations([5](https://medium.com/@aasispaudelthp2/factoryboy-tutorial-with-sqlalchemy-and-pytest-1cda908d783a))),
- and have that data immediately persisted to the in-memory Postgres for the
+and have that data immediately persisted to the in-memory Postgres for the
 test to use.
 
 ## Final Tips and Best Practices
@@ -482,7 +481,7 @@ teams find that such a setup **“shaves minutes from every build, and hours fro
 every week” by ensuring every test run starts from a known good state with no
 manual DB management
 overhead([3](https://hoop.dev/blog/the-simplest-way-to-make-postgresql-pytest-work-like-it-should/))
- **. Happy testing!
+**. Happy testing!
 
 **Sources:**
 

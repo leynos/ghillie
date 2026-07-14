@@ -493,8 +493,8 @@ changes such as roadmaps and ADRs.
 
 ## Incremental GitHub ingestion (Phase 1.3.b)
 
-Ghillie polls GitHub per managed repository and appends activity into the
-Bronze `raw_events` table. Each repository has per-kind watermarks stored in
+Ghillie polls GitHub per managed repository and appends activity into the Bronze
+`raw_events` table. Each repository has per-kind watermarks stored in
 `github_ingestion_offsets`, allowing the worker to fetch only new commits, pull
 requests, issues, and documentation changes since the last successful ingestion
 run.
@@ -1481,9 +1481,9 @@ A `ProjectEvidenceBundle` includes:
 - **Project metadata**: key, name, description, programme, and
   documentation paths from the catalogue.
 - **Component evidence**: one entry per component listing its key,
-  name, type (service, UI, library, etc.), lifecycle stage (`planned`,
-  `active`, `deprecated`), optional repository slug, and optional repository
-  report summary.
+  name, type (service, UI, library, etc.), lifecycle stage (`planned`, `active`,
+  `deprecated`), optional repository slug, and optional repository report
+  summary.
 - **Component dependency edges**: directed relationships between
   components within the same project (`depends_on`, `blocked_by`,
   `emits_events_to`), with kind (`runtime`, `dev`, `test`, `ops`) and optional

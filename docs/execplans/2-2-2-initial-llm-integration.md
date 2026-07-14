@@ -88,8 +88,9 @@ The HTTP client pattern is established:
 
 ### Key patterns to follow
 
-1. **Configuration dataclass**: Use `dataclasses.dataclass(frozen=True,
-   slots=True)` with `from_env()` classmethod
+1. **Configuration dataclass**: Use
+   `dataclasses.dataclass(frozen=True, slots=True)` with `from_env()`
+   classmethod
 2. **HTTP client ownership**: Support injected `http_client` for testing, own
    client if none provided
 3. **Async cleanup**: Implement `aclose()` method for resource cleanup

@@ -24,8 +24,8 @@ Success is observable when:
   local preview scripts.
 - `docs/roadmap.md` is updated with implementation tasks aligned to the design
   and staged as an upcoming phase or step.
-- Markdown quality gates pass (`make fmt`, `make markdownlint`, and `make
-  nixie`).
+- Markdown quality gates pass (`make fmt`, `make markdownlint`, and
+  `make nixie`).
 
 ## Progress
 

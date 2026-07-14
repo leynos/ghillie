@@ -145,10 +145,9 @@
   '''
   # Upgrade Ghillie to femtologging SHA 691a73962df8f99308a82348d99c4f707c245e63
   
-  This ExecPlan (execution plan) is a living document. The sections
-  `Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`,
-  `Decision log`, and `Outcomes & retrospective` must be kept up to date as work
-  proceeds.
+  This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+  `Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`, `Decision log`,
+  and `Outcomes & retrospective` must be kept up to date as work proceeds.
   
   Status: COMPLETE
   
@@ -503,8 +502,8 @@
      `docs/roadmap.md`, and `docs/femtologging-users-guide.md` no longer describe
      the old snapshot as current.
   5. Full sequential repository gates pass:
-     `make fmt`, `make markdownlint`, `make nixie`, `make check-fmt`,
-     `make lint`, `make typecheck`, and `make test`.
+     `make fmt`, `make markdownlint`, `make nixie`, `make check-fmt`, `make lint`,
+     `make typecheck`, and `make test`.
   
   Expected high-signal evidence includes:
   

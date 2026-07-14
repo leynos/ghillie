@@ -62,8 +62,8 @@ Success is observable when:
    injection). Addressed with targeted `# noqa: PLR0913` annotations.
 
 3. **`PERF401` preference:** Ruff prefers `lines.extend(generator)` over
-   `for item in list: lines.append(f"- {item}")`. Refactored the renderer to
-   use `extend()` with generator expressions.
+   `for item in list: lines.append(f"- {item}")`. Refactored the renderer to use
+   `extend()` with generator expressions.
 
 4. **`S101` in production code:** `assert` statements in production code
    are flagged by ruff. Replaced with defensive `if \u2026 return` guards in
@@ -173,9 +173,9 @@ The reporting module (`ghillie/reporting/`) already provides:
 
 ### Key patterns to follow
 
-1. **Configuration dataclass**: `@dataclasses.dataclass(frozen=True,
-   slots=True)` with `from_env()` classmethod (see `ghillie/reporting/config.py
-   `, `ghillie/status/config.py`).
+1. **Configuration dataclass**:
+   `@dataclasses.dataclass(frozen=True, slots=True)` with `from_env()`
+   classmethod (see `ghillie/reporting/config.py`, `ghillie/status/config.py`).
 2. **Protocol ports**: `@typ.runtime_checkable` Protocol classes (see
    `ghillie/status/protocol.py`).
 3. **Constructor injection**: Optional parameters with `None` defaults

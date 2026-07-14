@@ -136,7 +136,7 @@ risks (tuple[str, …]), next_steps (tuple[str, …]). Include a
 
 Create `StatusModel` protocol in `ghillie/status/protocol.py` with async
 `summarize_repository(evidence: RepositoryEvidenceBundle) -> RepositoryStatusResult`
- method. Use `@runtime_checkable` decorator.
+method. Use `@runtime_checkable` decorator.
 
 ### Phase 4: Implement MockStatusModel
 

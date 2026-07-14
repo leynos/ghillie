@@ -207,8 +207,8 @@ dataclass grouping `session_factory`, `evidence_service`, and `status_model`.
 `from_env()`.
 
 **Report model** (`ghillie/gold/storage.py`): SQLAlchemy model with `id` (UUID
-string), `scope`, `repository_id`, `window_start`, `window_end`,
-`generated_at`, `model`, `human_text`, `machine_summary` (JSON dict).
+string), `scope`, `repository_id`, `window_start`, `window_end`, `generated_at`,
+`model`, `human_text`, `machine_summary` (JSON dict).
 
 **Repository model** (`ghillie/silver/storage.py`): SQLAlchemy model with `id`,
 `github_owner`, `github_name`, `slug` property, and a unique constraint on
@@ -224,8 +224,8 @@ endpoints exist yet.
 variables and a database URL, creating the session factory, evidence service,
 status model, and optional filesystem sink.
 
-**ReportSink** (`ghillie/reporting/sink.py`): `@runtime_checkable` Protocol
-with `write_report(markdown, *, metadata)`. `FilesystemReportSink`
+**ReportSink** (`ghillie/reporting/sink.py`): `@runtime_checkable` Protocol with
+`write_report(markdown, *, metadata)`. `FilesystemReportSink`
 (`ghillie/reporting/filesystem_sink.py`) implements it, writing to
 `{base_path}/{owner}/{name}/latest.md` and dated archive files.
 
