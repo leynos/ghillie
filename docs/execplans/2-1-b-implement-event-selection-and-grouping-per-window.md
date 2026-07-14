@@ -225,5 +225,5 @@ users' guide.
 
 ## Revision note
 
-Updated progress, discoveries, and artifacts after implementing coverage-aware
+Updated progress, discoveries, and artefacts after implementing coverage-aware
 event selection and completing validation. Remaining work: none.

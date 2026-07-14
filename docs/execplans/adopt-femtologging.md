@@ -265,7 +265,7 @@ Steps are re-runnable. If a stage fails, revert the affected files with
 before retrying. Re-running `uv lock`, `make fmt`, and the make-based quality
 gates is safe and should converge on a clean state.
 
-## Artifacts and Notes
+## Artefacts and Notes
 
 Expected log shape (update if the snapshot emits a different format):
 

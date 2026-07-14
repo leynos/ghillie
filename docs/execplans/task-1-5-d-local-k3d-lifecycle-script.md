@@ -698,7 +698,7 @@ make local-k8s-down
   then `make local-k8s-up` again.
 - All Helm installs use `upgrade --install` for idempotent behaviour.
 
-## Artifacts and notes
+## Artefacts and notes
 
 ### Config dataclass (from design document)
 

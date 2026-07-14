@@ -414,7 +414,7 @@ If a step fails:
 - Re-run `helm lint` or `pytest` to verify.
 - No cleanup required; proceed from the failing step.
 
-## Artifacts and Notes
+## Artefacts and Notes
 
 ### Chart.yaml
 

@@ -285,7 +285,7 @@ place([3](https://hoop.dev/blog/the-simplest-way-to-make-postgresql-pytest-work-
   back migrations after the tests if desired. With py-pglite, the in-memory
   database vanishes once the process ends, so explicit teardown of the schema
   is usually not required – simply let py-pglite shut down. Clean any
-  persistent artifacts (like files on disk via `work_dir` config) if they were
+  persistent artefacts (like files on disk via `work_dir` config) if they were
   created.
 
 Using Alembic in tests ensures ORM code is exercised against the **actual
