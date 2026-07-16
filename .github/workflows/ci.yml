@@ -59,12 +59,6 @@ jobs:
       # generates and uploads the authoritative main-branch coverage on
       # push, so a push-triggered run of this job would otherwise generate
       # coverage twice for the same commit.
-      #
-      # Uploading to CodeScene from the PR is deferred: `mode: check`
-      # requires a gates configuration that CodeScene has not yet enabled
-      # for this project (see ddlint#287 for the model). Once
-      # coverage-main.yml has fed the project an initial upload and the
-      # gates configuration appears, add a guarded `mode: check` step here.
       - name: Generate coverage
         if: github.event_name == 'pull_request'
         uses: leynos/shared-actions/.github/actions/generate-coverage@927edd45ae77be4251a8a18ca9eb5613a2e32cbd
@@ -72,6 +66,18 @@ jobs:
           format: cobertura
           output-path: coverage.xml
           with-ratchet: 'true'
+
+      - name: Check coverage against CodeScene gates
+        env:
+          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
+        if: env.CS_ACCESS_TOKEN != '' && github.event_name == 'pull_request'
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@927edd45ae77be4251a8a18ca9eb5613a2e32cbd
+        with:
+          format: cobertura
+          mode: check
+          project-url: https://api.codescene.io/v2/projects/74419
+          access-token: ${{ env.CS_ACCESS_TOKEN }}
+          installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
 
       - name: Run tests
         if: github.event_name != 'pull_request'
