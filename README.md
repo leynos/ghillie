@@ -1,5 +1,8 @@
 # Ghillie
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](
+https://deepwiki.com/leynos/ghillie)
+
 Ghillie provides automated estate-level status reporting for GitHub
 repositories. It watches your repositories so you don't have to. It ingests
 activity from across your engineering estate, transforms raw events into
