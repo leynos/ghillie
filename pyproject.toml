@@ -44,7 +44,7 @@ dev = [
     "asyncpg>=0.20.0,<1.0",
     "ruff",
     "pyright",
-    "ty>=0.0.56",
+    "ty>=0.0.59",
     "pytest-timeout",
     # Script dependencies for type checking and testing
     "plumbum>=2.0.1,<3",
