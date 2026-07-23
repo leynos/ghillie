@@ -18,7 +18,7 @@ jobs:
     permissions:
       contents: read
       id-token: write # OIDC workflow-source resolution
-    uses: leynos/shared-actions/.github/workflows/mutation-mutmut.yml@4977418856133491c6aa7407d40668744df21818
+    uses: leynos/shared-actions/.github/workflows/mutation-mutmut.yml@1c1a46f0b4fde6dd78a9757fc475a5d06ee891c7
     with:
       paths: "ghillie/"
       module-prefix-strip: ""
