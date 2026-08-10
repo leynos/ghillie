@@ -496,6 +496,68 @@ GHILLIE_TEST_DB=sqlite make test
 make helm-test
 ```
 
+## Mutation-testing workflow contract tests
+
+This repository runs scheduled, informational mutation testing through a thin
+caller workflow,
+[`.github/workflows/mutation-testing.yml`](../.github/workflows/mutation-testing.yml),
+which delegates to the shared reusable workflow
+`leynos/shared-actions/.github/workflows/mutation-mutmut.yml`. The heavy
+lifting — running `mutmut` and summarising survivors — lives in
+`shared-actions`; this repository carries only declarative configuration. The
+run is **informational only**: it never gates a pull request. Survivors are
+reported through the job summary and downloadable artefacts so they can be
+triaged into tests, not enforced as a blocking check. The mutation targets and
+test selection themselves are configured in `[tool.mutmut]` in
+`pyproject.toml` (`source_paths`, `pytest_add_cli_args_test_selection`,
+`also_copy`).
+
+The workflow runs on a **daily schedule** and can also be triggered by
+**manual dispatch** (the Actions "Run workflow" control); select a branch in
+that control to exercise a feature branch.
+
+The caller passes a small set of configuration inputs, each carrying intent:
+
+- `paths` — the change-detection globs (`ghillie/`) that decide whether a
+  scheduled run has anything to mutate, bounding the run to real source
+  changes.
+- `module-prefix-strip` — left empty, because Ghillie uses a flat layout: the
+  package lives at the repository root rather than under a `src/` prefix, so
+  no module prefix needs stripping.
+
+The `uses:` reference pins the shared workflow to a full 40-character commit
+SHA rather than a branch or tag, so a force-push upstream cannot silently
+change what runs here. The contract test hard-codes the expected SHA in a
+`PINNED_SHA` constant and asserts the `uses:` line matches it, so bumping the
+pin means editing the workflow's `uses:` line and that constant together in
+the same change.
+
+Because the caller is configuration rather than code, a contract test,
+[`tests/test_workflow_contract.py`](../tests/test_workflow_contract.py), pins
+the shape it must uphold, failing the pull request when the caller drifts —
+repointing the pin at a branch, widening the token scope, or dropping a
+configuration input — rather than letting the breakage surface only in a
+scheduled run. The test module self-skips when the workflow file is absent
+(mutmut copies the sources into a `mutants/` sandbox that omits `.github/`, so
+the contract test does not run there). Run it locally with:
+
+```bash
+uv run pytest tests/test_workflow_contract.py -v
+```
+
+The test validates:
+
+- the `uses:` reference targets `mutation-mutmut.yml` pinned to the documented
+  full commit SHA;
+- the `with:` block carries exactly the expected configuration (`paths` and
+  `module-prefix-strip` above);
+- job permissions are least-privilege (`contents: read`, `id-token: write`)
+  and the workflow-level default token scope is empty;
+- `concurrency` serialises runs per ref without cancelling one in progress;
+  and
+- the triggers keep the daily schedule and a plain `workflow_dispatch` with no
+  inputs.
+
 ## Documentation
 
 - Update `docs/users-guide.md` for user-facing feature documentation
