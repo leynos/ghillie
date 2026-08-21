@@ -11,6 +11,11 @@ NIXIE ?= nixie
 TOOLS = $(MDLINT) uv
 VENV_TOOLS = pytest
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
+SKYLOS_VERSION = 4.33.2
+SKYLOS_COMMAND = $(UV_ENV) uv tool run --from 'skylos==$(SKYLOS_VERSION)' skylos
+SKYLOS = $(SKYLOS_COMMAND) --config-file pyproject.toml
+SKYLOS_WHITELIST = $(SKYLOS_COMMAND) whitelist
+SKYLOS_PRODUCTION_TARGETS ?= ghillie
 
 UV ?= uv
 # The CV-005 CodeScene contracts live in shared-actions and run from a full
@@ -31,6 +36,7 @@ RUFF = $(UV_ENV) uv tool run ruff@$(RUFF_VERSION)
 .PHONY: help all clean build build-release check-architecture lint fmt check-fmt \
         markdownlint nixie test typecheck helm-lint helm-test \
         docker-build docker-run spelling spelling-helper-test \
+        skylos-allow \
         $(TOOLS) $(VENV_TOOLS) test-workflow-contracts
 
 .DEFAULT_GOAL := all
@@ -96,6 +102,16 @@ check-architecture: build ## Run hexagonal architecture import checks
 
 lint: check-architecture ## Run linters
 	$(RUFF) check
+	$(SKYLOS) $(SKYLOS_PRODUCTION_TARGETS) --category dead_code --gate \
+		--format concise --no-upload --no-provenance --no-grep-verify
+
+skylos-allow: export SKYLOS_NAME = $(value NAME)
+skylos-allow: ## Document one named Skylos exception, not an entry point
+	@test -n "$${SKYLOS_NAME}" || { \
+	  printf "Error: NAME is required for a named whitelist exception\\n" >&2; \
+	  exit 2; \
+	}
+	$(SKYLOS_WHITELIST) "$${SKYLOS_NAME}"
 
 typecheck: build ## Run typechecking
 	$(UV_ENV) uv run ty --version

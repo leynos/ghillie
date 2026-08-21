@@ -228,7 +228,7 @@ correctly, regardless of the underlying compliance check that generated it.
 - Noise filters and status preferences live in the catalogue and are persisted
   onto project rows during import. Noise filters include a global `enabled`
   flag plus per-filter toggles, so operators can switch filters on or off via
-  catalogue updates. Setting `summarise_dependency_prs: false` tells downstream
+  catalogue updates. Setting `summarize_dependency_prs: false` tells downstream
   reporting jobs not to summarize dependency-only pull requests.
 - The schema is defined with `msgspec` structures and exported as a JSON Schema
   consumed by `pajv`. The shipped example catalogue
