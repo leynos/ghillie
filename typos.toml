@@ -34,7 +34,7 @@ extend-ignore-re = [
     "Backstage Software Catalog",
     "JSONB: PostgreSQL’s Secret Weapon for Flexible Data Modeling",
     "\\brust-analyzer\\b",
-    "`[^`\\n]+`",
+    "catalog-info.yaml",
 ]
 
 [default.extend-words]
@@ -312,6 +312,7 @@ extend-ignore-re = [
 "colonizers" = "colonizers"
 "colonizes" = "colonizes"
 "colonizing" = "colonizing"
+"color" = "color"
 "colourisable" = "colourizable"
 "colourisation" = "colourization"
 "colourisations" = "colourizations"
@@ -1704,6 +1705,24 @@ extend-ignore-re = [
 "pluralizers" = "pluralizers"
 "pluralizes" = "pluralizes"
 "pluralizing" = "pluralizing"
+"polymerisable" = "polymerizable"
+"polymerisation" = "polymerization"
+"polymerisations" = "polymerizations"
+"polymerise" = "polymerize"
+"polymerised" = "polymerized"
+"polymeriser" = "polymerizer"
+"polymerisers" = "polymerizers"
+"polymerises" = "polymerizes"
+"polymerising" = "polymerizing"
+"polymerizable" = "polymerizable"
+"polymerization" = "polymerization"
+"polymerizations" = "polymerizations"
+"polymerize" = "polymerize"
+"polymerized" = "polymerized"
+"polymerizer" = "polymerizer"
+"polymerizers" = "polymerizers"
+"polymerizes" = "polymerizes"
+"polymerizing" = "polymerizing"
 "popularisable" = "popularizable"
 "popularisation" = "popularization"
 "popularisations" = "popularizations"

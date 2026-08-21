@@ -8,7 +8,7 @@ stems = []
 [words]
 # PostgreSQL's ANALYZE statement and official organization names retain their
 # upstream spelling.
-accepted = ["ANALYZE", "Center", "Hashi"]
+accepted = ["ANALYZE", "Center", "Hashi", "color"]
 
 [words.corrections]
 
@@ -16,6 +16,7 @@ accepted = ["ANALYZE", "Center", "Hashi"]
 ignore = [
     "Backstage Software Catalog",
     "JSONB: PostgreSQL’s Secret Weapon for Flexible Data Modeling",
+    "catalog-info.yaml",
 ]
 
 [files]
