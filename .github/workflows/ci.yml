@@ -49,7 +49,7 @@ jobs:
       - name: Check spelling
         run: make spelling
 
-      - name: Run architecture and lint checks
+      - name: Run architecture, dead-code, and lint checks
         run: make lint
 
       - name: Run typechecker
