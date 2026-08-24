@@ -125,11 +125,13 @@ rationale is recorded in `docs/adr-003-adopt-hecate-for-architecture-checks.md`.
 
 ## Dead-code detection
 
-`make lint` runs Skylos `4.33.2` as an isolated `uv tool` against `ghillie/`.
-The blocking scan is local and non-interactive: it neither uploads source nor
-collects provenance. Tests are intentionally excluded from its liveness graph,
-and grep verification is disabled, so test-only references cannot mask dead
-production code.
+`make lint` runs Skylos `4.33.2` as an isolated `uv tool` with Python 3.14
+against `ghillie/`. Skylos parses source using its own runtime's Python AST, so
+pinning Python 3.14 prevents phantom dead-code findings from newer syntax that
+an older tool runtime cannot parse. The blocking scan is local and
+non-interactive: it neither uploads source nor collects provenance. Tests are
+intentionally excluded from its liveness graph, and grep verification is
+disabled, so test-only references cannot mask dead production code.
 
 Treat each finding as dead code until its runtime caller is verified. Remove
 genuine dead code. For a framework callback or protocol implementation that
@@ -139,14 +141,29 @@ Use `make skylos-allow` only when an entry-point rule cannot express the
 boundary:
 
 ```bash
-make skylos-allow NAME=registered_handler
+make skylos-allow SYMBOL=registered_handler REASON="Loaded by plugin registry"
 ```
 
-The target rejects an empty name and records the exception in Skylos's
-documented allow list. Skylos accepts the name only, so retain the verified
-caller rationale in the reviewing change. Do not add broad or unexplained
-exceptions; remove an allow-list entry when its dynamic boundary no longer
+The target rejects missing `SYMBOL` or `REASON` with exit status 2 and records
+the reason in Skylos's documented allow list. Use `SYMBOL`, rather than
+`NAME`, because WSL may inject `NAME` with the hostname. Do not add broad or
+unexplained exceptions; retain the verified caller rationale in the reviewing
+change and remove an allow-list entry when its dynamic boundary no longer
 exists.
+
+The Skylos Makefile contract is parsed with pinned Makeutil in
+`tests/unit/test_skylos_lint_contract.py`; `make test` requires that parser.
+Before running the full suite locally, install the same pinned toolchain and
+revision used in CI:
+
+```bash
+rustup toolchain install nightly-2026-05-28 --profile minimal
+RUSTFLAGS="-Zpolonius=next" cargo +nightly-2026-05-28 install \
+  --git https://github.com/leynos/makeutil \
+  --rev 29fc5a1634ffbaa18a773eed9dff1b2838a45d9c \
+  --locked --force makeutil
+make test
+```
 
 ## Code style and type handling
 
