@@ -115,6 +115,25 @@ To roll back this decision:
 6. Supersede this ADR with a replacement decision rather than deleting the
    historical record.
 
+## Addendum — 2026-08-24: Fourth Python static-quality tier
+
+The original Hecate decision remains historical: it introduced the first
+static architecture check. The effective Python static-quality architecture
+now has four complementary tiers:
+
+1. Hecate — import-direction and architectural-boundary checks.
+2. Ruff — fast source-style and correctness rules.
+3. Ty — strict type verification through `make typecheck`.
+4. Skylos — strict production dead-code detection through `make lint`.
+
+Skylos scans only the `ghillie` production package, excludes `tests`, and is a
+blocking lint gate. It runs as an independently provisioned `uv tool` with
+Python 3.14 because Skylos parses the source with its runtime's Python AST.
+Pinning that runtime prevents phantom dead-code findings when the repository
+uses newer Python syntax. Static-analysis false positives must be modelled as
+typed, reasoned entry points in `pyproject.toml`; a named allow-list exception
+is only appropriate where the dynamic boundary cannot be expressed that way.
+
 ## References
 
 - Hecate users' guide:
