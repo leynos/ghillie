@@ -117,9 +117,9 @@ To roll back this decision:
 
 ## Addendum — 2026-08-24: Fourth Python static-quality tier
 
-The original Hecate decision remains historical: it introduced the first
-static architecture check. The effective Python static-quality architecture
-now has four complementary tiers:
+The original Hecate decision remains historical: it introduced the first static
+architecture check. The effective Python static-quality architecture now has
+four complementary tiers:
 
 1. Hecate — import-direction and architectural-boundary checks.
 2. Ruff — fast source-style and correctness rules.
