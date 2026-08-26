@@ -87,8 +87,9 @@ When implementing changes, adhere to the following testing procedures:
       genuine dead code. For a verified false positive, prefer a precise,
       reasoned entry-point rule in `[tool.skylos.dead_code]`; use
       `make skylos-allow SYMBOL=name REASON="verified runtime caller"` only
-      when an entry-point rule cannot describe the dynamic boundary. Retain the
-      verified caller rationale in the reviewing change.
+      when an entry-point rule cannot describe the dynamic boundary. `SYMBOL`
+      and `REASON` must each contain non-whitespace text; retain the verified
+      caller rationale in the reviewing change.
     - **Formatting:** Adheres to formatting standards (run `make check-fmt` to
       verify, use `make fmt` to apply formatting).
     - **Typechecking:** Passes type checking (`make typecheck`).

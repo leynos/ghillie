@@ -144,12 +144,12 @@ boundary:
 make skylos-allow SYMBOL=registered_handler REASON="Loaded by plugin registry"
 ```
 
-The target rejects missing `SYMBOL` or `REASON` with exit status 2 and records
-the reason in Skylos's documented allow list. Use `SYMBOL`, rather than
-`NAME`, because WSL may inject `NAME` with the hostname. Do not add broad or
-unexplained exceptions; retain the verified caller rationale in the reviewing
-change and remove an allow-list entry when its dynamic boundary no longer
-exists.
+The target rejects missing or whitespace-only `SYMBOL` or `REASON` values with
+exit status 2 and records the reason in Skylos's documented allow list. Use
+`SYMBOL`, rather than `NAME`, because WSL may inject `NAME` with the hostname.
+Do not add broad or unexplained exceptions; retain the verified caller
+rationale in the reviewing change and remove an allow-list entry when its
+dynamic boundary no longer exists.
 
 The Skylos Makefile contract is parsed with pinned Makeutil in
 `tests/unit/test_skylos_lint_contract.py`; `make test` requires that parser.
