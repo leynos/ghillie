@@ -167,6 +167,35 @@ markers = [
 [tool.uv]
 package = true
 
+[tool.skylos.gate]
+strict = true
+
+[[tool.skylos.dead_code.entrypoints]]
+type = "method"
+full_name = [
+    "ghillie.bronze.storage.UTCDateTime.process_bind_param",
+    "ghillie.bronze.storage.UTCDateTime.process_result_value",
+    "ghillie.evidence.event_targets.EventTargetExtractor.extract",
+]
+reason = "SQLAlchemy invokes TypeDecorator hooks, and ProjectEvidenceService invokes the typed extractor instance."
+
+[[tool.skylos.dead_code.entrypoints]]
+type = "parameter"
+full_name = [
+    "ghillie.bronze.storage.UTCDateTime.process_bind_param.dialect",
+    "ghillie.bronze.storage.UTCDateTime.process_result_value.dialect",
+]
+reason = "SQLAlchemy supplies the TypeDecorator dialect argument as part of its bind and result conversion protocol."
+
+[[tool.skylos.dead_code.entrypoints]]
+type = "variable"
+full_name = [
+    "ghillie.bronze.storage.UTCDateTime.impl",
+    "ghillie.bronze.storage.UTCDateTime.cache_ok",
+    "ghillie.evidence.models.ComponentEvidence.component_type",
+]
+reason = "SQLAlchemy reads TypeDecorator configuration, and msgspec serializes ComponentEvidence fields for report consumers."
+
 [tool.hecate]
 root_packages = ["ghillie"]
 

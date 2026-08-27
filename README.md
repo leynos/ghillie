@@ -93,6 +93,9 @@ The [users' guide](docs/users-guide.md) walks you through:
 - [Proposal](docs/ghillie-proposal.md) – Original problem statement and goals
 - [Bronze/Silver architecture](docs/ghillie-bronze-silver-architecture-design.md)
   – Detailed Medallion layer design
+- [Static-quality gate ADR](docs/adr-003-adopt-hecate-for-architecture-checks.md)
+  – Historical Hecate decision with the current four-tier Python quality-gate
+  addendum
 
 ## Related projects
 

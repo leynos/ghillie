@@ -91,14 +91,6 @@ class _StreamIngestionResult:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class _KindIngestionContext:
-    """Context for ingesting a specific entity kind."""
-
-    kind: typ.Literal["commit", "pull_request", "issue"]
-    now: dt.datetime
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
 class _RepositoryIngestionContext:
     """Context shared across ingestion for a single repository run."""
 

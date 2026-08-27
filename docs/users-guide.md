@@ -63,7 +63,7 @@ validated with `msgspec` and exposed as a JSON Schema for external linters.
   `ignore_paths`, `ignore_title_prefixes`) and status preferences under `noise`
   and `status`. Set `noise.enabled: false` to disable all filters for a
   project, or use `noise.toggles.*` to disable individual filters without
-  deleting the configured values. Setting `summarise_dependency_prs: false`
+  deleting the configured values. Setting `summarize_dependency_prs: false`
   signals that dependency update pull requests should be ignored in downstream
   summaries.
 - Record documentation paths at both project level (`documentation_paths`) and

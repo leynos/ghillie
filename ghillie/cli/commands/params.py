@@ -77,16 +77,6 @@ class ExportSinkOptions:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class PaginationFilter:
-    """Pagination and active/inactive filter configuration."""
-
-    active: bool = True
-    inactive: bool = False
-    limit: int = 50
-    offset: int = 0
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
 class NiceMetricsOptions:
     """Optional metrics inclusion flags."""
 
