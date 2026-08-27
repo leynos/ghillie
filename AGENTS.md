@@ -89,7 +89,8 @@ When implementing changes, adhere to the following testing procedures:
       `make skylos-allow SYMBOL=name REASON="verified runtime caller"` only
       when an entry-point rule cannot describe the dynamic boundary. `SYMBOL`
       and `REASON` must each contain non-whitespace text; retain the verified
-      caller rationale in the reviewing change.
+      caller rationale in the reviewing change. The helper serializes updates
+      through its ignored repository-local lock file.
     - **Formatting:** Adheres to formatting standards (run `make check-fmt` to
       verify, use `make fmt` to apply formatting).
     - **Typechecking:** Passes type checking (`make typecheck`).
