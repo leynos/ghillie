@@ -29,6 +29,62 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 _MAKEUTIL_COMMAND: typ.Final = ("makeutil", "parse", "Makefile")
 _MAKEUTIL_REVISION: typ.Final = "29fc5a1634ffbaa18a773eed9dff1b2838a45d9c"
 _MAKEUTIL_TOOLCHAIN: typ.Final = "nightly-2026-05-28"
+_SKYLOS_VERSION_TOKENS: typ.Final = ("4.33.2",)
+_SKYLOS_PRODUCTION_TARGET_TOKENS: typ.Final = ("ghillie",)
+_SKYLOS_EXCLUDE_FOLDER_TOKENS: typ.Final = ("tests",)
+_SKYLOS_CLI_TOKENS: typ.Final = (
+    "$(UV_ENV)",
+    "uv",
+    "tool",
+    "run",
+    "--python",
+    "3.14",
+    "--from",
+    "skylos==$(SKYLOS_VERSION)",
+    "skylos",
+)
+_SKYLOS_SCAN_TOKENS: typ.Final = (
+    "$(SKYLOS_CLI)",
+    "--config-file",
+    "pyproject.toml",
+)
+_SKYLOS_LINT_COMMAND: typ.Final = (
+    "$(SKYLOS)",
+    "$(SKYLOS_PRODUCTION_TARGETS)",
+    "--exclude",
+    "$(SKYLOS_EXCLUDE_FOLDERS)",
+    "--category",
+    "dead_code",
+    "--gate",
+    "--format",
+    "concise",
+    "--no-upload",
+    "--no-provenance",
+    "--no-grep-verify",
+)
+_SKYLOS_LINT_COMMAND_PREFIX: typ.Final = _SKYLOS_LINT_COMMAND[:1]
+_SKYLOS_WHITELIST_LOCK_TOKENS: typ.Final = (".skylos-whitelist.lock",)
+_SKYLOS_WHITELIST_COMMAND: typ.Final = (
+    "flock",
+    "$(SKYLOS_WHITELIST_LOCK)",
+    "env",
+    "$(SKYLOS_CLI)",
+    "whitelist",
+    "$${SKYLOS_SYMBOL}",
+    "--reason",
+    "$${SKYLOS_REASON}",
+)
+_SKYLOS_WHITELIST_COMMAND_PREFIX: typ.Final = _SKYLOS_WHITELIST_COMMAND[:4]
+_TEST_TARGET_PREREQUISITES: typ.Final = (
+    "build",
+    "uv",
+    "makeutil",
+    "$(VENV_TOOLS)",
+)
+_TOOL_TOKENS: typ.Final = ("$(MDFORMAT_ALL)", "ruff", "$(MDLINT)", "uv", "makeutil")
+_TOOL_PRESENCE_CHECK_TARGETS: typ.Final = ("$(TOOLS)",)
+_TOOL_PRESENCE_CHECK_RECIPE: typ.Final = "$(call ensure_tool,$@)"
+_DOCUMENTED_WHITELIST_NAMES: typ.Final[frozenset[str]] = frozenset()
 _SHELL_ARGUMENT_TEXT: typ.Final = st.builds(
     lambda prefix, content, suffix: prefix + content + suffix,
     st.text(alphabet=" \t", max_size=4),
@@ -245,68 +301,66 @@ def _assert_makeutil_installation(command: object, *, contract: str) -> None:
 
 def test_lint_recipe_runs_the_production_dead_code_gate() -> None:
     """`make lint` must scan production code with Skylos's strict gate."""
-    assert _variable_tokens("SKYLOS_VERSION") == ("4.33.2",), (
+    test_prerequisites = _text_sequence(
+        _sole_recipe_rule("test").get("prerequisites"),
+        subject="test target prerequisites",
+    )
+    assert test_prerequisites == _TEST_TARGET_PREREQUISITES, (
+        "Make test prerequisite contract must require the checked makeutil binary"
+    )
+    assert _variable_tokens("TOOLS") == _TOOL_TOKENS, (
+        "Make tool contract must retain makeutil in the checked CLI tool set"
+    )
+    makeutil_check_rule = _sole_recipe_rule("$(TOOLS)")
+    assert (
+        _text_sequence(makeutil_check_rule.get("targets"), subject="tool-check targets")
+        == _TOOL_PRESENCE_CHECK_TARGETS
+    ), "Make tool contract must use the shared CLI presence-check target"
+    makeutil_check_recipes = _objects(
+        makeutil_check_rule.get("recipes"), subject="tool-check recipes"
+    )
+    assert tuple(recipe.get("text") for recipe in makeutil_check_recipes) == (
+        _TOOL_PRESENCE_CHECK_RECIPE,
+    ), "Make tool contract must check makeutil before the full suite runs"
+    assert _variable_tokens("SKYLOS_VERSION") == _SKYLOS_VERSION_TOKENS, (
         "Skylos version contract must pin 4.33.2"
     )
-    assert _variable_tokens("SKYLOS_PRODUCTION_TARGETS") == ("ghillie",), (
-        "Skylos production-target contract must scan ghillie"
-    )
-    assert _variable_tokens("SKYLOS_EXCLUDE_FOLDERS") == ("tests",), (
-        "Skylos exclusion contract must omit tests"
-    )
+    assert (
+        _variable_tokens("SKYLOS_PRODUCTION_TARGETS")
+        == _SKYLOS_PRODUCTION_TARGET_TOKENS
+    ), "Skylos production-target contract must scan ghillie"
+    assert (
+        _variable_tokens("SKYLOS_EXCLUDE_FOLDERS") == _SKYLOS_EXCLUDE_FOLDER_TOKENS
+    ), "Skylos exclusion contract must omit tests"
     skylos_commands = [
-        command for command in _recipe_tokens("lint") if command[:1] == ("$(SKYLOS)",)
+        command
+        for command in _recipe_tokens("lint")
+        if command[:1] == _SKYLOS_LINT_COMMAND_PREFIX
     ]
-    assert skylos_commands == [
-        (
-            "$(SKYLOS)",
-            "$(SKYLOS_PRODUCTION_TARGETS)",
-            "--exclude",
-            "$(SKYLOS_EXCLUDE_FOLDERS)",
-            "--category",
-            "dead_code",
-            "--gate",
-            "--format",
-            "concise",
-            "--no-upload",
-            "--no-provenance",
-            "--no-grep-verify",
-        )
-    ], "Skylos lint command contract must scan production dead code strictly"
+    assert skylos_commands == [_SKYLOS_LINT_COMMAND], (
+        "Skylos lint command contract must scan production dead code strictly"
+    )
 
 
 def test_whitelist_target_uses_the_python_314_cli_contract() -> None:
     """`skylos whitelist` must dispatch before its reason and scan options."""
-    assert _variable_tokens("SKYLOS_CLI") == (
-        "$(UV_ENV)",
-        "uv",
-        "tool",
-        "run",
-        "--python",
-        "3.14",
-        "--from",
-        "skylos==$(SKYLOS_VERSION)",
-        "skylos",
-    ), "Skylos CLI contract must pin Python 3.14 and its tool release"
-    assert _variable_tokens("SKYLOS") == (
-        "$(SKYLOS_CLI)",
-        "--config-file",
-        "pyproject.toml",
-    ), "Skylos scan command contract must add only the configuration file"
+    assert _variable_tokens("SKYLOS_CLI") == _SKYLOS_CLI_TOKENS, (
+        "Skylos CLI contract must pin Python 3.14 and its tool release"
+    )
+    assert _variable_tokens("SKYLOS") == _SKYLOS_SCAN_TOKENS, (
+        "Skylos scan command contract must add only the configuration file"
+    )
+    assert _variable_tokens("SKYLOS_WHITELIST_LOCK") == _SKYLOS_WHITELIST_LOCK_TOKENS, (
+        "Skylos whitelist contract must use a repository-local lock"
+    )
     whitelist_commands = [
         command
         for command in _recipe_tokens("skylos-allow")
-        if command[:1] == ("$(SKYLOS_CLI)",)
+        if command[:4] == _SKYLOS_WHITELIST_COMMAND_PREFIX
     ]
-    assert whitelist_commands == [
-        (
-            "$(SKYLOS_CLI)",
-            "whitelist",
-            "$${SKYLOS_SYMBOL}",
-            "--reason",
-            "$${SKYLOS_REASON}",
-        )
-    ], "Skylos whitelist command contract must dispatch before --reason"
+    assert whitelist_commands == [_SKYLOS_WHITELIST_COMMAND], (
+        "Skylos whitelist command contract must lock and dispatch before --reason"
+    )
 
 
 @settings(max_examples=25, deadline=None)
@@ -343,6 +397,7 @@ def test_skylos_allow_forwards_generated_argument_boundaries(
     with TemporaryDirectory() as temporary_directory:
         recorded_arguments = Path(temporary_directory, "arguments.json")
         recorder = Path(temporary_directory, "skylos-recorder")
+        whitelist_lock = Path(temporary_directory, "whitelist.lock")
         recorder.write_text(
             "#!/usr/bin/env python3\n"
             "import json\n"
@@ -365,14 +420,17 @@ def test_skylos_allow_forwards_generated_argument_boundaries(
         command: list[str] = [
             _make_executable(),
             "--no-print-directory",
+            "-f",
+            str(REPOSITORY_ROOT / "Makefile"),
             f"SKYLOS_CLI={recorder}",
+            f"SKYLOS_WHITELIST_LOCK={whitelist_lock}",
             "skylos-allow",
         ]
         completed = subprocess.run(  # noqa: S603 - controlled Make contract command.
             command,
             capture_output=True,
             check=False,
-            cwd=REPOSITORY_ROOT,
+            cwd=temporary_directory,
             env=environment,
             text=True,
         )
@@ -382,6 +440,9 @@ def test_skylos_allow_forwards_generated_argument_boundaries(
         )
         assert recorded_arguments.exists(), (
             "Skylos whitelist must invoke the injected recorder for valid input"
+        )
+        assert whitelist_lock.exists(), (
+            "Skylos whitelist forwarding must use the isolated lock path"
         )
         assert json.loads(recorded_arguments.read_text(encoding="utf-8")) == [
             "whitelist",
@@ -407,6 +468,24 @@ def test_skylos_configuration_models_implicit_runtime_callers() -> None:
     dead_code = _mapping(
         skylos.get("dead_code"), subject="Skylos dead-code configuration"
     )
+    whitelist = _mapping(
+        skylos.get("whitelist", {}), subject="Skylos documented whitelist"
+    )
+    documented_names = frozenset(
+        _text_sequence(whitelist.get("names", []), subject="Skylos whitelist names")
+    )
+    documented = _mapping(
+        whitelist.get("documented", {}), subject="Skylos documented whitelist reasons"
+    )
+    assert documented_names == _DOCUMENTED_WHITELIST_NAMES, (
+        "Skylos documented-whitelist contract must require a conscious exception update"
+    )
+    assert frozenset(documented) == _DOCUMENTED_WHITELIST_NAMES, (
+        "Skylos documented-whitelist reasons must cover exactly the named exceptions"
+    )
+    assert all(
+        isinstance(reason, str) and reason.strip() for reason in documented.values()
+    ), "Skylos documented-whitelist reasons must be non-empty text"
     entry_points = _objects(dead_code.get("entrypoints"), subject="Skylos entry points")
     configured_by_type: dict[str, set[str]] = {}
     for entry_point in entry_points:
@@ -461,8 +540,11 @@ def test_ci_installs_pinned_makeutil_for_each_full_suite_job() -> None:
 
 
 def test_skylos_cache_is_ignored() -> None:
-    """Keep local Skylos cache files out of version control."""
+    """Keep Skylos cache and whitelist-lock files out of version control."""
     gitignore = (REPOSITORY_ROOT / ".gitignore").read_text(encoding="utf-8")
     assert ".skylos/" in gitignore.splitlines(), (
         "Git ignore contract must exclude the Skylos cache directory"
+    )
+    assert ".skylos-whitelist.lock" in gitignore.splitlines(), (
+        "Git ignore contract must exclude the Skylos whitelist lock file"
     )
