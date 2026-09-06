@@ -42,7 +42,7 @@ dev = [
     "syrupy>=5.5.3,<6",
     "py-pglite[asyncpg]>=0.5.3",
     "asyncpg>=0.20.0,<1.0",
-    "ruff",
+    "ruff==0.15.21",  # keep in step with RUFF_VERSION in the Makefile
     "pyright",
     "ty>=0.0.56",
     "pytest-timeout",

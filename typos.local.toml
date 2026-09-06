@@ -13,9 +13,20 @@ accepted = ["ANALYZE", "Center", "Hashi"]
 [words.corrections]
 
 [patterns]
+# The shared base no longer excludes inline code spans, so an identifier or a
+# quoted US spelling inside backticks reaches the checker. Record each one with
+# its backticks so the same word in prose is still flagged.
 ignore = [
     "Backstage Software Catalog",
     "JSONB: PostgreSQL’s Secret Weapon for Flexible Data Modeling",
+    # The documentation style guide's own example of a US spelling kept inside
+    # an API name.
+    "`color`",
+    # A configuration key, spelt as the code spells it. The trailing backtick
+    # is omitted because the guide quotes the key with its value.
+    "`summarise_dependency_prs",
+    # Backstage's catalogue descriptor file name.
+    "`catalog-info.yaml`",
 ]
 
 [files]
