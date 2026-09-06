@@ -61,12 +61,12 @@ $(VENV_TOOLS): ## Verify required CLI tools in venv
 	$(call ensure_tool_venv,$@)
 endif
 
-fmt: $(MDFORMAT_ALL) ## Format sources
+fmt: uv $(MDFORMAT_ALL) ## Format sources
 	$(RUFF) format
 	$(RUFF) check --select I --fix
 	$(MDFORMAT_ALL)
 
-check-fmt: ## Verify formatting
+check-fmt: uv ## Verify formatting
 	$(RUFF) format --check
 	# mdformat-all doesn't currently do checking
 
@@ -91,7 +91,7 @@ spelling: spelling-helper-test ## Enforce en-GB-oxendict spelling in Markdown pr
 		xargs -0 -r env $(UV_ENV) uv tool run typos@$(TYPOS_VERSION) \
 		--config typos.toml --force-exclude
 
-spelling-helper-test: ## Validate the shared spelling-policy integration
+spelling-helper-test: uv ## Validate the shared spelling-policy integration
 	@$(RUFF) format --isolated \
 		--target-version py313 --check scripts/generate_typos_config.py \
 		scripts/typos_rollout.py scripts/typos_rollout_cache.py \

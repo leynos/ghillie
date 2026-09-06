@@ -34,7 +34,7 @@ extend-ignore-re = [
     "Backstage Software Catalog",
     "JSONB: PostgreSQL’s Secret Weapon for Flexible Data Modeling",
     "\\brust-analyzer\\b",
-    "`catalog-info.yaml`",
+    "`catalog-info\\.yaml`",
     "`color`",
     "`summarise_dependency_prs",
 ]
