@@ -30,12 +30,21 @@ jobs:
         uses: astral-sh/setup-uv@v8.3.2
 
       - name: Install yaml schema validator
-        run: bun install -g pajv
+        env:
+          PAJV_VERSION: '1.2.0'
+        run: bun install -g "pajv@${PAJV_VERSION}"
 
       - name: Install CLI tools
+        env:
+          # Pin every tool this job installs. `uv tool install ruff` followed
+          # upstream into a release that formats Python inside Markdown fences
+          # and turned main red at "Check formatting". ruff is not installed
+          # here any more: the Makefile runs one pinned ruff for every gate.
+          MBAKE_VERSION: '1.4.6'
+          MARKDOWNLINT_CLI2_VERSION: '0.23.2'
         run: |
-          for tool in mbake ruff; do uv tool install ${tool}; done
-          npm install -g markdownlint-cli2
+          uv tool install "mbake==${MBAKE_VERSION}"
+          npm install -g "markdownlint-cli2@${MARKDOWNLINT_CLI2_VERSION}"
 
       - name: Validate Makefile
         run: mbake validate Makefile

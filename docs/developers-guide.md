@@ -94,6 +94,36 @@ If a workflow's behaviour genuinely depends on a feature only present from a
 particular commit onwards, express that as a comment or a changelog note, not
 as a test assertion on the SHA string.
 
+### Tool versions
+
+Every tool a CI job installs names an exact version, and every ruff invocation
+goes through one pin. An unpinned `uv tool install ruff` is what turned `main`
+red at "Check formatting" on 2026-08-13: it followed upstream into a release
+that formats Python inside Markdown fences, against a tree formatted by an
+older one. The Makefile ran whichever ruff was on `PATH`, so nothing in the
+repository could disagree with it.
+
+| Tool | Where the version lives |
+| --- | --- |
+| `ruff` | `RUFF_VERSION` in the Makefile, matched by the `ruff==` requirement in `pyproject.toml` |
+| `typos` | `TYPOS_VERSION` in the Makefile |
+| `mbake` | `MBAKE_VERSION` in `ci.yml` |
+| `markdownlint-cli2` | `MARKDOWNLINT_CLI2_VERSION` in `ci.yml` |
+| `pajv` | `PAJV_VERSION` in `ci.yml` |
+| `ty` | the `dev` dependency group, resolved in `uv.lock` |
+
+`tests/test_ci_workflow_contract.py` enforces all of it. Every `uv tool
+install`, `npm install -g` and `bun install -g` in `ci.yml` must name an exact
+version, and the test resolves a version written as `${VERSION}` back to the
+value the step's `env` gives it, so a variable holding `latest` fails and a
+misspelt variable name fails rather than looking pinned. A moving tag or a
+range is not a pin: `@latest`, `^0.23`, `~0.23.0`, `1.*` and `>=1.4.6` are each
+rejected by name. On the Makefile side, `RUFF` must expand to
+`uv tool run ruff@$(RUFF_VERSION)`, no recipe may call `ruff` from `PATH`, and
+the Makefile pin must equal the `pyproject.toml` requirement. Each assertion
+matches the command or recipe line itself, not a comment near it, and carries a
+mutation check.
+
 ## Architecture checks
 
 Ghillie uses Hecate as the static architecture fitness function for Python

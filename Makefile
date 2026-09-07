@@ -1,9 +1,15 @@
 MDLINT ?= markdownlint-cli2
 NIXIE ?= nixie
 MDFORMAT_ALL ?= mdformat-all
-TOOLS = $(MDFORMAT_ALL) ruff $(MDLINT) uv
+TOOLS = $(MDFORMAT_ALL) $(MDLINT) uv
 VENV_TOOLS = pytest
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
+
+# One pinned ruff for every gate. An unpinned `uv tool install ruff` in CI is
+# what turned main red: it followed upstream into a release that formats Python
+# inside Markdown fences, against a tree formatted by an older one.
+RUFF_VERSION ?= 0.15.21
+RUFF = $(UV_ENV) uv tool run ruff@$(RUFF_VERSION)
 
 .PHONY: help all clean build build-release check-architecture lint fmt check-fmt \
         markdownlint nixie test typecheck helm-lint helm-test \
@@ -55,20 +61,20 @@ $(VENV_TOOLS): ## Verify required CLI tools in venv
 	$(call ensure_tool_venv,$@)
 endif
 
-fmt: ruff $(MDFORMAT_ALL) ## Format sources
-	ruff format
-	ruff check --select I --fix
+fmt: uv $(MDFORMAT_ALL) ## Format sources
+	$(RUFF) format
+	$(RUFF) check --select I --fix
 	$(MDFORMAT_ALL)
 
-check-fmt: ruff ## Verify formatting
-	ruff format --check
+check-fmt: uv ## Verify formatting
+	$(RUFF) format --check
 	# mdformat-all doesn't currently do checking
 
 check-architecture: build ## Run hexagonal architecture import checks
 	$(UV_ENV) uv run scripts/check_architecture.py
 
-lint: check-architecture ruff ## Run linters
-	ruff check
+lint: check-architecture ## Run linters
+	$(RUFF) check
 
 typecheck: build ## Run typechecking
 	$(UV_ENV) uv run ty --version
@@ -78,7 +84,6 @@ markdownlint: spelling $(MDLINT) ## Lint Markdown files and enforce spelling
 	$(MDLINT) '**/*.md'
 
 TYPOS_VERSION ?= 1.48.0
-RUFF_VERSION ?= 0.15.12
 
 spelling: spelling-helper-test ## Enforce en-GB-oxendict spelling in Markdown prose
 	@$(UV_ENV) uv run scripts/generate_typos_config.py
@@ -86,12 +91,12 @@ spelling: spelling-helper-test ## Enforce en-GB-oxendict spelling in Markdown pr
 		xargs -0 -r env $(UV_ENV) uv tool run typos@$(TYPOS_VERSION) \
 		--config typos.toml --force-exclude
 
-spelling-helper-test: ## Validate the shared spelling-policy integration
-	@$(UV_ENV) uv tool run ruff@$(RUFF_VERSION) format --isolated \
+spelling-helper-test: uv ## Validate the shared spelling-policy integration
+	@$(RUFF) format --isolated \
 		--target-version py313 --check scripts/generate_typos_config.py \
 		scripts/typos_rollout.py scripts/typos_rollout_cache.py \
 		scripts/tests/test_typos_rollout.py
-	@$(UV_ENV) uv tool run ruff@$(RUFF_VERSION) check --isolated \
+	@$(RUFF) check --isolated \
 		--target-version py313 scripts/generate_typos_config.py \
 		scripts/typos_rollout.py scripts/typos_rollout_cache.py \
 		scripts/tests/test_typos_rollout.py
