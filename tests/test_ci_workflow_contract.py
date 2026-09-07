@@ -79,17 +79,30 @@ def _steps() -> cabc.Iterator[tuple[str, dict[str, str]]]:
     """
     workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
     assert isinstance(workflow, dict), "the workflow must be a mapping"
-    workflow_env = _string_mapping(workflow.get("env"))
     jobs = workflow.get("jobs")
     assert isinstance(jobs, dict), "the workflow must declare a jobs mapping"
 
+    workflow_env = _string_mapping(workflow.get("env"))
     for job in jobs.values():
-        if not isinstance(job, dict):
+        yield from _job_steps(job, workflow_env)
+
+
+def _job_steps(
+    job: object, inherited: dict[str, str]
+) -> cabc.Iterator[tuple[str, dict[str, str]]]:
+    """Yield one job's `run:` scripts with the environment visible to each."""
+    if not isinstance(job, dict):
+        return
+    steps = job.get("steps")
+    if not isinstance(steps, list):
+        return
+    job_env = inherited | _string_mapping(job.get("env"))
+    for step in steps:
+        if not isinstance(step, dict):
             continue
-        job_env = workflow_env | _string_mapping(job.get("env"))
-        for step in job.get("steps", []):
-            if isinstance(step, dict) and isinstance(step.get("run"), str):
-                yield step["run"], job_env | _string_mapping(step.get("env"))
+        script = step.get("run")
+        if isinstance(script, str):
+            yield script, job_env | _string_mapping(step.get("env"))
 
 
 def _string_mapping(value: object) -> dict[str, str]:
@@ -113,21 +126,34 @@ def _resolve(package: str, environment: dict[str, str]) -> str:
     return SHELL_VARIABLE.sub(substitute, package)
 
 
+def _packages(arguments: str) -> cabc.Iterator[str]:
+    """Yield the package arguments of one install command's argument list."""
+    for argument in arguments.split():
+        # A `-flag` is not a package, and a lone backslash is the shell's line
+        # continuation rather than something being installed.
+        if argument.startswith("-") or argument == "\\":
+            continue
+        yield argument.strip("\"'")
+
+
+def _script_installs(
+    script: str, environment: dict[str, str]
+) -> cabc.Iterator[Install]:
+    """Yield every install of one `run:` script, resolved against its env."""
+    for pattern in INSTALL_PATTERNS:
+        for match in pattern.finditer(script):
+            command = match.group(0).strip()
+            for package in _packages(match.group("arguments")):
+                yield Install(command, package, _resolve(package, environment))
+
+
 def _installs() -> list[Install]:
-    """Every package argument of every install command in the workflow."""
-    found: list[Install] = []
-    for script, environment in _steps():
-        for pattern in INSTALL_PATTERNS:
-            for match in pattern.finditer(script):
-                command = match.group(0).strip()
-                for token in match.group("arguments").split():
-                    if token.startswith("-"):
-                        continue
-                    package = token.strip("\"'")
-                    found.append(
-                        Install(command, package, _resolve(package, environment))
-                    )
-    return found
+    """Collect every package argument of every install command."""
+    return [
+        install
+        for script, environment in _steps()
+        for install in _script_installs(script, environment)
+    ]
 
 
 INSTALLS = _installs()
