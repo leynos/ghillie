@@ -70,7 +70,7 @@ jobs:
       # coverage twice for the same commit.
       - name: Generate coverage
         if: github.event_name == 'pull_request'
-        uses: leynos/shared-actions/.github/actions/generate-coverage@824724a791a7f6dfef79bf95e11ea744b6eb4de4
+        uses: leynos/shared-actions/.github/actions/generate-coverage@6b5cdc2d4c0bb72cafd5a66d24d248ac25827db9
         with:
           format: cobertura
           output-path: coverage.xml
@@ -80,7 +80,7 @@ jobs:
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         if: env.CS_ACCESS_TOKEN != '' && github.event_name == 'pull_request'
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@824724a791a7f6dfef79bf95e11ea744b6eb4de4
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@6b5cdc2d4c0bb72cafd5a66d24d248ac25827db9
         with:
           format: cobertura
           mode: check
