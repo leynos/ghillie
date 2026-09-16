@@ -7,15 +7,14 @@
 
 ## `http.HTTPStatus`
 
-`http.HTTPStatus` is an `IntEnum` whose members compare equal to their
-integer values. Use it everywhere an HTTP status code appears:
-response status assignment, threshold comparisons, test assertions,
-and error construction.
+`http.HTTPStatus` is an `IntEnum` whose members compare equal to their integer
+values. Use it everywhere an HTTP status code appears: response status
+assignment, threshold comparisons, test assertions, and error construction.
 
-Equality checks (`==`, `!=`) may use `HTTPStatus` members directly.
-Relational comparisons (`>=`, `<`) used as thresholds must cast to
-`int()` so the intent — a numeric boundary, not a specific status — is
-unambiguous to both readers and type checkers.
+Equality checks (`==`, `!=`) may use `HTTPStatus` members directly. Relational
+comparisons (`>=`, `<`) used as thresholds must cast to `int()` so the intent —
+a numeric boundary, not a specific status — is unambiguous to both readers and
+type checkers.
 
 ```python
 from http import HTTPStatus
@@ -48,10 +47,9 @@ assert result.status_code == HTTPStatus.NOT_FOUND
 
 ## `http.HTTPMethod`
 
-`http.HTTPMethod` is a `StrEnum` whose members compare equal to their
-string values (`HTTPMethod.GET == "GET"`). Use it whenever an HTTP
-method appears as a literal string — for example, in client calls,
-routing tables, or test fixtures.
+`http.HTTPMethod` is a `StrEnum` whose members compare equal to their string
+values (`HTTPMethod.GET == "GET"`). Use it whenever an HTTP method appears as a
+literal string — for example, in client calls, routing tables, or test fixtures.
 
 ```python
 from http import HTTPMethod
@@ -68,18 +66,18 @@ if request.method == HTTPMethod.GET:
 
 - **Discoverable:** IDE autocompletion lists valid methods.
 - **Typo-proof:** `HTTPMethod.DLETE` raises `AttributeError` at
-  runtime and is flagged by static type checkers (e.g. Pyright, mypy)
-  during analysis; `"DLETE"` bypasses both checks.
+  runtime and is flagged by static type checkers (e.g. Pyright, mypy) during
+  analysis; `"DLETE"` bypasses both checks.
 
 ## Banned alternatives
 
-| Do not use | Use instead |
-| --- | --- |
-| `falcon.HTTP_200`, `falcon.HTTP_404`, … | `HTTPStatus.OK`, `HTTPStatus.NOT_FOUND`, … |
-| `200`, `404`, `500` (bare integers) | `HTTPStatus.OK`, `HTTPStatus.NOT_FOUND`, `HTTPStatus.INTERNAL_SERVER_ERROR` |
-| `"GET"`, `"POST"`, … (bare strings) | `HTTPMethod.GET`, `HTTPMethod.POST`, … |
+| Do not use                              | Use instead                                                                 |
+| --------------------------------------- | --------------------------------------------------------------------------- |
+| `falcon.HTTP_200`, `falcon.HTTP_404`, … | `HTTPStatus.OK`, `HTTPStatus.NOT_FOUND`, …                                  |
+| `200`, `404`, `500` (bare integers)     | `HTTPStatus.OK`, `HTTPStatus.NOT_FOUND`, `HTTPStatus.INTERNAL_SERVER_ERROR` |
+| `"GET"`, `"POST"`, … (bare strings)     | `HTTPMethod.GET`, `HTTPMethod.POST`, …                                      |
 
 ______________________________________________________________________
 
-These conventions keep HTTP semantics explicit, framework-independent,
-and verifiable by static analysis.
+These conventions keep HTTP semantics explicit, framework-independent, and
+verifiable by static analysis.

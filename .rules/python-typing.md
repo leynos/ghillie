@@ -167,8 +167,8 @@ Python 3.14 evaluates annotations lazily by default, so
 `from __future__ import annotations` is no longer part of the standard module
 template for this repository.
 
-When maintaining compatibility with Python 3.13 or older, add the future
-import only when deferred annotation evaluation is required for that module.
+When maintaining compatibility with Python 3.13 or older, add the future import
+only when deferred annotation evaluation is required for that module.
 
 ## `if typing.TYPE_CHECKING`
 
