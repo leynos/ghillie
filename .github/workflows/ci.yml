@@ -83,6 +83,7 @@ jobs:
         with:
           language: python
           python-source: ./ghillie
+          baseline-python-file: .coverage-baseline.python-main-owned
           format: cobertura
           output-path: coverage.xml
           pytest-workers: ''

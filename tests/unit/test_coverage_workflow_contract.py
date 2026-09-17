@@ -68,6 +68,9 @@ def test_pull_request_coverage_is_local_and_ratcheted() -> None:
     assert coverage.get("if") == "github.event_name == 'pull_request'"
     inputs = _inputs(coverage, GENERATE_ACTION)
     assert inputs.get("python-source") == "./ghillie"
+    assert inputs.get("baseline-python-file") == (
+        ".coverage-baseline.python-main-owned"
+    )
     assert inputs.get("pytest-workers") == ""
     assert inputs.get("with-ratchet") == "true"
     ci_text = CI_PATH.read_text(encoding="utf-8")
@@ -86,6 +89,9 @@ def test_main_coverage_publishes_the_local_measurement() -> None:
     coverage_upload = _job(workflow, "coverage-upload")
     generate = _inputs(_step(coverage_upload, "Generate coverage"), GENERATE_ACTION)
     assert generate.get("python-source") == "./ghillie"
+    assert generate.get("baseline-python-file") == (
+        ".coverage-baseline.python-main-owned"
+    )
     assert generate.get("pytest-workers") == ""
     assert generate.get("with-ratchet") == "true"
     upload = _inputs(

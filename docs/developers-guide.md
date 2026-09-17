@@ -9,6 +9,10 @@ Pull-request CI measures `ghillie` serially and compares the result with the
 ratcheted baseline written by `main`. It does not invoke CodeScene, expose
 `CS_ACCESS_TOKEN`, or require full Git history.
 
+Both workflows use `.coverage-baseline.python-main-owned`; the separate cache
+namespace prevents the source-scoped measurement from being compared with the
+broader pre-migration baseline.
+
 After each merge, `coverage-main.yml` regenerates the same source-scoped,
 serial measurement, advances the ratchet, and publishes `coverage.xml` to
 CodeScene with explicit upload mode. CodeScene project settings should show the
