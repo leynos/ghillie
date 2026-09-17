@@ -3,6 +3,17 @@
 This guide covers local development setup, tooling, and deployment workflows
 for contributors to the Ghillie project.
 
+## Coverage publication
+
+Pull-request CI measures `ghillie` serially and compares the result with the
+ratcheted baseline written by `main`. It does not invoke CodeScene, expose
+`CS_ACCESS_TOKEN`, or require full Git history.
+
+After each merge, `coverage-main.yml` regenerates the same source-scoped,
+serial measurement, advances the ratchet, and publishes `coverage.xml` to
+CodeScene with explicit upload mode. CodeScene project settings should show the
+external coverage check only when data is available.
+
 ## Spelling policy
 
 Run `make spelling` to enforce en-GB-oxendict prose spelling. The generated
