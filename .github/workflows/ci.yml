@@ -73,13 +73,14 @@ jobs:
       - name: Run typechecker
         run: make typecheck
 
-      # Coverage is generated here only for pull requests; coverage-main.yml
-      # generates and uploads the authoritative main-branch coverage on
-      # push, so a push-triggered run of this job would otherwise generate
-      # coverage twice for the same commit.
+      # Coverage is generated here only for pull requests, and ratcheted
+      # against the baseline coverage-main.yml writes on main; nothing here
+      # talks to CodeScene. A push-triggered run would write a second
+      # baseline for the same commit, and publish-artefact is off because
+      # the report is compared, not published.
       - name: Generate coverage
         if: github.event_name == 'pull_request'
-        uses: leynos/shared-actions/.github/actions/generate-coverage@152d9c4784d0ae5877938a984fe6d1f04d718fd8
+        uses: leynos/shared-actions/.github/actions/generate-coverage@dbe2e22ceaf498d85512679ccded38be9dbe7777
         with:
           language: python
           python-source: ./ghillie
@@ -88,6 +89,7 @@ jobs:
           output-path: coverage.xml
           pytest-workers: ''
           with-ratchet: 'true'
+          publish-artefact: 'false'
 
       - name: Run tests
         if: github.event_name != 'pull_request'

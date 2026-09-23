@@ -5,18 +5,43 @@ for contributors to the Ghillie project.
 
 ## Coverage publication
 
-Pull-request CI measures `ghillie` serially and compares the result with the
-ratcheted baseline written by `main`. It does not invoke CodeScene, expose
-`CS_ACCESS_TOKEN`, or require full Git history.
+Main owns CodeScene. Pull-request CI measures `ghillie` serially with
+`generate-coverage`, compares the result with the ratchet baseline that `main`
+wrote (`with-ratchet: 'true'`), and uploads no artefact
+(`publish-artefact: 'false'`). Nothing a pull request can start talks to
+CodeScene, holds `CS_ACCESS_TOKEN`, or needs full Git history. The step is
+guarded to the `pull_request` event, because `generate-coverage` saves its
+baseline on a push to `main` and `coverage-main.yml` must be the only workflow
+writing it.
 
 Both workflows use `.coverage-baseline.python-main-owned`; the separate cache
 namespace prevents the source-scoped measurement from being compared with the
 broader pre-migration baseline.
 
-After each merge, `coverage-main.yml` regenerates the same source-scoped,
-serial measurement, advances the ratchet, and publishes `coverage.xml` to
-CodeScene with explicit upload mode. CodeScene project settings should show the
-external coverage check only when data is available.
+After each merge, `coverage-main.yml` regenerates the same measurement,
+advances the ratchet, and uploads `coverage.xml` with
+`upload-codescene-coverage` in explicit `mode: upload`. The upload step binds
+the secret itself and runs only when `github.ref == 'refs/heads/main'` and the
+token is non-empty, so a `workflow_dispatch` aimed at a branch cannot publish
+that branch as `main`. Its concurrency group never cancels: a newer push
+replaces an older pending run, and the newest baseline wins.
+
+The retired `installer-checksum` input, the `CODESCENE_CLI_SHA256` variable and
+the `get-codescene-sha.yml` refresher are gone. The shared uploader selects and
+verifies the `cs-coverage` archive from its own manifest.
+
+`tests/workflow_contracts/` holds this shape. `reading.py` parses workflows
+through a loader that refuses duplicate keys and reads the `on:` triggers in
+scalar, sequence and mapping form under either key. `codescene_reach.py`
+follows local reusable-workflow calls (`./` and `$/`) from every
+pull-request-started workflow and refuses any key or value in that closure
+naming the CodeScene host, the credential, the client or the uploader.
+`codescene_publisher.py` and `coverage_lanes.py` hold the publisher and the
+lanes to the rules above. Each rule returns its findings as text, so the rule
+tests beside them can drive it over a constructed tree; every refusal case
+changes one thing in the compliant tree in `fixtures.py`. Keep a new rule to
+that pattern: a pure reading, a repository assertion, and a refusal case that
+fails when the rule's clause is deleted.
 
 ## Spelling policy
 
