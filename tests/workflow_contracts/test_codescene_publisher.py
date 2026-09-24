@@ -12,6 +12,7 @@ import pytest
 from .codescene_publisher import (
     concurrency_violations,
     find_publisher,
+    permission_violations,
     retired_checksum_violations,
     trigger_violations,
     upload_step_violations,
@@ -255,3 +256,21 @@ def test_a_substitution_that_changes_nothing_is_refused() -> None:
         replaced(PUBLISHER, "absent text", "anything")
     with pytest.raises(ValueError, match="would change nothing"):
         replaced(PUBLISHER, "mode: upload", "mode: upload")
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        # A workflow-scope grant reaches every job that declares none.
+        ("permissions: {}\n", ""),
+        ("permissions: {}\n", "permissions: write-all\n"),
+        # The upload job needs its checkout and nothing else.
+        ("    permissions:\n      contents: read\n", ""),
+        ("      contents: read\n", "      contents: write\n"),
+        ("      contents: read\n", "      contents: read\n      id-token: write\n"),
+    ],
+)
+def test_the_publisher_grants_only_read_access(old: str, new: str) -> None:
+    """A wider or missing grant at either scope is refused."""
+    found = permission_violations(_publisher(mutate("coverage-main.yml", old, new)))
+    assert found, found

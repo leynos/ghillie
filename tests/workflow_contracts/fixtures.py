@@ -13,6 +13,7 @@ import typing as typ
 from .codescene_publisher import (
     concurrency_violations,
     find_publisher,
+    permission_violations,
     retired_checksum_violations,
     trigger_violations,
     upload_step_violations,
@@ -71,12 +72,15 @@ PUBLISHER: typ.Final[str] = textwrap.dedent(f"""\
       push:
         branches: [main]
       workflow_dispatch:
+    permissions: {{}}
     concurrency:
       group: coverage-main-${{{{ github.ref }}}}
       cancel-in-progress: false
     jobs:
       coverage-upload:
         runs-on: ubuntu-latest
+        permissions:
+          contents: read
         steps:
           - uses: actions/checkout@v4
           - name: Generate coverage
@@ -164,6 +168,7 @@ def violations(texts: dict[str, str]) -> list[str]:
         *trigger_violations(publisher),
         *concurrency_violations(publisher),
         *upload_step_violations(publisher),
+        *permission_violations(publisher),
         *check_step_violations(publisher),
         *upload_guard_violations(publisher),
         *upload_token_violations(publisher),
