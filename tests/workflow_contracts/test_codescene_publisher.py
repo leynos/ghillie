@@ -20,6 +20,7 @@ from .codescene_publisher import (
 from .coverage_lanes import (
     publisher_lane_violations,
     pull_request_lane_violations,
+    report_violations,
     second_writer_violations,
 )
 from .fixtures import PUBLISHER, PULL_REQUEST_LANE, REPOSITORY, mutate, replaced, tree
@@ -78,14 +79,14 @@ def test_the_publisher_needs_a_concurrency_group() -> None:
     [
         # A constant group lets a branch dispatch replace a pending main run.
         "group: coverage-main",
-        # An event key lets a dispatch and a push on main upload out of order.
+        # An event key lets a dispatch and a push on main run at once.
         "group: coverage-main-${{ github.ref }}-${{ github.event_name }}",
         # Text naming the ref outside an expression evaluates nothing.
         "group: coverage-main-github.ref",
     ],
 )
 def test_the_group_is_keyed_on_the_ref_alone(group: str) -> None:
-    """Only the exact ref-keyed group keeps triggered uploads in commit order."""
+    """Only the exact ref-keyed group keeps runs on main from overlapping."""
     found = concurrency_violations(
         _publisher(mutate("coverage-main.yml", GROUP, group))
     )
@@ -273,4 +274,27 @@ def test_a_substitution_that_changes_nothing_is_refused() -> None:
 def test_the_publisher_grants_only_read_access(old: str, new: str) -> None:
     """A wider or missing grant at either scope is refused."""
     found = permission_violations(_publisher(mutate("coverage-main.yml", old, new)))
+    assert found, found
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        (
+            "          path: coverage.xml\n",
+            "          path: lcov.info\n",
+        ),
+        (
+            "          format: cobertura\n          mode: upload\n",
+            "          format: lcov\n          mode: upload\n",
+        ),
+        (
+            "          format: cobertura\n          mode: upload\n",
+            "          mode: upload\n",
+        ),
+    ],
+)
+def test_the_uploader_reads_the_generated_report(old: str, new: str) -> None:
+    """An uploader naming another path or format than the generator's is refused."""
+    found = report_violations(_publisher(mutate("coverage-main.yml", old, new)))
     assert found, found
