@@ -31,6 +31,7 @@ from .codescene_token import (
 from .coverage_lanes import (
     publisher_lane_violations,
     pull_request_lane_violations,
+    report_violations,
     second_writer_violations,
 )
 from .loading import Document, read_workflows
@@ -165,3 +166,9 @@ def test_the_pull_request_lane_only_reads_contents(
     """The lint-test job measures coverage with a read-only token."""
     granted = jobs(documents["ci.yml"])["lint-test"].get("permissions")
     assert granted == {"contents": "read"}, granted
+
+
+def test_the_uploader_reads_the_generated_report(publisher: Document) -> None:
+    """The upload names the path and format the generator writes."""
+    found = report_violations(publisher)
+    assert not found, found
