@@ -50,6 +50,7 @@ dev = [
     "plumbum>=2.0.1,<3",
     "cmd-mox>=0.2,<1",
     "pyyaml>=6.0.3",
+    "packaging>=25.0",
 ]
 
 [tool.ruff]
