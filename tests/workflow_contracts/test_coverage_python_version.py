@@ -34,8 +34,10 @@ from .coverage_python_sources import (
     SETUP_PYTHON,
     WORKFLOWS,
     CoverageCall,
+    CoverageContractError,
     coverage_calls,
     python_version_entry,
+    read_required_text,
     read_text_if_present,
     rejected_versions,
     requires_python,
@@ -63,9 +65,7 @@ def _lane_calls() -> dict[str, list[CoverageCall]]:
         read_text_if_present(ROOT / ".python-version")
     )
     return {
-        lane: coverage_calls(
-            (WORKFLOWS / lane).read_text(encoding="utf-8"), python_version
-        )
+        lane: coverage_calls(read_required_text(WORKFLOWS / lane), python_version)
         for lane in LANES
     }
 
@@ -77,7 +77,7 @@ def test_both_lanes_call_generate_coverage() -> None:
 
 def test_every_call_declares_one_accepted_python() -> None:
     """Each call names a Python, every source agrees, and the project accepts it."""
-    accepted = requires_python((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    accepted = requires_python(read_required_text(ROOT / "pyproject.toml"))
     for lane, calls in _lane_calls().items():
         for call in calls:
             where = f"{lane}:{call.job}"
@@ -169,6 +169,28 @@ def test_the_innermost_uv_python_is_read(
     assert read.sources["UV_PYTHON"] == expected, (
         f"UV_PYTHON read as {read.sources['UV_PYTHON']!r}, expected {expected!r}"
     )
+
+
+def test_an_empty_step_uv_python_wins_over_the_outer_value() -> None:
+    """An empty step ``UV_PYTHON`` replaces the job's, so there is no false conflict.
+
+    The action then falls through to ``.python-version``, which agrees with
+    the setup step; reading the job's ``3.13`` instead would report a conflict.
+    """
+    step = {**COVERAGE, "env": {"UV_PYTHON": ""}}
+    job = {**_steps(_setup(AGREE), step), "env": {"UV_PYTHON": CONFLICT}}
+    (call,) = coverage_calls(_workflow({"cov": job}), AGREE)
+
+    assert call.sources["UV_PYTHON"] == "", "the empty step value must win"
+    assert verdict(call) == "", f"no conflict expected, got {call.sources}"
+
+
+def test_an_absent_step_uv_python_still_inherits_the_job_value() -> None:
+    """Narrow: with no step value the job's ``UV_PYTHON`` applies, and conflicts."""
+    job = {**_steps(_setup(AGREE), COVERAGE), "env": {"UV_PYTHON": CONFLICT}}
+    (call,) = coverage_calls(_workflow({"cov": job}), AGREE)
+
+    assert verdict(call) == "conflicting", f"expected a conflict, got {call.sources}"
 
 
 class SourceCombination(typ.NamedTuple):
@@ -276,17 +298,49 @@ def test_a_python_version_file_is_read_from_the_tree(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     "workflow",
     [
-        "",
         "- a list\n",
         "jobs: scalar\n",
         "jobs:\n  cov: scalar\n",
         "jobs:\n  cov: [x]\n",
+        "jobs: [unclosed\n",
     ],
-    ids=["empty", "list-top-level", "scalar-jobs", "scalar-job", "list-job"],
+    ids=["list-top-level", "scalar-jobs", "scalar-job", "list-job", "not-yaml"],
 )
-def test_a_malformed_workflow_reads_as_no_calls(workflow: str) -> None:
-    """The traversal treats a wrongly shaped workflow, jobs or job as empty."""
-    assert coverage_calls(workflow) == [], f"{workflow!r} should hold no coverage calls"
+def test_a_wrongly_shaped_workflow_is_refused(workflow: str) -> None:
+    """A workflow, jobs mapping or job of the wrong shape fails, not reads empty."""
+    with pytest.raises(CoverageContractError):
+        coverage_calls(workflow)
+
+
+@pytest.mark.parametrize(
+    "workflow", ["", "jobs:\n", "jobs: {}\n"], ids=["empty", "no-jobs", "empty-jobs"]
+)
+def test_a_workflow_without_jobs_has_no_calls(workflow: str) -> None:
+    """An absent or empty jobs mapping holds no coverage call, and is not an error."""
+    assert coverage_calls(workflow) == [], f"{workflow!r} should hold no calls"
+
+
+def test_a_required_file_that_is_missing_or_undecodable_fails_loudly(
+    tmp_path: Path,
+) -> None:
+    """A file the contract needs raises a typed error naming it."""
+    undecodable = tmp_path / "bad.yml"
+    undecodable.write_bytes(b"\xff\xfe")
+    for path in (tmp_path / "missing.yml", undecodable):
+        with pytest.raises(CoverageContractError, match=path.name):
+            read_required_text(path)
+
+
+def test_an_optional_file_that_cannot_be_decoded_fails_loudly(tmp_path: Path) -> None:
+    """Only absence reads as absent; an existing file that cannot be read raises."""
+    undecodable = tmp_path / ".python-version"
+    undecodable.write_bytes(b"\xff\xfe")
+    directory = tmp_path / "directory"
+    directory.mkdir()
+
+    for path in (undecodable, directory):
+        with pytest.raises(CoverageContractError, match=path.name):
+            read_text_if_present(path)
 
 
 @pytest.mark.parametrize(

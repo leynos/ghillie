@@ -31,6 +31,14 @@ SOURCES: typ.Final[tuple[str, ...]] = (
 )
 
 
+class CoverageContractError(Exception):
+    """Raised when a file the contract reads cannot be read or is the wrong shape.
+
+    The message names the file or level, so a failing contract says which input
+    was at fault rather than judging nothing.
+    """
+
+
 class CoverageCall(typ.NamedTuple):
     """One generate-coverage call and the versions each source declares for it.
 
@@ -101,11 +109,40 @@ def requires_python(pyproject: str) -> SpecifierSet:
     return SpecifierSet(tomllib.loads(pyproject)["project"]["requires-python"])
 
 
+def read_required_text(path: Path) -> str:
+    """Return the text of a file the contract cannot run without.
+
+    Parameters
+    ----------
+    path : Path
+        The file to read.
+
+    Returns
+    -------
+    str
+        The file's UTF-8 text.
+
+    Raises
+    ------
+    CoverageContractError
+        If the file is missing, unreadable or not valid UTF-8; the message
+        names the path and the ``OSError`` or ``UnicodeDecodeError`` is the
+        cause.
+
+    """
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        message = f"{path} could not be read: {error}"
+        raise CoverageContractError(message) from error
+
+
 def read_text_if_present(path: Path) -> str | None:
     """Return a file's text, or ``None`` when the file does not exist.
 
-    The only file access in this module. A file that exists but cannot be read
-    raises, which fails the contract loudly rather than reading as absent.
+    Only a missing file reads as absent: a directory, a permission failure or
+    undecodable bytes raise :class:`CoverageContractError`, which fails the
+    contract loudly rather than reading as absent.
 
     Parameters
     ----------
@@ -117,8 +154,18 @@ def read_text_if_present(path: Path) -> str | None:
     str or None
         The file's text, or ``None`` when it is absent.
 
+    Raises
+    ------
+    CoverageContractError
+        If the file exists but cannot be read.
+
     """
-    return path.read_text(encoding="utf-8") if path.is_file() else None
+    try:
+        return read_required_text(path)
+    except CoverageContractError as error:
+        if isinstance(error.__cause__, FileNotFoundError):
+            return None
+        raise
 
 
 def python_version_entry(text: str | None) -> str:
@@ -147,6 +194,23 @@ def _mapping(value: object) -> dict[str, object]:
     return typ.cast("dict[str, object]", value) if isinstance(value, dict) else {}
 
 
+def _required_mapping(value: object, what: str) -> dict[str, object]:
+    """Return ``value`` as a mapping, treating an absent one as empty.
+
+    Raises
+    ------
+    CoverageContractError
+        If ``value`` is present but is not a mapping, naming ``what``.
+
+    """
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        message = f"{what} must be a mapping, not {type(value).__name__}"
+        raise CoverageContractError(message)
+    return typ.cast("dict[str, object]", value)
+
+
 def _declared_by_setup(step: dict[str, object]) -> str:
     """Return the version a setup-python step reliably puts on ``PATH``, or empty."""
     if "if" in step or step.get("continue-on-error"):
@@ -155,11 +219,16 @@ def _declared_by_setup(step: dict[str, object]) -> str:
 
 
 def _uv_python(*scopes: dict[str, object]) -> str:
-    """Return the innermost ``UV_PYTHON`` among step, job and workflow scopes."""
+    """Return the innermost ``UV_PYTHON`` among step, job and workflow scopes.
+
+    The first scope that defines the key wins even when its value is empty: an
+    empty step value replaces the outer one, and the action then falls through
+    to ``.python-version`` or ``PATH`` rather than to the outer value.
+    """
     for scope in scopes:
-        value = _mapping(scope.get("env")).get("UV_PYTHON")
-        if value:
-            return str(value)
+        env = _mapping(scope.get("env"))
+        if "UV_PYTHON" in env:
+            return str(env["UV_PYTHON"] or "")
     return ""
 
 
@@ -212,12 +281,26 @@ def coverage_calls(workflow: str, python_version: str = "") -> list[CoverageCall
         One entry per call, in workflow order, with every source's version in
         the resolver's priority order (empty where a source declares nothing).
 
+    Raises
+    ------
+    CoverageContractError
+        If the text is not YAML, or the workflow, its ``jobs`` or a job is not
+        a mapping, so a wrongly shaped file fails rather than reading as empty.
+
     """
-    document = _mapping(yaml.safe_load(workflow))
+    try:
+        parsed = yaml.safe_load(workflow)
+    except yaml.YAMLError as error:
+        message = f"not a workflow document: {error}"
+        raise CoverageContractError(message) from error
+    document = _required_mapping(parsed, "a workflow")
+    jobs = _required_mapping(document.get("jobs"), "jobs")
     return [
         call
-        for name, job in _mapping(document.get("jobs")).items()
-        for call in _job_calls(name, _mapping(job), document, python_version)
+        for name, job in jobs.items()
+        for call in _job_calls(
+            name, _required_mapping(job, f"job {name}"), document, python_version
+        )
     ]
 
 
