@@ -193,6 +193,35 @@ def test_an_absent_step_uv_python_still_inherits_the_job_value() -> None:
     assert verdict(call) == "conflicting", f"expected a conflict, got {call.sources}"
 
 
+@pytest.mark.parametrize(
+    "guard",
+    [{"if": "always()"}, {"continue-on-error": True}],
+    ids=["guarded", "continue-on-error"],
+)
+def test_a_guarded_setup_after_a_reliable_one_declares_nothing(
+    guard: dict[str, object],
+) -> None:
+    """A later setup that may not run leaves nothing the call can rely on.
+
+    The earlier setup's Python may or may not still be first on ``PATH`` once a
+    later one can replace it, so with no other source the call is undeclared.
+    """
+    job = _steps(_setup(AGREE), _setup(CONFLICT, **guard), COVERAGE)
+    (call,) = coverage_calls(_workflow({"cov": job}))
+
+    assert call.sources["setup-python"] == "", f"setup read as {call.sources}"
+    assert verdict(call) == "undeclared", f"expected undeclared, got {call.sources}"
+
+
+def test_an_empty_job_uv_python_wins_over_the_workflow_value() -> None:
+    """An empty job ``UV_PYTHON`` replaces the workflow's, so there is no conflict."""
+    job = {**_steps(_setup(AGREE), COVERAGE), "env": {"UV_PYTHON": ""}}
+    (call,) = coverage_calls(_workflow({"cov": job}, {"UV_PYTHON": CONFLICT}), AGREE)
+
+    assert call.sources["UV_PYTHON"] == "", "the empty job value must win"
+    assert verdict(call) == "", f"no conflict expected, got {call.sources}"
+
+
 class SourceCombination(typ.NamedTuple):
     """One combination of the sources the resolver reads for a single call."""
 
@@ -307,6 +336,26 @@ def test_a_python_version_file_is_read_from_the_tree(tmp_path: Path) -> None:
         "jobs:\n  cov:\n",
         "jobs:\n  cov:\n    steps: []\n    steps: []\n",
         "",
+        "jobs:\n  broken:\n  cov:\n    steps: []\n",
+        "jobs:\n  cov:\n    steps: scalar\n",
+        "jobs:\n  cov:\n    steps:\n",
+        "jobs:\n  cov:\n    steps: [x]\n",
+        (
+            "jobs:\n  cov:\n    steps:\n"
+            f"      - uses: {COVERAGE['uses']}\n"
+            "        with: scalar\n"
+        ),
+        (
+            "jobs:\n  cov:\n    steps:\n"
+            f"      - uses: {COVERAGE['uses']}\n"
+            "        env: scalar\n"
+        ),
+        (f"jobs:\n  cov:\n    env:\n    steps:\n      - uses: {COVERAGE['uses']}\n"),
+        (
+            "jobs:\n  cov:\n    steps:\n"
+            f"      - uses: {SETUP['uses']}\n"
+            "        with: scalar\n"
+        ),
     ],
     ids=[
         "list-top-level",
@@ -318,6 +367,14 @@ def test_a_python_version_file_is_read_from_the_tree(tmp_path: Path) -> None:
         "null-job",
         "duplicate-steps",
         "empty",
+        "null-job-beside-a-valid-one",
+        "scalar-steps",
+        "null-steps",
+        "scalar-step-item",
+        "scalar-coverage-with",
+        "scalar-coverage-env",
+        "null-job-env",
+        "scalar-setup-with",
     ],
 )
 def test_a_wrongly_shaped_workflow_is_refused(workflow: str) -> None:
