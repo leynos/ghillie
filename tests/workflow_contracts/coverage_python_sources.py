@@ -12,9 +12,10 @@ import tomllib
 import typing as typ
 from pathlib import Path
 
-import yaml
-from packaging.specifiers import SpecifierSet
-from packaging.version import Version
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.version import InvalidVersion, Version
+
+from .loading import WorkflowReadingError, load_workflow
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
@@ -105,8 +106,18 @@ def requires_python(pyproject: str) -> SpecifierSet:
     SpecifierSet
         The versions the project declares it accepts.
 
+    Raises
+    ------
+    CoverageContractError
+        If the text is not TOML, has no ``project.requires-python`` string, or
+        that string is not a version specifier; the original error is the cause.
+
     """
-    return SpecifierSet(tomllib.loads(pyproject)["project"]["requires-python"])
+    try:
+        return SpecifierSet(tomllib.loads(pyproject)["project"]["requires-python"])
+    except (tomllib.TOMLDecodeError, KeyError, TypeError, InvalidSpecifier) as error:
+        message = f"pyproject.toml has no usable project.requires-python: {error!r}"
+        raise CoverageContractError(message) from error
 
 
 def read_required_text(path: Path) -> str:
@@ -195,16 +206,16 @@ def _mapping(value: object) -> dict[str, object]:
 
 
 def _required_mapping(value: object, what: str) -> dict[str, object]:
-    """Return ``value`` as a mapping, treating an absent one as empty.
+    """Return ``value`` as a mapping.
 
     Raises
     ------
     CoverageContractError
-        If ``value`` is present but is not a mapping, naming ``what``.
+        If ``value`` is not a mapping, ``None`` included, naming ``what``. A key
+        that is absent is the caller's to skip; a key that is present must hold
+        a mapping.
 
     """
-    if value is None:
-        return {}
     if not isinstance(value, dict):
         message = f"{what} must be a mapping, not {type(value).__name__}"
         raise CoverageContractError(message)
@@ -284,17 +295,16 @@ def coverage_calls(workflow: str, python_version: str = "") -> list[CoverageCall
     Raises
     ------
     CoverageContractError
-        If the text is not YAML, or the workflow, its ``jobs`` or a job is not
-        a mapping, so a wrongly shaped file fails rather than reading as empty.
+        If the text is not YAML, repeats a mapping key, or the workflow, a
+        present ``jobs`` or a job is not a mapping (null included), so a wrongly
+        shaped file fails rather than reading as empty.
 
     """
     try:
-        parsed = yaml.safe_load(workflow)
-    except yaml.YAMLError as error:
-        message = f"not a workflow document: {error}"
-        raise CoverageContractError(message) from error
-    document = _required_mapping(parsed, "a workflow")
-    jobs = _required_mapping(document.get("jobs"), "jobs")
+        document = _required_mapping(load_workflow(workflow), "a workflow")
+    except WorkflowReadingError as error:
+        raise CoverageContractError(str(error)) from error
+    jobs = _required_mapping(document["jobs"], "jobs") if "jobs" in document else {}
     return [
         call
         for name, job in jobs.items()
@@ -319,5 +329,14 @@ def rejected_versions(accepted: SpecifierSet, requested: list[str]) -> list[str]
     list of str
         The requested versions outside ``accepted``, in their original order.
 
+    Raises
+    ------
+    CoverageContractError
+        If a requested version is not a valid version string.
+
     """
-    return [version for version in requested if Version(version) not in accepted]
+    try:
+        return [version for version in requested if Version(version) not in accepted]
+    except InvalidVersion as error:
+        message = f"not a version: {error}"
+        raise CoverageContractError(message) from error

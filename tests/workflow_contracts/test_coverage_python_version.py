@@ -303,8 +303,22 @@ def test_a_python_version_file_is_read_from_the_tree(tmp_path: Path) -> None:
         "jobs:\n  cov: scalar\n",
         "jobs:\n  cov: [x]\n",
         "jobs: [unclosed\n",
+        "jobs:\n",
+        "jobs:\n  cov:\n",
+        "jobs:\n  cov:\n    steps: []\n    steps: []\n",
+        "",
     ],
-    ids=["list-top-level", "scalar-jobs", "scalar-job", "list-job", "not-yaml"],
+    ids=[
+        "list-top-level",
+        "scalar-jobs",
+        "scalar-job",
+        "list-job",
+        "not-yaml",
+        "null-jobs",
+        "null-job",
+        "duplicate-steps",
+        "empty",
+    ],
 )
 def test_a_wrongly_shaped_workflow_is_refused(workflow: str) -> None:
     """A workflow, jobs mapping or job of the wrong shape fails, not reads empty."""
@@ -313,34 +327,60 @@ def test_a_wrongly_shaped_workflow_is_refused(workflow: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "workflow", ["", "jobs:\n", "jobs: {}\n"], ids=["empty", "no-jobs", "empty-jobs"]
+    "workflow",
+    ["on: push\n", "jobs: {}\n"],
+    ids=["no-jobs-key", "empty-jobs"],
 )
 def test_a_workflow_without_jobs_has_no_calls(workflow: str) -> None:
-    """An absent or empty jobs mapping holds no coverage call, and is not an error."""
+    """An absent jobs key or an empty jobs mapping holds no call, and is no error."""
     assert coverage_calls(workflow) == [], f"{workflow!r} should hold no calls"
 
 
-def test_a_required_file_that_is_missing_or_undecodable_fails_loudly(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    ("kind", "cause"),
+    [("missing", FileNotFoundError), ("undecodable", UnicodeDecodeError)],
+    ids=["missing", "undecodable"],
+)
+def test_a_required_file_that_cannot_be_read_fails_loudly(
+    tmp_path: Path, kind: str, cause: type[Exception]
 ) -> None:
-    """A file the contract needs raises a typed error naming it."""
-    undecodable = tmp_path / "bad.yml"
-    undecodable.write_bytes(b"\xff\xfe")
-    for path in (tmp_path / "missing.yml", undecodable):
-        with pytest.raises(CoverageContractError, match=path.name):
-            read_required_text(path)
+    """A file the contract needs raises a typed error naming it, with its cause."""
+    path = tmp_path / f"{kind}.yml"
+    if kind == "undecodable":
+        path.write_bytes(b"\xff\xfe")
+
+    with pytest.raises(CoverageContractError, match=kind) as raised:
+        read_required_text(path)
+
+    assert isinstance(raised.value.__cause__, cause), (
+        f"{kind} should chain {cause.__name__}, got {raised.value.__cause__!r}"
+    )
 
 
-def test_an_optional_file_that_cannot_be_decoded_fails_loudly(tmp_path: Path) -> None:
-    """Only absence reads as absent; an existing file that cannot be read raises."""
-    undecodable = tmp_path / ".python-version"
-    undecodable.write_bytes(b"\xff\xfe")
-    directory = tmp_path / "directory"
-    directory.mkdir()
+@pytest.mark.parametrize(
+    ("kind", "cause"),
+    [("undecodable", UnicodeDecodeError), ("directory", OSError)],
+    ids=["undecodable", "directory"],
+)
+def test_an_optional_file_that_cannot_be_read_fails_loudly(
+    tmp_path: Path, kind: str, cause: type[Exception]
+) -> None:
+    """Only absence reads as absent; a directory or undecodable file raises.
 
-    for path in (undecodable, directory):
-        with pytest.raises(CoverageContractError, match=path.name):
-            read_text_if_present(path)
+    The typed error names the path and keeps the original failure as its cause.
+    """
+    path = tmp_path / kind
+    if kind == "directory":
+        path.mkdir()
+    else:
+        path.write_bytes(b"\xff\xfe")
+
+    with pytest.raises(CoverageContractError, match=kind) as raised:
+        read_text_if_present(path)
+
+    assert isinstance(raised.value.__cause__, cause), (
+        f"{kind} should chain {cause.__name__}, got {raised.value.__cause__!r}"
+    )
 
 
 @pytest.mark.parametrize(
@@ -359,3 +399,34 @@ def test_the_check_rejects_exactly_the_versions_outside_the_range(
     assert rejected_versions(SpecifierSet(specifier), requested) == rejected, (
         f"{requested} against {specifier} should reject {rejected}"
     )
+
+
+@pytest.mark.parametrize(
+    "pyproject",
+    [
+        "not = [valid toml",
+        "[tool.x]\nname = 1\n",
+        "[project]\nname = 'x'\n",
+        "[project]\nrequires-python = 3\n",
+        "[project]\nrequires-python = 'not a specifier'\n",
+    ],
+    ids=[
+        "not-toml",
+        "no-project",
+        "no-requires-python",
+        "not-a-string",
+        "bad-specifier",
+    ],
+)
+def test_a_pyproject_without_a_usable_requires_python_is_refused(
+    pyproject: str,
+) -> None:
+    """A missing or malformed ``requires-python`` fails with the typed error."""
+    with pytest.raises(CoverageContractError):
+        requires_python(pyproject)
+
+
+def test_a_version_that_does_not_parse_is_refused() -> None:
+    """A requested version that is not a version fails with the typed error."""
+    with pytest.raises(CoverageContractError):
+        rejected_versions(SpecifierSet(">=3.12"), ["three.thirteen"])
