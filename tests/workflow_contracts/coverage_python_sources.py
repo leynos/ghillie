@@ -114,9 +114,19 @@ def requires_python(pyproject: str) -> SpecifierSet:
 
     """
     try:
-        return SpecifierSet(tomllib.loads(pyproject)["project"]["requires-python"])
-    except (tomllib.TOMLDecodeError, KeyError, TypeError, InvalidSpecifier) as error:
+        value = tomllib.loads(pyproject)["project"]["requires-python"]
+    except (tomllib.TOMLDecodeError, KeyError, TypeError) as error:
         message = f"pyproject.toml has no usable project.requires-python: {error!r}"
+        raise CoverageContractError(message) from error
+    if not isinstance(value, str):
+        # SpecifierSet also takes an iterable, so `[]` or `{}` would build an
+        # unrestricted set and accept every version.
+        message = f"requires-python must be a string, not {type(value).__name__}"
+        raise CoverageContractError(message)
+    try:
+        return SpecifierSet(value)
+    except InvalidSpecifier as error:
+        message = f"requires-python is not a version specifier: {error}"
         raise CoverageContractError(message) from error
 
 

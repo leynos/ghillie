@@ -465,6 +465,8 @@ def test_the_check_rejects_exactly_the_versions_outside_the_range(
         "[tool.x]\nname = 1\n",
         "[project]\nname = 'x'\n",
         "[project]\nrequires-python = 3\n",
+        "[project]\nrequires-python = []\n",
+        "[project]\nrequires-python = {}\n",
         "[project]\nrequires-python = 'not a specifier'\n",
     ],
     ids=[
@@ -472,6 +474,8 @@ def test_the_check_rejects_exactly_the_versions_outside_the_range(
         "no-project",
         "no-requires-python",
         "not-a-string",
+        "empty-array",
+        "empty-table",
         "bad-specifier",
     ],
 )
