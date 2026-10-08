@@ -132,7 +132,7 @@ nixie: ## Validate Mermaid diagrams
 	$(call ensure_tool,nixie)
 	$(NIXIE) --no-sandbox
 
-test: build uv $(VENV_TOOLS) ## Run tests
+test: build uv $(VENV_TOOLS) test-workflow-contracts ## Run tests
 	$(UV_ENV) uv run pytest -v -n auto
 
 helm-lint: ## Lint the Helm chart
