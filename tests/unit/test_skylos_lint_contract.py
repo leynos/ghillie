@@ -81,7 +81,7 @@ _TEST_TARGET_PREREQUISITES: typ.Final = (
     "makeutil",
     "$(VENV_TOOLS)",
 )
-_TOOL_TOKENS: typ.Final = ("$(MDFORMAT_ALL)", "ruff", "$(MDLINT)", "uv", "makeutil")
+_TOOL_TOKENS: typ.Final = ("$(MDLINT)", "uv", "makeutil")
 _TOOL_PRESENCE_CHECK_TARGETS: typ.Final = ("$(TOOLS)",)
 _TOOL_PRESENCE_CHECK_RECIPE: typ.Final = "$(call ensure_tool,$@)"
 _DOCUMENTED_WHITELIST_NAMES: typ.Final[frozenset[str]] = frozenset()
