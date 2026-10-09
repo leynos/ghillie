@@ -12,6 +12,16 @@ TOOLS = $(MDLINT) uv
 VENV_TOOLS = pytest
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
 
+UV ?= uv
+# The CV-005 CodeScene contracts live in shared-actions and run from a full
+# commit, so a fix is a pin bump. `.github/cv005.toml` holds this repository's
+# only parameters.
+CV005_CONTRACTS_REF ?= 88977798a5c3bae1549afb99642529488c665276
+CV005_CONTRACTS = $(UV_ENV) $(UV) tool run --python 3.13 \
+	--from 'git+https://github.com/leynos/shared-actions@$(CV005_CONTRACTS_REF)\#subdirectory=packages/cv005-contracts' \
+	cv005-contracts
+
+
 # One pinned ruff for every gate. An unpinned `uv tool install ruff` in CI is
 # what turned main red: it followed upstream into a release that formats Python
 # inside Markdown fences, against a tree formatted by an older one.
@@ -21,11 +31,14 @@ RUFF = $(UV_ENV) uv tool run ruff@$(RUFF_VERSION)
 .PHONY: help all clean build build-release check-architecture lint fmt check-fmt \
         markdownlint nixie test typecheck helm-lint helm-test \
         docker-build docker-run spelling spelling-helper-test \
-        $(TOOLS) $(VENV_TOOLS)
+        $(TOOLS) $(VENV_TOOLS) test-workflow-contracts
 
 .DEFAULT_GOAL := all
 
-all: build check-fmt lint typecheck test spelling
+test-workflow-contracts: ## Check the CV-005 CodeScene workflow contracts
+	$(CV005_CONTRACTS) check --repository .
+
+all: build check-fmt lint typecheck test spelling test-workflow-contracts
 
 .venv: pyproject.toml
 	$(UV_ENV) uv venv --clear
@@ -119,7 +132,7 @@ nixie: ## Validate Mermaid diagrams
 	$(call ensure_tool,nixie)
 	$(NIXIE) --no-sandbox
 
-test: build uv $(VENV_TOOLS) ## Run tests
+test: build uv $(VENV_TOOLS) test-workflow-contracts ## Run tests
 	$(UV_ENV) uv run pytest -v -n auto
 
 helm-lint: ## Lint the Helm chart
