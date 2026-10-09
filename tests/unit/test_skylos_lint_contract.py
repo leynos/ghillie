@@ -116,6 +116,9 @@ _MAKEUTIL_INSTALL_TOKENS: typ.Final = (
     "--force",
     "makeutil",
 )
+_MUTMUT_REQUIRED_COPY_PATHS: typ.Final = frozenset(
+    {"Makefile", ".github/workflows/", ".gitignore"}
+)
 _RUNTIME_ENTRY_POINTS: typ.Final = {
     "method": frozenset(
         {
@@ -578,6 +581,22 @@ def test_ci_installs_pinned_makeutil_for_each_full_suite_job() -> None:
             parser_step.get("run"),
             contract=f"{workflow_path} Makeutil-install contract",
         )
+
+
+def test_mutmut_copies_assets_required_by_skylos_contracts() -> None:
+    """Mutation baselines must retain repository-root contract-test inputs."""
+    with (REPOSITORY_ROOT / "pyproject.toml").open("rb") as configuration_file:
+        configuration = tomllib.load(configuration_file)
+    tool = _mapping(configuration.get("tool"), subject="tool configuration")
+    mutmut = _mapping(tool.get("mutmut"), subject="mutmut configuration")
+    copied_paths = frozenset(
+        _text_sequence(mutmut.get("also_copy"), subject="mutmut copied paths")
+    )
+
+    assert copied_paths >= _MUTMUT_REQUIRED_COPY_PATHS, (
+        "mutmut must copy the Makefile, workflow contracts, and gitignore "
+        "required by the Skylos contract tests"
+    )
 
 
 def test_skylos_cache_is_ignored() -> None:

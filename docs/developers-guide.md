@@ -265,6 +265,10 @@ remove an allow-list entry when its dynamic boundary no longer exists.
 
 The Skylos Makefile contract is parsed with pinned Makeutil in
 `tests/unit/test_skylos_lint_contract.py`; `make test` requires that parser.
+Only the Makeutil-dependent parser contract tests skip in isolated runs where
+Makeutil has not been provisioned, such as mutmut; the copied Makefile,
+workflow, and ignore-file contracts still run. Ordinary `make test` retains its
+hard Makeutil prerequisite, and CI and coverage install the pinned binary.
 Before running the full suite locally, install the same pinned toolchain and
 revision used in CI:
 
