@@ -9,6 +9,7 @@ Skylos also parses source with its own Python AST, so the CLI must use Python
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import shlex
@@ -20,6 +21,7 @@ import typing as typ
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import pytest
 import yaml
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
@@ -138,8 +140,14 @@ _RUNTIME_ENTRY_POINTS: typ.Final = {
 }
 
 
+@functools.cache
 def _makefile_report() -> dict[str, object]:
     """Return Makeutil's complete, successfully parsed Makefile report."""
+    if shutil.which(_MAKEUTIL_COMMAND[0]) is None:
+        pytest.skip(
+            "Makeutil-dependent contracts are skipped when the binary is not "
+            "provisioned"
+        )
     completed = subprocess.run(  # noqa: S603 - fixed parser command.
         _MAKEUTIL_COMMAND,
         capture_output=True,
@@ -153,6 +161,39 @@ def _makefile_report() -> dict[str, object]:
         f"Makeutil must complete the Makefile parse, got {parse!r}"
     )
     return report
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _reset_makefile_report_cache() -> typ.Iterator[None]:
+    """Keep the cached report scoped to this module's stable Makefile."""
+    _makefile_report.cache_clear()
+    yield
+    _makefile_report.cache_clear()
+
+
+def test_makefile_report_reuses_its_cached_parse() -> None:
+    """Repeated Makefile lookups should share one Makeutil subprocess result."""
+    _makefile_report.cache_clear()
+    report = _makefile_report()
+    cache_hits = _makefile_report.cache_info().hits
+
+    assert _makefile_report() is report, (
+        "Makeutil contract lookups must reuse the parsed report"
+    )
+    assert _makefile_report.cache_info().hits == cache_hits + 1, (
+        "repeated Makeutil contract lookups must hit the session cache"
+    )
+
+
+def test_makefile_report_skips_when_makeutil_is_not_provisioned(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reusable mutation workflows may omit the external Makeutil binary."""
+    _makefile_report.cache_clear()
+    monkeypatch.setattr(shutil, "which", lambda _: None)
+
+    with pytest.raises(pytest.skip.Exception, match="Makeutil-dependent contracts"):
+        _makefile_report()
 
 
 def _mapping(value: object, *, subject: str) -> dict[str, object]:
