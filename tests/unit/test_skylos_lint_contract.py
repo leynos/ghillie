@@ -82,6 +82,7 @@ _TEST_TARGET_PREREQUISITES: typ.Final = (
     "uv",
     "makeutil",
     "$(VENV_TOOLS)",
+    "test-workflow-contracts",
 )
 _TOOL_TOKENS: typ.Final = ("$(MDLINT)", "uv", "makeutil")
 _TOOL_PRESENCE_CHECK_TARGETS: typ.Final = ("$(TOOLS)",)
@@ -350,7 +351,7 @@ def test_lint_recipe_runs_the_production_dead_code_gate() -> None:
         subject="test target prerequisites",
     )
     assert test_prerequisites == _TEST_TARGET_PREREQUISITES, (
-        "Make test prerequisite contract must require the checked makeutil binary"
+        "Make test prerequisite contract must require Makeutil and workflow contracts"
     )
     assert _variable_tokens("TOOLS") == _TOOL_TOKENS, (
         "Make tool contract must retain makeutil in the checked CLI tool set"
