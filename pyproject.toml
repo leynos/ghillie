@@ -148,10 +148,16 @@ typeCheckingMode = "strict"
 source_paths = ["ghillie/"]
 pytest_add_cli_args_test_selection = ["tests/"]
 # mutmut runs pytest from mutants/; copy the assets tests resolve
-# relative to the repository root: the docs snapshot tests read docs/,
-# the catalogue fixture reads examples/wildside-catalogue.yaml, and the
-# Helm chart tests read charts/ when helm is installed.
-also_copy = ["docs/", "examples/", "charts/"]
+# relative to the repository root, including docs snapshots, catalogue and
+# chart fixtures, and the Skylos Makefile/workflow/ignore-file contracts.
+also_copy = [
+    "docs/",
+    "examples/",
+    "charts/",
+    "Makefile",
+    ".github/workflows/",
+    ".gitignore",
+]
 
 [tool.pytest.ini_options]
 # Tests automatically killed after seconds elapsed
@@ -167,6 +173,35 @@ markers = [
 
 [tool.uv]
 package = true
+
+[tool.skylos.gate]
+strict = true
+
+[[tool.skylos.dead_code.entrypoints]]
+type = "method"
+full_name = [
+    "ghillie.bronze.storage.UTCDateTime.process_bind_param",
+    "ghillie.bronze.storage.UTCDateTime.process_result_value",
+    "ghillie.evidence.event_targets.EventTargetExtractor.extract",
+]
+reason = "SQLAlchemy invokes TypeDecorator hooks, and ProjectEvidenceService invokes the typed extractor instance."
+
+[[tool.skylos.dead_code.entrypoints]]
+type = "parameter"
+full_name = [
+    "ghillie.bronze.storage.UTCDateTime.process_bind_param.dialect",
+    "ghillie.bronze.storage.UTCDateTime.process_result_value.dialect",
+]
+reason = "SQLAlchemy supplies the TypeDecorator dialect argument as part of its bind and result conversion protocol."
+
+[[tool.skylos.dead_code.entrypoints]]
+type = "variable"
+full_name = [
+    "ghillie.bronze.storage.UTCDateTime.impl",
+    "ghillie.bronze.storage.UTCDateTime.cache_ok",
+    "ghillie.evidence.models.ComponentEvidence.component_type",
+]
+reason = "SQLAlchemy reads TypeDecorator configuration, and msgspec serializes ComponentEvidence fields for report consumers."
 
 [tool.hecate]
 root_packages = ["ghillie"]

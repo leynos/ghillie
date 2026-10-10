@@ -252,17 +252,6 @@ def _connection_edges(
     return [edge for edge in edges if isinstance(edge, dict)]
 
 
-def _connection_nodes(
-    connection: dict[str, typ.Any],
-    *,
-    field: str,
-) -> list[dict[str, typ.Any]]:
-    nodes = connection.get("nodes")
-    if not isinstance(nodes, list):
-        raise GitHubResponseShapeError.missing(f"{field}.nodes")
-    return [node for node in nodes if isinstance(node, dict)]
-
-
 def _commit_event_from_node(
     repo: RepositoryInfo,
     node: dict[str, typ.Any],
@@ -558,22 +547,6 @@ def _event_from_edge(
         ),
         False,
     )
-
-
-def _pull_request_node_to_event(
-    repo: RepositoryInfo,
-    edge: dict[str, typ.Any],
-    since: dt.datetime,
-) -> tuple[GitHubIngestedEvent | None, bool]:
-    return _event_from_edge(repo, edge, since, kind="pull_request")
-
-
-def _issue_node_to_event(
-    repo: RepositoryInfo,
-    edge: dict[str, typ.Any],
-    since: dt.datetime,
-) -> tuple[GitHubIngestedEvent | None, bool]:
-    return _event_from_edge(repo, edge, since, kind="issue")
 
 
 def _events_from_nodes(
