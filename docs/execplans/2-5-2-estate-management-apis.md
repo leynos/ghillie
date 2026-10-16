@@ -612,7 +612,7 @@ keys, schema failure, happy path), and `tests/unit/test_estate_service.py`
 ### EP-M3: HTTP endpoints, error mapping, and OpenAPI
 
 Create `ghillie/api/estate/__init__.py`, `ghillie/api/estate/schemas.py`
-(msgspec request structs and response serialisers), and
+(msgspec request structs and response serializers), and
 `ghillie/api/estate/resources.py` with five resources:
 `EstateCollectionResource.on_get`, `CatalogueImportResource.on_post`,
 `RegistrySyncResource.on_post`, `EstateRepositoryCollectionResource.on_get`, and
@@ -747,7 +747,7 @@ Feature: Estate management through the operator CLI and HTTP API
 
 Add `tests/e2e/__init__.py`, `tests/e2e/conftest.py`, and
 `tests/e2e/test_estate_management_e2e.py`. The fixture creates a SQLite file
-database under pytest's `tmp_path`, initialises all storage, picks a free port,
+database under pytest's `tmp_path`, initializes all storage, picks a free port,
 and starts `python -m ghillie.runtime` as a subprocess with
 `GHILLIE_HOST=127.0.0.1`, `GHILLIE_PORT`, `GHILLIE_DATABASE_URL`,
 `GHILLIE_ALLOW_STUB_BROKER=1`, and `GHILLIE_STATUS_MODEL_BACKEND=mock`; it polls
