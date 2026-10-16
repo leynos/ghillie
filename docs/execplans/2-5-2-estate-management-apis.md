@@ -199,6 +199,8 @@ per pull request.
 - [x] (2026-10-16) Expert-panel design review (structure, contracts, failure
   modes, alternatives, verification); verdict "proceed with conditions"; plan
   revised to address every finding (see revision note).
+- [x] (2026-10-16) Opened draft pull request leynos/ghillie#200 for plan
+  review.
 - [ ] Plan approved by a human.
 - [ ] PR-A, EP-M1: sync preserves operator toggles and reports conflicts.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
