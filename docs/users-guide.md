@@ -476,6 +476,34 @@ for repo in active_repos:
 page = await service.list_active_repositories(limit=100, offset=0)
 ```
 
+A toggle survives later catalogue imports and syncs. Sync creates rows, adopts
+unlinked rows, and disables rows that leave the catalogue, but it never
+re-enables a linked row of the estate. A repository that is removed from the
+catalogue and later re-added therefore stays disabled until an operator enables
+it again. The sync result names those repositories:
+
+```python
+result = await service.sync_from_catalogue("wildside")
+print(result.repositories_left_disabled_count)
+print(result.repositories_left_disabled)  # first 100 slugs
+```
+
+If another estate already owns a repository that this estate's catalogue names,
+sync leaves that row untouched and reports the slug in
+`result.repositories_conflicted`. Resolve the overlap by removing the
+repository from one catalogue; sync will not move a row between estates.
+
+A toggle applied to an ad hoc row lasts only until the row is adopted by a
+catalogue entry, at which point the catalogue's active flag takes over.
+
+To preview a sync without changing anything, pass `dry_run=True`. The result
+reports the counts the sync would have produced, and the transaction is rolled
+back:
+
+```python
+preview = await service.sync_from_catalogue("wildside", dry_run=True)
+```
+
 ### Ad hoc repositories
 
 When the Silver transformer encounters events for repositories not in the

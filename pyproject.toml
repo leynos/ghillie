@@ -232,6 +232,7 @@ prefixes = [
     "ghillie.catalogue.models",
     "ghillie.evidence.models",
     "ghillie.registry.models",
+    "ghillie.registry.policy",
     "ghillie.reporting.sink",
     "ghillie.status.metrics",
     "ghillie.status.models",

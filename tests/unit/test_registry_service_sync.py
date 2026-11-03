@@ -9,7 +9,7 @@ import pytest_asyncio
 from sqlalchemy import delete, select
 
 from ghillie.catalogue import CatalogueImporter, RepositoryRecord
-from ghillie.registry import RegistrySyncError
+from ghillie.registry import RegistrySyncError, RepositoryRegistryService
 from ghillie.silver.storage import Repository
 from tests.fixtures.specs import RepositoryCreateSpec
 
@@ -18,7 +18,7 @@ if typ.TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-    from ghillie.registry import RepositoryRegistryService, SyncResult
+    from ghillie.registry import SyncResult
     from tests.fixtures.specs import CreateRepoFn, FetchRepoFn
 
 
@@ -220,3 +220,116 @@ async def test_sync_copies_documentation_paths_from_catalogue(
     assert repo is not None
     assert "docs/roadmap.md" in repo.documentation_paths
     assert "docs/adr/" in repo.documentation_paths
+
+
+@pytest.mark.asyncio
+async def test_sync_preserves_operator_disable(
+    session_factory: async_sessionmaker[AsyncSession],
+    registry_service: RepositoryRegistryService,
+    import_and_sync: typ.Callable[[Path, str], typ.Awaitable[SyncResult]],
+    wildside_catalogue_path: Path,
+) -> None:
+    """A later import and sync must not re-enable an operator-disabled repo."""
+    await import_and_sync(wildside_catalogue_path, "test-preserve-1")
+    assert await registry_service.disable_ingestion("leynos", "wildside") is True
+
+    importer = CatalogueImporter(
+        session_factory, estate_key="test", estate_name="Test Estate"
+    )
+    await importer.import_path(wildside_catalogue_path, commit_sha="test-preserve-2")
+
+    result = await registry_service.sync_from_catalogue("test")
+
+    repo = await fetch_silver_repo(session_factory, "leynos", "wildside")
+    assert repo is not None
+    assert repo.ingestion_enabled is False
+    assert "leynos/wildside" in result.repositories_left_disabled
+    assert result.repositories_left_disabled_count == 1
+
+
+@pytest.mark.asyncio
+async def test_sync_keeps_readded_repository_disabled(
+    session_factory: async_sessionmaker[AsyncSession],
+    registry_service: RepositoryRegistryService,
+    import_and_sync: typ.Callable[[Path, str], typ.Awaitable[SyncResult]],
+    wildside_catalogue_path: Path,
+) -> None:
+    """A repository removed and re-added stays disabled until an operator acts."""
+    await import_and_sync(wildside_catalogue_path, "test-readd-1")
+
+    # Simulate removal: deleting the catalogue record makes the next sync treat
+    # the linked Silver row as removed. Re-importing then recreates the record
+    # with a fresh id, so the Silver row's link is stale but still non-null.
+    async with session_factory() as session, session.begin():
+        await session.execute(
+            delete(RepositoryRecord).where(
+                RepositoryRecord.owner == "leynos",
+                RepositoryRecord.name == "wildside-engine",
+            )
+        )
+    removed = await registry_service.sync_from_catalogue("test")
+    assert removed.repositories_deactivated >= 1
+
+    importer = CatalogueImporter(
+        session_factory, estate_key="test", estate_name="Test Estate"
+    )
+    await importer.import_path(wildside_catalogue_path, commit_sha="test-readd-2")
+
+    readded = await registry_service.sync_from_catalogue("test")
+
+    repo = await fetch_silver_repo(session_factory, "leynos", "wildside-engine")
+    assert repo is not None
+    assert repo.ingestion_enabled is False
+    assert "leynos/wildside-engine" in readded.repositories_left_disabled
+
+
+@pytest.mark.asyncio
+async def test_sync_reports_cross_estate_conflict(
+    session_factory: async_sessionmaker[AsyncSession],
+    create_estates: tuple[str, str],
+    create_repo: CreateRepoFn,
+    wildside_catalogue_path: Path,
+) -> None:
+    """A repository owned by another estate is reported, not stolen or failed."""
+    registry_service = RepositoryRegistryService(session_factory, session_factory)
+    _estate_a_id, estate_b_id = create_estates
+    await create_repo(
+        "leynos",
+        "wildside",
+        spec=RepositoryCreateSpec(
+            ingestion_enabled=True,
+            estate_id=estate_b_id,
+            catalogue_repository_id="cat-repo-b",
+        ),
+    )
+
+    importer = CatalogueImporter(
+        session_factory, estate_key="estate-a", estate_name="Estate A"
+    )
+    await importer.import_path(wildside_catalogue_path, commit_sha="test-conflict-1")
+
+    result = await registry_service.sync_from_catalogue("estate-a")
+
+    assert "leynos/wildside" in result.repositories_conflicted
+    repo = await fetch_silver_repo(session_factory, "leynos", "wildside")
+    assert repo is not None
+    assert repo.estate_id == estate_b_id
+    assert repo.ingestion_enabled is True
+
+
+@pytest.mark.asyncio
+async def test_sync_dry_run_leaves_registry_unchanged(
+    session_factory: async_sessionmaker[AsyncSession],
+    registry_service: RepositoryRegistryService,
+    wildside_catalogue_path: Path,
+) -> None:
+    """A dry-run sync reports the counts it would produce without persisting."""
+    importer = CatalogueImporter(
+        session_factory, estate_key="test", estate_name="Test Estate"
+    )
+    await importer.import_path(wildside_catalogue_path, commit_sha="test-dry-run-1")
+
+    result = await registry_service.sync_from_catalogue("test", dry_run=True)
+
+    assert result.repositories_created >= 1
+    assert await fetch_silver_repo(session_factory, "leynos", "wildside") is None
