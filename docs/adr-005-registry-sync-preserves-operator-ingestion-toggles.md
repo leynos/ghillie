@@ -12,10 +12,10 @@ Accepted (implemented on 2026-11-03)
 
 `RepositoryRegistryService.sync_from_catalogue()` projects catalogue
 repositories into the Silver `repositories` table. Until now it wrote
-`ingestion_enabled = catalogue.is_active` on every sync. An operator who ran
-`ghillie estate repository disable leynos/wildside` therefore had that decision
-silently reverted by the next catalogue import and sync, with no record that
-anything had changed.
+`ingestion_enabled = catalogue.is_active` on every sync. An operator who called
+`RepositoryRegistryService.disable_ingestion("leynos", "wildside")` therefore
+had that decision silently reverted by the next catalogue import and sync, with
+no record that anything had changed.
 
 An import and a sync can follow each other many times a day. The Silver toggle
 is the only per-repository switch the ingestion worker consults, so losing it
