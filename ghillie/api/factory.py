@@ -20,7 +20,9 @@ from __future__ import annotations
 
 import typing as typ
 
+from ghillie.estate.service import EstateManagementService
 from ghillie.evidence import EvidenceBundleService
+from ghillie.registry.service import RepositoryRegistryService
 from ghillie.reporting.config import ReportingConfig
 from ghillie.reporting.observability import ReportingEventLogger
 from ghillie.reporting.service import ReportingService, ReportingServiceDependencies
@@ -31,7 +33,27 @@ if typ.TYPE_CHECKING:
 
     from ghillie.reporting.sink import ReportSink
 
-__all__ = ["build_reporting_service"]
+__all__ = ["build_estate_service", "build_reporting_service"]
+
+
+def build_estate_service(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> EstateManagementService:
+    """Build an ``EstateManagementService`` over one database.
+
+    Parameters
+    ----------
+    session_factory
+        Async session factory for the catalogue and Silver tables.
+
+    Returns
+    -------
+    EstateManagementService
+        A service wired to a registry over the same database.
+
+    """
+    registry = RepositoryRegistryService(session_factory, session_factory)
+    return EstateManagementService(session_factory, registry=registry)
 
 
 def build_reporting_service(
