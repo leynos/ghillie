@@ -306,7 +306,38 @@ per pull request.
       longer says every D28 test drives a sync:
       `test_claim_unowned_repository_is_atomic_under_a_stale_view` calls the
       claim primitive directly.
-- [ ] PR-B, EP-M2: estate port, service, and catalogue query.
+- [x] PR-B, EP-M2: estate port, service, and catalogue queries.
+  - [x] (2026-11-03) Red observed: `test_estate_service.py` hit
+        `NotImplementedError` from the service stub, and the new importer
+        dry-run and rename tests exercised the missing behaviour.
+  - [x] (2026-11-03) Green: `parse_catalogue_text` rejects anchors and aliases
+        in `asyncio.to_thread`; `ghillie.catalogue.queries` reads estates with
+        their latest import; the importer accepts `dry_run` and keeps an
+        existing description on rename (D18); `EstateManagementService`
+        validates keys and pages, serializes import and sync per estate,
+        translates every underlying failure (D17), logs each mutation (D21),
+        and implements dry runs (D20).
+  - [x] (2026-11-03) Focused suites green: 84 tests on SQLite and 53 tests on
+        py-pglite across the models, parser, queries, service, pagination, and
+        importer modules. The O2 walk covers 780 count, filter, and limit
+        combinations.
+  - [x] (2026-11-03) Hecate groups extended for the new ports, application
+        service, and catalogue query adapter; `build_estate_service` provides
+        the production caller.
+  - [x] (2026-11-03) Full gate suite green sequentially: `check-fmt`,
+        `test` (1298 passed, 11 skipped), `markdownlint`, and `nixie` on the
+        candidate. The first `lint`/`typecheck` run failed: Skylos reported
+        six service helpers as dead and `MAX_REQUEST_BODY_BYTES` as unused, and
+        `ty` rejected the importer's transaction annotation and a possibly
+        `None` page offset.
+  - [x] (2026-11-03) Repairs: the importer now annotates
+        `AsyncSessionTransaction` (the type `session.begin()` returns), the
+        pagination test narrows `next_offset` before arithmetic,
+        `MAX_REQUEST_BODY_BYTES` was removed until EP-M3 adds it with its
+        consumer, and a reasoned `type = "function"` Skylos entrypoint rule
+        records that the six helpers have verified runtime callers in
+        `EstateManagementService`. `make lint` and `make typecheck` then
+        passed on the repaired candidate.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
@@ -612,6 +643,26 @@ exercised interleavings in which one estate claims a slug first. A CodeRabbit
 review then found that a dry run could report counts for a sync whose unique
 constraint would fail on commit; flushing before the rollback closes that gap
 and keeps the dry-run contract honest.
+
+### PR-B, EP-M2 (complete)
+
+Outcome: `ghillie.estate` provides the `EstateManagement` protocol and its
+`EstateManagementService`, which composes `CatalogueImporter`,
+`RepositoryRegistryService`, and `ghillie.catalogue.queries`. The service
+validates keys and pages, serializes import and sync per estate, translates
+every underlying failure into the estate error vocabulary, logs each mutation,
+and implements dry runs. `parse_catalogue_text` rejects anchors and aliases off
+the event loop, and the importer keeps an estate's description on rename.
+
+Evidence: red and green runs are recorded in Progress; the focused suites pass
+on SQLite (84 tests) and py-pglite (53 tests), and the O2 walk covers 780
+count, filter, and limit combinations. The full gate suite passed, then the
+dead-code and type repairs described in Progress were re-gated with `make lint`
+and `make typecheck`.
+
+Retrospective: Skylos's liveness graph misses module-private helpers called
+from async methods, so the six false positives needed an entrypoint rule with
+the caller rationale; the rule stays narrow rather than disabling the gate.
 
 ## Context and orientation
 
