@@ -18,6 +18,13 @@ if typ.TYPE_CHECKING:
 MAX_ESTATE_KEY_LENGTH = 64
 MAX_PAGE_LIMIT = 500
 DEFAULT_PAGE_LIMIT = 50
+MAX_REQUEST_BODY_BYTES = 1024 * 1024
+"""Largest catalogue-import or toggle body the HTTP adapter accepts.
+
+The catalogue document is the only unbounded field a client supplies, so one
+megabyte comfortably covers a large estate's YAML while bounding what a single
+request can make the process buffer.
+"""
 
 NEW_ESTATE_KEY_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
 """Pattern a *new* estate key must match.

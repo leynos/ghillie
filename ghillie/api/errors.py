@@ -1,8 +1,9 @@
 """Domain exceptions and Falcon error handlers for the API layer.
 
-This module defines domain-specific exceptions raised by API resources
-and the corresponding Falcon error handler functions that translate them
-into appropriate HTTP responses.
+Every error response shares one envelope (D7): ``title``, ``description``,
+a stable ``code``, and optionally ``field``, ``issues``, or ``max_bytes``.
+Keeping the envelope uniform lets the CLI map a machine-readable ``code`` to
+an actionable hint instead of parsing prose.
 
 Usage
 -----
@@ -26,17 +27,54 @@ import typing as typ
 from http import HTTPStatus
 
 if typ.TYPE_CHECKING:
+    import falcon
     from falcon.asgi import Request, Response
 
+    from ghillie.estate.errors import (
+        CatalogueRejectedError,
+        EstateConflictError,
+        EstateNotFoundError,
+        InvalidEstateKeyError,
+        InvalidPaginationError,
+        RegistrySyncFailedError,
+        StorageUnavailableError,
+    )
+    from ghillie.estate.errors import (
+        RepositoryNotFoundError as EstateRepositoryNotFoundError,
+    )
     from ghillie.reporting.errors import ReportValidationError
 
 __all__ = [
     "InvalidInputError",
+    "PayloadTooLargeError",
     "RepositoryNotFoundError",
+    "handle_catalogue_rejected",
+    "handle_estate_conflict",
+    "handle_estate_not_found",
+    "handle_estate_repository_not_found",
+    "handle_falcon_http_error",
+    "handle_invalid_estate_key",
     "handle_invalid_input",
+    "handle_invalid_pagination",
+    "handle_payload_too_large",
+    "handle_registry_sync_failed",
     "handle_report_validation_failed",
     "handle_repository_not_found",
+    "handle_storage_unavailable",
 ]
+
+# Falcon's own errors still pass through the envelope; this table gives them a
+# stable code where the status has an obvious meaning. Unknown statuses fall
+# back to ``http_<status>`` so a client can still branch on it.
+_HTTP_ERROR_CODES = {
+    HTTPStatus.BAD_REQUEST: "invalid_input",
+    HTTPStatus.UNAUTHORIZED: "unauthorized",
+    HTTPStatus.NOT_FOUND: "not_found",
+    HTTPStatus.METHOD_NOT_ALLOWED: "method_not_allowed",
+    HTTPStatus.REQUEST_ENTITY_TOO_LARGE: "payload_too_large",
+    HTTPStatus.UNSUPPORTED_MEDIA_TYPE: "unsupported_media_type",
+    HTTPStatus.UNPROCESSABLE_ENTITY: "unprocessable_entity",
+}
 
 
 class RepositoryNotFoundError(Exception):
@@ -100,31 +138,58 @@ class InvalidInputError(Exception):
         super().__init__(message)
 
 
+class PayloadTooLargeError(Exception):
+    """Raised when a request body exceeds ``MAX_REQUEST_BODY_BYTES``.
+
+    Attributes
+    ----------
+    max_bytes
+        Largest body the endpoint accepts, echoed so a client can trim the
+        upload without guessing the limit.
+
+    """
+
+    def __init__(self, max_bytes: int) -> None:
+        """Initialize with the accepted body size limit."""
+        self.max_bytes = max_bytes
+        super().__init__(f"Request body must not exceed {max_bytes} bytes.")
+
+
+def _set_error(  # noqa: PLR0913 - the envelope's fields are all distinct.
+    resp: Response,
+    *,
+    status: HTTPStatus | int,
+    title: str,
+    code: str,
+    description: str,
+    extra: dict[str, typ.Any] | None = None,
+) -> None:
+    """Set the shared error envelope on *resp*."""
+    media: dict[str, typ.Any] = {
+        "title": title,
+        "description": description,
+        "code": code,
+    }
+    if extra:
+        media.update(extra)
+    resp.status = status
+    resp.media = media
+
+
 async def handle_repository_not_found(
     _req: Request,
     resp: Response,
     ex: RepositoryNotFoundError,
     _params: dict[str, typ.Any],
 ) -> None:
-    """Map ``RepositoryNotFoundError`` to an HTTP 404 JSON response.
-
-    Parameters
-    ----------
-    _req
-        Falcon request (unused).
-    resp
-        Falcon response whose status and media are set.
-    ex
-        The domain exception containing owner/name details.
-    _params
-        URI template parameters (unused).
-
-    """
-    resp.status = HTTPStatus.NOT_FOUND
-    resp.media = {
-        "title": "Repository not found",
-        "description": str(ex),
-    }
+    """Map ``RepositoryNotFoundError`` to an HTTP 404 JSON response."""
+    _set_error(
+        resp,
+        status=HTTPStatus.NOT_FOUND,
+        title="Repository not found",
+        code="repository_not_found",
+        description=str(ex),
+    )
 
 
 async def handle_invalid_input(
@@ -133,28 +198,199 @@ async def handle_invalid_input(
     ex: InvalidInputError,
     _params: dict[str, typ.Any],
 ) -> None:
-    """Map ``InvalidInputError`` to an HTTP 400 JSON response.
+    """Map ``InvalidInputError`` to an HTTP 400 JSON response."""
+    extra = {"field": ex.field} if ex.field is not None else None
+    _set_error(
+        resp,
+        status=HTTPStatus.BAD_REQUEST,
+        title="Invalid input",
+        code="invalid_input",
+        description=ex.reason,
+        extra=extra,
+    )
 
-    Parameters
-    ----------
-    _req
-        Falcon request (unused).
-    resp
-        Falcon response whose status and media are set.
-    ex
-        The validation exception containing reason and optional field.
-    _params
-        URI template parameters (unused).
 
-    """
-    resp.status = HTTPStatus.BAD_REQUEST
-    media: dict[str, str] = {
-        "title": "Invalid input",
-        "description": ex.reason,
-    }
-    if ex.field is not None:
-        media["field"] = ex.field
-    resp.media = media
+async def handle_payload_too_large(
+    _req: Request,
+    resp: Response,
+    ex: PayloadTooLargeError,
+    _params: dict[str, typ.Any],
+) -> None:
+    """Map ``PayloadTooLargeError`` to an HTTP 413 JSON response."""
+    _set_error(
+        resp,
+        status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+        title="Payload too large",
+        code="payload_too_large",
+        description=str(ex),
+        extra={"max_bytes": ex.max_bytes},
+    )
+
+
+async def handle_estate_not_found(
+    _req: Request,
+    resp: Response,
+    ex: EstateNotFoundError,
+    _params: dict[str, typ.Any],
+) -> None:
+    """Map an unknown estate to an HTTP 404 JSON response."""
+    _set_error(
+        resp,
+        status=HTTPStatus.NOT_FOUND,
+        title="Estate not found",
+        code="estate_not_found",
+        description=str(ex),
+    )
+
+
+async def handle_estate_repository_not_found(
+    _req: Request,
+    resp: Response,
+    ex: EstateRepositoryNotFoundError,
+    _params: dict[str, typ.Any],
+) -> None:
+    """Map an unknown repository to an HTTP 404 JSON response."""
+    _set_error(
+        resp,
+        status=HTTPStatus.NOT_FOUND,
+        title="Repository not found",
+        code="repository_not_found",
+        description=str(ex),
+    )
+
+
+async def handle_invalid_estate_key(
+    _req: Request,
+    resp: Response,
+    ex: InvalidEstateKeyError,
+    _params: dict[str, typ.Any],
+) -> None:
+    """Map a rejected estate key to an HTTP 400 JSON response."""
+    _set_error(
+        resp,
+        status=HTTPStatus.BAD_REQUEST,
+        title="Invalid input",
+        code="invalid_input",
+        description=ex.reason,
+        extra={"field": "estate_key"},
+    )
+
+
+async def handle_invalid_pagination(
+    _req: Request,
+    resp: Response,
+    ex: InvalidPaginationError,
+    _params: dict[str, typ.Any],
+) -> None:
+    """Map an out-of-range page limit or offset to HTTP 400."""
+    _set_error(
+        resp,
+        status=HTTPStatus.BAD_REQUEST,
+        title="Invalid input",
+        code="invalid_input",
+        description=ex.reason,
+        extra={"field": ex.field},
+    )
+
+
+async def handle_catalogue_rejected(
+    _req: Request,
+    resp: Response,
+    ex: CatalogueRejectedError,
+    _params: dict[str, typ.Any],
+) -> None:
+    """Map catalogue validation issues to an HTTP 422 JSON response."""
+    _set_error(
+        resp,
+        status=HTTPStatus.UNPROCESSABLE_ENTITY,
+        title="Catalogue invalid",
+        code="catalogue_invalid",
+        description="The catalogue document failed validation.",
+        extra={
+            "issues": [
+                {"code": issue.code, "message": issue.message} for issue in ex.issues
+            ]
+        },
+    )
+
+
+async def handle_estate_conflict(
+    _req: Request,
+    resp: Response,
+    ex: EstateConflictError,
+    _params: dict[str, typ.Any],
+) -> None:
+    """Map a uniqueness conflict to an HTTP 409 JSON response."""
+    _set_error(
+        resp,
+        status=HTTPStatus.CONFLICT,
+        title="Conflict",
+        code="conflict",
+        description=str(ex) or "The write conflicts with an existing record.",
+    )
+
+
+async def handle_storage_unavailable(
+    _req: Request,
+    resp: Response,
+    ex: StorageUnavailableError,
+    _params: dict[str, typ.Any],
+) -> None:
+    """Map an unreachable database to an HTTP 503 JSON response."""
+    _set_error(
+        resp,
+        status=HTTPStatus.SERVICE_UNAVAILABLE,
+        title="Storage unavailable",
+        code="storage_unavailable",
+        description=str(ex) or "Storage is unavailable.",
+    )
+
+
+async def handle_registry_sync_failed(
+    _req: Request,
+    resp: Response,
+    ex: RegistrySyncFailedError,
+    _params: dict[str, typ.Any],
+) -> None:
+    """Map an unexpected sync failure to an HTTP 500 JSON response."""
+    _set_error(
+        resp,
+        status=HTTPStatus.INTERNAL_SERVER_ERROR,
+        title="Registry sync failed",
+        code="registry_sync_failed",
+        description=str(ex) or "The registry sync failed.",
+    )
+
+
+async def handle_falcon_http_error(
+    _req: Request,
+    resp: Response,
+    ex: falcon.HTTPError,
+    _params: dict[str, typ.Any],
+) -> None:
+    """Render Falcon's own HTTP errors through the shared envelope."""
+    status_code = ex.status_code
+    try:
+        status = HTTPStatus(status_code)
+    except ValueError:
+        # Falcon allows a non-standard numeric status; render it as-is.
+        status = status_code
+    code = _HTTP_ERROR_CODES.get(status)
+    if code is None:
+        code = f"http_{status_code}"
+    # Falcon attaches headers such as ``WWW-Authenticate`` to the error; the
+    # envelope handler must copy them or a 401 would lose its challenge.
+    if ex.headers:
+        headers = typ.cast("dict[str, str]", ex.headers)
+        for name, value in headers.items():
+            resp.set_header(name, value)
+    _set_error(
+        resp,
+        status=status,
+        title=ex.title,
+        code=code,
+        description=ex.description or ex.title,
+    )
 
 
 async def handle_report_validation_failed(
@@ -163,24 +399,12 @@ async def handle_report_validation_failed(
     ex: ReportValidationError,
     _params: dict[str, typ.Any],
 ) -> None:
-    """Map ``ReportValidationError`` to an HTTP 422 JSON response.
-
-    Parameters
-    ----------
-    _req
-        Falcon request (unused).
-    resp
-        Falcon response whose status and media are set.
-    ex
-        The validation exception containing issues and review_id.
-    _params
-        URI template parameters (unused).
-
-    """
+    """Map ``ReportValidationError`` to an HTTP 422 JSON response."""
     resp.status = HTTPStatus.UNPROCESSABLE_ENTITY
     resp.media = {
         "title": "Report validation failed",
         "description": "Generated report failed correctness checks after retries.",
+        "code": "report_validation_failed",
         "review_id": ex.review_id,
         "issues": [
             {"code": issue.code, "message": issue.message} for issue in ex.issues
