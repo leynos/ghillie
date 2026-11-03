@@ -546,8 +546,7 @@ components:
           type: string
           description: Display name stored for the estate.
         description:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: Optional estate description.
         last_import:
           oneOf:
@@ -578,8 +577,7 @@ components:
           type: boolean
           description: Whether another page exists.
         next_offset:
-          type: integer
-          nullable: true
+          type: [integer, "null"]
           description: Offset of the next page, or null.
     CatalogueImportRequest:
       type: object
@@ -644,8 +642,7 @@ components:
         skipped:
           type: boolean
         skipped_reason:
-          type: string
-          nullable: true
+          type: [string, "null"]
         registry_sync_required:
           type: boolean
         projects:
@@ -738,8 +735,7 @@ components:
         has_more:
           type: boolean
         next_offset:
-          type: integer
-          nullable: true
+          type: [integer, "null"]
     IngestionToggleRequest:
       type: object
       additionalProperties: false

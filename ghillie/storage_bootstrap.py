@@ -5,10 +5,12 @@ touch the schema by default. Setting ``GHILLIE_DB_BOOTSTRAP=create-all``
 instead asks every replica to create any missing tables at start-up, which is
 what a single-container or compose deployment needs.
 
-``create_all`` is idempotent: it checks for an existing table before issuing
-``CREATE TABLE``. Replicas that start together may therefore race harmlessly;
-the loser's duplicate-table error is not retried because PostgreSQL and SQLite
-both treat the surviving table as authoritative.
+``create_all`` checks for an existing table before issuing ``CREATE TABLE``.
+Those two steps are not atomic, so replicas that start together can both see a
+missing table and race on the DDL. PostgreSQL may fail the loser with a
+duplicate-table error; that replica fails its start-up and the orchestrator
+restarts it, at which point the table exists. Prefer a single bootstrap replica
+or managed migrations when the platform cannot tolerate that restart.
 """
 
 from __future__ import annotations

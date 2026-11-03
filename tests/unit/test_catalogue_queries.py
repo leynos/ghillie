@@ -48,7 +48,9 @@ async def test_list_estates_is_empty_initially(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     """An empty database lists no estates."""
-    assert await list_estates(session_factory, limit=10, offset=0) == []
+    assert await list_estates(session_factory, limit=10, offset=0) == [], (
+        "an empty database should list no estates"
+    )
 
 
 @pytest.mark.asyncio
@@ -61,7 +63,7 @@ async def test_list_estates_orders_by_key_and_pages(
 
     page = await list_estates(session_factory, limit=2, offset=1)
 
-    assert [row.key for row in page] == ["beta", "gamma"]
+    assert [row.key for row in page] == ["beta", "gamma"], "offset follows key order"
 
 
 @pytest.mark.asyncio
@@ -85,14 +87,14 @@ async def test_list_estates_includes_the_latest_import(
 
     [row] = await list_estates(session_factory, limit=10, offset=0)
 
-    assert row.key == "alpha"
-    assert row.name == "Alpha"
-    assert row.last_import_commit_sha == "newer"
-    assert row.last_imported_at is not None
+    assert row.key == "alpha", "row should carry the estate key"
+    assert row.name == "Alpha", "row should carry the estate name"
+    assert row.last_import_commit_sha == "newer", "row should carry the newest commit"
+    assert row.last_imported_at is not None, "latest import timestamp should be present"
     # SQLite drops tzinfo; compare the wall-clock value so both backends agree.
     assert row.last_imported_at.replace(tzinfo=None) == dt.datetime(  # noqa: DTZ001 - compares wall-clock values.
         2026, 2, 1
-    )
+    ), "latest import should use the newest timestamp"
 
 
 @pytest.mark.asyncio
@@ -104,9 +106,9 @@ async def test_list_estates_keeps_estates_without_imports(
 
     [row] = await list_estates(session_factory, limit=10, offset=0)
 
-    assert row.description == "Demo estate"
-    assert row.last_import_commit_sha is None
-    assert row.last_imported_at is None
+    assert row.description == "Demo estate", "row should carry the estate description"
+    assert row.last_import_commit_sha is None, "no commit without an import"
+    assert row.last_imported_at is None, "no timestamp without an import"
 
 
 @pytest.mark.asyncio
@@ -124,10 +126,10 @@ async def test_get_estate_by_key_returns_the_row(
 
     row = await get_estate_by_key(session_factory, "alpha")
 
-    assert row is not None
-    assert row.id == estate.id
-    assert row.name == "Alpha"
-    assert row.last_import_commit_sha == "abc123"
+    assert row is not None, "known key should resolve to a row"
+    assert row.id == estate.id, "row should carry the estate id"
+    assert row.name == "Alpha", "row should carry the estate name"
+    assert row.last_import_commit_sha == "abc123", "row should carry the newest commit"
 
 
 @pytest.mark.asyncio
@@ -135,7 +137,9 @@ async def test_get_estate_by_key_returns_none_for_unknown_keys(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     """An unknown key resolves to ``None``."""
-    assert await get_estate_by_key(session_factory, "missing") is None
+    assert await get_estate_by_key(session_factory, "missing") is None, (
+        "unknown key should resolve to nothing"
+    )
 
 
 def test_estate_row_is_immutable() -> None:

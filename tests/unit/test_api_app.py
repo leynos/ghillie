@@ -16,60 +16,7 @@ import falcon.testing
 import pytest
 
 from ghillie.api.app import AppDependencies, create_app
-from ghillie.estate.models import (
-    CatalogueImportSummary,
-    EstateSummary,
-    IngestionToggleOutcome,
-    Page,
-    PageRequest,
-    RegistrySyncSummary,
-    RepositoryPage,
-    RepositoryQuery,
-)
-
-
-class _EmptyEstateService:
-    """Estate port double that returns an empty first page."""
-
-    async def list_estates(self, page: PageRequest) -> Page[EstateSummary]:
-        """Return an empty page."""
-        return Page(
-            items=(),
-            limit=page.limit,
-            offset=page.offset,
-            has_more=False,
-            next_offset=None,
-        )
-
-    async def import_catalogue(  # noqa: PLR0913 - mirrors the port signature.
-        self,
-        estate_key: str,
-        *,
-        catalogue_yaml: str,
-        commit_sha: str,
-        estate_name: str | None,
-        dry_run: bool,
-    ) -> CatalogueImportSummary:
-        """Not exercised by these tests."""
-        raise NotImplementedError
-
-    async def sync_registry(
-        self, estate_key: str, *, dry_run: bool
-    ) -> RegistrySyncSummary:
-        """Not exercised by these tests."""
-        raise NotImplementedError
-
-    async def list_repositories(
-        self, estate_key: str, query: RepositoryQuery
-    ) -> RepositoryPage:
-        """Not exercised by these tests."""
-        raise NotImplementedError
-
-    async def set_ingestion(
-        self, owner: str, name: str, *, enabled: bool
-    ) -> IngestionToggleOutcome:
-        """Not exercised by these tests."""
-        raise NotImplementedError
+from tests.unit.estate_test_helpers import EmptyEstateManagement
 
 
 @pytest.fixture
@@ -161,7 +108,7 @@ class TestCreateAppEstateRoutes:
     def test_estate_only_app_registers_estate_routes(self) -> None:
         """An estate service alone exposes the estate family."""
         client = falcon.testing.TestClient(
-            create_app(AppDependencies(estate_service=_EmptyEstateService()))
+            create_app(AppDependencies(estate_service=EmptyEstateManagement()))
         )
 
         assert client.simulate_get("/estates").status_code == HTTPStatus.OK
@@ -191,7 +138,7 @@ class TestCreateAppEstateRoutes:
                 AppDependencies(
                     session_factory=deps.session_factory,
                     reporting_service=deps.reporting_service,
-                    estate_service=_EmptyEstateService(),
+                    estate_service=EmptyEstateManagement(),
                 )
             )
         )

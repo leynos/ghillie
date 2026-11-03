@@ -98,11 +98,22 @@ def _assert_error(
     """Assert a structured error body and return it."""
     assert result.status_code == status, result.text
     body = result.json
-    assert body["code"] == code
-    assert isinstance(body["title"], str)
-    assert body["title"]
-    assert isinstance(body["description"], str)
+    assert body["code"] == code, "error body should carry the expected code"
+    assert isinstance(body["title"], str), "title should be a string"
+    assert body["title"], "title should be present"
+    assert isinstance(body["description"], str), "description should be a string"
     return body
+
+
+def test_unexpected_error_uses_the_envelope() -> None:
+    """An unhandled exception still yields the shared 500 body (D7)."""
+    result = _client(RuntimeError("boom")).simulate_get("/estates")
+
+    body = _assert_error(result, status=500, code="internal_error")
+    assert "boom" not in result.text, "internal errors must not leak details"
+    assert body["description"] == "An unexpected error occurred.", (
+        "description should use the generic message"
+    )
 
 
 def test_invalid_estate_key_is_invalid_input() -> None:
@@ -113,7 +124,7 @@ def test_invalid_estate_key_is_invalid_input() -> None:
     )
 
     body = _assert_error(result, status=400, code="invalid_input")
-    assert body["field"] == "estate_key"
+    assert body["field"] == "estate_key", "error should name the estate key"
 
 
 def test_invalid_pagination_is_invalid_input() -> None:
@@ -122,8 +133,10 @@ def test_invalid_pagination_is_invalid_input() -> None:
     result = _client(error).simulate_get("/estates", params={"limit": "0"})
 
     body = _assert_error(result, status=400, code="invalid_input")
-    assert body["field"] == "limit"
-    assert body["description"] == "must be between 1 and 500"
+    assert body["field"] == "limit", "error should name the limit field"
+    assert body["description"] == "must be between 1 and 500", (
+        "description should explain the limit"
+    )
 
 
 def test_catalogue_rejected_is_unprocessable() -> None:
@@ -142,7 +155,7 @@ def test_catalogue_rejected_is_unprocessable() -> None:
     assert body["issues"] == [
         {"code": "catalogue_schema", "message": "projects: required"},
         {"code": "catalogue_schema", "message": "components: invalid"},
-    ]
+    ], "issues should list both failures"
 
 
 def test_estate_not_found() -> None:
@@ -151,7 +164,7 @@ def test_estate_not_found() -> None:
     result = _client(error).simulate_post("/estates/missing/registry-sync")
 
     body = _assert_error(result, status=404, code="estate_not_found")
-    assert "missing" in body["description"]
+    assert "missing" in body["description"], "description should name the estate"
 
 
 def test_repository_not_found() -> None:
@@ -164,7 +177,7 @@ def test_repository_not_found() -> None:
     )
 
     body = _assert_error(result, status=404, code="repository_not_found")
-    assert "org/alpha" in body["description"]
+    assert "org/alpha" in body["description"], "description should name the repository"
 
 
 def test_conflict() -> None:
@@ -212,5 +225,5 @@ def test_falcon_http_error_keeps_its_description() -> None:
     result = _client(StorageUnavailableError("unused")).simulate_get("/nope")
 
     body = result.json
-    assert body["title"]
-    assert body["description"]
+    assert body["title"], "fallback title should be present"
+    assert body["description"], "fallback description should be present"

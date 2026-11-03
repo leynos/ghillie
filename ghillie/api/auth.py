@@ -82,7 +82,12 @@ class BearerTokenMiddleware:
         if self._token is None or req.path in _UNAUTHENTICATED_PATHS:
             return
         supplied = _bearer_token(req.get_header("Authorization") or "")
-        if supplied is not None and hmac.compare_digest(supplied, self._token):
+        # Compare bytes: ``hmac.compare_digest`` raises TypeError for
+        # non-ASCII strings, and an unauthenticated client can send a Latin-1
+        # header value that Falcon decodes into one.
+        if supplied is not None and hmac.compare_digest(
+            supplied.encode("utf-8"), self._token.encode("utf-8")
+        ):
             return
         # The challenge makes the 401 self-describing to a generic client and
         # matches the bearer scheme documented in the OpenAPI description.

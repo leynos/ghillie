@@ -49,6 +49,7 @@ from ghillie.api.errors import (
     handle_report_validation_failed,
     handle_repository_not_found,
     handle_storage_unavailable,
+    handle_unexpected_error,
 )
 from ghillie.api.health.resources import HealthResource, ReadyResource
 from ghillie.estate.errors import (
@@ -223,6 +224,9 @@ def _register_error_handlers(app: falcon.asgi.App) -> None:
     app.add_error_handler(StorageUnavailableError, handle_storage_unavailable)
     app.add_error_handler(RegistrySyncFailedError, handle_registry_sync_failed)
     app.add_error_handler(falcon.HTTPError, handle_falcon_http_error)
+    # Every failure reaching a client must use the envelope, including one no
+    # domain handler anticipated.
+    app.add_error_handler(Exception, handle_unexpected_error)
 
 
 def create_app(
