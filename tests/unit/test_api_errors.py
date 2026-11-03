@@ -83,6 +83,11 @@ class TestRepositoryNotFoundError:
         result = client.simulate_get("/not-found")
         assert result.json["title"] == "Repository not found", "wrong title"
 
+    def test_response_body_has_code(self, client: falcon.testing.TestClient) -> None:
+        """Response body carries the stable repository error code (D7)."""
+        result = client.simulate_get("/not-found")
+        assert result.json["code"] == "repository_not_found", "wrong code"
+
 
 class TestInvalidInputHandler:
     """Tests for InvalidInputError and its handler."""
@@ -103,6 +108,11 @@ class TestInvalidInputHandler:
         """Response body includes an 'Invalid input' title."""
         result = client.simulate_get("/bad-request")
         assert result.json["title"] == "Invalid input", "wrong title"
+
+    def test_response_body_has_code(self, client: falcon.testing.TestClient) -> None:
+        """Response body carries the stable invalid-input code (D7)."""
+        result = client.simulate_get("/bad-request")
+        assert result.json["code"] == "invalid_input", "wrong code"
 
     def test_response_omits_field_when_none(
         self, client: falcon.testing.TestClient

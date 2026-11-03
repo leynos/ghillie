@@ -195,6 +195,17 @@ full_name = [
 reason = "SQLAlchemy supplies the TypeDecorator dialect argument as part of its bind and result conversion protocol."
 
 [[tool.skylos.dead_code.entrypoints]]
+type = "parameter"
+full_name = [
+    "ghillie.api.auth.BearerTokenMiddleware.process_request.resp",
+    "ghillie.api.auth.BearerTokenMiddleware.process_response.req",
+    "ghillie.api.auth.BearerTokenMiddleware.process_response.resp",
+    "ghillie.api.auth.BearerTokenMiddleware.process_response.resource",
+    "ghillie.api.auth.BearerTokenMiddleware.process_response.req_succeeded",
+]
+reason = "Falcon passes these middleware hooks the request, response, resource, and success flag positionally; the bearer-token check only needs the request and must keep the names its protocol declares."
+
+[[tool.skylos.dead_code.entrypoints]]
 type = "function"
 full_name = [
     "ghillie.estate.service._elapsed_ms",
@@ -227,6 +238,7 @@ prefixes = [
     "ghillie.reporting.actor",
     "ghillie.runtime",
     "ghillie.status.factory",
+    "ghillie.storage_bootstrap",
 ]
 allowed = [
     "application",

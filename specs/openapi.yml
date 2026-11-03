@@ -3,9 +3,11 @@ info:
   title: Ghillie Runtime API
   version: 0.1.0
   description: >-
-    HTTP surface for Kubernetes probes and on-demand report generation.
-    Health endpoints are always available; report generation requires
-    database dependencies to be configured.
+    HTTP surface for Kubernetes probes, estate management, and on-demand
+    report generation. Health endpoints are always available; the estate
+    endpoints require a database, and report generation additionally requires
+    a status backend. Every failure uses one structured envelope with a
+    stable ``code`` so the CLI can map errors to actionable hints.
 servers:
   - url: http://{host}:{port}
     description: Runtime server
@@ -17,10 +19,12 @@ servers:
         default: "8080"
         description: TCP port for the runtime server.
 security:
-  - ApiKeyAuth: []
+  - BearerAuth: []
 tags:
   - name: Health
     description: Kubernetes liveness and readiness probes.
+  - name: Estates
+    description: Estate catalogue import, registry sync, and repository control.
   - name: Reports
     description: On-demand report generation endpoints.
 paths:
@@ -60,8 +64,197 @@ paths:
                 ready:
                   value:
                     status: ready
+  /estates:
+    get:
+      operationId: listEstates
+      summary: List estates
+      description: Returns a page of estates and their most recent import.
+      tags:
+        - Estates
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: A page of estates.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EstateListResponse"
+        "400":
+          $ref: "#/components/responses/InvalidInput"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
+  /estates/{estate_key}/catalogue-import:
+    post:
+      operationId: importCatalogue
+      summary: Import a catalogue document
+      description: >-
+        Parses an uploaded catalogue YAML document and imports it into the
+        estate. Unknown estates are created. A dry run validates and reports
+        counts without writing anything.
+      tags:
+        - Estates
+      parameters:
+        - $ref: "#/components/parameters/EstateKey"
+        - $ref: "#/components/parameters/DryRun"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CatalogueImportRequest"
+      responses:
+        "200":
+          description: The catalogue was imported.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogueImportResponse"
+        "400":
+          $ref: "#/components/responses/InvalidInput"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "422":
+          $ref: "#/components/responses/CatalogueRejected"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
+  /estates/{estate_key}/registry-sync:
+    post:
+      operationId: syncRegistry
+      summary: Synchronize the repository registry
+      description: >-
+        Projects the estate's imported catalogue into the repository registry,
+        creating, updating, and deactivating repositories as required.
+      tags:
+        - Estates
+      parameters:
+        - $ref: "#/components/parameters/EstateKey"
+        - $ref: "#/components/parameters/DryRun"
+      responses:
+        "200":
+          description: The registry was synchronized.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegistrySyncResponse"
+        "400":
+          $ref: "#/components/responses/InvalidInput"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/EstateNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
+  /estates/{estate_key}/repositories:
+    get:
+      operationId: listEstateRepositories
+      summary: List an estate's repositories
+      description: Returns a page of the repositories registered for an estate.
+      tags:
+        - Estates
+      parameters:
+        - $ref: "#/components/parameters/EstateKey"
+        - name: ingestion_enabled
+          in: query
+          required: false
+          description: Filter by ingestion state.
+          schema:
+            type: boolean
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: A page of repositories.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepositoryListResponse"
+        "400":
+          $ref: "#/components/responses/InvalidInput"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/EstateNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
+  /repositories/{owner}/{name}/ingestion:
+    patch:
+      operationId: setRepositoryIngestion
+      summary: Set repository ingestion
+      description: Enables or disables ingestion for one registered repository.
+      tags:
+        - Estates
+      parameters:
+        - name: owner
+          in: path
+          required: true
+          schema:
+            type: string
+          description: GitHub repository owner.
+          example: acme
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: GitHub repository name.
+          example: widgets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IngestionToggleRequest"
+          application/merge-patch+json:
+            schema:
+              $ref: "#/components/schemas/IngestionToggleRequest"
+      responses:
+        "200":
+          description: The ingestion flag was updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestionToggleResponse"
+        "400":
+          $ref: "#/components/responses/InvalidInput"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/RepositoryNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "422":
+          $ref: "#/components/responses/InvalidInput"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
   /reports/repositories/{owner}/{name}:
     post:
+      operationId: generateReport
       summary: Generate on-demand repository report
       description: >-
         Triggers report generation for the specified repository using the
@@ -116,6 +309,7 @@ paths:
                   value:
                     title: Invalid input
                     description: "owner: must not be empty"
+                    code: invalid_input
         "404":
           description: Repository not found.
           content:
@@ -127,15 +321,138 @@ paths:
                   value:
                     title: Repository not found
                     description: "No repository matching 'acme/widgets' exists."
+                    code: repository_not_found
+        "422":
+          description: The generated report failed validation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                validation_failed:
+                  value:
+                    title: Report validation failed
+                    description: >-
+                      Generated report failed correctness checks after retries.
+                    code: report_validation_failed
+                    issues:
+                      - code: empty_summary
+                        message: Summary is empty
 components:
   securitySchemes:
-    ApiKeyAuth:
-      type: apiKey
-      in: header
-      name: Authorization
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
       description: >-
-        Placeholder authentication scheme for future endpoints. Health and
-        readiness endpoints explicitly opt out of authentication.
+        Shared bearer token read from ``GHILLIE_API_TOKEN``. Health and
+        readiness endpoints explicitly opt out of authentication because
+        orchestrators cannot be expected to hold the token.
+  parameters:
+    EstateKey:
+      name: estate_key
+      in: path
+      required: true
+      description: Estate identifier.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+      example: demo
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Maximum number of items to return.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 500
+        default: 50
+    Offset:
+      name: offset
+      in: query
+      required: false
+      description: Number of items to skip.
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    DryRun:
+      name: dry_run
+      in: query
+      required: false
+      description: Validate and report counts without writing anything.
+      schema:
+        type: boolean
+        default: false
+  responses:
+    InvalidInput:
+      description: The request is malformed or a parameter is invalid.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: A valid bearer token is required.
+      headers:
+        WWW-Authenticate:
+          description: Authentication challenge.
+          schema:
+            type: string
+            example: Bearer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    EstateNotFound:
+      description: The estate does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    RepositoryNotFound:
+      description: The repository does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: The write conflicts with an existing record.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    PayloadTooLarge:
+      description: The request body exceeds the accepted size.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    UnsupportedMediaType:
+      description: The request media type is not supported.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    CatalogueRejected:
+      description: The catalogue document failed validation.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalError:
+      description: An unexpected server error occurred.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    StorageUnavailable:
+      description: The database is unreachable.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
   schemas:
     BaseStatus:
       type: object
@@ -159,6 +476,297 @@ components:
           properties:
             status:
               const: ready
+    ErrorResponse:
+      type: object
+      required:
+        - title
+        - description
+        - code
+      properties:
+        title:
+          type: string
+          description: Short error title.
+        description:
+          type: string
+          description: Human-readable error description.
+        code:
+          type: string
+          description: Stable machine-readable error code.
+        field:
+          type: string
+          description: >-
+            Name of the input field that caused the error. Only present
+            for validation errors that relate to a specific field.
+        issues:
+          type: array
+          description: Validation problems, when more than one was found.
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - code
+              - message
+            properties:
+              code:
+                type: string
+                description: Stable identifier for the kind of problem.
+              message:
+                type: string
+                description: Human-readable explanation.
+        max_bytes:
+          type: integer
+          description: Largest accepted request body, present on 413 responses.
+    LastImportResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - commit_sha
+        - imported_at
+      properties:
+        commit_sha:
+          type: string
+          description: Commit the imported catalogue was read from.
+        imported_at:
+          type: string
+          format: date-time
+          description: When the import completed.
+    EstateSummaryResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - key
+        - name
+        - description
+        - last_import
+      properties:
+        key:
+          type: string
+          description: Estate identifier.
+        name:
+          type: string
+          description: Display name stored for the estate.
+        description:
+          type: string
+          nullable: true
+          description: Optional estate description.
+        last_import:
+          oneOf:
+            - $ref: "#/components/schemas/LastImportResponse"
+            - type: "null"
+          description: Most recent successful import, or null.
+    EstateListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - limit
+        - offset
+        - has_more
+        - next_offset
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/EstateSummaryResponse"
+        limit:
+          type: integer
+          description: Page size that was applied.
+        offset:
+          type: integer
+          description: Offset that was applied.
+        has_more:
+          type: boolean
+          description: Whether another page exists.
+        next_offset:
+          type: integer
+          nullable: true
+          description: Offset of the next page, or null.
+    CatalogueImportRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - commit_sha
+        - catalogue_yaml
+      properties:
+        commit_sha:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: Commit the catalogue document was read from.
+        catalogue_yaml:
+          type: string
+          description: Catalogue document as YAML text.
+        estate_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: >-
+            Display name to store for the estate. When omitted, an existing
+            name is kept and a new estate is named after its key.
+    CountResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - created
+        - updated
+        - deleted
+      properties:
+        created:
+          type: integer
+        updated:
+          type: integer
+        deleted:
+          type: integer
+    CatalogueImportResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - estate_key
+        - commit_sha
+        - state
+        - dry_run
+        - skipped
+        - skipped_reason
+        - registry_sync_required
+        - projects
+        - components
+        - repositories
+        - edges
+      properties:
+        estate_key:
+          type: string
+        commit_sha:
+          type: string
+        state:
+          type: string
+        dry_run:
+          type: boolean
+        skipped:
+          type: boolean
+        skipped_reason:
+          type: string
+          nullable: true
+        registry_sync_required:
+          type: boolean
+        projects:
+          $ref: "#/components/schemas/CountResponse"
+        components:
+          $ref: "#/components/schemas/CountResponse"
+        repositories:
+          $ref: "#/components/schemas/CountResponse"
+        edges:
+          $ref: "#/components/schemas/CountResponse"
+    RegistrySyncResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - estate_key
+        - state
+        - dry_run
+        - repositories_created
+        - repositories_updated
+        - repositories_deactivated
+        - repositories_conflicted
+        - repositories_left_disabled
+        - repositories_left_disabled_count
+      properties:
+        estate_key:
+          type: string
+        state:
+          type: string
+        dry_run:
+          type: boolean
+        repositories_created:
+          type: integer
+        repositories_updated:
+          type: integer
+        repositories_deactivated:
+          type: integer
+        repositories_conflicted:
+          type: array
+          items:
+            type: string
+        repositories_left_disabled:
+          type: array
+          items:
+            type: string
+        repositories_left_disabled_count:
+          type: integer
+    RepositoryResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - owner
+        - name
+        - default_branch
+        - ingestion_enabled
+        - documentation_paths
+      properties:
+        owner:
+          type: string
+        name:
+          type: string
+        default_branch:
+          type: string
+        ingestion_enabled:
+          type: boolean
+        documentation_paths:
+          type: array
+          items:
+            type: string
+    RepositoryListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - estate_key
+        - items
+        - limit
+        - offset
+        - has_more
+        - next_offset
+      properties:
+        estate_key:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RepositoryResponse"
+        limit:
+          type: integer
+        offset:
+          type: integer
+        has_more:
+          type: boolean
+        next_offset:
+          type: integer
+          nullable: true
+    IngestionToggleRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - ingestion_enabled
+      properties:
+        ingestion_enabled:
+          type: boolean
+          description: Whether ingestion should be enabled.
+    IngestionToggleResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - owner
+        - name
+        - ingestion_enabled
+        - changed
+      properties:
+        owner:
+          type: string
+        name:
+          type: string
+        ingestion_enabled:
+          type: boolean
+        changed:
+          type: boolean
+          description: Whether the stored value differed from the request.
     ReportMetadata:
       type: object
       additionalProperties: false
@@ -195,20 +803,3 @@ components:
         model:
           type: string
           description: Identifier of the model that generated the report.
-    ErrorResponse:
-      type: object
-      required:
-        - title
-        - description
-      properties:
-        title:
-          type: string
-          description: Short error title.
-        description:
-          type: string
-          description: Human-readable error description.
-        field:
-          type: string
-          description: >-
-            Name of the input field that caused the error. Only present
-            for validation errors that relate to a specific field.

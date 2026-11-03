@@ -121,6 +121,16 @@ _MUTMUT_REQUIRED_COPY_PATHS: typ.Final = frozenset(
     {"Makefile", ".github/workflows/", ".gitignore"}
 )
 _RUNTIME_ENTRY_POINTS: typ.Final = {
+    "function": frozenset(
+        {
+            "ghillie.estate.service._elapsed_ms",
+            "ghillie.estate.service._estate_summary",
+            "ghillie.estate.service._log_mutation",
+            "ghillie.estate.service._next_offset",
+            "ghillie.estate.service._sync_error",
+            "ghillie.estate.service._validate_page",
+        }
+    ),
     "method": frozenset(
         {
             "ghillie.bronze.storage.UTCDateTime.process_bind_param",
@@ -130,6 +140,11 @@ _RUNTIME_ENTRY_POINTS: typ.Final = {
     ),
     "parameter": frozenset(
         {
+            "ghillie.api.auth.BearerTokenMiddleware.process_request.resp",
+            "ghillie.api.auth.BearerTokenMiddleware.process_response.req",
+            "ghillie.api.auth.BearerTokenMiddleware.process_response.resp",
+            "ghillie.api.auth.BearerTokenMiddleware.process_response.resource",
+            "ghillie.api.auth.BearerTokenMiddleware.process_response.req_succeeded",
             "ghillie.bronze.storage.UTCDateTime.process_bind_param.dialect",
             "ghillie.bronze.storage.UTCDateTime.process_result_value.dialect",
         }

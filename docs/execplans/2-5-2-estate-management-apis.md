@@ -339,6 +339,45 @@ per pull request.
         `EstateManagementService`. `make lint` and `make typecheck` then
         passed on the repaired candidate.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
+  - [x] (2026-11-03) Red artefacts written: `tests/unit/test_api_auth.py`,
+        `test_api_estate_errors.py`, `test_api_estate_resources.py`,
+        `test_openapi_estate_paths.py`, `test_runtime_wiring.py`, and
+        `test_storage_bootstrap.py`, plus updates to `test_api_app.py`,
+        `test_api_errors.py`, and `test_api_report_resource.py`.
+  - [x] (2026-11-03) Green: `ghillie/api/estate/schemas.py` and
+        `resources.py` implement the five endpoints with msgspec decoding, a
+        one-megabyte body limit, media-type checks, and single-valued query
+        parameters; `ghillie/api/auth.py` adds the optional bearer middleware
+        (D14); `ghillie/storage_bootstrap.py` creates missing tables at ASGI
+        start-up behind `GHILLIE_DB_BOOTSTRAP` (D13); `ghillie/api/errors.py`
+        renders every failure through the D7 envelope with stable codes and
+        Falcon's own headers preserved; `ghillie/api/app.py` registers route
+        families independently and `ghillie/runtime.py` reads the new
+        environment variables; `specs/openapi.yml` documents the endpoints,
+        security scheme, parameters, and reusable error responses.
+  - [x] (2026-11-03) Focused suites green: 129 tests across the nine API,
+        runtime, and OpenAPI modules.
+  - [x] (2026-11-03) First full gate run found four `ty` diagnostics and one
+        stale Skylos contract test. Repairs: the middleware protocol keeps
+        Falcon's keyword-compatible parameter names, the error handler narrows
+        `HTTPError.headers` to `dict[str, str]`, the chunked-body test casts
+        the Falcon app at the `httpx.ASGITransport` boundary, and
+        `_RUNTIME_ENTRY_POINTS` gained the EP-M2 function rule.
+  - [x] (2026-11-03) Second full gate run went seven of eight green;
+        `make lint` then reported five `SKY-U006` unused-parameter findings on
+        the Falcon-mandated middleware arguments. A narrow `type =
+        "parameter"` entrypoint rule with its rationale records why the bearer
+        check cannot consume them, and the contract test asserts that rule.
+  - [x] (2026-11-03) Third full gate run went seven of eight green again; the
+        exhaustive O2 walk timed out during py-pglite fixture start-up on a
+        heavily loaded host. The module now carries the explicit 120-second
+        timeout the plan reserves for database-heavy runs; its test body takes
+        about four seconds, so the longer budget covers start-up only.
+  - [x] (2026-11-03) Fourth full gate run green sequentially: `check-fmt`,
+        `check-architecture`, `typecheck`, `lint` (Hecate, Ruff, and Skylos),
+        `test` (1391 passed, 11 skipped), `markdownlint`, `nixie`, and
+        `spelling`.
+  - [ ] (2026-11-03) CodeRabbit review of this milestone.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
@@ -393,6 +432,20 @@ per pull request.
 - Observation: `/tmp` contains a stray `bisect.py`, so Python run with `/tmp`
   as its working directory cannot import the standard library. Impact: run
   scratch Python with `-I` from the repository root.
+- Observation: `ty` matches Falcon middleware protocol members by parameter
+  name, so an underscore-prefixed unused argument fails conformance, while the
+  keyword-compatible name triggers Skylos's `SKY-U006`. Impact: the protocol
+  keeps Falcon's names and the five arguments the bearer check cannot consume
+  are declared as documented Skylos parameter entry points.
+- Observation: Falcon's ASGI `App` annotates the scope as `dict[str, Any]`,
+  while `httpx.ASGITransport` requires a `MutableMapping`. Impact: the
+  chunked-body test casts at that boundary instead of weakening either type.
+- Observation: `session_factory` starts a fresh py-pglite Postgres for every
+  test, so fixture set-up alone costs about 26 seconds; under heavy host load
+  pytest-timeout's 30-second default can expire during set-up before the test
+  body runs. Impact: `test_estate_pagination` carries the plan's explicit
+  120-second module timeout.
+
 - Observation: the Silver schema permits an unowned row (`estate_id` null) that
   still carries a `catalogue_repository_id`. Because the policy treats a null
   `estate_id` as adoptable, and therefore as owned for its purposes, such a row
