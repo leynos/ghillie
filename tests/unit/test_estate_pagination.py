@@ -25,6 +25,11 @@ _REPOSITORY_COUNT = 26
 _FILTERS = (None, True, False)
 _LIMITS = range(1, 11)
 
+# The exhaustive walk and its py-pglite fixture start-up both exceed the
+# suite's 30-second default when the host is loaded, so this module opts into
+# the longer budget the plan already reserves for database-heavy runs.
+pytestmark = pytest.mark.timeout(120)
+
 
 @pytest.fixture
 def registry(
