@@ -5,12 +5,12 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & Retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: APPROVED (2026-11-03)
 
 This plan implements roadmap Task 2.5.b (tracked on the branch
-`2-5-2-estate-management-apis`). It must not be implemented until a human has
-explicitly approved it. It has been revised once after an expert-panel design
-review; see `Decision log` and the revision note at the end.
+`2-5-2-estate-management-apis`). It was approved by a human on 2026-11-03 and
+implementation began the same day. It has been revised once after an
+expert-panel design review; see `Decision log` and the revision note at the end.
 
 ## Purpose / big picture
 
@@ -201,8 +201,27 @@ per pull request.
   revised to address every finding (see revision note).
 - [x] (2026-10-16) Opened draft pull request leynos/ghillie#200 for plan
   review.
-- [ ] Plan approved by a human.
+- [x] (2026-11-03) Plan approved by a human; implementation commenced.
 - [ ] PR-A, EP-M1: sync preserves operator toggles and reports conflicts.
+  - [x] (2026-11-03) Red artefacts written: `ghillie/registry/policy.py`
+        stub, `SyncResult` fields, `dry_run` stubs, the exhaustive policy
+        table, the named examples, and the O1 state machine.
+  - [x] (2026-11-03) Red observed after the environment build completed:
+        `test_sync_preserves_operator_disable` failed with `assert True is
+        False`, `test_sync_keeps_readded_repository_disabled` failed the same
+        way, `test_sync_reports_cross_estate_conflict` raised
+        `RegistrySyncError`, `test_sync_dry_run_leaves_registry_unchanged`
+        raised `NotImplementedError`, and the O1 state machine failed with
+        `sqlite3.IntegrityError: UNIQUE constraint failed:
+        repositories.github_owner, repositories.github_name` because the old
+        loader could not see another estate's row.
+  - [x] (2026-11-03) Green: `ghillie.registry.policy` implemented; `sync.py`
+        loads estate, unowned, and catalogue-named rows, consults the policy,
+        and implements `dry_run` by rolling back an explicit transaction.
+  - [x] (2026-11-03) Focused suites green: 42 tests across the policy table,
+        named examples, and O1; 60 registry unit tests overall. O1 produced
+        all five transitions (adopt, preserve, disable_inactive,
+        disable_removed, conflict) in the witness seed.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
@@ -243,7 +262,16 @@ per pull request.
 - Observation: `ghillie/registry/ingestion.py` `set_ingestion_enabled`
   already reports whether the state changed, and the docstrings of
   `enable_ingestion` and `disable_ingestion` in `ghillie/registry/service.py`
-  misdescribe the return value. Impact: EP-M2 fixes the docstrings.
+  misdescribed the return value. Impact: corrected in EP-M1.
+- Observation: the old sync loaded only this estate's and unowned rows, so a
+  catalogue slug already owned by another estate became an INSERT and failed
+  the global unique `(github_owner, github_name)` constraint. Evidence: the O1
+  machine's witness seed raised `sqlite3.IntegrityError`. Impact: EP-M1 adds a
+  second, slug-scoped query so conflicts are visible rather than fatal.
+- Observation: Hypothesis passes only the machine instance to a `@precondition`
+  callable, never the rule's arguments. Impact: O1 keeps coarse preconditions
+  and guards the chosen index inside each rule body; a guard that rejects the
+  index is a no-op step.
 - Observation: pull-request CI runs pytest through the shared
   `generate-coverage` action (`.github/workflows/ci.yml`), not `make test`.
   Impact: EP-M5 confirms the `e2e` tests run there.
@@ -407,8 +435,27 @@ expert-panel review.
 
 ## Outcomes & retrospective
 
-Not started. On completion record, per pull request, what shipped against the
+Not complete. On completion record, per pull request, what shipped against the
 success criteria, the gate results, and the hand-off of D15 to Task 2.5.e.
+
+### PR-A, EP-M1 (in progress)
+
+Outcome: `ghillie.registry.policy` decides ingestion from four inputs
+(ownership, linkage, current flag, catalogue activity) through
+`decide_for_catalogue_repository` and `decide_for_removed_repository`.
+`sync.py` consults it, loads estate, unowned, and catalogue-named rows, reports
+other-estate rows in `repositories_conflicted` instead of failing, and supports
+`dry_run`. `SyncResult` gained `repositories_conflicted`,
+`repositories_left_disabled`, and `repositories_left_disabled_count`.
+
+Evidence: the red run failed exactly as predicted (see Progress), and the
+focused suites are green (42 tests for policy plus named examples plus O1; 60
+registry unit tests). The O1 witness seed produced every `IngestionTransition`,
+so the non-vacuity assertion holds.
+
+Retrospective: the state machine found a real defect that the named examples
+alone could not express — the cross-estate UNIQUE violation — because it
+exercised interleavings in which one estate claims a slug first.
 
 ## Context and orientation
 

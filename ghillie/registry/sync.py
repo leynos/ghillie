@@ -4,9 +4,11 @@ This module contains the low-level implementation used by
 `RepositoryRegistryService.sync_from_catalogue()` to project repository
 definitions from the catalogue database into the Silver `Repository` table.
 
-It creates missing repositories, updates existing ones to match catalogue
-state, and disables ingestion for repositories that were removed from the
-catalogue (while keeping rows for historical reporting).
+It creates missing repositories, refreshes catalogue metadata on existing ones,
+and disables ingestion for repositories that were removed from the catalogue
+(while keeping rows for historical reporting). The ingestion flag itself is
+decided by :mod:`ghillie.registry.policy`, so a sync never re-enables a linked
+row of the estate and never captures a row owned by another estate.
 
 Example:
 -------
@@ -26,7 +28,7 @@ from __future__ import annotations
 import dataclasses
 import typing as typ
 
-from sqlalchemy import select
+from sqlalchemy import select, tuple_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
@@ -36,9 +38,17 @@ from ghillie.catalogue.storage import (
     ProjectRecord,
     RepositoryRecord,
 )
+from ghillie.common.slug import parse_repo_slug
 from ghillie.common.time import utcnow
 from ghillie.registry.errors import RegistrySyncError
 from ghillie.registry.models import SyncResult
+from ghillie.registry.policy import (
+    IngestionDecision,
+    IngestionTransition,
+    SilverIngestionState,
+    decide_for_catalogue_repository,
+    decide_for_removed_repository,
+)
 from ghillie.silver.storage import Repository
 
 if typ.TYPE_CHECKING:
@@ -54,8 +64,22 @@ async def sync_from_catalogue(
     catalogue_session_factory: SessionFactory,
     silver_session_factory: SessionFactory,
     estate_key: str,
+    *,
+    dry_run: bool = False,
 ) -> SyncResult:
     """Synchronize catalogue repositories to Silver for an estate.
+
+    Parameters
+    ----------
+    catalogue_session_factory:
+        Async session factory for the catalogue database.
+    silver_session_factory:
+        Async session factory for the Silver database.
+    estate_key:
+        The estate whose repositories should be synchronized.
+    dry_run:
+        When true, run the sync inside its transaction and roll it back,
+        returning the counts it would have produced.
 
     Raises
     ------
@@ -63,20 +87,20 @@ async def sync_from_catalogue(
         If the estate cannot be found or sync fails.
 
     """
-    result = SyncResult(estate_key=estate_key)
-
     catalogue_repos, estate_id = await _load_catalogue_repositories_or_raise(
         catalogue_session_factory,
         estate_key,
     )
-    await _sync_catalogue_repositories_or_raise(
-        silver_session_factory,
-        catalogue_repos,
-        estate_id,
-        result,
+    plan = _SyncPlan(
+        estate_key=estate_key,
+        estate_id=estate_id,
+        catalogue_repos=catalogue_repos,
     )
-
-    return result
+    return await _sync_catalogue_repositories_or_raise(
+        silver_session_factory,
+        plan,
+        dry_run=dry_run,
+    )
 
 
 async def _load_catalogue_repositories_or_raise(
@@ -97,18 +121,27 @@ async def _load_catalogue_repositories_or_raise(
 
 async def _sync_catalogue_repositories_or_raise(
     session_factory: SessionFactory,
-    catalogue_repos: dict[str, RepositoryRecord],
-    estate_id: str | None,
-    result: SyncResult,
-) -> None:
-    """Sync catalogue repositories into Silver, raising RegistrySyncError."""
+    plan: _SyncPlan,
+    *,
+    dry_run: bool,
+) -> SyncResult:
+    """Sync catalogue repositories into Silver, raising RegistrySyncError.
+
+    A dry run rolls the transaction back, so the returned counts describe what
+    a real run would have done without persisting any of it.
+    """
+    result = SyncResult(estate_key=plan.estate_key)
     try:
-        async with session_factory() as session, session.begin():
-            await _sync_repositories(session, catalogue_repos, estate_id, result)
+        async with session_factory() as session:
+            transaction = await session.begin()
+            await _sync_repositories(session, plan, result)
+            if dry_run:
+                await transaction.rollback()
+            else:
+                await transaction.commit()
     except SQLAlchemyError as exc:
-        raise RegistrySyncError(
-            result.estate_key, "Database error during sync"
-        ) from exc
+        raise RegistrySyncError(plan.estate_key, "Database error during sync") from exc
+    return result
 
 
 def _catalogue_repository_map(
@@ -148,15 +181,42 @@ async def _load_catalogue_repositories(
 async def _load_silver_repositories(
     session: AsyncSession,
     estate_id: str | None,
+    catalogue_slugs: cabc.Iterable[str],
 ) -> dict[str, Repository]:
-    """Load Silver repositories that could belong to an estate sync run."""
-    query = select(Repository)
-    if estate_id is not None:
-        query = query.where(
+    """Load Silver rows the sync must see for this estate.
+
+    That means rows the estate owns or that are unowned, plus every row whose
+    slug the catalogue names. The second query is what makes a row owned by
+    another estate visible as a conflict instead of an attempted insert.
+    """
+    rows: dict[str, Repository] = {}
+    owned = await session.scalars(
+        select(Repository).where(
             (Repository.estate_id == estate_id) | (Repository.estate_id.is_(None))
         )
-    existing = await session.scalars(query)
-    return {repo.slug: repo for repo in existing}
+    )
+    for row in owned:
+        rows[row.slug] = row
+
+    pairs = [parse_repo_slug(slug) for slug in catalogue_slugs]
+    if pairs:
+        named = await session.scalars(
+            select(Repository).where(
+                tuple_(Repository.github_owner, Repository.github_name).in_(pairs)
+            )
+        )
+        for row in named:
+            rows.setdefault(row.slug, row)
+    return rows
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class _SyncPlan:
+    """The catalogue view a sync applies, resolved before Silver is touched."""
+
+    estate_key: str
+    estate_id: str | None
+    catalogue_repos: dict[str, RepositoryRecord]
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -170,6 +230,20 @@ class _SilverSyncContext:
     result: SyncResult
 
 
+def _silver_state(
+    silver_repo: Repository,
+    estate_id: str | None,
+) -> SilverIngestionState:
+    """Describe a Silver row in the terms the policy understands."""
+    return SilverIngestionState(
+        is_linked=silver_repo.catalogue_repository_id is not None,
+        is_owned_by_estate=(
+            silver_repo.estate_id is None or silver_repo.estate_id == estate_id
+        ),
+        ingestion_enabled=silver_repo.ingestion_enabled,
+    )
+
+
 def _sync_one_repository(
     context: _SilverSyncContext,
     slug: str,
@@ -177,106 +251,107 @@ def _sync_one_repository(
 ) -> None:
     """Sync a single catalogue repository into Silver."""
     silver_repo = context.silver_repos.get(slug)
+    current = (
+        None if silver_repo is None else _silver_state(silver_repo, context.estate_id)
+    )
+    decision = decide_for_catalogue_repository(
+        current, catalogue_active=cat_repo.is_active
+    )
+
+    if decision.transition is IngestionTransition.CONFLICT:
+        context.result.repositories_conflicted.append(slug)
+        return
+
     if silver_repo is None:
-        context.session.add(
-            _create_silver_repository(cat_repo, context.estate_id, context.now)
-        )
+        context.session.add(_create_silver_repository(cat_repo, context, decision))
         context.result.repositories_created += 1
         return
 
-    changed = _update_silver_repository(
-        silver_repo,
-        cat_repo,
-        context.estate_id,
-        context.now,
-    )
+    changed = _update_silver_repository(context, silver_repo, cat_repo, decision)
     if changed:
         context.result.repositories_updated += 1
+
+    if (
+        decision.transition is IngestionTransition.PRESERVE
+        and not decision.ingestion_enabled
+    ):
+        context.result.note_left_disabled(slug)
 
 
 async def _sync_repositories(
     session: AsyncSession,
-    catalogue_repos: dict[str, RepositoryRecord],
-    estate_id: str | None,
+    plan: _SyncPlan,
     result: SyncResult,
 ) -> None:
     """Project catalogue repositories into Silver, updating or creating."""
-    silver_repos = await _load_silver_repositories(session, estate_id)
+    silver_repos = await _load_silver_repositories(
+        session, plan.estate_id, plan.catalogue_repos
+    )
 
-    now = utcnow()
-    seen_slugs = set(catalogue_repos)
     context = _SilverSyncContext(
         session=session,
         silver_repos=silver_repos,
-        estate_id=estate_id,
-        now=now,
+        estate_id=plan.estate_id,
+        now=utcnow(),
         result=result,
     )
 
-    for slug, cat_repo in catalogue_repos.items():
+    for slug, cat_repo in plan.catalogue_repos.items():
         _sync_one_repository(context, slug, cat_repo)
 
-    _deactivate_removed_repositories(silver_repos, seen_slugs, now, result)
+    _deactivate_removed_repositories(context, set(plan.catalogue_repos))
 
 
 def _create_silver_repository(
     cat_repo: RepositoryRecord,
-    estate_id: str | None,
-    now: dt.datetime,
+    context: _SilverSyncContext,
+    decision: IngestionDecision,
 ) -> Repository:
     """Create a new Silver repository from a catalogue record."""
     return Repository(
         github_owner=cat_repo.owner,
         github_name=cat_repo.name,
         default_branch=cat_repo.default_branch,
-        estate_id=estate_id,
+        estate_id=context.estate_id,
         catalogue_repository_id=cat_repo.id,
-        ingestion_enabled=cat_repo.is_active,
+        ingestion_enabled=decision.ingestion_enabled,
         documentation_paths=list(cat_repo.documentation_paths),
-        last_synced_at=now,
-    )
-
-
-def _should_deactivate_repository(
-    slug: str,
-    silver_repo: Repository,
-    seen_slugs: set[str],
-) -> bool:
-    """Determine whether a Silver repository should be deactivated."""
-    return (
-        slug not in seen_slugs
-        and silver_repo.catalogue_repository_id is not None
-        and silver_repo.ingestion_enabled
+        last_synced_at=context.now,
     )
 
 
 def _deactivate_removed_repositories(
-    silver_repos: dict[str, Repository],
+    context: _SilverSyncContext,
     seen_slugs: set[str],
-    now: dt.datetime,
-    result: SyncResult,
 ) -> None:
-    """Deactivate repositories that are no longer in the catalogue."""
-    for slug, silver_repo in silver_repos.items():
-        if _should_deactivate_repository(slug, silver_repo, seen_slugs):
-            silver_repo.ingestion_enabled = False
-            silver_repo.last_synced_at = now
-            result.repositories_deactivated += 1
+    """Deactivate repositories that are no longer in this estate's catalogue."""
+    for slug, silver_repo in context.silver_repos.items():
+        if slug in seen_slugs:
+            continue
+        decision = decide_for_removed_repository(
+            _silver_state(silver_repo, context.estate_id)
+        )
+        if decision.transition is not IngestionTransition.DISABLE_REMOVED:
+            continue
+        if not silver_repo.ingestion_enabled:
+            continue
+        silver_repo.ingestion_enabled = False
+        silver_repo.last_synced_at = context.now
+        context.result.repositories_deactivated += 1
 
 
 def _update_silver_repository(
+    context: _SilverSyncContext,
     silver_repo: Repository,
     cat_repo: RepositoryRecord,
-    estate_id: str | None,
-    now: dt.datetime,
+    decision: IngestionDecision,
 ) -> bool:
     """Update Silver repository fields from catalogue; return True if changed."""
     # Define field mappings: (silver_field, catalogue_value)
     field_updates = [
         ("default_branch", cat_repo.default_branch),
-        ("estate_id", estate_id),
+        ("estate_id", context.estate_id),
         ("catalogue_repository_id", cat_repo.id),
-        ("ingestion_enabled", cat_repo.is_active),
     ]
 
     changed = False
@@ -287,6 +362,11 @@ def _update_silver_repository(
             setattr(silver_repo, field_name, new_value)
             changed = True
 
+    # The policy owns ingestion; metadata never implies a toggle change.
+    if silver_repo.ingestion_enabled != decision.ingestion_enabled:
+        silver_repo.ingestion_enabled = decision.ingestion_enabled
+        changed = True
+
     # Handle documentation_paths separately (list comparison)
     new_paths = list(cat_repo.documentation_paths)
     if silver_repo.documentation_paths != new_paths:
@@ -294,6 +374,6 @@ def _update_silver_repository(
         changed = True
 
     if changed:
-        silver_repo.last_synced_at = now
+        silver_repo.last_synced_at = context.now
 
     return changed

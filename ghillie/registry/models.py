@@ -27,15 +27,37 @@ class RepositoryInfo:
         return repo_slug(self.owner, self.name)
 
 
+LEFT_DISABLED_PREVIEW_LIMIT = 100
+"""Maximum number of slugs echoed in ``SyncResult.repositories_left_disabled``.
+
+The count is always exact; the list is a bounded preview so a large estate
+cannot produce an unbounded response body.
+"""
+
+
 @dataclasses.dataclass(slots=True)
 class SyncResult:
     """Summary of a catalogue-to-Silver synchronisation run.
 
     Tracks the number of repositories created, updated, or deactivated
     during a sync operation, enabling operators to monitor sync health.
+
+    ``repositories_conflicted`` lists repositories that this estate's catalogue
+    names but another estate owns; sync leaves them untouched. The
+    ``repositories_left_disabled`` preview and its exact count report linked
+    repositories that remain disabled because an operator turned them off.
     """
 
     estate_key: str
     repositories_created: int = 0
     repositories_updated: int = 0
     repositories_deactivated: int = 0
+    repositories_conflicted: list[str] = dataclasses.field(default_factory=list)
+    repositories_left_disabled: list[str] = dataclasses.field(default_factory=list)
+    repositories_left_disabled_count: int = 0
+
+    def note_left_disabled(self, slug: str) -> None:
+        """Record a repository that sync left disabled, bounding the preview."""
+        self.repositories_left_disabled_count += 1
+        if len(self.repositories_left_disabled) < LEFT_DISABLED_PREVIEW_LIMIT:
+            self.repositories_left_disabled.append(slug)

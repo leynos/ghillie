@@ -46,7 +46,9 @@ class RepositoryRegistryService:
         self._catalogue_sf = catalogue_session_factory
         self._silver_sf = silver_session_factory
 
-    async def sync_from_catalogue(self, estate_key: str) -> SyncResult:
+    async def sync_from_catalogue(
+        self, estate_key: str, *, dry_run: bool = False
+    ) -> SyncResult:
         """Synchronize all catalogue repositories to Silver for an estate.
 
         Reads repositories from the catalogue database (via component
@@ -58,6 +60,9 @@ class RepositoryRegistryService:
         ----------
         estate_key:
             The estate whose repositories should be synchronized.
+        dry_run:
+            When true, run the sync inside its transaction and roll it back,
+            returning the counts it would have produced.
 
         Returns
         -------
@@ -71,7 +76,7 @@ class RepositoryRegistryService:
 
         """
         return await sync_from_catalogue(
-            self._catalogue_sf, self._silver_sf, estate_key
+            self._catalogue_sf, self._silver_sf, estate_key, dry_run=dry_run
         )
 
     async def list_active_repositories(
@@ -167,7 +172,7 @@ class RepositoryRegistryService:
         Returns
         -------
         bool
-            True if the repository was found and updated.
+            True if the flag changed, False if it was already enabled.
 
         Raises
         ------
@@ -190,7 +195,7 @@ class RepositoryRegistryService:
         Returns
         -------
         bool
-            True if the repository was found and updated.
+            True if the flag changed, False if it was already disabled.
 
         Raises
         ------
