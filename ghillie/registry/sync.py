@@ -136,6 +136,10 @@ async def _sync_catalogue_repositories_or_raise(
             transaction = await session.begin()
             await _sync_repositories(session, plan, result)
             if dry_run:
+                # Flush first so constraints (for example the unique
+                # owner/name pair) are evaluated before the rollback. Without
+                # it a dry run could report counts for a sync that would fail.
+                await session.flush()
                 await transaction.rollback()
             else:
                 await transaction.commit()

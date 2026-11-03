@@ -369,7 +369,7 @@ expert-panel review.
   adding a request field needs the server upgraded first.
 - D9, driving port. `ghillie.estate.ports.EstateManagement` is a
   `typing.Protocol` implemented by
-  `ghillie.estate.service. EstateManagementService`, which composes
+  `ghillie.estate.service.EstateManagementService`, which composes
   `CatalogueImporter`, `RepositoryRegistryService`, and
   `ghillie.catalogue.queries`. The panel's alternative (methods directly on
   `RepositoryRegistryService`, concrete services in resources) was weighed: it
@@ -476,7 +476,7 @@ unique by owner and name across all estates.
 `import_path` and `import_catalogue(catalogue, *, commit_sha)` returning
 `CatalogueImportResult`. A repeated `commit_sha` returns `skipped=True`.
 Validation failures raise
-`ghillie.catalogue.validation. CatalogueValidationError` (`issues: list[str]`).
+`ghillie.catalogue.validation.CatalogueValidationError` (`issues: list[str]`).
 `ghillie/catalogue/loader.py` `load_catalogue(path)` parses YAML 1.2 with
 `ruamel.yaml` and converts with `msgspec`. Importing anything under
 `ghillie.catalogue` runs the package initializer, which imports the importer
@@ -489,7 +489,7 @@ class `Repository`: `github_owner`, `github_name` unique together,
 `documentation_paths`). Ingestion (`ghillie/github/ingestion.py`) and reporting
 (`ghillie/reporting/actor.py`) honour `ingestion_enabled`.
 `ghillie/registry/service.py`
-`RepositoryRegistryService(catalogue_session_ factory, silver_session_factory)`
+`RepositoryRegistryService(catalogue_session_factory, silver_session_factory)`
 provides `sync_from_catalogue(estate_key) -> SyncResult`, listing by estate
 UUID, and `enable_ingestion` / `disable_ingestion(owner, name) -> bool` (raising
 `ghillie.registry.errors.RepositoryNotFoundError`). Sync is implemented in
@@ -812,7 +812,7 @@ Create:
 - `ghillie/estate/ports.py` (`domain_ports`): the `EstateManagement`
   Protocol (see `Interfaces and dependencies`).
 - `ghillie/catalogue/queries.py` (`outbound_adapter`):
-  `list_estates(session_ factory, *, limit, offset) -> list[EstateRow]` (estate
+  `list_estates(session_factory, *, limit, offset) -> list[EstateRow]` (estate
   plus latest import) and
   `get_estate_by_key(session_factory, key) -> EstateRow | None`.
 - `ghillie/estate/service.py` (`application`, prefix `ghillie.estate` placed
@@ -913,7 +913,7 @@ Tests first: `tests/unit/cli/test_estate_commands.py` (method, path, query, and
 body per verb via `httpx.MockTransport`; local validation exits `2` with no
 request recorded; O4 client half; O5 client half; pattern equality),
 `tests/unit/cli/test_output.py` additions,
-`tests/unit/cli/ test_estate_output_snapshots.py` (syrupy snapshots of `table`
+`tests/unit/cli/test_estate_output_snapshots.py` (syrupy snapshots of `table`
 and `yaml` output and of error output, from fixed fake responses; `json`
 compared by parsed equality), `tests/unit/cli/test_estate_token_redaction.py`
 (a distinctive token and an `--api-base-url` containing `user:pass@` never
@@ -1042,7 +1042,7 @@ opt-out. Regenerate snapshots with `-p no:xdist`.
 - `docs/ghillie-design.md`: new §8.5 "Estate-management control plane
   (Task 2.5.b)" recording D1, D2, D4–D10, D12–D21 and linking ADR-005; update
   §8.4's module tree and "Planned evolution" note to include
-  `ghillie/api/ estate/`; update §3.0 to say the estate verbs are live.
+  `ghillie/api/estate/`; update §3.0 to say the estate verbs are live.
 - `docs/developers-guide.md`: msgspec request and response structs (D8), the
   error-code convention (D7), the port-owned error vocabulary, the
   `RunnerTransport` BDD harness, running and opting out of `e2e` tests, and the

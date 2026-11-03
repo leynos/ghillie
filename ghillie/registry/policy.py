@@ -1,4 +1,4 @@
-"""Pure ingestion-toggle policy for catalogue-to-Silver synchronisation.
+"""Pure ingestion-toggle policy for catalogue-to-Silver synchronization.
 
 The policy separates the *decision* about a repository's ``ingestion_enabled``
 flag from the persistence work in :mod:`ghillie.registry.sync`. Keeping the
@@ -14,8 +14,6 @@ one place to read the rules:
 The module deliberately imports only the standard library so Hecate can hold it
 in the ``domain_ports`` group.
 """
-
-from __future__ import annotations
 
 import dataclasses
 import enum

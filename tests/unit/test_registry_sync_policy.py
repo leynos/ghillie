@@ -6,8 +6,6 @@ enumerate every combination so the test is a complete check rather than a
 sample.
 """
 
-from __future__ import annotations
-
 import dataclasses
 import itertools
 
@@ -206,7 +204,7 @@ def test_decide_for_catalogue_repository(
 
     assert decision == IngestionDecision(
         ingestion_enabled=enabled, transition=transition
-    )
+    ), (current, catalogue_active)
 
 
 @pytest.mark.parametrize(("current", "transition", "enabled"), _REMOVED_CASES)
@@ -221,7 +219,7 @@ def test_decide_for_removed_repository(
 
     assert decision == IngestionDecision(
         ingestion_enabled=enabled, transition=transition
-    )
+    ), current
 
 
 def test_present_cases_cover_the_whole_input_space() -> None:

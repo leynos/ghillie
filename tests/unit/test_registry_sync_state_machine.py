@@ -11,8 +11,6 @@ Hypothesis owns the ordering; the model below owns the expectation. Every
 observed transition is counted so the test can prove it was not vacuous.
 """
 
-from __future__ import annotations
-
 import asyncio
 import collections
 import dataclasses
@@ -241,7 +239,7 @@ class EstateSyncMachine(RuleBasedStateMachine):
 
     @rule(index=_INDEX, enabled=st.booleans())
     @precondition(lambda self: any(expected.exists for expected in self._model))
-    def toggle(self, index: int, enabled: bool) -> None:  # noqa: FBT001
+    def toggle(self, index: int, *, enabled: bool) -> None:
         """Toggle ingestion exactly as an operator would.
 
         Hypothesis passes only the machine to a precondition, so the per-index
@@ -255,7 +253,7 @@ class EstateSyncMachine(RuleBasedStateMachine):
         else:
             changed = self._runner.run(self._service.disable_ingestion(owner, name))
         expected = self._model[index]
-        assert changed is (expected.enabled != enabled)
+        assert changed is (expected.enabled != enabled), (_SLUGS[index], enabled)
         expected.enabled = enabled
         self._assert_matches_db()
 
@@ -364,7 +362,7 @@ class EstateSyncMachine(RuleBasedStateMachine):
             _build_catalogue(self._other_catalogue), commit_sha=self._next_commit()
         )
         result = await self._service.sync_from_catalogue(_OTHER_ESTATE)
-        assert result.repositories_conflicted == []
+        assert result.repositories_conflicted == [], result.repositories_conflicted
 
     async def _mark_inactive(self, index: int) -> None:
         owner, name = _REPOSITORIES[index]
@@ -409,4 +407,5 @@ def test_sync_transitions_are_modelled() -> None:
         ),
     )
 
-    assert set(transitions) == set(IngestionTransition)
+    missing = set(IngestionTransition) - set(transitions)
+    assert not missing, f"transitions never exercised: {sorted(missing)}"
