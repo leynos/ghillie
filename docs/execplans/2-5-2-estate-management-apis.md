@@ -202,7 +202,7 @@ per pull request.
 - [x] (2026-10-16) Opened draft pull request leynos/ghillie#200 for plan
   review.
 - [x] (2026-11-03) Plan approved by a human; implementation commenced.
-- [ ] PR-A, EP-M1: sync preserves operator toggles and reports conflicts.
+- [x] PR-A, EP-M1: sync preserves operator toggles and reports conflicts.
   - [x] (2026-11-03) Red artefacts written: `ghillie/registry/policy.py`
         stub, `SyncResult` fields, `dry_run` stubs, the exhaustive policy
         table, the named examples, and the O1 state machine.
@@ -222,6 +222,14 @@ per pull request.
         named examples, and O1; 60 registry unit tests overall. O1 produced
         all five transitions (adopt, preserve, disable_inactive,
         disable_removed, conflict) in the witness seed.
+  - [x] (2026-11-03) CodeRabbit review addressed: a dry run now flushes
+        before rolling back so constraints are evaluated, the state machine's
+        `toggle` rule takes `enabled` keyword-only, and the policy and ADR
+        wording were corrected.
+  - [x] (2026-11-03) Full gate suite green sequentially: `check-fmt`,
+        `check-architecture`, `typecheck`, `lint` (Hecate and Skylos),
+        `test` (1222 passed, 11 skipped), `markdownlint`, `nixie`, and
+        `spelling`.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
@@ -438,7 +446,7 @@ expert-panel review.
 Not complete. On completion record, per pull request, what shipped against the
 success criteria, the gate results, and the hand-off of D15 to Task 2.5.e.
 
-### PR-A, EP-M1 (in progress)
+### PR-A, EP-M1 (complete)
 
 Outcome: `ghillie.registry.policy` decides ingestion from four inputs
 (ownership, linkage, current flag, catalogue activity) through
@@ -455,7 +463,10 @@ so the non-vacuity assertion holds.
 
 Retrospective: the state machine found a real defect that the named examples
 alone could not express — the cross-estate UNIQUE violation — because it
-exercised interleavings in which one estate claims a slug first.
+exercised interleavings in which one estate claims a slug first. A CodeRabbit
+review then found that a dry run could report counts for a sync whose unique
+constraint would fail on commit; flushing before the rollback closes that gap
+and keeps the dry-run contract honest.
 
 ## Context and orientation
 
