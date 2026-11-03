@@ -126,17 +126,25 @@ async def test_import_creates_estate_and_reports_counts(
     """A first import reports what it created and asks for a registry sync."""
     summary = await _import(service)
 
-    assert summary.estate_key == _ESTATE_KEY
-    assert summary.commit_sha == "c1"
-    assert summary.state == "succeeded"
-    assert summary.dry_run is False
-    assert summary.skipped is False
-    assert summary.skipped_reason is None
-    assert summary.registry_sync_required is True
-    assert (summary.projects.created, summary.projects.updated) == (1, 0)
-    assert (summary.components.created, summary.components.updated) == (1, 0)
-    assert (summary.repositories.created, summary.repositories.updated) == (1, 0)
-    assert (summary.edges.created, summary.edges.updated) == (0, 0)
+    assert summary.estate_key == _ESTATE_KEY, "estate key should match the import"
+    assert summary.commit_sha == "c1", "commit sha should be c1"
+    assert summary.state == "succeeded", "import should succeed"
+    assert summary.dry_run is False, "import should not be a dry run"
+    assert summary.skipped is False, "import should not be skipped"
+    assert summary.skipped_reason is None, "skipped reason should be empty"
+    assert summary.registry_sync_required is True, "registry sync should be required"
+    assert (summary.projects.created, summary.projects.updated) == (1, 0), (
+        "projects should report one created"
+    )
+    assert (summary.components.created, summary.components.updated) == (1, 0), (
+        "components should report one created"
+    )
+    assert (summary.repositories.created, summary.repositories.updated) == (1, 0), (
+        "repositories should report one created"
+    )
+    assert (summary.edges.created, summary.edges.updated) == (0, 0), (
+        "edges should report no changes"
+    )
 
 
 @pytest.mark.asyncio
@@ -148,12 +156,14 @@ async def test_import_is_idempotent_for_the_same_commit(
 
     summary = await _import(service, commit_sha="c1")
 
-    assert summary.skipped is True
-    assert summary.skipped_reason == "commit_already_imported"
-    assert summary.registry_sync_required is False
-    assert summary.projects.created == 0
-    assert summary.components.created == 0
-    assert summary.repositories.created == 0
+    assert summary.skipped is True, "repeated commit should be skipped"
+    assert summary.skipped_reason == "commit_already_imported", (
+        "skip reason should name the commit"
+    )
+    assert summary.registry_sync_required is False, "no registry sync required"
+    assert summary.projects.created == 0, "repeated commit creates no projects"
+    assert summary.components.created == 0, "repeated commit creates no components"
+    assert summary.repositories.created == 0, "repeat creates no repositories"
 
 
 @pytest.mark.asyncio
@@ -164,12 +174,14 @@ async def test_import_dry_run_leaves_no_catalogue_rows(
     """A dry run reports counts after flushing, then rolls back."""
     summary = await _import(service, dry_run=True)
 
-    assert summary.projects.created == 1
-    assert summary.repositories.created == 1
-    assert summary.dry_run is True
-    assert summary.registry_sync_required is False
-    assert await _count(session_factory, Estate) == 0
-    assert await _count(session_factory, ProjectRecord) == 0
+    assert summary.projects.created == 1, "dry run should report a project"
+    assert summary.repositories.created == 1, "dry run should report a repository"
+    assert summary.dry_run is True, "summary should be a dry run"
+    assert summary.registry_sync_required is False, "no registry sync required"
+    assert await _count(session_factory, Estate) == 0, "dry run should leave no estates"
+    assert await _count(session_factory, ProjectRecord) == 0, (
+        "dry run should leave no project rows"
+    )
 
 
 @pytest.mark.asyncio
@@ -184,8 +196,8 @@ async def test_import_uses_the_stored_name_when_none_is_supplied(
 
     async with session_factory() as session:
         estate = await session.scalar(select(Estate))
-    assert estate is not None
-    assert estate.name == "Demo Estate"
+    assert estate is not None, "stored estate should exist"
+    assert estate.name == "Demo Estate", "stored estate should keep its name"
 
 
 @pytest.mark.asyncio
@@ -197,16 +209,18 @@ async def test_import_keeps_an_existing_description(
     await _import(service, commit_sha="c1")
     async with session_factory() as session, session.begin():
         estate = await session.scalar(select(Estate))
-        assert estate is not None
+        assert estate is not None, "stored estate should exist"
         estate.description = "Maintained by the platform team"
 
     await _import(service, commit_sha="c2", estate_name="Renamed")
 
     async with session_factory() as session:
         estate = await session.scalar(select(Estate))
-    assert estate is not None
-    assert estate.name == "Renamed"
-    assert estate.description == "Maintained by the platform team"
+    assert estate is not None, "stored estate should exist"
+    assert estate.name == "Renamed", "import should rename the estate"
+    assert estate.description == "Maintained by the platform team", (
+        "import should keep the description"
+    )
 
 
 @pytest.mark.asyncio
@@ -228,9 +242,13 @@ async def test_import_reports_catalogue_issues(
     with pytest.raises(CatalogueRejectedError) as raised:
         await _import(service, catalogue_yaml="version: [unclosed")
 
-    assert raised.value.issues
-    assert all(issue.code == "catalogue_schema" for issue in raised.value.issues)
-    assert all(issue.message for issue in raised.value.issues)
+    assert raised.value.issues, "rejection should report issues"
+    assert all(issue.code == "catalogue_schema" for issue in raised.value.issues), (
+        "every issue should carry the catalogue code"
+    )
+    assert all(issue.message for issue in raised.value.issues), (
+        "every issue should carry a message"
+    )
 
 
 @pytest.mark.asyncio
@@ -254,7 +272,9 @@ async def test_import_translates_validation_from_the_importer(
     with pytest.raises(CatalogueRejectedError) as raised:
         await _import(service)
 
-    assert raised.value.issues[0].message == "duplicate component key"
+    assert raised.value.issues[0].message == "duplicate component key", (
+        "validation should name the duplicate"
+    )
 
 
 @pytest.mark.asyncio
@@ -342,7 +362,23 @@ async def test_import_lock_serializes_concurrent_imports(
         _import(service, commit_sha="c2"),
     )
 
-    assert max_active == 1
+    assert max_active == 1, "imports should not overlap"
+
+
+@pytest.mark.asyncio
+async def test_estate_locks_are_not_retained_after_use(
+    service: EstateManagementService,
+) -> None:
+    """D17: serialization does not leak one lock per key ever mentioned.
+
+    An unauthenticated client can name any estate key, so a strong map would
+    let it grow process memory indefinitely. The weak map must release an idle
+    lock once the import block finishes.
+    """
+    await _import(service, estate_key="alpha")
+    await _import(service, estate_key="beta")
+
+    assert list(service._locks) == [], "idle locks should be released"
 
 
 # ---------------------------------------------------------------------------
@@ -366,12 +402,12 @@ async def test_list_estates_pages_in_key_order(
     first = await service.list_estates(PageRequest(limit=1, offset=0))
     second = await service.list_estates(PageRequest(limit=1, offset=1))
 
-    assert [item.key for item in first.items] == ["alpha"]
-    assert first.has_more is True
-    assert first.next_offset == 1
-    assert [item.key for item in second.items] == ["beta"]
-    assert second.has_more is False
-    assert second.next_offset is None
+    assert [item.key for item in first.items] == ["alpha"], "first page holds alpha"
+    assert first.has_more is True, "first page should report more"
+    assert first.next_offset == 1, "first page should point to offset 1"
+    assert [item.key for item in second.items] == ["beta"], "last page holds beta"
+    assert second.has_more is False, "last page should report no more"
+    assert second.next_offset is None, "last page should have no next offset"
 
 
 @pytest.mark.asyncio
@@ -384,10 +420,10 @@ async def test_list_estates_carries_the_latest_import(
     page = await service.list_estates(PageRequest())
 
     [summary] = page.items
-    assert summary.key == _ESTATE_KEY
-    assert summary.name == "Demo"
-    assert summary.last_import_commit_sha == "c1"
-    assert summary.last_imported_at is not None
+    assert summary.key == _ESTATE_KEY, "summary should carry the estate key"
+    assert summary.name == "Demo", "summary should carry the estate name"
+    assert summary.last_import_commit_sha == "c1", "summary should name the commit"
+    assert summary.last_imported_at is not None, "summary should carry the import time"
 
 
 @pytest.mark.asyncio
@@ -409,7 +445,7 @@ async def test_list_estates_rejects_invalid_pagination(
     with pytest.raises(InvalidPaginationError) as raised:
         await service.list_estates(PageRequest(limit=limit, offset=offset))
 
-    assert raised.value.field == field
+    assert raised.value.field == field, "error should name the offending field"
 
 
 # ---------------------------------------------------------------------------
@@ -426,15 +462,15 @@ async def test_sync_registry_reports_created_repositories(
 
     summary = await service.sync_registry(_ESTATE_KEY, dry_run=False)
 
-    assert summary.estate_key == _ESTATE_KEY
-    assert summary.state == "succeeded"
-    assert summary.dry_run is False
-    assert summary.repositories_created == 1
-    assert summary.repositories_updated == 0
-    assert summary.repositories_deactivated == 0
-    assert summary.repositories_conflicted == ()
-    assert summary.repositories_left_disabled == ()
-    assert summary.repositories_left_disabled_count == 0
+    assert summary.estate_key == _ESTATE_KEY, "summary should carry the estate key"
+    assert summary.state == "succeeded", "sync should succeed"
+    assert summary.dry_run is False, "sync should not be a dry run"
+    assert summary.repositories_created == 1, "sync should create one repository"
+    assert summary.repositories_updated == 0, "sync should update no repositories"
+    assert summary.repositories_deactivated == 0, "sync should deactivate nothing"
+    assert summary.repositories_conflicted == (), "sync should report no conflicts"
+    assert summary.repositories_left_disabled == (), "sync should leave none disabled"
+    assert summary.repositories_left_disabled_count == 0, "left disabled count is zero"
 
 
 @pytest.mark.asyncio
@@ -447,9 +483,11 @@ async def test_sync_registry_dry_run_leaves_no_rows(
 
     summary = await service.sync_registry(_ESTATE_KEY, dry_run=True)
 
-    assert summary.repositories_created == 1
-    assert summary.dry_run is True
-    assert await registry.list_all_repositories() == []
+    assert summary.repositories_created == 1, "dry run should report a creation"
+    assert summary.dry_run is True, "summary should be a dry run"
+    assert await registry.list_all_repositories() == [], (
+        "dry run should persist no repositories"
+    )
 
 
 @pytest.mark.asyncio
@@ -542,11 +580,15 @@ async def test_list_repositories_filters_by_ingestion_state(
         _ESTATE_KEY, RepositoryQuery(ingestion_enabled=False, limit=10, offset=0)
     )
 
-    assert [repo.slug for repo in all_page.items] == [f"{_OWNER}/{_REPO_NAME}"]
-    assert all_page.items[0].ingestion_enabled is False
-    assert enabled_page.items == ()
-    assert enabled_page.has_more is False
-    assert [repo.slug for repo in disabled_page.items] == [f"{_OWNER}/{_REPO_NAME}"]
+    assert [repo.slug for repo in all_page.items] == [f"{_OWNER}/{_REPO_NAME}"], (
+        "unfiltered listing should show the repository"
+    )
+    assert all_page.items[0].ingestion_enabled is False, "repository should be disabled"
+    assert enabled_page.items == (), "filtered page should be empty"
+    assert enabled_page.has_more is False, "filtered page should have no more"
+    assert [repo.slug for repo in disabled_page.items] == [f"{_OWNER}/{_REPO_NAME}"], (
+        "disabled listing should show the repository"
+    )
 
 
 @pytest.mark.asyncio
@@ -584,12 +626,12 @@ async def test_set_ingestion_reports_each_transition(
     repeated = await service.set_ingestion(_OWNER, _REPO_NAME, enabled=False)
     enabled = await service.set_ingestion(_OWNER, _REPO_NAME, enabled=True)
 
-    assert disabled.ingestion_enabled is False
-    assert disabled.changed is True
-    assert repeated.ingestion_enabled is False
-    assert repeated.changed is False
-    assert enabled.ingestion_enabled is True
-    assert enabled.changed is True
+    assert disabled.ingestion_enabled is False, "toggle should disable ingestion"
+    assert disabled.changed is True, "first toggle should change state"
+    assert repeated.ingestion_enabled is False, "repeat should leave ingestion disabled"
+    assert repeated.changed is False, "repeat toggle should change nothing"
+    assert enabled.ingestion_enabled is True, "toggle should enable ingestion"
+    assert enabled.changed is True, "enable toggle should change state"
 
 
 @pytest.mark.asyncio
@@ -600,8 +642,8 @@ async def test_set_ingestion_translates_repository_not_found(
     with pytest.raises(RepositoryNotFoundError) as raised:
         await service.set_ingestion(_OWNER, "missing", enabled=True)
 
-    assert raised.value.owner == _OWNER
-    assert raised.value.name == "missing"
+    assert raised.value.owner == _OWNER, "error should carry the owner"
+    assert raised.value.name == "missing", "error should carry the name"
 
 
 @pytest.mark.asyncio

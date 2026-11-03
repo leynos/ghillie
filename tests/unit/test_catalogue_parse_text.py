@@ -92,7 +92,7 @@ def test_parse_catalogue_text_rejects_an_alias_bomb_under_one_mib() -> None:
 
 def test_parse_catalogue_text_accepts_a_byte_order_mark() -> None:
     """A UTF-8 BOM is tolerated, as the CLI reads files with ``utf-8-sig``."""
-    catalogue = parse_catalogue_text("﻿" + _VALID)
+    catalogue = parse_catalogue_text("\ufeff" + _VALID)
 
     assert catalogue.version == 1
 

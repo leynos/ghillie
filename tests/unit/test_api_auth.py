@@ -9,63 +9,10 @@ import falcon.testing
 import pytest
 
 from ghillie.api.app import AppDependencies, create_app
-from ghillie.estate.models import (
-    CatalogueImportSummary,
-    EstateSummary,
-    IngestionToggleOutcome,
-    Page,
-    PageRequest,
-    RegistrySyncSummary,
-    RepositoryPage,
-    RepositoryQuery,
-)
+from tests.unit.estate_test_helpers import EmptyEstateManagement
 
 _TOKEN = "s3cret-token-value"  # noqa: S105 - test credential, not a secret.
 _AUTHORIZATION = "Authorization"
-
-
-class _EmptyEstateManagement:
-    """Minimal port double used only to register the estate routes."""
-
-    async def list_estates(self, page: PageRequest) -> Page[EstateSummary]:
-        """Return an empty page."""
-        return Page(
-            items=(),
-            limit=page.limit,
-            offset=page.offset,
-            has_more=False,
-            next_offset=None,
-        )
-
-    async def import_catalogue(  # noqa: PLR0913 - mirrors the port signature.
-        self,
-        estate_key: str,
-        *,
-        catalogue_yaml: str,
-        commit_sha: str,
-        estate_name: str | None,
-        dry_run: bool,
-    ) -> CatalogueImportSummary:
-        """Not exercised by these tests."""
-        raise NotImplementedError
-
-    async def sync_registry(
-        self, estate_key: str, *, dry_run: bool
-    ) -> RegistrySyncSummary:
-        """Not exercised by these tests."""
-        raise NotImplementedError
-
-    async def list_repositories(
-        self, estate_key: str, query: RepositoryQuery
-    ) -> RepositoryPage:
-        """Not exercised by these tests."""
-        raise NotImplementedError
-
-    async def set_ingestion(
-        self, owner: str, name: str, *, enabled: bool
-    ) -> IngestionToggleOutcome:
-        """Not exercised by these tests."""
-        raise NotImplementedError
 
 
 def _client(*, token: str | None) -> falcon.testing.TestClient:
@@ -73,7 +20,7 @@ def _client(*, token: str | None) -> falcon.testing.TestClient:
     return falcon.testing.TestClient(
         create_app(
             AppDependencies(
-                estate_service=_EmptyEstateManagement(),
+                estate_service=EmptyEstateManagement(),
                 api_token=token,
             )
         )
@@ -95,9 +42,9 @@ class TestTokenConfigured:
         """A protected route without a header is a structured 401."""
         result = client.simulate_get("/estates")
 
-        assert result.status_code == 401
-        assert result.json["code"] == "unauthorized"
-        assert result.headers.get("WWW-Authenticate") == "Bearer"
+        assert result.status_code == 401, "missing header should be unauthorised"
+        assert result.json["code"] == "unauthorized", "code should be unauthorised"
+        assert result.headers.get("WWW-Authenticate") == "Bearer", "challenge is bearer"
 
     def test_wrong_token_is_unauthorized(
         self, client: falcon.testing.TestClient
@@ -107,10 +54,10 @@ class TestTokenConfigured:
             "/estates", headers={_AUTHORIZATION: "Bearer wrong-token"}
         )
 
-        assert result.status_code == 401
-        assert result.json["code"] == "unauthorized"
-        assert "wrong-token" not in result.text
-        assert _TOKEN not in result.text
+        assert result.status_code == 401, "wrong token should be unauthorised"
+        assert result.json["code"] == "unauthorized", "code should be unauthorised"
+        assert "wrong-token" not in result.text, "response should not echo the token"
+        assert _TOKEN not in result.text, "response should never echo the token"
 
     @pytest.mark.parametrize(
         "header",
@@ -128,8 +75,8 @@ class TestTokenConfigured:
         """Anything that is not a non-empty bearer credential is rejected."""
         result = client.simulate_get("/estates", headers={_AUTHORIZATION: header})
 
-        assert result.status_code == 401
-        assert result.json["code"] == "unauthorized"
+        assert result.status_code == 401, "malformed header should be unauthorised"
+        assert result.json["code"] == "unauthorized", "code should be unauthorised"
 
     @pytest.mark.parametrize(
         "header",
@@ -145,8 +92,8 @@ class TestTokenConfigured:
         """The scheme is case-insensitive, as HTTP requires."""
         result = client.simulate_get("/estates", headers={_AUTHORIZATION: header})
 
-        assert result.status_code == 200
-        assert result.json["items"] == []
+        assert result.status_code == 200, "valid token should be accepted"
+        assert result.json["items"] == [], "listing should start empty"
 
     @pytest.mark.parametrize("path", ["/health", "/ready"])
     def test_health_and_readiness_are_exempt(
@@ -155,7 +102,18 @@ class TestTokenConfigured:
         """Probes work without a token so Kubernetes can reach them."""
         result = client.simulate_get(path)
 
-        assert result.status_code == 200
+        assert result.status_code == 200, "probe should succeed without a token"
+
+    def test_non_ascii_credential_is_unauthorized(
+        self, client: falcon.testing.TestClient
+    ) -> None:
+        """A Latin-1 credential is a 401, not a comparison error."""
+        result = client.simulate_get(
+            "/estates", headers={_AUTHORIZATION: "Bearer café"}
+        )
+
+        assert result.status_code == 401, "non-ascii credential should be unauthorised"
+        assert result.json["code"] == "unauthorized", "code should be unauthorised"
 
     def test_unknown_path_still_requires_a_token(
         self, client: falcon.testing.TestClient
@@ -163,8 +121,8 @@ class TestTokenConfigured:
         """Authentication is enforced before routing."""
         result = client.simulate_get("/nope")
 
-        assert result.status_code == 401
-        assert result.json["code"] == "unauthorized"
+        assert result.status_code == 401, "unknown path should still need a token"
+        assert result.json["code"] == "unauthorized", "code should be unauthorised"
 
     def test_unauthorized_response_does_not_echo_the_configured_token(
         self, client: falcon.testing.TestClient
@@ -172,7 +130,7 @@ class TestTokenConfigured:
         """The token is never included in an error response."""
         result = client.simulate_get("/estates")
 
-        assert _TOKEN not in result.text
+        assert _TOKEN not in result.text, "response should never echo the token"
 
 
 class TestNoTokenConfigured:
@@ -182,10 +140,10 @@ class TestNoTokenConfigured:
         """Without a token the API stays unauthenticated."""
         result = _client(token=None).simulate_get("/estates")
 
-        assert result.status_code == 200
+        assert result.status_code == 200, "estate route should be open"
 
     def test_empty_token_is_treated_as_unconfigured(self) -> None:
         """An empty environment value does not enable authentication."""
         result = _client(token="").simulate_get("/estates")
 
-        assert result.status_code == 200
+        assert result.status_code == 200, "empty token should disable auth"

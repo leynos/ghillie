@@ -79,7 +79,7 @@ async def _seed_estate(
     )
     async with session_factory() as session:
         estate = await session.scalar(select(Estate))
-    assert estate is not None
+    assert estate is not None, "catalogue import should create an estate"
     return estate.id
 
 
@@ -136,22 +136,22 @@ async def _walk_pages(
                 offset=offset,
             ),
         )
-        assert page.limit == limit
-        assert page.offset == offset
-        assert len(page.items) <= limit
+        assert page.limit == limit, "page should echo the requested limit"
+        assert page.offset == offset, "page should echo the requested offset"
+        assert len(page.items) <= limit, "page should not exceed the requested limit"
         visited.extend(repo.slug for repo in page.items)
 
         if not page.has_more:
-            assert page.next_offset is None
+            assert page.next_offset is None, "final page should not offer a next offset"
             break
 
         next_offset = page.next_offset
-        assert next_offset is not None
-        assert next_offset == offset + limit
-        assert len(page.items) == limit
+        assert next_offset is not None, "more results should give a next offset"
+        assert next_offset == offset + limit, "next offset should advance by one page"
+        assert len(page.items) == limit, "a full page should contain the limit"
         offset = next_offset
 
-    assert visited == expected
+    assert visited == expected, "paging should cover the same repositories in order"
 
     past_end = await service.list_repositories(
         _ESTATE_KEY,
@@ -161,9 +161,9 @@ async def _walk_pages(
             offset=len(expected) + 7,
         ),
     )
-    assert past_end.items == ()
-    assert past_end.has_more is False
-    assert past_end.next_offset is None
+    assert past_end.items == (), "offset past the end should return no items"
+    assert past_end.has_more is False, "past the end should report no more"
+    assert past_end.next_offset is None, "past the end should have no next offset"
 
 
 @pytest.mark.asyncio
@@ -207,6 +207,6 @@ async def test_first_page_of_an_empty_registry_is_empty(
         _ESTATE_KEY, RepositoryQuery(limit=10, offset=0)
     )
 
-    assert page.items == ()
-    assert page.has_more is False
-    assert page.next_offset is None
+    assert page.items == (), "empty registry should list no repositories"
+    assert page.has_more is False, "empty registry should report no further pages"
+    assert page.next_offset is None, "empty registry should have no next offset"

@@ -9,6 +9,7 @@ vocabulary so adapters never depend on an underlying package.
 import asyncio
 import time
 import typing as typ
+import weakref
 
 from sqlalchemy.exc import (
     IntegrityError,
@@ -72,7 +73,13 @@ class EstateManagementService:
         """Store the session factory and registry collaborator."""
         self._session_factory = session_factory
         self._registry = registry
-        self._locks: dict[str, asyncio.Lock] = {}
+        # A weak map keeps per-estate serialization without retaining a lock
+        # for every key a client has ever mentioned. A coroutine inside
+        # ``async with`` holds the only strong reference, so an idle lock is
+        # collected at once.
+        self._locks: weakref.WeakValueDictionary[str, asyncio.Lock] = (
+            weakref.WeakValueDictionary()
+        )
 
     async def list_estates(self, page: PageRequest) -> Page[EstateSummary]:
         """Return a page of estates ordered by key."""

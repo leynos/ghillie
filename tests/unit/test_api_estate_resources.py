@@ -182,8 +182,8 @@ def test_list_estates_returns_the_documented_envelope(
     """The default listing returns every documented field."""
     result = client.simulate_get("/estates")
 
-    assert result.status_code == 200
-    assert service.page_requests == [PageRequest()]
+    assert result.status_code == 200, "expected 200 from /estates"
+    assert service.page_requests == [PageRequest()], "default page request expected"
     assert result.json == {
         "items": [
             {
@@ -200,7 +200,7 @@ def test_list_estates_returns_the_documented_envelope(
         "offset": 0,
         "has_more": False,
         "next_offset": None,
-    }
+    }, "documented envelope expected"
 
 
 def test_list_estates_parses_pagination(
@@ -210,10 +210,12 @@ def test_list_estates_parses_pagination(
     """Limit and offset reach the port as integers."""
     result = client.simulate_get("/estates", params={"limit": "2", "offset": "3"})
 
-    assert result.status_code == 200
-    assert service.page_requests == [PageRequest(limit=2, offset=3)]
-    assert result.json["limit"] == 2
-    assert result.json["offset"] == 3
+    assert result.status_code == 200, "expected 200 from /estates"
+    assert service.page_requests == [PageRequest(limit=2, offset=3)], (
+        "limit and offset should reach the service"
+    )
+    assert result.json["limit"] == 2, "limit should echo the request"
+    assert result.json["offset"] == 3, "offset should echo the request"
 
 
 def test_list_estates_renders_a_null_last_import(
@@ -233,9 +235,9 @@ def test_list_estates_renders_a_null_last_import(
 
     result = client.simulate_get("/estates")
 
-    assert result.status_code == 200
-    assert result.json["items"][0]["last_import"] is None
-    assert result.json["items"][0]["description"] is None
+    assert result.status_code == 200, "expected 200 from /estates"
+    assert result.json["items"][0]["last_import"] is None, "last import should be null"
+    assert result.json["items"][0]["description"] is None, "description should be null"
 
 
 def test_list_estates_offset_past_end_is_empty(
@@ -247,10 +249,10 @@ def test_list_estates_offset_past_end_is_empty(
 
     result = client.simulate_get("/estates", params={"offset": "25"})
 
-    assert result.status_code == 200
-    assert result.json["items"] == []
-    assert result.json["has_more"] is False
-    assert result.json["next_offset"] is None
+    assert result.status_code == 200, "expected 200 from /estates"
+    assert result.json["items"] == [], "empty page should have no items"
+    assert result.json["has_more"] is False, "empty page should not have more"
+    assert result.json["next_offset"] is None, "no next offset on last page"
 
 
 @pytest.mark.parametrize("value", ["abc", "1.5", ""])
@@ -262,10 +264,10 @@ def test_list_estates_rejects_a_non_integer_limit(
     """A limit that is not an integer is invalid input."""
     result = client.simulate_get("/estates", params={"limit": value})
 
-    assert result.status_code == 400
-    assert result.json["code"] == "invalid_input"
-    assert result.json["field"] == "limit"
-    assert service.page_requests == []
+    assert result.status_code == 400, "expected 400 for a bad limit"
+    assert result.json["code"] == "invalid_input", "code should be invalid_input"
+    assert result.json["field"] == "limit", "error should name the limit field"
+    assert service.page_requests == [], "invalid input should not reach the service"
 
 
 def test_list_estates_rejects_a_repeated_query_parameter(
@@ -275,10 +277,10 @@ def test_list_estates_rejects_a_repeated_query_parameter(
     """A repeated pagination parameter is ambiguous and rejected."""
     result = client.simulate_get("/estates?limit=1&limit=2")
 
-    assert result.status_code == 400
-    assert result.json["code"] == "invalid_input"
-    assert result.json["field"] == "limit"
-    assert service.page_requests == []
+    assert result.status_code == 400, "expected 400 for a repeated limit"
+    assert result.json["code"] == "invalid_input", "code should be invalid_input"
+    assert result.json["field"] == "limit", "error should name the limit field"
+    assert service.page_requests == [], "invalid input should not reach the service"
 
 
 # ---------------------------------------------------------------------------
@@ -303,7 +305,7 @@ def test_import_returns_the_documented_envelope(
         json=_IMPORT_BODY,
     )
 
-    assert result.status_code == 200
+    assert result.status_code == 200, "expected 200 from catalogue-import"
     assert service.imports == [
         {
             "estate_key": "demo",
@@ -312,7 +314,7 @@ def test_import_returns_the_documented_envelope(
             "estate_name": "Demo",
             "dry_run": False,
         }
-    ]
+    ], "import arguments should reach the service"
     assert result.json == {
         "estate_key": "demo",
         "commit_sha": "c1",
@@ -325,7 +327,7 @@ def test_import_returns_the_documented_envelope(
         "components": {"created": 2, "updated": 0, "deleted": 1},
         "repositories": {"created": 1, "updated": 0, "deleted": 0},
         "edges": {"created": 1, "updated": 0, "deleted": 0},
-    }
+    }, "documented import envelope expected"
 
 
 def test_import_accepts_a_null_estate_name(
@@ -338,8 +340,8 @@ def test_import_accepts_a_null_estate_name(
         json={"commit_sha": "c1", "estate_name": None, "catalogue_yaml": "x"},
     )
 
-    assert result.status_code == 200
-    assert service.imports[0]["estate_name"] is None
+    assert result.status_code == 200, "expected 200 from catalogue-import"
+    assert service.imports[0]["estate_name"] is None, "estate name should be null"
 
 
 def test_import_parses_dry_run(
@@ -353,10 +355,10 @@ def test_import_parses_dry_run(
         json=_IMPORT_BODY,
     )
 
-    assert result.status_code == 200
-    assert service.imports[0]["dry_run"] is True
-    assert result.json["dry_run"] is True
-    assert result.json["registry_sync_required"] is False
+    assert result.status_code == 200, "expected 200 from catalogue-import"
+    assert service.imports[0]["dry_run"] is True, "dry run should reach the service"
+    assert result.json["dry_run"] is True, "response should be a dry run"
+    assert result.json["registry_sync_required"] is False, "no registry sync on dry run"
 
 
 def test_import_rejects_a_non_boolean_dry_run(
@@ -370,10 +372,10 @@ def test_import_rejects_a_non_boolean_dry_run(
         json=_IMPORT_BODY,
     )
 
-    assert result.status_code == 400
-    assert result.json["code"] == "invalid_input"
-    assert result.json["field"] == "dry_run"
-    assert service.imports == []
+    assert result.status_code == 400, "expected 400 for a bad boolean"
+    assert result.json["code"] == "invalid_input", "code should be invalid_input"
+    assert result.json["field"] == "dry_run", "error should name dry_run"
+    assert service.imports == [], "invalid input should not reach the service"
 
 
 def test_import_rejects_an_unsupported_media_type(
@@ -387,9 +389,9 @@ def test_import_rejects_an_unsupported_media_type(
         headers={"Content-Type": "text/yaml"},
     )
 
-    assert result.status_code == 415
-    assert result.json["code"] == "unsupported_media_type"
-    assert service.imports == []
+    assert result.status_code == 415, "expected 415 for a YAML body"
+    assert result.json["code"] == "unsupported_media_type", "unsupported media type"
+    assert service.imports == [], "invalid input should not reach the service"
 
 
 def test_import_rejects_a_body_over_the_limit_by_content_length(
@@ -403,10 +405,10 @@ def test_import_rejects_a_body_over_the_limit_by_content_length(
         headers={"Content-Type": "application/json"},
     )
 
-    assert result.status_code == 413
-    assert result.json["code"] == "payload_too_large"
-    assert result.json["max_bytes"] == _MAX_REQUEST_BODY_BYTES
-    assert service.imports == []
+    assert result.status_code == 413, "expected 413 for an oversized body"
+    assert result.json["code"] == "payload_too_large", "expected payload_too_large code"
+    assert result.json["max_bytes"] == _MAX_REQUEST_BODY_BYTES, "max bytes should match"
+    assert service.imports == [], "invalid input should not reach the service"
 
 
 @pytest.mark.asyncio
@@ -428,10 +430,12 @@ async def test_import_rejects_a_streamed_body_over_the_limit() -> None:
             headers={"Content-Type": "application/json"},
         )
 
-    assert response.status_code == 413
-    assert response.json()["code"] == "payload_too_large"
-    assert response.json()["max_bytes"] == _MAX_REQUEST_BODY_BYTES
-    assert service.imports == []
+    assert response.status_code == 413, "expected 413 for a streamed body"
+    assert response.json()["code"] == "payload_too_large", "expected payload_too_large"
+    assert response.json()["max_bytes"] == _MAX_REQUEST_BODY_BYTES, (
+        "max bytes should match"
+    )
+    assert service.imports == [], "invalid input should not reach the service"
 
 
 @pytest.mark.parametrize(
@@ -465,9 +469,9 @@ def test_import_rejects_a_malformed_or_incomplete_body(
         headers={"Content-Type": content_type},
     )
 
-    assert result.status_code == 400
-    assert result.json["code"] == "invalid_input"
-    assert service.imports == []
+    assert result.status_code == 400, "expected 400 for a malformed body"
+    assert result.json["code"] == "invalid_input", "code should be invalid_input"
+    assert service.imports == [], "invalid input should not reach the service"
 
 
 # ---------------------------------------------------------------------------
@@ -482,8 +486,10 @@ def test_sync_returns_the_documented_envelope(
     """A sync echoes counts, conflicted slugs, and the disabled preview."""
     result = client.simulate_post("/estates/demo/registry-sync")
 
-    assert result.status_code == 200
-    assert service.syncs == [{"estate_key": "demo", "dry_run": False}]
+    assert result.status_code == 200, "expected 200 from registry-sync"
+    assert service.syncs == [{"estate_key": "demo", "dry_run": False}], (
+        "sync call should reach the service"
+    )
     assert result.json == {
         "estate_key": "demo",
         "state": "succeeded",
@@ -494,7 +500,7 @@ def test_sync_returns_the_documented_envelope(
         "repositories_conflicted": ["other/estate-repo"],
         "repositories_left_disabled": ["org/alpha"],
         "repositories_left_disabled_count": 1,
-    }
+    }, "documented sync envelope expected"
 
 
 def test_sync_parses_dry_run(
@@ -506,9 +512,11 @@ def test_sync_parses_dry_run(
         "/estates/demo/registry-sync", params={"dry_run": "true"}
     )
 
-    assert result.status_code == 200
-    assert service.syncs == [{"estate_key": "demo", "dry_run": True}]
-    assert result.json["dry_run"] is True
+    assert result.status_code == 200, "expected 200 from registry-sync"
+    assert service.syncs == [{"estate_key": "demo", "dry_run": True}], (
+        "dry-run sync should reach the service"
+    )
+    assert result.json["dry_run"] is True, "response should be a dry run"
 
 
 @pytest.mark.parametrize("value", ["1", "TRUE", "on", ""])
@@ -522,9 +530,9 @@ def test_sync_rejects_a_non_boolean_dry_run(
         "/estates/demo/registry-sync", params={"dry_run": value}
     )
 
-    assert result.status_code == 400
-    assert result.json["code"] == "invalid_input"
-    assert service.syncs == []
+    assert result.status_code == 400, "expected 400 for a bad boolean"
+    assert result.json["code"] == "invalid_input", "code should be invalid_input"
+    assert service.syncs == [], "invalid input should not reach the service"
 
 
 # ---------------------------------------------------------------------------
@@ -539,8 +547,8 @@ def test_list_repositories_returns_the_documented_envelope(
     """Repository items carry exactly the documented fields."""
     result = client.simulate_get("/estates/demo/repositories")
 
-    assert result.status_code == 200
-    assert service.repository_queries == [RepositoryQuery()]
+    assert result.status_code == 200, "expected 200 from repositories"
+    assert service.repository_queries == [RepositoryQuery()], "default query expected"
     assert result.json == {
         "estate_key": "demo",
         "items": [
@@ -556,7 +564,7 @@ def test_list_repositories_returns_the_documented_envelope(
         "offset": 0,
         "has_more": False,
         "next_offset": None,
-    }
+    }, "documented repository envelope expected"
 
 
 def test_list_repositories_parses_every_query_parameter(
@@ -573,12 +581,12 @@ def test_list_repositories_parses_every_query_parameter(
         },
     )
 
-    assert result.status_code == 200
+    assert result.status_code == 200, "expected 200 from repositories"
     assert service.repository_queries == [
         RepositoryQuery(ingestion_enabled=False, limit=5, offset=10)
-    ]
-    assert result.json["limit"] == 5
-    assert result.json["offset"] == 10
+    ], "filters and paging should reach the service"
+    assert result.json["limit"] == 5, "limit should echo the request"
+    assert result.json["offset"] == 10, "offset should echo the request"
 
 
 def test_list_repositories_accepts_no_filter(
@@ -588,8 +596,8 @@ def test_list_repositories_accepts_no_filter(
     """Omitting the filter lists both enabled and disabled repositories."""
     result = client.simulate_get("/estates/demo/repositories")
 
-    assert result.status_code == 200
-    assert service.repository_queries[0].ingestion_enabled is None
+    assert result.status_code == 200, "expected 200 from repositories"
+    assert service.repository_queries[0].ingestion_enabled is None, "no filter expected"
 
 
 @pytest.mark.parametrize("value", ["yes", "1", "TRUE", ""])
@@ -603,10 +611,10 @@ def test_list_repositories_rejects_a_non_boolean_filter(
         "/estates/demo/repositories", params={"ingestion_enabled": value}
     )
 
-    assert result.status_code == 400
-    assert result.json["code"] == "invalid_input"
-    assert result.json["field"] == "ingestion_enabled"
-    assert service.repository_queries == []
+    assert result.status_code == 400, "expected 400 for a bad boolean"
+    assert result.json["code"] == "invalid_input", "code should be invalid_input"
+    assert result.json["field"] == "ingestion_enabled", "error should name the filter"
+    assert service.repository_queries == [], "invalid input should not reach the port"
 
 
 def test_list_repositories_rejects_a_repeated_filter(
@@ -618,10 +626,10 @@ def test_list_repositories_rejects_a_repeated_filter(
         "/estates/demo/repositories?ingestion_enabled=true&ingestion_enabled=false"
     )
 
-    assert result.status_code == 400
-    assert result.json["code"] == "invalid_input"
-    assert result.json["field"] == "ingestion_enabled"
-    assert service.repository_queries == []
+    assert result.status_code == 400, "expected 400 for a bad boolean"
+    assert result.json["code"] == "invalid_input", "code should be invalid_input"
+    assert result.json["field"] == "ingestion_enabled", "error should name the filter"
+    assert service.repository_queries == [], "invalid input should not reach the port"
 
 
 # ---------------------------------------------------------------------------
@@ -645,14 +653,16 @@ def test_toggle_accepts_both_json_media_types(
         headers={"Content-Type": content_type},
     )
 
-    assert result.status_code == 200
-    assert service.toggles == [{"owner": "org", "name": "alpha", "enabled": False}]
+    assert result.status_code == 200, "expected 200 from a toggle"
+    assert service.toggles == [{"owner": "org", "name": "alpha", "enabled": False}], (
+        "toggle arguments should reach the service"
+    )
     assert result.json == {
         "owner": "org",
         "name": "alpha",
         "ingestion_enabled": False,
         "changed": True,
-    }
+    }, "documented toggle envelope expected"
 
 
 @pytest.mark.parametrize("body", [b"{}", b'{"ingestion_enabled": null}'])
@@ -668,9 +678,9 @@ def test_toggle_rejects_a_missing_or_null_flag(
         headers={"Content-Type": "application/json"},
     )
 
-    assert result.status_code == 400
-    assert result.json["code"] == "invalid_input"
-    assert service.toggles == []
+    assert result.status_code == 400, "expected 400 for a missing flag"
+    assert result.json["code"] == "invalid_input", "code should be invalid_input"
+    assert service.toggles == [], "invalid input should not reach the service"
 
 
 @pytest.mark.parametrize(
@@ -693,9 +703,9 @@ def test_toggle_rejects_non_boolean_or_unknown_fields(
         headers={"Content-Type": "application/json"},
     )
 
-    assert result.status_code == 400
-    assert result.json["code"] == "invalid_input"
-    assert service.toggles == []
+    assert result.status_code == 400, "expected 400 for a bad toggle body"
+    assert result.json["code"] == "invalid_input", "code should be invalid_input"
+    assert service.toggles == [], "invalid input should not reach the service"
 
 
 def test_toggle_rejects_an_unsupported_media_type(
@@ -709,9 +719,9 @@ def test_toggle_rejects_an_unsupported_media_type(
         headers={"Content-Type": "text/plain"},
     )
 
-    assert result.status_code == 415
-    assert result.json["code"] == "unsupported_media_type"
-    assert service.toggles == []
+    assert result.status_code == 415, "expected 415 for a text body"
+    assert result.json["code"] == "unsupported_media_type", "unsupported media type"
+    assert service.toggles == [], "invalid input should not reach the service"
 
 
 # ---------------------------------------------------------------------------
@@ -726,5 +736,5 @@ def test_unknown_extra_query_parameter_is_ignored(
     """Unknown query parameters do not change the documented behaviour."""
     result = client.simulate_get("/estates", params={"unknown": "value"})
 
-    assert result.status_code == 200
-    assert service.page_requests == [PageRequest()]
+    assert result.status_code == 200, "expected 200 from /estates"
+    assert service.page_requests == [PageRequest()], "default page request expected"

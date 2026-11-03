@@ -26,6 +26,8 @@ from __future__ import annotations
 import typing as typ
 from http import HTTPStatus
 
+from ghillie.logging import get_logger, log_exception
+
 if typ.TYPE_CHECKING:
     import falcon
     from falcon.asgi import Request, Response
@@ -61,7 +63,10 @@ __all__ = [
     "handle_report_validation_failed",
     "handle_repository_not_found",
     "handle_storage_unavailable",
+    "handle_unexpected_error",
 ]
+
+logger = get_logger(__name__)
 
 # Falcon's own errors still pass through the envelope; this table gives them a
 # stable code where the status has an obvious meaning. Unknown statuses fall
@@ -410,3 +415,24 @@ async def handle_report_validation_failed(
             {"code": issue.code, "message": issue.message} for issue in ex.issues
         ],
     }
+
+
+async def handle_unexpected_error(
+    _req: Request,
+    resp: Response,
+    ex: Exception,
+    _params: dict[str, typ.Any],
+) -> None:
+    """Render an unhandled exception as the shared 500 envelope (D7).
+
+    The details stay in the log; the response is deliberately generic so an
+    internal failure never leaks implementation detail to a client.
+    """
+    log_exception(logger, "Unhandled API error", ex)
+    _set_error(
+        resp,
+        status=HTTPStatus.INTERNAL_SERVER_ERROR,
+        title="Internal server error",
+        code="internal_error",
+        description="An unexpected error occurred.",
+    )

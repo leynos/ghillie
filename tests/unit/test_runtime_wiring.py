@@ -44,9 +44,13 @@ def test_estate_routes_need_only_a_database(
     client = _client()
 
     estates = client.simulate_get("/estates")
-    assert estates.status_code == 503
-    assert estates.json["code"] == "storage_unavailable"
-    assert client.simulate_post("/reports/repositories/acme/widgets").status_code == 404
+    assert estates.status_code == 503, "expected 503 when storage is unavailable"
+    assert estates.json["code"] == "storage_unavailable", (
+        "body should report storage unavailability"
+    )
+    assert (
+        client.simulate_post("/reports/repositories/acme/widgets").status_code == 404
+    ), "reports route should be absent"
 
 
 def test_reporting_route_needs_a_status_backend(
@@ -58,8 +62,12 @@ def test_reporting_route_needs_a_status_backend(
 
     client = _client()
 
-    assert client.simulate_get("/estates").status_code == 503
-    assert client.simulate_post("/reports/repositories/acme/widgets").status_code != 404
+    assert client.simulate_get("/estates").status_code == 503, (
+        "estate route should report storage unavailable"
+    )
+    assert (
+        client.simulate_post("/reports/repositories/acme/widgets").status_code != 404
+    ), "reports route should be mounted"
 
 
 def test_invalid_bootstrap_value_fails_fast(
@@ -84,7 +92,22 @@ def test_create_all_bootstrap_value_is_accepted(
 
     from ghillie.runtime import create_app
 
-    assert isinstance(create_app(), falcon.asgi.App)
+    assert isinstance(create_app(), falcon.asgi.App), "runtime should build the app"
+
+
+def test_api_token_is_stripped(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A trailing newline from a secret file does not break authentication."""
+    _set_database(monkeypatch, tmp_path)
+    monkeypatch.setenv("GHILLIE_API_TOKEN", "runtime-token\n")
+
+    result = _client().simulate_get(
+        "/estates", headers={"Authorization": "Bearer runtime-token"}
+    )
+
+    assert result.status_code == 503, "token should authenticate"
+    assert result.json["code"] == "storage_unavailable", (
+        "body should report storage unavailability"
+    )
 
 
 def test_api_token_from_environment_protects_routes(
@@ -96,10 +119,12 @@ def test_api_token_from_environment_protects_routes(
 
     client = _client()
 
-    assert client.simulate_get("/estates").status_code == 401
+    assert client.simulate_get("/estates").status_code == 401, (
+        "missing token should be rejected"
+    )
     assert (
         client.simulate_get(
             "/estates", headers={"Authorization": "Bearer runtime-token"}
         ).status_code
         == 503
-    )
+    ), "valid token should authenticate"

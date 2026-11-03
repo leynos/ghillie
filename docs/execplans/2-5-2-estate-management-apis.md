@@ -377,7 +377,25 @@ per pull request.
         `check-architecture`, `typecheck`, `lint` (Hecate, Ruff, and Skylos),
         `test` (1391 passed, 11 skipped), `markdownlint`, `nixie`, and
         `spelling`.
-  - [ ] (2026-11-03) CodeRabbit review of this milestone.
+  - [x] (2026-11-04) CodeRabbit review of this milestone returned nine
+        findings (six minor, three trivial). Repairs: the bootstrap docstring
+        now states that concurrent `CREATE TABLE` can fail a replica;
+        `GHILLIE_API_TOKEN` is stripped before use; the bearer check compares
+        bytes so a Latin-1 credential is a 401 rather than a `TypeError`; a
+        catch-all `Exception` handler renders the D7 envelope and logs the
+        detail; the BOM literal is an escape sequence; per-estate locks live
+        in a `WeakValueDictionary` with a regression test; the empty estate
+        port double is shared from `tests/unit/estate_test_helpers.py`; every
+        new-test assert carries a failure message; and the four
+        `nullable: true` OpenAPI fields are JSON Schema null unions, asserted
+        by a new test.
+  - [x] (2026-11-04) Final gate suite after the review repairs, run
+        sequentially on the candidate: `check-fmt`, `check-architecture`,
+        `typecheck`, `test` (1396 passed, 11 skipped), `markdownlint`,
+        `nixie`, and `spelling` were green. `lint` found one `ANN401` in the
+        new OpenAPI walker; retyping its argument as `object` fixed it, and
+        `make lint` and the OpenAPI module then passed on the final
+        candidate.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
@@ -445,6 +463,18 @@ per pull request.
   pytest-timeout's 30-second default can expire during set-up before the test
   body runs. Impact: `test_estate_pagination` carries the plan's explicit
   120-second module timeout.
+- Observation: Falcon routes an exception with no registered handler to its
+  default 500, which bypasses the D7 envelope and emits only a `title`.
+  Registering a domain handler set is therefore not "every failure type"; the
+  catch-all `Exception` handler is required, and `falcon.HTTPError` handlers
+  still win by method-resolution order. Impact: EP-M3.
+- Observation: OpenAPI 3.1 aligns the Schema Object with JSON Schema
+  2020-12, which has no `nullable` keyword, so `nullable: true` is silently
+  ignored by validators; `type: [T, "null"]` is the portable form. Impact: the
+  four optional response fields in `specs/openapi.yml`.
+- Observation: the local CodeRabbit CLI reviews committed history, not the
+  working tree, so review repairs must be committed before a re-assessment can
+  cover them. Impact: the review loop for EP-M3.
 
 - Observation: the Silver schema permits an unowned row (`estate_id` null) that
   still carries a `catalogue_repository_id`. Because the policy treats a null

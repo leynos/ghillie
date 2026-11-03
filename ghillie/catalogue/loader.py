@@ -13,7 +13,7 @@ from .validation import CatalogueValidationError, validate_catalogue
 
 YAML_VERSION = (1, 2)
 
-_BOM = "﻿"
+_BOM = "\ufeff"
 
 
 def lint_catalogue(path: Path | str) -> Catalogue:

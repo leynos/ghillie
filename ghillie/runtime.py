@@ -127,7 +127,10 @@ def create_app() -> falcon.asgi.App:
     from ghillie.api.app import create_app as _create_api_app
 
     bootstrap = _read_bootstrap_setting()
-    api_token = os.environ.get("GHILLIE_API_TOKEN") or None
+    # Secrets supplied by files or shell helpers often carry a trailing
+    # newline; the request parser strips the supplied credential, so the
+    # configured value must be stripped too or a valid token never matches.
+    api_token = (os.environ.get("GHILLIE_API_TOKEN") or "").strip() or None
     database_url = os.environ.get("GHILLIE_DATABASE_URL")
 
     if database_url is None:
