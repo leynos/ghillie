@@ -62,7 +62,9 @@ def test_new_estate_key_rejects_non_matching_keys(estate_key: str) -> None:
 @given(st.from_regex(NEW_ESTATE_KEY_PATTERN, fullmatch=True))
 def test_new_estate_key_property_accepts_pattern_matches(estate_key: str) -> None:
     """Every string generated from the pattern is accepted."""
-    assert validate_new_estate_key(estate_key) == estate_key
+    assert validate_new_estate_key(estate_key) == estate_key, (
+        f"pattern-generated key {estate_key!r} should be accepted"
+    )
 
 
 @given(st.text())

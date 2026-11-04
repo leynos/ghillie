@@ -119,7 +119,21 @@ async def list_estates(
 async def get_estate_by_key(
     session_factory: SessionFactory, key: str
 ) -> EstateRow | None:
-    """Return one estate by key, with its latest import, or ``None``."""
+    """Return one estate by key, with its latest import, or ``None``.
+
+    Parameters
+    ----------
+    session_factory:
+        Factory for async catalogue sessions.
+    key:
+        Estate key to look up.
+
+    Returns
+    -------
+    EstateRow | None
+        The matching estate, or ``None`` when no estate has that key.
+
+    """
     latest = _latest_import_subquery(key)
     query = (
         select(Estate, latest.c.commit_sha, latest.c.imported_at)

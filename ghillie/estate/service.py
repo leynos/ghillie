@@ -48,7 +48,7 @@ from ghillie.estate.models import (
     validate_new_estate_key,
 )
 from ghillie.logging import get_logger, log_info
-from ghillie.registry.errors import RegistrySyncError
+from ghillie.registry.errors import ESTATE_NOT_FOUND_REASON, RegistrySyncError
 from ghillie.registry.errors import (
     RepositoryNotFoundError as RegistryRepositoryNotFoundError,
 )
@@ -63,7 +63,21 @@ logger = get_logger(__name__)
 
 
 class EstateManagementService:
-    """Coordinate catalogue imports, registry syncs, listings, and toggles."""
+    """Coordinate catalogue imports, registry syncs, listings, and toggles.
+
+    Parameters
+    ----------
+    session_factory:
+        Factory for async catalogue sessions.
+    registry:
+        Registry collaborator that projects catalogue repositories into Silver.
+
+    Notes
+    -----
+    Imports and syncs for one estate are serialized by an in-process lock, so
+    two concurrent requests cannot interleave their catalogue writes.
+
+    """
 
     def __init__(
         self,
@@ -83,7 +97,26 @@ class EstateManagementService:
         )
 
     async def list_estates(self, page: PageRequest) -> Page[EstateSummary]:
-        """Return a page of estates ordered by key."""
+        """Return a page of estates ordered by key.
+
+        Parameters
+        ----------
+        page:
+            Requested limit and offset.
+
+        Returns
+        -------
+        Page[EstateSummary]
+            The requested page and its continuation metadata.
+
+        Raises
+        ------
+        InvalidPaginationError
+            If ``page.limit`` or ``page.offset`` is outside its allowed range.
+        StorageUnavailableError
+            If the catalogue database cannot be read.
+
+        """
         _validate_page(page.limit, page.offset)
         try:
             rows = await list_estates(
@@ -113,7 +146,40 @@ class EstateManagementService:
         estate_name: str | None,
         dry_run: bool,
     ) -> CatalogueImportSummary:
-        """Import one catalogue document for an estate."""
+        """Import one catalogue document for an estate.
+
+        Parameters
+        ----------
+        estate_key:
+            Key of the estate to import into. A new estate is created when the
+            key does not exist.
+        catalogue_yaml:
+            Catalogue document as YAML text.
+        commit_sha:
+            Commit the document was read from.
+        estate_name:
+            Display name to store. ``None`` keeps an existing name and names a
+            new estate after its key.
+        dry_run:
+            When true, report the counts without persisting them.
+
+        Returns
+        -------
+        CatalogueImportSummary
+            Counts and skip state for the import.
+
+        Raises
+        ------
+        InvalidEstateKeyError
+            If ``estate_key`` does not match the creation pattern.
+        CatalogueRejectedError
+            If the YAML is malformed or fails schema validation.
+        EstateConflictError
+            If the import conflicts with an existing record.
+        StorageUnavailableError
+            If the catalogue database cannot be written.
+
+        """
         validate_new_estate_key(estate_key)
 
         try:
@@ -198,7 +264,34 @@ class EstateManagementService:
     async def sync_registry(
         self, estate_key: str, *, dry_run: bool
     ) -> RegistrySyncSummary:
-        """Project an estate's catalogue repositories into the registry."""
+        """Project an estate's catalogue repositories into the registry.
+
+        Parameters
+        ----------
+        estate_key:
+            Key of the estate whose repositories should be synchronized.
+        dry_run:
+            When true, report the counts without persisting them.
+
+        Returns
+        -------
+        RegistrySyncSummary
+            Counts, conflicts, and repositories left disabled by the sync.
+
+        Raises
+        ------
+        InvalidEstateKeyError
+            If ``estate_key`` is empty or over the length limit.
+        EstateNotFoundError
+            If no estate has that key.
+        EstateConflictError
+            If the sync conflicts with an existing record.
+        RegistrySyncFailedError
+            If the registry reports a failure that is not storage-related.
+        StorageUnavailableError
+            If the catalogue or registry database cannot be reached.
+
+        """
         validate_estate_key_reference(estate_key)
 
         started = time.perf_counter()
@@ -248,7 +341,32 @@ class EstateManagementService:
     async def list_repositories(
         self, estate_key: str, query: RepositoryQuery
     ) -> RepositoryPage:
-        """Return a page of an estate's registered repositories."""
+        """Return a page of an estate's registered repositories.
+
+        Parameters
+        ----------
+        estate_key:
+            Key of the estate whose repositories should be listed.
+        query:
+            Ingestion filter and requested limit and offset.
+
+        Returns
+        -------
+        RepositoryPage
+            The requested page and its continuation metadata.
+
+        Raises
+        ------
+        InvalidEstateKeyError
+            If ``estate_key`` is empty or over the length limit.
+        InvalidPaginationError
+            If ``query.limit`` or ``query.offset`` is outside its allowed range.
+        EstateNotFoundError
+            If no estate has that key.
+        StorageUnavailableError
+            If the registry database cannot be read.
+
+        """
         validate_estate_key_reference(estate_key)
         _validate_page(query.limit, query.offset)
 
@@ -280,7 +398,30 @@ class EstateManagementService:
     async def set_ingestion(
         self, owner: str, name: str, *, enabled: bool
     ) -> IngestionToggleOutcome:
-        """Set one repository's ingestion flag."""
+        """Set one repository's ingestion flag.
+
+        Parameters
+        ----------
+        owner:
+            Repository owner.
+        name:
+            Repository name.
+        enabled:
+            Desired ingestion state.
+
+        Returns
+        -------
+        IngestionToggleOutcome
+            The resulting state and whether the call changed it.
+
+        Raises
+        ------
+        RepositoryNotFoundError
+            If no repository has that owner and name.
+        StorageUnavailableError
+            If the registry database cannot be written.
+
+        """
         started = time.perf_counter()
         try:
             changed = await self._toggle(owner, name, enabled=enabled)
@@ -367,12 +508,16 @@ def _catalogue_rejected(exc: CatalogueValidationError) -> CatalogueRejectedError
 
 def _sync_error(estate_key: str, exc: RegistrySyncError) -> Exception:
     """Map a registry sync failure using its original cause when present."""
-    cause = exc.__cause__
-    if isinstance(cause, IntegrityError):
-        return EstateConflictError(_CONFLICT_MESSAGE)
-    if isinstance(cause, (OperationalError, InterfaceError)):
-        return StorageUnavailableError(_STORAGE_MESSAGE)
-    if exc.reason == "Estate not found":
+    # The registry wraps low-level SQLAlchemy failures instead of exposing
+    # them, so the original cause is the only place that distinguishes a
+    # uniqueness clash from an outage. Anything else falls back to the reason
+    # the registry reported.
+    match exc.__cause__:
+        case IntegrityError():
+            return EstateConflictError(_CONFLICT_MESSAGE)
+        case OperationalError() | InterfaceError():
+            return StorageUnavailableError(_STORAGE_MESSAGE)
+    if exc.reason == ESTATE_NOT_FOUND_REASON:
         return EstateNotFoundError(estate_key)
     return RegistrySyncFailedError(str(exc))
 

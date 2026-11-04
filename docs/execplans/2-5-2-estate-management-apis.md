@@ -411,8 +411,21 @@ per pull request.
         from `setRepositoryIngestion`; the `-ise` docstrings use en-GB
         Oxford `-ize` spelling; and the remaining bare test asserts carry
         failure messages. Regression tests were added for the offset bound,
-        middleware construction, and scoped subquery. Pending: gate run and
-        re-review of this repair commit.
+        middleware construction, and scoped subquery. The full gate suite was
+        green on the repair commit (`6bb5d44`): `check-fmt`,
+        `check-architecture`, `typecheck`, `lint`, `test` (1401 passed, 11
+        skipped), `markdownlint`, `nixie`, and `spelling`.
+  - [x] (2026-11-04) Third CodeRabbit review returned five findings (one
+        minor, four trivial). Repairs: `CatalogueImportRequest.estate_name`
+        is a JSON Schema null union, matching the server's accepted null; the
+        public port, service, and `get_estate_by_key` docstrings carry NumPy
+        parameter, return, and raise sections; `_sync_error` matches on the
+        wrapped cause and compares `RegistrySyncError.reason` to the new
+        `ESTATE_NOT_FOUND_REASON` constant exported by
+        `ghillie.registry.errors`; the remaining bare property-test assert
+        carries a message; and the two oversized test modules were split at
+        their endpoint and service seams, with the shared fake port and
+        database builders moved into `tests/unit/estate_test_helpers.py`.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.

@@ -1,161 +1,25 @@
-"""HTTP resource behaviour for the estate-management endpoints.
+"""HTTP resource behaviour for estate listing, import, and synchronization.
 
 The resources are exercised against a fake :class:`EstateManagement` port so
 these tests describe only the transport contract: paths, query parsing, strict
 booleans, request bodies, and response shapes. Translation of domain failures
-is covered by ``test_api_estate_errors.py``.
+is covered by ``test_api_estate_errors.py``; repository listing and ingestion
+toggles are covered by ``test_api_repository_resources.py``.
 """
 
-import datetime as dt
 import typing as typ
 
-import falcon.testing
 import httpx
 import pytest
 
 from ghillie.api.app import AppDependencies, create_app
-from ghillie.estate.models import (
-    CatalogueImportSummary,
-    CountSummary,
-    EstateSummary,
-    IngestionToggleOutcome,
-    Page,
-    PageRequest,
-    RegistrySyncSummary,
-    RepositoryPage,
-    RepositoryQuery,
-)
-from ghillie.registry.models import RepositoryInfo
+from ghillie.estate.models import EstateSummary, PageRequest
+from tests.unit.estate_test_helpers import FakeEstateManagement, build_estate_client
 
-_NOW = dt.datetime(2024, 7, 7, 12, 0, tzinfo=dt.UTC)
+if typ.TYPE_CHECKING:
+    import falcon.testing
+
 _MAX_REQUEST_BODY_BYTES = 1024 * 1024
-_DOCUMENTATION_PATHS = ("docs/", "README.md")
-
-
-class FakeEstateManagement:
-    """In-memory port double that records every call."""
-
-    def __init__(self) -> None:
-        """Build a double with one estate and one repository."""
-        self.page_requests: list[PageRequest] = []
-        self.repository_queries: list[RepositoryQuery] = []
-        self.imports: list[dict[str, object]] = []
-        self.syncs: list[dict[str, object]] = []
-        self.toggles: list[dict[str, object]] = []
-        self.estate_items: tuple[EstateSummary, ...] = (
-            EstateSummary(
-                key="demo",
-                name="Demo",
-                description="A demo estate",
-                last_import_commit_sha="c1",
-                last_imported_at=_NOW,
-            ),
-        )
-        self.repository_items: tuple[RepositoryInfo, ...] = (
-            RepositoryInfo(
-                id="repo-1",
-                owner="org",
-                name="alpha",
-                default_branch="main",
-                ingestion_enabled=True,
-                documentation_paths=_DOCUMENTATION_PATHS,
-                estate_id="estate-1",
-            ),
-        )
-
-    async def list_estates(self, page: PageRequest) -> Page[EstateSummary]:
-        """Return the configured estate page."""
-        self.page_requests.append(page)
-        return Page(
-            items=self.estate_items,
-            limit=page.limit,
-            offset=page.offset,
-            has_more=False,
-            next_offset=None,
-        )
-
-    async def import_catalogue(  # noqa: PLR0913 - mirrors the port signature.
-        self,
-        estate_key: str,
-        *,
-        catalogue_yaml: str,
-        commit_sha: str,
-        estate_name: str | None,
-        dry_run: bool,
-    ) -> CatalogueImportSummary:
-        """Record and return a fixed import summary."""
-        self.imports.append(
-            {
-                "estate_key": estate_key,
-                "catalogue_yaml": catalogue_yaml,
-                "commit_sha": commit_sha,
-                "estate_name": estate_name,
-                "dry_run": dry_run,
-            }
-        )
-        return CatalogueImportSummary(
-            estate_key=estate_key,
-            commit_sha=commit_sha,
-            state="succeeded",
-            dry_run=dry_run,
-            skipped=False,
-            skipped_reason=None,
-            registry_sync_required=not dry_run,
-            projects=CountSummary(created=1, updated=0, deleted=0),
-            components=CountSummary(created=2, updated=0, deleted=1),
-            repositories=CountSummary(created=1, updated=0, deleted=0),
-            edges=CountSummary(created=1, updated=0, deleted=0),
-        )
-
-    async def sync_registry(
-        self, estate_key: str, *, dry_run: bool
-    ) -> RegistrySyncSummary:
-        """Record and return a fixed sync summary."""
-        self.syncs.append({"estate_key": estate_key, "dry_run": dry_run})
-        return RegistrySyncSummary(
-            estate_key=estate_key,
-            state="succeeded",
-            dry_run=dry_run,
-            repositories_created=1,
-            repositories_updated=2,
-            repositories_deactivated=0,
-            repositories_conflicted=("other/estate-repo",),
-            repositories_left_disabled=("org/alpha",),
-            repositories_left_disabled_count=1,
-        )
-
-    async def list_repositories(
-        self, estate_key: str, query: RepositoryQuery
-    ) -> RepositoryPage:
-        """Record and return the configured repository page."""
-        self.repository_queries.append(query)
-        return RepositoryPage(
-            estate_key=estate_key,
-            items=self.repository_items,
-            limit=query.limit,
-            offset=query.offset,
-            has_more=False,
-            next_offset=None,
-        )
-
-    async def set_ingestion(
-        self, owner: str, name: str, *, enabled: bool
-    ) -> IngestionToggleOutcome:
-        """Record and return a fixed toggle outcome."""
-        self.toggles.append({"owner": owner, "name": name, "enabled": enabled})
-        return IngestionToggleOutcome(
-            owner=owner,
-            name=name,
-            ingestion_enabled=enabled,
-            changed=True,
-        )
-
-
-def _client(service: FakeEstateManagement) -> falcon.testing.TestClient:
-    """Build a client for an app with only the estate service configured."""
-    return falcon.testing.TestClient(
-        create_app(AppDependencies(estate_service=service))
-    )
 
 
 @pytest.fixture
@@ -167,7 +31,7 @@ def service() -> FakeEstateManagement:
 @pytest.fixture
 def client(service: FakeEstateManagement) -> falcon.testing.TestClient:
     """Build a client over the fake port."""
-    return _client(service)
+    return build_estate_client(service)
 
 
 # ---------------------------------------------------------------------------
@@ -533,195 +397,6 @@ def test_sync_rejects_a_non_boolean_dry_run(
     assert result.status_code == 400, "expected 400 for a bad boolean"
     assert result.json["code"] == "invalid_input", "code should be invalid_input"
     assert service.syncs == [], "invalid input should not reach the service"
-
-
-# ---------------------------------------------------------------------------
-# GET /estates/{estate_key}/repositories
-# ---------------------------------------------------------------------------
-
-
-def test_list_repositories_returns_the_documented_envelope(
-    client: falcon.testing.TestClient,
-    service: FakeEstateManagement,
-) -> None:
-    """Repository items carry exactly the documented fields."""
-    result = client.simulate_get("/estates/demo/repositories")
-
-    assert result.status_code == 200, "expected 200 from repositories"
-    assert service.repository_queries == [RepositoryQuery()], "default query expected"
-    assert result.json == {
-        "estate_key": "demo",
-        "items": [
-            {
-                "owner": "org",
-                "name": "alpha",
-                "default_branch": "main",
-                "ingestion_enabled": True,
-                "documentation_paths": list(_DOCUMENTATION_PATHS),
-            }
-        ],
-        "limit": 50,
-        "offset": 0,
-        "has_more": False,
-        "next_offset": None,
-    }, "documented repository envelope expected"
-
-
-def test_list_repositories_parses_every_query_parameter(
-    client: falcon.testing.TestClient,
-    service: FakeEstateManagement,
-) -> None:
-    """The filter and pagination parameters reach the port."""
-    result = client.simulate_get(
-        "/estates/demo/repositories",
-        params={
-            "ingestion_enabled": "false",
-            "limit": "5",
-            "offset": "10",
-        },
-    )
-
-    assert result.status_code == 200, "expected 200 from repositories"
-    assert service.repository_queries == [
-        RepositoryQuery(ingestion_enabled=False, limit=5, offset=10)
-    ], "filters and paging should reach the service"
-    assert result.json["limit"] == 5, "limit should echo the request"
-    assert result.json["offset"] == 10, "offset should echo the request"
-
-
-def test_list_repositories_accepts_no_filter(
-    client: falcon.testing.TestClient,
-    service: FakeEstateManagement,
-) -> None:
-    """Omitting the filter lists both enabled and disabled repositories."""
-    result = client.simulate_get("/estates/demo/repositories")
-
-    assert result.status_code == 200, "expected 200 from repositories"
-    assert service.repository_queries[0].ingestion_enabled is None, "no filter expected"
-
-
-@pytest.mark.parametrize("value", ["yes", "1", "TRUE", ""])
-def test_list_repositories_rejects_a_non_boolean_filter(
-    client: falcon.testing.TestClient,
-    service: FakeEstateManagement,
-    value: str,
-) -> None:
-    """The ingestion filter accepts exactly ``true`` or ``false``."""
-    result = client.simulate_get(
-        "/estates/demo/repositories", params={"ingestion_enabled": value}
-    )
-
-    assert result.status_code == 400, "expected 400 for a bad boolean"
-    assert result.json["code"] == "invalid_input", "code should be invalid_input"
-    assert result.json["field"] == "ingestion_enabled", "error should name the filter"
-    assert service.repository_queries == [], "invalid input should not reach the port"
-
-
-def test_list_repositories_rejects_a_repeated_filter(
-    client: falcon.testing.TestClient,
-    service: FakeEstateManagement,
-) -> None:
-    """A repeated filter is ambiguous and rejected."""
-    result = client.simulate_get(
-        "/estates/demo/repositories?ingestion_enabled=true&ingestion_enabled=false"
-    )
-
-    assert result.status_code == 400, "expected 400 for a bad boolean"
-    assert result.json["code"] == "invalid_input", "code should be invalid_input"
-    assert result.json["field"] == "ingestion_enabled", "error should name the filter"
-    assert service.repository_queries == [], "invalid input should not reach the port"
-
-
-# ---------------------------------------------------------------------------
-# PATCH /repositories/{owner}/{name}/ingestion
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "content_type",
-    ["application/json", "application/merge-patch+json"],
-)
-def test_toggle_accepts_both_json_media_types(
-    client: falcon.testing.TestClient,
-    service: FakeEstateManagement,
-    content_type: str,
-) -> None:
-    """Both documented media types decode the same body."""
-    result = client.simulate_patch(
-        "/repositories/org/alpha/ingestion",
-        body=b'{"ingestion_enabled": false}',
-        headers={"Content-Type": content_type},
-    )
-
-    assert result.status_code == 200, "expected 200 from a toggle"
-    assert service.toggles == [{"owner": "org", "name": "alpha", "enabled": False}], (
-        "toggle arguments should reach the service"
-    )
-    assert result.json == {
-        "owner": "org",
-        "name": "alpha",
-        "ingestion_enabled": False,
-        "changed": True,
-    }, "documented toggle envelope expected"
-
-
-@pytest.mark.parametrize("body", [b"{}", b'{"ingestion_enabled": null}'])
-def test_toggle_rejects_a_missing_or_null_flag(
-    client: falcon.testing.TestClient,
-    service: FakeEstateManagement,
-    body: bytes,
-) -> None:
-    """A missing or null flag is invalid input."""
-    result = client.simulate_patch(
-        "/repositories/org/alpha/ingestion",
-        body=body,
-        headers={"Content-Type": "application/json"},
-    )
-
-    assert result.status_code == 400, "expected 400 for a missing flag"
-    assert result.json["code"] == "invalid_input", "code should be invalid_input"
-    assert service.toggles == [], "invalid input should not reach the service"
-
-
-@pytest.mark.parametrize(
-    "body",
-    [
-        b'{"ingestion_enabled": 1}',
-        b'{"ingestion_enabled": "true"}',
-        b'{"ingestion_enabled": true, "extra": 1}',
-    ],
-)
-def test_toggle_rejects_non_boolean_or_unknown_fields(
-    client: falcon.testing.TestClient,
-    service: FakeEstateManagement,
-    body: bytes,
-) -> None:
-    """The toggle body is strict about types and unknown fields."""
-    result = client.simulate_patch(
-        "/repositories/org/alpha/ingestion",
-        body=body,
-        headers={"Content-Type": "application/json"},
-    )
-
-    assert result.status_code == 400, "expected 400 for a bad toggle body"
-    assert result.json["code"] == "invalid_input", "code should be invalid_input"
-    assert service.toggles == [], "invalid input should not reach the service"
-
-
-def test_toggle_rejects_an_unsupported_media_type(
-    client: falcon.testing.TestClient,
-    service: FakeEstateManagement,
-) -> None:
-    """A patch with an unsupported media type is a 415."""
-    result = client.simulate_patch(
-        "/repositories/org/alpha/ingestion",
-        body=b"ingestion_enabled=false",
-        headers={"Content-Type": "text/plain"},
-    )
-
-    assert result.status_code == 415, "expected 415 for a text body"
-    assert result.json["code"] == "unsupported_media_type", "unsupported media type"
-    assert service.toggles == [], "invalid input should not reach the service"
 
 
 # ---------------------------------------------------------------------------

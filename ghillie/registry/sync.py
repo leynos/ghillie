@@ -40,7 +40,7 @@ from ghillie.catalogue.storage import (
 )
 from ghillie.common.slug import parse_repo_slug
 from ghillie.common.time import utcnow
-from ghillie.registry.errors import RegistrySyncError
+from ghillie.registry.errors import ESTATE_NOT_FOUND_REASON, RegistrySyncError
 from ghillie.registry.models import SyncResult
 from ghillie.registry.policy import (
     IngestionDecision,
@@ -114,7 +114,7 @@ async def _load_catalogue_repositories_or_raise(
         raise RegistrySyncError(estate_key, "Database error during sync") from exc
 
     if load_result is None:
-        raise RegistrySyncError(estate_key, "Estate not found")
+        raise RegistrySyncError(estate_key, ESTATE_NOT_FOUND_REASON)
 
     return load_result
 
