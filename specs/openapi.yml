@@ -592,7 +592,7 @@ components:
           type: string
           description: Catalogue document as YAML text.
         estate_name:
-          type: string
+          type: [string, "null"]
           minLength: 1
           maxLength: 255
           description: >-

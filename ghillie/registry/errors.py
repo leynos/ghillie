@@ -1,5 +1,13 @@
 """Errors specific to the repository registry."""
 
+ESTATE_NOT_FOUND_REASON = "Estate not found"
+"""Reason reported when a sync targets an estate that does not exist.
+
+Callers translate a sync failure back into their own vocabulary by comparing
+``RegistrySyncError.reason`` to this constant rather than to a repeated string
+literal.
+"""
+
 
 class RegistryError(Exception):
     """Base class for registry errors."""
