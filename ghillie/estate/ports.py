@@ -6,17 +6,19 @@ HTTP and CLI layers see only estate-owned types and errors.
 
 import typing as typ
 
-if typ.TYPE_CHECKING:
-    from ghillie.estate.models import (
-        CatalogueImportSummary,
-        EstateSummary,
-        IngestionToggleOutcome,
-        Page,
-        PageRequest,
-        RegistrySyncSummary,
-        RepositoryPage,
-        RepositoryQuery,
-    )
+# Importing the models at runtime keeps ``typing.get_type_hints`` working for
+# adapters and documentation tools; names that live only under
+# ``TYPE_CHECKING`` are unresolvable once PEP 649 evaluates the annotations.
+from ghillie.estate.models import (  # noqa: TC001
+    CatalogueImportSummary,
+    EstateSummary,
+    IngestionToggleOutcome,
+    Page,
+    PageRequest,
+    RegistrySyncSummary,
+    RepositoryPage,
+    RepositoryQuery,
+)
 
 
 class EstateManagement(typ.Protocol):

@@ -255,7 +255,24 @@ async def handle_estate_not_found(
     ex: EstateNotFoundError,
     _params: dict[str, typ.Any],
 ) -> None:
-    """Map an unknown estate to an HTTP 404 JSON response."""
+    """Map an unknown estate to an HTTP 404 JSON response.
+
+    Parameters
+    ----------
+    _req:
+        Request that named the missing estate.
+    resp:
+        Response to populate with the error envelope.
+    ex:
+        Error carrying the estate key that was not found.
+    _params:
+        Falcon's per-route error-handler parameters.
+
+    Returns
+    -------
+    None
+
+    """
     _set_error(
         resp,
         status=HTTPStatus.NOT_FOUND,
@@ -271,7 +288,24 @@ async def handle_estate_repository_not_found(
     ex: EstateRepositoryNotFoundError,
     _params: dict[str, typ.Any],
 ) -> None:
-    """Map an unknown repository to an HTTP 404 JSON response."""
+    """Map an unknown repository to an HTTP 404 JSON response.
+
+    Parameters
+    ----------
+    _req:
+        Request that named the missing repository.
+    resp:
+        Response to populate with the error envelope.
+    ex:
+        Error carrying the owner and name that were not found.
+    _params:
+        Falcon's per-route error-handler parameters.
+
+    Returns
+    -------
+    None
+
+    """
     _set_error(
         resp,
         status=HTTPStatus.NOT_FOUND,
@@ -287,7 +321,24 @@ async def handle_invalid_estate_key(
     ex: InvalidEstateKeyError,
     _params: dict[str, typ.Any],
 ) -> None:
-    """Map a rejected estate key to an HTTP 400 JSON response."""
+    """Map a rejected estate key to an HTTP 400 JSON response.
+
+    Parameters
+    ----------
+    _req:
+        Request that carried the rejected key.
+    resp:
+        Response to populate with the error envelope.
+    ex:
+        Error carrying the key and the rule it broke.
+    _params:
+        Falcon's per-route error-handler parameters.
+
+    Returns
+    -------
+    None
+
+    """
     _set_error(
         resp,
         status=HTTPStatus.BAD_REQUEST,
@@ -304,7 +355,24 @@ async def handle_invalid_pagination(
     ex: InvalidPaginationError,
     _params: dict[str, typ.Any],
 ) -> None:
-    """Map an out-of-range page limit or offset to HTTP 400."""
+    """Map an out-of-range page limit or offset to HTTP 400.
+
+    Parameters
+    ----------
+    _req:
+        Request that carried the invalid pagination.
+    resp:
+        Response to populate with the error envelope.
+    ex:
+        Error naming the invalid field and its allowed range.
+    _params:
+        Falcon's per-route error-handler parameters.
+
+    Returns
+    -------
+    None
+
+    """
     _set_error(
         resp,
         status=HTTPStatus.BAD_REQUEST,
@@ -321,7 +389,24 @@ async def handle_catalogue_rejected(
     ex: CatalogueRejectedError,
     _params: dict[str, typ.Any],
 ) -> None:
-    """Map catalogue validation issues to an HTTP 422 JSON response."""
+    """Map catalogue validation issues to an HTTP 422 JSON response.
+
+    Parameters
+    ----------
+    _req:
+        Request that uploaded the invalid catalogue.
+    resp:
+        Response to populate with the error envelope.
+    ex:
+        Error carrying the catalogue validation issues.
+    _params:
+        Falcon's per-route error-handler parameters.
+
+    Returns
+    -------
+    None
+
+    """
     _set_error(
         resp,
         status=HTTPStatus.UNPROCESSABLE_ENTITY,
@@ -342,7 +427,24 @@ async def handle_estate_conflict(
     ex: EstateConflictError,
     _params: dict[str, typ.Any],
 ) -> None:
-    """Map a uniqueness conflict to an HTTP 409 JSON response."""
+    """Map a uniqueness conflict to an HTTP 409 JSON response.
+
+    Parameters
+    ----------
+    _req:
+        Request whose write conflicted with stored state.
+    resp:
+        Response to populate with the error envelope.
+    ex:
+        Error describing the conflict without driver detail.
+    _params:
+        Falcon's per-route error-handler parameters.
+
+    Returns
+    -------
+    None
+
+    """
     _set_error(
         resp,
         status=HTTPStatus.CONFLICT,
@@ -358,7 +460,24 @@ async def handle_storage_unavailable(
     ex: StorageUnavailableError,
     _params: dict[str, typ.Any],
 ) -> None:
-    """Map an unreachable database to an HTTP 503 JSON response."""
+    """Map an unreachable database to an HTTP 503 JSON response.
+
+    Parameters
+    ----------
+    _req:
+        Request that needed the unavailable database.
+    resp:
+        Response to populate with the error envelope.
+    ex:
+        Error describing the unavailable storage without driver detail.
+    _params:
+        Falcon's per-route error-handler parameters.
+
+    Returns
+    -------
+    None
+
+    """
     _set_error(
         resp,
         status=HTTPStatus.SERVICE_UNAVAILABLE,
@@ -374,7 +493,25 @@ async def handle_registry_sync_failed(
     ex: RegistrySyncFailedError,
     _params: dict[str, typ.Any],
 ) -> None:
-    """Map an unexpected sync failure to an HTTP 500 JSON response."""
+    """Map an unexpected sync failure to an HTTP 500 JSON response.
+
+    Parameters
+    ----------
+    _req:
+        Request that triggered the failed sync.
+    resp:
+        Response to populate with the error envelope.
+    ex:
+        Sync failure, logged here because it is a server-side fault.
+    _params:
+        Falcon's per-route error-handler parameters.
+
+    Returns
+    -------
+    None
+
+    """
+    log_exception(logger, "Registry sync failed", ex)
     _set_error(
         resp,
         status=HTTPStatus.INTERNAL_SERVER_ERROR,
@@ -438,7 +575,24 @@ async def handle_report_validation_failed(
     ex: ReportValidationError,
     _params: dict[str, typ.Any],
 ) -> None:
-    """Map ``ReportValidationError`` to an HTTP 422 JSON response."""
+    """Map ``ReportValidationError`` to an HTTP 422 JSON response.
+
+    Parameters
+    ----------
+    _req:
+        Request that generated the invalid report.
+    resp:
+        Response to populate with the validation envelope.
+    ex:
+        Error carrying the review identifier and validation issues.
+    _params:
+        Falcon's per-route error-handler parameters.
+
+    Returns
+    -------
+    None
+
+    """
     resp.status = HTTPStatus.UNPROCESSABLE_ENTITY
     resp.media = {
         "title": "Report validation failed",

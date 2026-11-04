@@ -93,6 +93,19 @@ def test_create_all_bootstrap_value_is_accepted(
     assert isinstance(create_app(), falcon.asgi.App), "runtime should build the app"
 
 
+def test_blank_api_token_fails_fast(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A configured but blank token must not silently disable authentication."""
+    _set_database(monkeypatch, tmp_path)
+    monkeypatch.setenv("GHILLIE_API_TOKEN", "   \n")
+
+    from ghillie.runtime import create_app
+
+    with pytest.raises(SystemExit):
+        create_app()
+
+
 def test_api_token_is_stripped(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """A trailing newline from a secret file does not break authentication."""
     _set_database(monkeypatch, tmp_path)

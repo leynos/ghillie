@@ -333,6 +333,7 @@ paths:
                     description: >-
                       Generated report failed correctness checks after retries.
                     code: report_validation_failed
+                    review_id: review-123
                     issues:
                       - code: empty_summary
                         message: Summary is empty
@@ -515,6 +516,11 @@ components:
         max_bytes:
           type: integer
           description: Largest accepted request body, present on 413 responses.
+        review_id:
+          type: string
+          description: >-
+            Identifier of the generated report review that failed validation.
+            Only present on ``report_validation_failed`` responses.
     LastImportResponse:
       type: object
       additionalProperties: false

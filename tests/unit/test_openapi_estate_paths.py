@@ -90,6 +90,9 @@ def test_error_response_carries_the_stable_code(
     assert properties["max_bytes"]["type"] == "integer", (
         "max_bytes should be an integer"
     )
+    assert properties["review_id"]["type"] == "string", (
+        "review_id should be documented as a string"
+    )
 
 
 def test_import_request_body_uses_the_json_upload_shape(
@@ -159,13 +162,15 @@ def test_optional_fields_use_json_schema_null_types(
         assert "null" in field_spec["type"], f"{schema_name}.{field}"
 
     def _has_nullable(value: object) -> bool:
-        if isinstance(value, dict):
-            return "nullable" in value or any(
-                _has_nullable(child) for child in value.values()
-            )
-        if isinstance(value, list):
-            return any(_has_nullable(child) for child in value)
-        return False
+        match value:
+            case dict():
+                return "nullable" in value or any(
+                    _has_nullable(child) for child in value.values()
+                )
+            case list():
+                return any(_has_nullable(child) for child in value)
+            case _:
+                return False
 
     assert not _has_nullable(spec), "no schema should use the nullable keyword"
 

@@ -30,6 +30,7 @@ from tests.fixtures.specs import (
     RepositoryParams,
 )
 from tests.helpers.event_builders import commit_envelope
+from tests.unit.estate_test_helpers import build_registry, build_service
 from tests.unit.project_evidence_helpers import (
     _import_wildside,
     create_project_report,
@@ -44,6 +45,7 @@ from tests.unit.project_evidence_helpers import (
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+    from ghillie.estate.service import EstateManagementService
     from ghillie.gold.storage import Report
 
 # Re-export specs so existing ``from tests.unit.conftest import ...`` lines
@@ -264,6 +266,23 @@ async def setup_test_repository_with_event(
     )
     await transformer.process_pending()
     return await get_repo_id(session_factory, test_spec.owner, test_spec.name)
+
+
+@pytest.fixture
+def registry(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> RepositoryRegistryService:
+    """Build a registry service over the shared test database."""
+    return build_registry(session_factory)
+
+
+@pytest.fixture
+def service(
+    session_factory: async_sessionmaker[AsyncSession],
+    registry: RepositoryRegistryService,
+) -> EstateManagementService:
+    """Build the estate service under test."""
+    return build_service(session_factory, registry)
 
 
 @pytest_asyncio.fixture

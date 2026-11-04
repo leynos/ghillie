@@ -540,6 +540,16 @@ def test_importer_dry_run_leaves_no_rows(
     assert result.edges_created == EXPECTED_EDGES, "dry run should count edges"
     assert _count_rows(session_factory) == (0, 0, 0, 0), "dry run should leave no rows"
 
+    async def _persistence() -> tuple[int, int]:
+        async with session_factory() as session:
+            estates = (await session.scalars(select(Estate))).all()
+            imports = (await session.scalars(select(CatalogueImportRecord))).all()
+            return len(estates), len(imports)
+
+    assert asyncio.run(_persistence()) == (0, 0), (
+        "dry run should not persist the estate or its import record"
+    )
+
 
 def test_importer_keeps_the_estate_description_on_rename(
     session_factory: async_sessionmaker[AsyncSession],

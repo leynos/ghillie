@@ -5,6 +5,30 @@ methods, so :class:`EmptyEstateManagement` keeps one empty double instead of
 every test module repeating the five-method signature. The HTTP and service
 suites share :class:`FakeEstateManagement` and the database-backed builders
 from the same module so each split test file starts from the same fixtures.
+
+Exported builders
+-----------------
+``build_estate_client``
+    Wrap a :class:`FakeEstateManagement` in a Falcon test client whose app has
+    only the estate service wired in.
+``build_registry``
+    Construct a :class:`RepositoryRegistryService` over a test session factory,
+    using the same factory for the catalogue and Silver stores.
+``build_service``
+    Construct the :class:`EstateManagementService` under test from a session
+    factory and a registry.
+``catalogue_document``
+    Render a minimal valid catalogue YAML document with overridable component
+    and repository names.
+``import_catalogue``
+    Import through the service with terse defaults, treating only ``None`` as
+    "use the fixture document" so an explicit empty upload still reaches the
+    importer.
+``count_rows``
+    Count every row in one catalogue table.
+
+``NOW`` and ``DOCUMENTATION_PATHS`` provide the fixed timestamp and path
+fixtures the doubles advertise.
 """
 
 import datetime as dt

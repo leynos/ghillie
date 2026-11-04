@@ -7,7 +7,9 @@ toggle behaviour live in ``test_estate_service_queries.py``.
 """
 
 import asyncio
+import gc
 import typing as typ
+import weakref
 
 import pytest
 from sqlalchemy import select
@@ -27,37 +29,14 @@ from ghillie.estate.errors import (
     InvalidEstateKeyError,
     StorageUnavailableError,
 )
-from tests.unit.estate_test_helpers import (
-    build_registry,
-    build_service,
-    count_rows,
-    import_catalogue,
-)
+from tests.unit.estate_test_helpers import count_rows, import_catalogue
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from ghillie.estate.service import EstateManagementService
-    from ghillie.registry.service import RepositoryRegistryService
 
 _ESTATE_KEY = "demo"
-
-
-@pytest.fixture
-def registry(
-    session_factory: async_sessionmaker[AsyncSession],
-) -> RepositoryRegistryService:
-    """Build a registry service over the shared test database."""
-    return build_registry(session_factory)
-
-
-@pytest.fixture
-def service(
-    session_factory: async_sessionmaker[AsyncSession],
-    registry: RepositoryRegistryService,
-) -> EstateManagementService:
-    """Build the service under test."""
-    return build_service(session_factory, registry)
 
 
 # ---------------------------------------------------------------------------
@@ -329,6 +308,7 @@ async def test_import_lock_serializes_concurrent_imports(
 @pytest.mark.asyncio
 async def test_estate_locks_are_not_retained_after_use(
     service: EstateManagementService,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """D17: serialization does not leak one lock per key ever mentioned.
 
@@ -336,7 +316,21 @@ async def test_estate_locks_are_not_retained_after_use(
     let it grow process memory indefinitely. The weak map must release an idle
     lock once the import block finishes.
     """
+    created: list[weakref.ref[asyncio.Lock]] = []
+    real_lock = asyncio.Lock
+
+    class _RecordingLock(real_lock):
+        def __init__(self) -> None:
+            super().__init__()
+            created.append(weakref.ref(self))
+
+    monkeypatch.setattr(asyncio, "Lock", _RecordingLock)
+
     await import_catalogue(service, estate_key="alpha")
     await import_catalogue(service, estate_key="beta")
+    gc.collect()
 
-    assert list(service._locks) == [], "idle locks should be released"
+    assert created, "each import should create a per-estate lock"
+    assert all(lock_ref() is None for lock_ref in created), (
+        "idle locks should be released"
+    )

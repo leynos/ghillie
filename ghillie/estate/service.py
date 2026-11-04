@@ -485,6 +485,7 @@ _SYNC_FAILED_MESSAGE = "the registry sync failed"
 
 
 def _estate_summary(row: EstateRow) -> EstateSummary:
+    """Convert a catalogue row into the port's estate summary."""
     return EstateSummary(
         key=row.key,
         name=row.name,
@@ -495,10 +496,12 @@ def _estate_summary(row: EstateRow) -> EstateSummary:
 
 
 def _count_summary(created: int, updated: int, deleted: int) -> CountSummary:
+    """Pack three record counts into the shared count summary."""
     return CountSummary(created=created, updated=updated, deleted=deleted)
 
 
 def _catalogue_rejected(exc: CatalogueValidationError) -> CatalogueRejectedError:
+    """Translate catalogue validation messages into port issues."""
     issues = tuple(
         Issue(code="catalogue_schema", message=message) for message in exc.issues
     )
@@ -522,6 +525,7 @@ def _sync_error(estate_key: str, exc: RegistrySyncError) -> Exception:
 
 
 def _validate_page(limit: int, offset: int) -> None:
+    """Reject a page request outside the documented bounds."""
     if not 1 <= limit <= MAX_PAGE_LIMIT:
         message = f"must be between 1 and {MAX_PAGE_LIMIT}"
         raise InvalidPaginationError("limit", message)
@@ -531,10 +535,12 @@ def _validate_page(limit: int, offset: int) -> None:
 
 
 def _next_offset(limit: int, offset: int, *, has_more: bool) -> int | None:
+    """Return the following page's offset, or ``None`` on the last page."""
     return offset + limit if has_more else None
 
 
 def _elapsed_ms(started: float) -> float:
+    """Return the milliseconds elapsed since *started*."""
     return (time.perf_counter() - started) * 1000
 
 
@@ -548,6 +554,7 @@ def _log_mutation(  # noqa: PLR0913 - every structured log field is required by 
     started: float,
     details: str,
 ) -> None:
+    """Write the one structured mutation line required by D21."""
     log_info(
         logger,
         "%s estate_key=%s commit_sha=%s dry_run=%s %s duration_ms=%.1f outcome=%s",
