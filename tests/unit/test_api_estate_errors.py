@@ -89,15 +89,26 @@ def _client(error: Exception) -> falcon.testing.TestClient:
 _IMPORT_BODY = {"commit_sha": "c1", "catalogue_yaml": "version: 1\n"}
 
 
+class _ErrorBody(typ.TypedDict, total=False):
+    """Documented error-envelope fields these assertions inspect."""
+
+    title: str
+    description: str
+    code: str
+    field: str
+    issues: list[dict[str, str]]
+    max_bytes: int
+
+
 def _assert_error(
     result: falcon.testing.Result,
     *,
     status: int,
     code: str,
-) -> dict[str, typ.Any]:
+) -> _ErrorBody:
     """Assert a structured error body and return it."""
     assert result.status_code == status, result.text
-    body = result.json
+    body = typ.cast("_ErrorBody", result.json)
     assert body["code"] == code, "error body should carry the expected code"
     assert isinstance(body["title"], str), "title should be a string"
     assert body["title"], "title should be present"

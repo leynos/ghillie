@@ -23,7 +23,24 @@ type SessionFactory = async_sessionmaker[AsyncSession]
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class EstateRow:
-    """An estate together with its most recent catalogue import."""
+    """An estate together with its most recent catalogue import.
+
+    Attributes
+    ----------
+    id:
+        Database identifier used to key the row's repository projections.
+    key:
+        Operator-facing estate key.
+    name:
+        Display name of the estate.
+    description:
+        Optional operator description, or ``None``.
+    last_import_commit_sha:
+        Commit of the latest catalogue import, or ``None`` if never imported.
+    last_imported_at:
+        Time of the latest catalogue import, or ``None`` if never imported.
+
+    """
 
     id: str
     key: str
@@ -33,7 +50,11 @@ class EstateRow:
     last_imported_at: dt.datetime | None
 
 
-def _latest_import_subquery(estate_key: str | None = None) -> Subquery:
+def _latest_import_subquery(
+    estate_key: str | None = None,
+    *,
+    estate_ids: typ.Sequence[str] | None = None,
+) -> Subquery:
     """Rank imports per estate so the outer join can pick rank one.
 
     Parameters
@@ -42,6 +63,10 @@ def _latest_import_subquery(estate_key: str | None = None) -> Subquery:
         When supplied, rank only this estate's imports. The single-estate
         lookup uses it so PostgreSQL does not scan the whole import history
         for a window whose other ranks the outer filter would discard anyway.
+    estate_ids:
+        When supplied, rank only these estates' imports. The paged listing
+        uses it after selecting its page, so the window never spans the whole
+        import history.
 
     """
     query = select(
@@ -62,6 +87,8 @@ def _latest_import_subquery(estate_key: str | None = None) -> Subquery:
         query = query.join(Estate, Estate.id == CatalogueImportRecord.estate_id).where(
             Estate.key == estate_key
         )
+    elif estate_ids is not None:
+        query = query.where(CatalogueImportRecord.estate_id.in_(estate_ids))
     return query.subquery()
 
 
@@ -88,32 +115,52 @@ async def list_estates(
         Estates in key order.
 
     """
-    latest = _latest_import_subquery()
-    query = (
-        select(Estate, latest.c.commit_sha, latest.c.imported_at)
-        .outerjoin(
-            latest,
-            and_(latest.c.estate_id == Estate.id, latest.c.rank == 1),
-        )
-        .order_by(Estate.key)
-        .offset(offset)
-        .limit(limit)
-    )
-
     async with session_factory() as session:
-        rows = (await session.execute(query)).all()
-
-    return [
-        EstateRow(
-            id=estate.id,
-            key=estate.key,
-            name=estate.name,
-            description=estate.description,
-            last_import_commit_sha=commit_sha,
-            last_imported_at=imported_at,
+        # Select the page first so the ranking window only covers the estates
+        # it will return instead of the whole import history.
+        estates = (
+            (
+                await session.execute(
+                    select(Estate).order_by(Estate.key).offset(offset).limit(limit)
+                )
+            )
+            .scalars()
+            .all()
         )
-        for estate, commit_sha, imported_at in rows
-    ]
+        if not estates:
+            return []
+
+        latest = _latest_import_subquery(estate_ids=[estate.id for estate in estates])
+        imports = (
+            await session.execute(
+                select(
+                    latest.c.estate_id,
+                    latest.c.commit_sha,
+                    latest.c.imported_at,
+                ).where(latest.c.rank == 1)
+            )
+        ).all()
+
+        # Build the rows before the session closes so every attribute is read
+        # while the ORM instances are still attached and loaded.
+        by_estate = {
+            estate_id: (commit_sha, imported_at)
+            for estate_id, commit_sha, imported_at in imports
+        }
+        rows: list[EstateRow] = []
+        for estate in estates:
+            commit_sha, imported_at = by_estate.get(estate.id, (None, None))
+            rows.append(
+                EstateRow(
+                    id=estate.id,
+                    key=estate.key,
+                    name=estate.name,
+                    description=estate.description,
+                    last_import_commit_sha=commit_sha,
+                    last_imported_at=imported_at,
+                )
+            )
+        return rows
 
 
 async def get_estate_by_key(

@@ -5,8 +5,6 @@ expose report routes only when a status backend is also configured, read the
 optional API token, and fail fast on an unknown bootstrap value.
 """
 
-from __future__ import annotations
-
 import typing as typ
 
 import falcon.asgi

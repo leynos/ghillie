@@ -52,7 +52,6 @@ from ghillie.registry.errors import ESTATE_NOT_FOUND_REASON, RegistrySyncError
 from ghillie.registry.errors import (
     RepositoryNotFoundError as RegistryRepositoryNotFoundError,
 )
-from ghillie.registry.listing import RepositoryListOptions, list_repositories
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -372,14 +371,14 @@ class EstateManagementService:
 
         estate = await self._require_estate(estate_key)
         try:
-            repositories = await list_repositories(
-                self._session_factory,
-                RepositoryListOptions(
-                    estate_id=estate.id,
-                    ingestion_enabled=query.ingestion_enabled,
-                    limit=query.limit + 1,
-                    offset=query.offset,
-                ),
+            # The registry owns the Silver session factory. Querying Silver
+            # through the catalogue factory would read the wrong database when
+            # the stores are deployed separately.
+            repositories = await self._registry.list_repositories(
+                estate.id,
+                ingestion_enabled=query.ingestion_enabled,
+                limit=query.limit + 1,
+                offset=query.offset,
             )
         except SQLAlchemyError as exc:
             raise StorageUnavailableError(_STORAGE_MESSAGE) from exc

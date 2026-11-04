@@ -12,7 +12,11 @@ import typing as typ
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ghillie.registry.ingestion import get_repository_by_slug, set_ingestion_enabled
-from ghillie.registry.listing import RepositoryListOptions, list_repositories
+from ghillie.registry.listing import (
+    RepositoryListOptions,
+    list_repositories,
+    list_repositories as query_repositories,
+)
 from ghillie.registry.storage import DialectUpsertStrategy
 from ghillie.registry.sync import SyncOptions, sync_from_catalogue
 
@@ -20,6 +24,18 @@ if typ.TYPE_CHECKING:
     from ghillie.registry.models import RepositoryInfo, SyncResult
     from ghillie.registry.storage import UpsertStrategy
 
+type SessionFactory = async_sessionmaker[AsyncSession]
+
+
+
+"""Repository registry service for managing GitHub ingestion targets.
+The registry service bridges the catalogue domain (source of truth for estate
+configuration) with the Silver layer (operational data store for ingestion
+and reporting).
+"""
+if typ.TYPE_CHECKING:
+    from ghillie.registry.models import RepositoryInfo, SyncResult
+    from ghillie.registry.storage import UpsertStrategy
 type SessionFactory = async_sessionmaker[AsyncSession]
 
 
@@ -129,7 +145,7 @@ class RepositoryRegistryService:
         once.
 
         """
-        return await list_repositories(
+        return await query_repositories(
             self._silver_sf,
             RepositoryListOptions(
                 estate_id=estate_id,
@@ -169,11 +185,54 @@ class RepositoryRegistryService:
         once.
 
         """
-        return await list_repositories(
+        return await query_repositories(
             self._silver_sf,
             RepositoryListOptions(
                 estate_id=estate_id,
                 ingestion_enabled=None,
+                limit=limit,
+                offset=offset,
+            ),
+        )
+
+    async def list_repositories(
+        self,
+        estate_id: str | None = None,
+        *,
+        ingestion_enabled: bool | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> list[RepositoryInfo]:
+        """Return repositories from Silver with optional filters.
+
+        Parameters
+        ----------
+        estate_id:
+            Optional filter to limit results to a specific estate.
+        ingestion_enabled:
+            Optional filter for ingestion status. ``None`` applies no filter.
+        limit:
+            Optional maximum number of repositories to return.
+        offset:
+            Optional number of ordered rows to skip before returning results.
+
+        Returns
+        -------
+        list[RepositoryInfo]
+            Matching repositories in stable order.
+
+        Notes
+        -----
+        Callers such as estate management must not hold a Silver session
+        factory of their own, so this method keeps the choice of backing
+        database inside the registry that owns it.
+
+        """
+        return await query_repositories(
+            self._silver_sf,
+            RepositoryListOptions(
+                estate_id=estate_id,
+                ingestion_enabled=ingestion_enabled,
                 limit=limit,
                 offset=offset,
             ),

@@ -221,7 +221,24 @@ async def handle_payload_too_large(
     ex: PayloadTooLargeError,
     _params: dict[str, typ.Any],
 ) -> None:
-    """Map ``PayloadTooLargeError`` to an HTTP 413 JSON response."""
+    """Map ``PayloadTooLargeError`` to an HTTP 413 JSON response.
+
+    Parameters
+    ----------
+    _req:
+        Request that carried the oversized body.
+    resp:
+        Response to populate with the error envelope.
+    ex:
+        Exception carrying the accepted body-size limit.
+    _params:
+        Falcon's per-route error-handler parameters.
+
+    Returns
+    -------
+    None
+
+    """
     _set_error(
         resp,
         status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
@@ -373,7 +390,24 @@ async def handle_falcon_http_error(
     ex: falcon.HTTPError,
     _params: dict[str, typ.Any],
 ) -> None:
-    """Render Falcon's own HTTP errors through the shared envelope."""
+    """Render Falcon's own HTTP errors through the shared envelope.
+
+    Parameters
+    ----------
+    _req:
+        Request that triggered the HTTP error.
+    resp:
+        Response to populate with the error envelope.
+    ex:
+        Falcon error carrying the status, title, description, and headers.
+    _params:
+        Falcon's per-route error-handler parameters.
+
+    Returns
+    -------
+    None
+
+    """
     status_code = ex.status_code
     try:
         status = HTTPStatus(status_code)
@@ -427,6 +461,22 @@ async def handle_unexpected_error(
 
     The details stay in the log; the response is deliberately generic so an
     internal failure never leaks implementation detail to a client.
+
+    Parameters
+    ----------
+    _req:
+        Request whose handling raised the exception.
+    resp:
+        Response to populate with the generic error envelope.
+    ex:
+        Unhandled exception, logged for operators but not returned.
+    _params:
+        Falcon's per-route error-handler parameters.
+
+    Returns
+    -------
+    None
+
     """
     log_exception(logger, "Unhandled API error", ex)
     _set_error(
