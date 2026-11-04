@@ -149,7 +149,10 @@ def _build_middleware(
     from ghillie.api.auth import BearerTokenMiddleware
 
     middleware: list[AsyncMiddlewareProto] = []
-    if deps is not None and deps.api_token:
+    if deps is not None and (deps.api_token or deps.estate_service is not None):
+        # Build the middleware whenever authentication is configured or the
+        # estate routes are exposed. With no token it warns at start-up and
+        # then acts as a no-op, making an unauthenticated deployment visible.
         middleware.append(BearerTokenMiddleware(deps.api_token))
 
     if _has_domain_deps(deps):

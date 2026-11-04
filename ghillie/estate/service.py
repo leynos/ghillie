@@ -34,6 +34,7 @@ from ghillie.estate.errors import (
 )
 from ghillie.estate.models import (
     MAX_PAGE_LIMIT,
+    MAX_PAGE_OFFSET,
     CatalogueImportSummary,
     CountSummary,
     EstateSummary,
@@ -380,8 +381,9 @@ def _validate_page(limit: int, offset: int) -> None:
     if not 1 <= limit <= MAX_PAGE_LIMIT:
         message = f"must be between 1 and {MAX_PAGE_LIMIT}"
         raise InvalidPaginationError("limit", message)
-    if offset < 0:
-        raise InvalidPaginationError("offset", "must be zero or greater")
+    if not 0 <= offset <= MAX_PAGE_OFFSET:
+        message = f"must be between 0 and {MAX_PAGE_OFFSET}"
+        raise InvalidPaginationError("offset", message)
 
 
 def _next_offset(limit: int, offset: int, *, has_more: bool) -> int | None:

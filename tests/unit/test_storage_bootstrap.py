@@ -57,7 +57,9 @@ async def test_init_all_storage_creates_every_table(tmp_path: Path) -> None:
     try:
         await init_all_storage(engine)
 
-        assert await _table_names(engine) >= _EXPECTED_TABLES
+        assert await _table_names(engine) >= _EXPECTED_TABLES, (
+            "bootstrap should create every layer's tables"
+        )
     finally:
         await engine.dispose()
 
@@ -74,6 +76,8 @@ async def test_init_all_storage_is_idempotent(tmp_path: Path) -> None:
 
         await init_all_storage(engine)
 
-        assert await _table_names(engine) == first
+        assert await _table_names(engine) == first, (
+            "a second bootstrap should not change the schema"
+        )
     finally:
         await engine.dispose()

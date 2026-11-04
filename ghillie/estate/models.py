@@ -17,6 +17,15 @@ if typ.TYPE_CHECKING:
 
 MAX_ESTATE_KEY_LENGTH = 64
 MAX_PAGE_LIMIT = 500
+MAX_PAGE_OFFSET = 2**31 - 1
+"""Largest offset the API accepts.
+
+SQLite raises a bare ``OverflowError`` when a caller binds a value beyond its
+signed 64-bit range, and PostgreSQL rejects an out-of-range ``OFFSET`` as a
+storage error. A signed 32-bit ceiling keeps both backends inside their native
+integer range while remaining far beyond any real estate listing.
+"""
+
 DEFAULT_PAGE_LIMIT = 50
 MAX_REQUEST_BODY_BYTES = 1024 * 1024
 """Largest catalogue-import or toggle body the HTTP adapter accepts.

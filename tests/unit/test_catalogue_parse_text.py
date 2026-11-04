@@ -31,8 +31,10 @@ def test_parse_catalogue_text_accepts_a_valid_document() -> None:
     """The happy path returns a validated catalogue."""
     catalogue = parse_catalogue_text(_VALID)
 
-    assert catalogue.version == 1
-    assert catalogue.projects[0].key == "alpha"
+    assert catalogue.version == 1, "catalogue should declare version 1"
+    assert catalogue.projects[0].key == "alpha", (
+        "catalogue should carry the project key"
+    )
 
 
 def test_parse_catalogue_text_rejects_empty_text() -> None:
@@ -85,7 +87,9 @@ def test_parse_catalogue_text_rejects_an_alias_bomb_under_one_mib() -> None:
     lines.extend(["version: 1", "projects: []"])
     document = "\n".join(lines)
 
-    assert len(document.encode("utf-8")) < 1_048_576
+    assert len(document.encode("utf-8")) < 1_048_576, (
+        "alias bomb should serialize under one mebibyte"
+    )
     with pytest.raises(CatalogueValidationError, match="anchors or aliases"):
         parse_catalogue_text(document)
 
@@ -94,7 +98,7 @@ def test_parse_catalogue_text_accepts_a_byte_order_mark() -> None:
     """A UTF-8 BOM is tolerated, as the CLI reads files with ``utf-8-sig``."""
     catalogue = parse_catalogue_text("\ufeff" + _VALID)
 
-    assert catalogue.version == 1
+    assert catalogue.version == 1, "BOM should be stripped"
 
 
 def test_parse_catalogue_text_rejects_a_schema_failure() -> None:

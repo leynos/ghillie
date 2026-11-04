@@ -31,6 +31,7 @@ from ghillie.estate.errors import (
     StorageUnavailableError,
 )
 from ghillie.estate.models import (
+    MAX_PAGE_OFFSET,
     CatalogueImportSummary,
     PageRequest,
     RepositoryQuery,
@@ -433,6 +434,7 @@ async def test_list_estates_carries_the_latest_import(
         (0, 0, "limit"),
         (501, 0, "limit"),
         (10, -1, "offset"),
+        (10, MAX_PAGE_OFFSET + 1, "offset"),
     ],
 )
 async def test_list_estates_rejects_invalid_pagination(
@@ -592,12 +594,20 @@ async def test_list_repositories_filters_by_ingestion_state(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "query",
+    [
+        RepositoryQuery(limit=0, offset=0),
+        RepositoryQuery(limit=10, offset=MAX_PAGE_OFFSET + 1),
+    ],
+)
 async def test_list_repositories_rejects_invalid_pagination(
     service: EstateManagementService,
+    query: RepositoryQuery,
 ) -> None:
-    """Bad limits are rejected before the estate lookup."""
+    """Bad limits and oversized offsets are rejected before the estate lookup."""
     with pytest.raises(InvalidPaginationError):
-        await service.list_repositories("missing", RepositoryQuery(limit=0, offset=0))
+        await service.list_repositories("missing", query)
 
 
 @pytest.mark.asyncio

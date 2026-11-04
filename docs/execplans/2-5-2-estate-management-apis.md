@@ -396,6 +396,23 @@ per pull request.
         new OpenAPI walker; retyping its argument as `object` fixed it, and
         `make lint` and the OpenAPI module then passed on the final
         candidate.
+  - [x] (2026-11-04) Second CodeRabbit review (against the real base
+        `2-5-2-estate-management-apis`) returned fourteen findings (twelve
+        unique; one was reported twice). Repairs: `MAX_PAGE_OFFSET` bounds
+        `offset` so an oversized value is a 400 instead of a SQLite
+        `OverflowError` 500 or a PostgreSQL storage 503, and the OpenAPI
+        `Offset` parameter documents the same maximum; the bearer middleware
+        is built whenever estate routes are exposed (or a token is
+        configured) so the disabled-authentication warning logs without
+        dropping protection from a reports-only app; `handle_falcon_http_error`
+        passes `HTTPError.headers` to `set_headers` so list-form headers
+        survive; `get_estate_by_key` scopes its ranking window to the
+        requested estate; the unreachable 409 and 422 responses are removed
+        from `setRepositoryIngestion`; the `-ise` docstrings use en-GB
+        Oxford `-ize` spelling; and the remaining bare test asserts carry
+        failure messages. Regression tests were added for the offset bound,
+        middleware construction, and scoped subquery. Pending: gate run and
+        re-review of this repair commit.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.

@@ -34,7 +34,7 @@ logger = get_logger(__name__)
 async def init_all_storage(engine: AsyncEngine) -> None:
     """Create every layer's tables that are missing from *engine*.
 
-    The layers are initialised in dependency order: bronze and silver own the
+    The layers are initialized in dependency order: bronze and silver own the
     ingestion tables, gold depends on repositories and reports, and the
     catalogue layer references repositories.
 
