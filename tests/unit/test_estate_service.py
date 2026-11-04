@@ -183,6 +183,19 @@ async def test_import_rejects_an_invalid_new_estate_key(
 
 
 @pytest.mark.asyncio
+async def test_import_rejects_an_explicitly_empty_document(
+    service: EstateManagementService,
+) -> None:
+    """An empty upload is rejected, not replaced by a default document.
+
+    The test helper distinguishes an omitted document from an explicitly empty
+    one so this case exercises the importer instead of the fixture.
+    """
+    with pytest.raises(CatalogueRejectedError, match="empty"):
+        await import_catalogue(service, catalogue_yaml="")
+
+
+@pytest.mark.asyncio
 async def test_import_reports_catalogue_issues(
     service: EstateManagementService,
 ) -> None:

@@ -7,6 +7,7 @@ is covered by ``test_api_estate_errors.py``; repository listing and ingestion
 toggles are covered by ``test_api_repository_resources.py``.
 """
 
+import json
 import typing as typ
 
 import httpx
@@ -17,6 +18,8 @@ from ghillie.estate.models import EstateSummary, PageRequest
 from tests.unit.estate_test_helpers import FakeEstateManagement, build_estate_client
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
     import falcon.testing
 
 _MAX_REQUEST_BODY_BYTES = 1024 * 1024
@@ -284,7 +287,7 @@ async def test_import_rejects_a_streamed_body_over_the_limit() -> None:
     # protocol expects, though the runtime contract is identical.
     transport = httpx.ASGITransport(app=typ.cast("typ.Any", app))
 
-    async def oversize() -> typ.AsyncIterator[bytes]:
+    async def oversize() -> cabc.AsyncIterator[bytes]:
         yield b"x" * (_MAX_REQUEST_BODY_BYTES + 1)
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -300,6 +303,42 @@ async def test_import_rejects_a_streamed_body_over_the_limit() -> None:
         "max bytes should match"
     )
     assert service.imports == [], "invalid input should not reach the service"
+
+
+@pytest.mark.asyncio
+async def test_import_accepts_a_body_split_across_chunks() -> None:
+    """A chunked upload is assembled completely before it is decoded.
+
+    Falcon's stream returns as much as the requested size allows, even when
+    the transport delivers the body in many small ASGI events. This pins that
+    behaviour so a future reader cannot silently decode only the first chunk.
+    """
+    service = FakeEstateManagement()
+    app = create_app(AppDependencies(estate_service=service))
+    transport = httpx.ASGITransport(app=typ.cast("typ.Any", app))
+    body = json.dumps(_IMPORT_BODY).encode()
+
+    async def chunks() -> cabc.AsyncIterator[bytes]:
+        for start in range(0, len(body), 8):
+            yield body[start : start + 8]
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/estates/demo/catalogue-import",
+            content=chunks(),
+            headers={"Content-Type": "application/json"},
+        )
+
+    assert response.status_code == 200, response.text
+    assert service.imports == [
+        {
+            "estate_key": "demo",
+            "catalogue_yaml": "version: 1\n",
+            "commit_sha": "c1",
+            "estate_name": "Demo",
+            "dry_run": False,
+        }
+    ], "the whole chunked body should reach the service"
 
 
 @pytest.mark.parametrize(

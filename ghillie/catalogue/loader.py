@@ -6,7 +6,13 @@ from pathlib import Path
 import msgspec
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
-from ruamel.yaml.events import AliasEvent
+from ruamel.yaml.events import (
+    AliasEvent,
+    MappingEndEvent,
+    MappingStartEvent,
+    SequenceEndEvent,
+    SequenceStartEvent,
+)
 
 from .models import Catalogue
 from .validation import CatalogueValidationError, validate_catalogue
@@ -14,6 +20,13 @@ from .validation import CatalogueValidationError, validate_catalogue
 YAML_VERSION = (1, 2)
 
 _BOM = "\ufeff"
+_MAX_YAML_DEPTH = 64
+"""Deepest collection nesting the event scan accepts.
+
+The scan runs before ``yaml.load`` composes the document. Composition recurses
+once per collection level, so a payload made of nested flow collections could
+otherwise exhaust the interpreter stack and surface as an unhandled 500.
+"""
 
 
 def lint_catalogue(path: Path | str) -> Catalogue:
@@ -36,9 +49,11 @@ def load_catalogue(path: Path | str) -> Catalogue:
 def parse_catalogue_text(text: str) -> Catalogue:
     """Parse and validate catalogue YAML supplied as a string.
 
-    The text is untrusted: documents that define anchors or use aliases are
-    rejected before the loader can expand them, which keeps an alias bomb from
-    allocating exponentially within the request-size limit.
+    The text is untrusted: documents that define anchors, use aliases, or nest
+    collections beyond :data:`_MAX_YAML_DEPTH` levels are rejected before the
+    loader expands or composes them. That keeps an alias bomb from allocating
+    exponentially and a deeply nested document from exhausting the stack,
+    both within the request-size limit.
 
     Parameters
     ----------
@@ -60,7 +75,7 @@ def parse_catalogue_text(text: str) -> Catalogue:
     if text.startswith(_BOM):
         text = text.removeprefix(_BOM)
 
-    _reject_anchors_and_aliases(text)
+    _reject_unsafe_structure(text)
 
     yaml = _yaml()
     try:
@@ -79,14 +94,29 @@ def parse_catalogue_text(text: str) -> Catalogue:
     return validate_catalogue(catalogue)
 
 
-def _reject_anchors_and_aliases(text: str) -> None:
-    """Scan YAML events and reject any anchor definition or alias use."""
+def _reject_unsafe_structure(text: str) -> None:
+    """Reject anchors, aliases, and collections nested beyond the limit.
+
+    Parsing to events does not compose the document, so this scan can inspect
+    an untrusted payload before the recursive constructor runs.
+    """
     yaml = _yaml()
+    depth = 0
     try:
         for event in yaml.parse(io.StringIO(text)):
             if isinstance(event, AliasEvent) or getattr(event, "anchor", None):
                 message = "catalogue must not use YAML anchors or aliases"
                 raise CatalogueValidationError([message])
+            if isinstance(event, (MappingStartEvent, SequenceStartEvent)):
+                depth += 1
+                if depth > _MAX_YAML_DEPTH:
+                    message = (
+                        "catalogue must not nest YAML collections deeper than "
+                        f"{_MAX_YAML_DEPTH} levels"
+                    )
+                    raise CatalogueValidationError([message])
+            elif isinstance(event, (MappingEndEvent, SequenceEndEvent)):
+                depth -= 1
     except YAMLError as exc:
         raise CatalogueValidationError([f"failed to parse YAML: {exc}"]) from exc
 

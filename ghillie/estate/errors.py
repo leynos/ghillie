@@ -30,7 +30,14 @@ class EstateError(Exception):
 
 
 class EstateNotFoundError(EstateError):
-    """Raised when an estate cannot be found by key."""
+    """Raised when an estate cannot be found by key.
+
+    Attributes
+    ----------
+    estate_key:
+        Key that did not resolve to an estate.
+
+    """
 
     def __init__(self, estate_key: str) -> None:
         """Initialize with the missing estate key."""
@@ -39,7 +46,16 @@ class EstateNotFoundError(EstateError):
 
 
 class InvalidEstateKeyError(EstateError):
-    """Raised when an estate key fails a creation or reference rule."""
+    """Raised when an estate key fails a creation or reference rule.
+
+    Attributes
+    ----------
+    estate_key:
+        Key that failed validation.
+    reason:
+        Human-readable description of the rule that was broken.
+
+    """
 
     def __init__(self, estate_key: str, reason: str) -> None:
         """Initialize with the rejected key and the reason."""
@@ -49,7 +65,16 @@ class InvalidEstateKeyError(EstateError):
 
 
 class InvalidPaginationError(EstateError):
-    """Raised when a page limit or offset is outside its allowed range."""
+    """Raised when a page limit or offset is outside its allowed range.
+
+    Attributes
+    ----------
+    field:
+        Name of the pagination field that failed validation.
+    reason:
+        Human-readable description of the allowed range.
+
+    """
 
     def __init__(self, field: str, reason: str) -> None:
         """Initialize with the offending field and the reason."""
@@ -59,7 +84,14 @@ class InvalidPaginationError(EstateError):
 
 
 class CatalogueRejectedError(EstateError):
-    """Raised when uploaded catalogue text cannot be accepted."""
+    """Raised when uploaded catalogue text cannot be accepted.
+
+    Attributes
+    ----------
+    issues:
+        Every validation problem found in the uploaded document.
+
+    """
 
     def __init__(self, issues: tuple[Issue, ...]) -> None:
         """Initialize with every validation issue found."""
@@ -69,7 +101,16 @@ class CatalogueRejectedError(EstateError):
 
 
 class RepositoryNotFoundError(EstateError):
-    """Raised when a repository cannot be found by owner and name."""
+    """Raised when a repository cannot be found by owner and name.
+
+    Attributes
+    ----------
+    owner:
+        GitHub repository owner that was queried.
+    name:
+        GitHub repository name that was queried.
+
+    """
 
     def __init__(self, owner: str, name: str) -> None:
         """Initialize with the missing repository identity."""

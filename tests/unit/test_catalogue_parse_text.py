@@ -43,6 +43,19 @@ def test_parse_catalogue_text_rejects_empty_text() -> None:
         parse_catalogue_text("")
 
 
+def test_parse_catalogue_text_rejects_excessive_nesting() -> None:
+    """A deeply nested document is rejected before a recursive compose.
+
+    The event scan runs before ``yaml.load`` composes the document, so a
+    payload built from nested flow collections cannot exhaust the interpreter
+    stack and surface as an unhandled 500.
+    """
+    document = "[" * 200 + "]" * 200
+
+    with pytest.raises(CatalogueValidationError, match="deeper than"):
+        parse_catalogue_text(document)
+
+
 def test_parse_catalogue_text_rejects_invalid_yaml() -> None:
     """Malformed YAML is reported as a catalogue validation failure."""
     with pytest.raises(CatalogueValidationError, match="failed to parse YAML"):

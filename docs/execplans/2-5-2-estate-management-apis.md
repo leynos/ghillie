@@ -425,7 +425,38 @@ per pull request.
         `ghillie.registry.errors`; the remaining bare property-test assert
         carries a message; and the two oversized test modules were split at
         their endpoint and service seams, with the shared fake port and
-        database builders moved into `tests/unit/estate_test_helpers.py`.
+        database builders moved into `tests/unit/estate_test_helpers.py`. The
+        full gate suite was green on `946ad03`: `check-fmt`,
+        `check-architecture`, `typecheck`, `lint`, `test` (1401 passed, 11
+        skipped), `markdownlint`, `nixie`, and `spelling`.
+  - [x] (2026-11-05) Fourth CodeRabbit review returned fifteen findings (three
+        major, three minor, nine trivial). Triage and repairs:
+        - The reported partial-read upload bug is a false positive for Falcon
+          4.3: `BoundedStream.read(size)` already loops over ASGI events until
+          it fills the requested size or reaches the end of the body. A new
+          regression test pins multi-chunk assembly and the existing streamed
+          oversize test still rejects at the limit.
+        - `parse_catalogue_text` now rejects collections nested deeper than 64
+          levels during the preparse event scan, before the recursive
+          constructor can exhaust the interpreter stack.
+        - `EstateManagementService.list_repositories` delegates to a new
+          `RepositoryRegistryService.list_repositories`, so the Silver query
+          uses the registry's own session factory instead of the catalogue
+          factory.
+        - `list_estates` selects its page before ranking latest imports, and
+          `_latest_import_subquery` accepts `estate_ids` so the window covers
+          only that page.
+        - `generateReport` documents its 401 response.
+        - The test helper treats only `None` as "use the fixture", so an
+          explicitly empty upload reaches validation.
+        - NumPy `Attributes` sections were added to the public estate data
+          classes, estate exceptions, and `EstateRow`; the three newly exported
+          API handlers gained parameter and return sections.
+        - Remaining trivial repairs: a `TypedDict` for the error-body helper,
+          `collections.abc.AsyncIterator`, removal of a redundant `__future__`
+          import, and `AsyncSessionTransaction` moved under `TYPE_CHECKING`.
+        Focused red-then-green runs are recorded above; fast gates
+        (`check-fmt`, `typecheck`, `lint`) were green before the repair commit.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.

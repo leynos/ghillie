@@ -119,6 +119,17 @@ def test_toggle_request_body_accepts_both_json_media_types(
     )
 
 
+def test_authenticated_report_operation_documents_unauthorized(
+    spec: dict[str, typ.Any],
+) -> None:
+    """Global bearer security also applies when generating a report."""
+    responses = spec["paths"]["/reports/repositories/{owner}/{name}"]["post"][
+        "responses"
+    ]
+
+    assert "401" in responses, "generateReport should document its 401 response"
+
+
 def test_documented_failure_statuses_are_present(
     spec: dict[str, typ.Any],
 ) -> None:

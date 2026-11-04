@@ -47,7 +47,22 @@ _NEW_ESTATE_KEY_RE = re.compile(NEW_ESTATE_KEY_PATTERN)
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class EstateSummary:
-    """One estate and its most recent catalogue import."""
+    """One estate and its most recent catalogue import.
+
+    Attributes
+    ----------
+    key:
+        Operator-facing estate key.
+    name:
+        Display name of the estate.
+    description:
+        Optional operator description, or ``None``.
+    last_import_commit_sha:
+        Commit of the latest catalogue import, or ``None`` if never imported.
+    last_imported_at:
+        Time of the latest catalogue import, or ``None`` if never imported.
+
+    """
 
     key: str
     name: str
@@ -58,7 +73,18 @@ class EstateSummary:
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class CountSummary:
-    """Created, updated, and deleted counts for one record family."""
+    """Created, updated, and deleted counts for one record family.
+
+    Attributes
+    ----------
+    created:
+        Rows inserted by the operation.
+    updated:
+        Existing rows changed by the operation.
+    deleted:
+        Rows removed by the operation.
+
+    """
 
     created: int
     updated: int
@@ -67,7 +93,34 @@ class CountSummary:
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class CatalogueImportSummary:
-    """Result of importing one catalogue document for an estate."""
+    """Result of importing one catalogue document for an estate.
+
+    Attributes
+    ----------
+    estate_key:
+        Key of the estate that was imported.
+    commit_sha:
+        Commit the catalogue document was read from.
+    state:
+        Terminal state of the import operation.
+    dry_run:
+        Whether the import was reported without being persisted.
+    skipped:
+        Whether the commit had already been imported.
+    skipped_reason:
+        Why the import was skipped, or ``None`` when it ran.
+    registry_sync_required:
+        Whether a registry sync should follow this import.
+    projects:
+        Project record counts.
+    components:
+        Component record counts.
+    repositories:
+        Repository record counts.
+    edges:
+        Component edge counts.
+
+    """
 
     estate_key: str
     commit_sha: str
@@ -84,7 +137,30 @@ class CatalogueImportSummary:
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class RegistrySyncSummary:
-    """Result of projecting one estate's catalogue into the registry."""
+    """Result of projecting one estate's catalogue into the registry.
+
+    Attributes
+    ----------
+    estate_key:
+        Key of the estate that was synchronized.
+    state:
+        Terminal state of the sync operation.
+    dry_run:
+        Whether the sync was reported without being persisted.
+    repositories_created:
+        Repositories added to the registry.
+    repositories_updated:
+        Existing repositories whose metadata changed.
+    repositories_deactivated:
+        Repositories disabled because they left the catalogue.
+    repositories_conflicted:
+        Slugs that could not be projected because of an ownership conflict.
+    repositories_left_disabled:
+        Preview of repositories that remain disabled after the sync.
+    repositories_left_disabled_count:
+        Total number of repositories left disabled.
+
+    """
 
     estate_key: str
     state: str
@@ -99,7 +175,16 @@ class RegistrySyncSummary:
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class PageRequest:
-    """Validated pagination input."""
+    """Validated pagination input.
+
+    Attributes
+    ----------
+    limit:
+        Maximum number of items to return.
+    offset:
+        Number of ordered items to skip.
+
+    """
 
     limit: int = DEFAULT_PAGE_LIMIT
     offset: int = 0
@@ -107,7 +192,22 @@ class PageRequest:
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class Page[T]:
-    """A page of items plus the metadata needed to walk the next page."""
+    """A page of items plus the metadata needed to walk the next page.
+
+    Attributes
+    ----------
+    items:
+        Items in this page's order.
+    limit:
+        Maximum number of items requested.
+    offset:
+        Number of ordered items skipped to reach this page.
+    has_more:
+        Whether at least one further item exists after this page.
+    next_offset:
+        Offset that returns the next page, or ``None`` on the last page.
+
+    """
 
     items: tuple[T, ...]
     limit: int
@@ -118,7 +218,18 @@ class Page[T]:
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class RepositoryQuery:
-    """Filtering and pagination for an estate's repository listing."""
+    """Filtering and pagination for an estate's repository listing.
+
+    Attributes
+    ----------
+    ingestion_enabled:
+        Optional ingestion-state filter; ``None`` lists both states.
+    limit:
+        Maximum number of repositories to return.
+    offset:
+        Number of ordered repositories to skip.
+
+    """
 
     ingestion_enabled: bool | None = None
     limit: int = DEFAULT_PAGE_LIMIT
@@ -127,7 +238,24 @@ class RepositoryQuery:
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class RepositoryPage:
-    """A page of an estate's registered repositories."""
+    """A page of an estate's registered repositories.
+
+    Attributes
+    ----------
+    estate_key:
+        Key of the estate these repositories belong to.
+    items:
+        Repositories in this page's order.
+    limit:
+        Maximum number of repositories requested.
+    offset:
+        Number of ordered repositories skipped to reach this page.
+    has_more:
+        Whether at least one further repository exists after this page.
+    next_offset:
+        Offset that returns the next page, or ``None`` on the last page.
+
+    """
 
     estate_key: str
     items: tuple[RepositoryInfo, ...]
@@ -139,7 +267,20 @@ class RepositoryPage:
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class IngestionToggleOutcome:
-    """Result of setting one repository's ingestion flag."""
+    """Result of setting one repository's ingestion flag.
+
+    Attributes
+    ----------
+    owner:
+        GitHub repository owner.
+    name:
+        GitHub repository name.
+    ingestion_enabled:
+        Ingestion state after the call.
+    changed:
+        Whether the call actually changed the stored state.
+
+    """
 
     owner: str
     name: str

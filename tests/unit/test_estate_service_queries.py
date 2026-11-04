@@ -284,6 +284,44 @@ async def test_list_repositories_rejects_invalid_pagination(
 
 
 @pytest.mark.asyncio
+async def test_list_repositories_queries_the_registry_silver_store(
+    service: EstateManagementService,
+    registry: RepositoryRegistryService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The listing delegates to the registry, which owns the Silver factory.
+
+    Passing the catalogue factory to the Silver query would read the wrong
+    database whenever the two stores are deployed separately.
+    """
+    await import_catalogue(service)
+    calls: list[tuple[str | None, bool | None, int | None, int | None]] = []
+
+    async def _list(
+        estate_id: str | None = None,
+        *,
+        ingestion_enabled: bool | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> list[typ.Never]:
+        calls.append((estate_id, ingestion_enabled, limit, offset))
+        return []
+
+    monkeypatch.setattr(registry, "list_repositories", _list)
+
+    page = await service.list_repositories(
+        _ESTATE_KEY, RepositoryQuery(limit=5, offset=1)
+    )
+
+    assert page.items == (), "delegated empty page should stay empty"
+    assert len(calls) == 1, "listing should delegate exactly once"
+    estate_id, ingestion_enabled, limit, offset = calls[0]
+    assert estate_id, "registry listing should receive the resolved estate id"
+    assert ingestion_enabled is None, "no filter should be forwarded"
+    assert (limit, offset) == (6, 1), "the over-fetch limit should be forwarded"
+
+
+@pytest.mark.asyncio
 async def test_list_repositories_requires_an_existing_estate(
     service: EstateManagementService,
 ) -> None:

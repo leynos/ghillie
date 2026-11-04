@@ -44,7 +44,6 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
-    AsyncSessionTransaction,
     async_sessionmaker,
     create_async_engine,
 )
@@ -63,6 +62,8 @@ from .storage import (
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
+
+    from sqlalchemy.ext.asyncio import AsyncSessionTransaction
 
     from .models import Catalogue, Component, ComponentLink
 

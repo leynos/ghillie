@@ -270,9 +270,12 @@ async def import_catalogue(  # noqa: PLR0913 - keyword defaults keep each test c
     catalogue_yaml: str | None = None,
 ) -> CatalogueImportSummary:
     """Import a catalogue through the service with terse test defaults."""
+    # Only ``None`` means "use the fixture"; an explicitly empty upload must
+    # reach the importer so rejection tests exercise the real validation path.
+    document = catalogue_document() if catalogue_yaml is None else catalogue_yaml
     return await service.import_catalogue(
         estate_key,
-        catalogue_yaml=catalogue_yaml or catalogue_document(),
+        catalogue_yaml=document,
         commit_sha=commit_sha,
         estate_name=estate_name,
         dry_run=dry_run,
