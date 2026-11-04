@@ -493,6 +493,21 @@ per pull request.
           form is clear, and the `getattr(event, "anchor", None)` guard
           deliberately covers event types that declare the attribute
           differently.
+  - [x] (2026-11-05) Full gates on the fifth-review repair commit `bb2d39d`
+        were green sequentially: `check-fmt`, `check-architecture`,
+        `typecheck`, `lint`, `test` (1410 passed, 11 skipped), `markdownlint`,
+        `nixie`, and `spelling`. The milestone CodeRabbit CLI review against
+        base `2-5-2-estate-management-apis` returned two trivial findings:
+        - The five exported estate resource classes gained NumPy `Parameters`
+          and `Raises` sections on their public `on_get`, `on_post`, and
+          `on_patch` handlers, naming the API and port errors each path can
+          raise.
+        - Skipped with reason: making an unset `GHILLIE_API_TOKEN` a fail-fast
+          configuration error unless `GHILLIE_API_AUTH=disabled` is set would
+          contradict decision D14, which deliberately keeps an unset token as
+          "unauthenticated with a start-up warning". The reviewer labels it a
+          posture suggestion rather than a defect; changing it needs a new
+          decision and is outside this plan's approved scope.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.

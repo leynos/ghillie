@@ -262,7 +262,26 @@ class EstateCollectionResource:
         self._estates = estates
 
     async def on_get(self, req: Request, resp: Response) -> None:
-        """Return a page of estates."""
+        """Return a page of estates.
+
+        Parameters
+        ----------
+        req
+            Request whose ``limit`` and ``offset`` query parameters select the
+            page.
+        resp
+            Response that receives the estate page.
+
+        Raises
+        ------
+        InvalidInputError
+            If a pagination parameter is malformed or supplied twice.
+        InvalidPaginationError
+            If the requested limit or offset is outside the documented bounds.
+        StorageUnavailableError
+            If the catalogue store cannot be read.
+
+        """
         page = await self._estates.list_estates(_page_request(req))
         resp.media = msgspec.to_builtins(_estate_list_response(page))
         resp.status = HTTPStatus.OK
@@ -282,7 +301,36 @@ class CatalogueImportResource:
         *,
         estate_key: str,
     ) -> None:
-        """Import one catalogue document for an estate."""
+        """Import one catalogue document for an estate.
+
+        Parameters
+        ----------
+        req
+            JSON request whose body carries the catalogue document, commit
+            SHA, and optional estate name; ``dry_run`` is a query parameter.
+        resp
+            Response that receives the import summary.
+        estate_key
+            Key of the estate to create or update.
+
+        Raises
+        ------
+        falcon.HTTPUnsupportedMediaType
+            If the request is not ``application/json``.
+        InvalidInputError
+            If the body is malformed or ``dry_run`` is not ``true``/``false``.
+        PayloadTooLargeError
+            If the body exceeds the documented limit.
+        InvalidEstateKeyError
+            If a new estate's key does not match the creation pattern.
+        CatalogueRejectedError
+            If the document fails catalogue validation.
+        EstateConflictError
+            If a concurrent import claims the same uniqueness constraint.
+        StorageUnavailableError
+            If the catalogue store cannot be written.
+
+        """
         _require_media_type(req, _JSON_ONLY)
         body = _decode_body(await _read_body(req), ImportCatalogueRequest)
         summary = await self._estates.import_catalogue(
@@ -310,7 +358,31 @@ class RegistrySyncResource:
         *,
         estate_key: str,
     ) -> None:
-        """Project an estate's catalogue into the registry."""
+        """Project an estate's catalogue into the registry.
+
+        Parameters
+        ----------
+        req
+            Request whose ``dry_run`` query parameter selects the mode.
+        resp
+            Response that receives the sync summary.
+        estate_key
+            Key of the estate whose catalogue is projected.
+
+        Raises
+        ------
+        InvalidInputError
+            If ``dry_run`` is not ``true`` or ``false``.
+        EstateNotFoundError
+            If no estate has the supplied key.
+        EstateConflictError
+            If a concurrent sync claims the same uniqueness constraint.
+        StorageUnavailableError
+            If the registry store cannot be written.
+        RegistrySyncFailedError
+            If the registry reports any other failure.
+
+        """
         summary = await self._estates.sync_registry(
             estate_key, dry_run=_flag_param(req, "dry_run")
         )
@@ -332,7 +404,30 @@ class EstateRepositoryCollectionResource:
         *,
         estate_key: str,
     ) -> None:
-        """Return a page of an estate's registered repositories."""
+        """Return a page of an estate's registered repositories.
+
+        Parameters
+        ----------
+        req
+            Request whose ``ingestion_enabled``, ``limit``, and ``offset``
+            query parameters select and filter the page.
+        resp
+            Response that receives the repository page.
+        estate_key
+            Key of the estate whose repositories are listed.
+
+        Raises
+        ------
+        InvalidInputError
+            If a query parameter is malformed or supplied twice.
+        InvalidPaginationError
+            If the requested limit or offset is outside the documented bounds.
+        EstateNotFoundError
+            If no estate has the supplied key.
+        StorageUnavailableError
+            If the registry store cannot be read.
+
+        """
         query = RepositoryQuery(
             ingestion_enabled=_optional_bool_param(req, "ingestion_enabled"),
             limit=_int_param(req, "limit", DEFAULT_PAGE_LIMIT),
@@ -358,7 +453,33 @@ class RepositoryIngestionResource:
         owner: str,
         name: str,
     ) -> None:
-        """Set one repository's ingestion flag."""
+        """Set one repository's ingestion flag.
+
+        Parameters
+        ----------
+        req
+            JSON or merge-patch request whose body carries the new flag.
+        resp
+            Response that receives the toggle outcome.
+        owner
+            GitHub owner of the repository.
+        name
+            GitHub name of the repository.
+
+        Raises
+        ------
+        falcon.HTTPUnsupportedMediaType
+            If the request media type is not accepted.
+        InvalidInputError
+            If the body is malformed.
+        PayloadTooLargeError
+            If the body exceeds the documented limit.
+        RepositoryNotFoundError
+            If no registered repository has that owner and name.
+        StorageUnavailableError
+            If the registry store cannot be written.
+
+        """
         _require_media_type(req, _PATCH_MEDIA_TYPES)
         body = _decode_body(await _read_body(req), IngestionRequest)
         outcome = await self._estates.set_ingestion(
