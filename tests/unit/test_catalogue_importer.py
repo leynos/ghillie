@@ -530,11 +530,15 @@ def test_importer_dry_run_leaves_no_rows(
         )
     )
 
-    assert result.projects_created == EXPECTED_PROJECTS
-    assert result.components_created == EXPECTED_COMPONENTS
-    assert result.repositories_created == EXPECTED_REPOS
-    assert result.edges_created == EXPECTED_EDGES
-    assert _count_rows(session_factory) == (0, 0, 0, 0)
+    assert result.projects_created == EXPECTED_PROJECTS, "dry run should count projects"
+    assert result.components_created == EXPECTED_COMPONENTS, (
+        "dry run should count components"
+    )
+    assert result.repositories_created == EXPECTED_REPOS, (
+        "dry run should count repositories"
+    )
+    assert result.edges_created == EXPECTED_EDGES, "dry run should count edges"
+    assert _count_rows(session_factory) == (0, 0, 0, 0), "dry run should leave no rows"
 
 
 def test_importer_keeps_the_estate_description_on_rename(
@@ -553,7 +557,9 @@ def test_importer_keeps_the_estate_description_on_rename(
     async def _set_description() -> None:
         async with session_factory() as session, session.begin():
             estate = await session.scalar(select(Estate).where(Estate.key == "demo"))
-            assert estate is not None
+            assert estate is not None, (
+                "estate should exist before setting its description"
+            )
             estate.description = "Maintained outside the catalogue"
 
     asyncio.run(_set_description())
@@ -570,9 +576,11 @@ def test_importer_keeps_the_estate_description_on_rename(
     async def _read_estate() -> Estate:
         async with session_factory() as session:
             estate = await session.scalar(select(Estate).where(Estate.key == "demo"))
-            assert estate is not None
+            assert estate is not None, "estate should exist after the rename"
             return estate
 
     estate = asyncio.run(_read_estate())
-    assert estate.name == "Second Name"
-    assert estate.description == "Maintained outside the catalogue"
+    assert estate.name == "Second Name", "rename should update the name"
+    assert estate.description == "Maintained outside the catalogue", (
+        "rename should keep the description"
+    )

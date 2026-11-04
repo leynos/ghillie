@@ -33,9 +33,18 @@ class EstateRow:
     last_imported_at: dt.datetime | None
 
 
-def _latest_import_subquery() -> Subquery:
-    """Rank imports per estate so the outer join can pick rank one."""
-    return select(
+def _latest_import_subquery(estate_key: str | None = None) -> Subquery:
+    """Rank imports per estate so the outer join can pick rank one.
+
+    Parameters
+    ----------
+    estate_key:
+        When supplied, rank only this estate's imports. The single-estate
+        lookup uses it so PostgreSQL does not scan the whole import history
+        for a window whose other ranks the outer filter would discard anyway.
+
+    """
+    query = select(
         CatalogueImportRecord.estate_id.label("estate_id"),
         CatalogueImportRecord.commit_sha.label("commit_sha"),
         CatalogueImportRecord.imported_at.label("imported_at"),
@@ -48,7 +57,12 @@ def _latest_import_subquery() -> Subquery:
             ],
         )
         .label("rank"),
-    ).subquery()
+    )
+    if estate_key is not None:
+        query = query.join(Estate, Estate.id == CatalogueImportRecord.estate_id).where(
+            Estate.key == estate_key
+        )
+    return query.subquery()
 
 
 async def list_estates(
@@ -106,7 +120,7 @@ async def get_estate_by_key(
     session_factory: SessionFactory, key: str
 ) -> EstateRow | None:
     """Return one estate by key, with its latest import, or ``None``."""
-    latest = _latest_import_subquery()
+    latest = _latest_import_subquery(key)
     query = (
         select(Estate, latest.c.commit_sha, latest.c.imported_at)
         .outerjoin(

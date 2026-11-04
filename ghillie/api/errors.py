@@ -386,9 +386,9 @@ async def handle_falcon_http_error(
     # Falcon attaches headers such as ``WWW-Authenticate`` to the error; the
     # envelope handler must copy them or a 401 would lose its challenge.
     if ex.headers:
-        headers = typ.cast("dict[str, str]", ex.headers)
-        for name, value in headers.items():
-            resp.set_header(name, value)
+        # ``set_headers`` accepts both mapping and iterable header forms, so a
+        # list-form ``HTTPError`` keeps its headers instead of raising.
+        resp.set_headers(ex.headers)
     _set_error(
         resp,
         status=status,

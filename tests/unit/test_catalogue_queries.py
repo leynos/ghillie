@@ -5,8 +5,14 @@ import datetime as dt
 import typing as typ
 
 import pytest
+from sqlalchemy import select
 
-from ghillie.catalogue.queries import EstateRow, get_estate_by_key, list_estates
+from ghillie.catalogue.queries import (
+    EstateRow,
+    _latest_import_subquery,
+    get_estate_by_key,
+    list_estates,
+)
 from ghillie.catalogue.storage import CatalogueImportRecord, Estate
 
 if typ.TYPE_CHECKING:
@@ -130,6 +136,35 @@ async def test_get_estate_by_key_returns_the_row(
     assert row.id == estate.id, "row should carry the estate id"
     assert row.name == "Alpha", "row should carry the estate name"
     assert row.last_import_commit_sha == "abc123", "row should carry the newest commit"
+
+
+@pytest.mark.asyncio
+async def test_latest_import_subquery_scopes_to_one_estate(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Scoping the ranking subquery keeps unrelated import history out."""
+    alpha = await _add_estate(session_factory, key="alpha")
+    beta = await _add_estate(session_factory, key="beta")
+    await _add_import(
+        session_factory,
+        alpha,
+        commit_sha="alpha-1",
+        imported_at=dt.datetime(2026, 1, 1, tzinfo=dt.UTC),
+    )
+    await _add_import(
+        session_factory,
+        beta,
+        commit_sha="beta-1",
+        imported_at=dt.datetime(2026, 1, 2, tzinfo=dt.UTC),
+    )
+
+    subquery = _latest_import_subquery("alpha")
+    async with session_factory() as session:
+        rows = (await session.execute(select(subquery.c.commit_sha))).all()
+
+    assert [row.commit_sha for row in rows] == ["alpha-1"], (
+        "subquery should rank only the requested estate"
+    )
 
 
 @pytest.mark.asyncio

@@ -8,7 +8,8 @@ stays unauthenticated.
 import falcon.testing
 import pytest
 
-from ghillie.api.app import AppDependencies, create_app
+from ghillie.api.app import AppDependencies, _build_middleware, create_app
+from ghillie.api.auth import BearerTokenMiddleware
 from tests.unit.estate_test_helpers import EmptyEstateManagement
 
 _TOKEN = "s3cret-token-value"  # noqa: S105 - test credential, not a secret.
@@ -147,3 +148,28 @@ class TestNoTokenConfigured:
         result = _client(token="").simulate_get("/estates")
 
         assert result.status_code == 200, "empty token should disable auth"
+
+
+def _has_bearer_middleware(deps: AppDependencies) -> bool:
+    """Return whether the assembled stack contains the bearer middleware."""
+    return any(
+        isinstance(item, BearerTokenMiddleware) for item in _build_middleware(deps)
+    )
+
+
+def test_estate_routes_install_middleware_without_a_token() -> None:
+    """The middleware is built even when auth is off, so it can warn."""
+    deps = AppDependencies(estate_service=EmptyEstateManagement())
+
+    assert _has_bearer_middleware(deps), (
+        "estate routes should install the bearer middleware to log disabled auth"
+    )
+
+
+def test_token_middleware_is_installed_without_estate_routes() -> None:
+    """A configured token still protects a reports-only app."""
+    deps = AppDependencies(api_token=_TOKEN)
+
+    assert _has_bearer_middleware(deps), (
+        "a configured token should install the middleware for every route family"
+    )

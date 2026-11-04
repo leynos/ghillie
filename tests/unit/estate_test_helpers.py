@@ -48,7 +48,7 @@ class EmptyEstateManagement:
     async def sync_registry(
         self, estate_key: str, *, dry_run: bool
     ) -> RegistrySyncSummary:
-        """Raise because these tests never synchronise the registry."""
+        """Raise because these tests never synchronize the registry."""
         raise NotImplementedError
 
     async def list_repositories(

@@ -111,11 +111,13 @@ class TestCreateAppEstateRoutes:
             create_app(AppDependencies(estate_service=EmptyEstateManagement()))
         )
 
-        assert client.simulate_get("/estates").status_code == HTTPStatus.OK
+        assert client.simulate_get("/estates").status_code == HTTPStatus.OK, (
+            "estate route should be registered"
+        )
         assert (
             client.simulate_post("/reports/repositories/acme/widgets").status_code
             == HTTPStatus.NOT_FOUND
-        )
+        ), "reports route should be absent"
 
     def test_reporting_only_app_does_not_register_estate_routes(
         self, deps: AppDependencies
@@ -123,11 +125,13 @@ class TestCreateAppEstateRoutes:
         """Reporting dependencies alone do not expose the estate family."""
         client = falcon.testing.TestClient(create_app(deps))
 
-        assert client.simulate_get("/estates").status_code == HTTPStatus.NOT_FOUND
+        assert client.simulate_get("/estates").status_code == HTTPStatus.NOT_FOUND, (
+            "estate route should be absent"
+        )
         assert (
             client.simulate_post("/reports/repositories/acme/widgets").status_code
             != HTTPStatus.NOT_FOUND
-        )
+        ), "reports route should be registered"
 
     def test_both_dependency_families_are_registered(
         self, deps: AppDependencies
@@ -143,18 +147,22 @@ class TestCreateAppEstateRoutes:
             )
         )
 
-        assert client.simulate_get("/estates").status_code == HTTPStatus.OK
+        assert client.simulate_get("/estates").status_code == HTTPStatus.OK, (
+            "estate route should be registered"
+        )
         assert (
             client.simulate_post("/reports/repositories/acme/widgets").status_code
             != HTTPStatus.NOT_FOUND
-        )
+        ), "reports route should be registered"
 
     def test_no_dependencies_registers_no_domain_routes(self) -> None:
         """A dependency-free app keeps only the probes."""
         client = falcon.testing.TestClient(create_app())
 
-        assert client.simulate_get("/estates").status_code == HTTPStatus.NOT_FOUND
+        assert client.simulate_get("/estates").status_code == HTTPStatus.NOT_FOUND, (
+            "estate route should be absent"
+        )
         assert (
             client.simulate_post("/reports/repositories/acme/widgets").status_code
             == HTTPStatus.NOT_FOUND
-        )
+        ), "reports route should be absent"

@@ -35,7 +35,9 @@ _COMPILED_PATTERN = re.compile(NEW_ESTATE_KEY_PATTERN)
 )
 def test_new_estate_key_accepts_matching_keys(estate_key: str) -> None:
     """Keys matching the creation pattern are returned unchanged."""
-    assert validate_new_estate_key(estate_key) == estate_key
+    assert validate_new_estate_key(estate_key) == estate_key, (
+        f"{estate_key!r} should be accepted"
+    )
 
 
 @pytest.mark.parametrize(
@@ -71,7 +73,7 @@ def test_new_estate_key_property_matches_pattern(estate_key: str) -> None:
     try:
         validate_new_estate_key(estate_key)
     except InvalidEstateKeyError:
-        assert not accepted, estate_key
+        assert not accepted, f"{estate_key!r} should be rejected"
     else:
         assert accepted, estate_key
 
@@ -84,7 +86,9 @@ def test_reference_key_accepts_any_non_empty_key_within_the_limit(
     estate_key: str,
 ) -> None:
     """Existing keys of any shape remain addressable."""
-    assert validate_estate_key_reference(estate_key) == estate_key
+    assert validate_estate_key_reference(estate_key) == estate_key, (
+        f"{estate_key!r} should be accepted"
+    )
 
 
 @pytest.mark.parametrize(

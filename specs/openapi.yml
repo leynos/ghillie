@@ -240,14 +240,10 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/RepositoryNotFound"
-        "409":
-          $ref: "#/components/responses/Conflict"
         "413":
           $ref: "#/components/responses/PayloadTooLarge"
         "415":
           $ref: "#/components/responses/UnsupportedMediaType"
-        "422":
-          $ref: "#/components/responses/InvalidInput"
         "500":
           $ref: "#/components/responses/InternalError"
         "503":
@@ -377,6 +373,7 @@ components:
       schema:
         type: integer
         minimum: 0
+        maximum: 2147483647
         default: 0
     DryRun:
       name: dry_run
