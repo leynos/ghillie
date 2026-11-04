@@ -22,6 +22,7 @@ from ghillie.estate.errors import (
     RepositoryNotFoundError,
     StorageUnavailableError,
 )
+from tests.helpers.femtologging_capture import capture_femto_logs
 
 if typ.TYPE_CHECKING:
     from ghillie.estate.models import (
@@ -215,6 +216,19 @@ def test_registry_sync_failed() -> None:
     result = _client(error).simulate_post("/estates/demo/registry-sync")
 
     _assert_error(result, status=500, code="registry_sync_failed")
+
+
+def test_registry_sync_failed_is_logged() -> None:
+    """A handled server-side failure still leaves an operator-visible log."""
+    error = RegistrySyncFailedError("the registry sync failed")
+
+    with capture_femto_logs("ghillie.api.errors") as logs:
+        _client(error).simulate_post("/estates/demo/registry-sync")
+        logs.wait_for_timeout()
+
+    assert any("Registry sync failed" in record.message for record in logs.records), (
+        "handled 500 responses should be logged"
+    )
 
 
 def test_unroutable_path_is_not_found() -> None:

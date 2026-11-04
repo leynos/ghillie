@@ -457,6 +457,42 @@ per pull request.
           import, and `AsyncSessionTransaction` moved under `TYPE_CHECKING`.
         Focused red-then-green runs are recorded above; fast gates
         (`check-fmt`, `typecheck`, `lint`) were green before the repair commit.
+  - [x] (2026-11-05) Fifth CodeRabbit review returned seventeen findings (two
+        major, four minor, eleven trivial). Triage and repairs:
+        - A configured but blank `GHILLIE_API_TOKEN` now stops start-up instead
+          of silently disabling authentication. `_read_api_token` strips the
+          value (secrets read from files often carry a newline) and raises
+          `SystemExit` when the stripped value is empty; a regression test
+          covers it.
+        - `ghillie.estate.ports` imports its model types at runtime, so
+          `typing.get_type_hints` resolves annotations for adapters and
+          documentation tools under PEP 649; a regression test resolves the
+          `list_estates` return type.
+        - `handle_registry_sync_failed` logs the exception before rendering the
+          envelope, so a handled 500 still leaves an operator-visible record;
+          a `capture_femto_logs` test asserts the line.
+        - The generated-report 422 example and `ErrorResponse` schema now carry
+          the optional `review_id`, asserted by the OpenAPI walker.
+        - `estate service` private helpers gained single-line docstrings; every
+          API error handler gained full NumPy sections.
+        - The registry, service, and estate-service test fixtures moved to
+          `tests/unit/conftest.py`, removing three duplicate local fixtures; the
+          pagination matrix now walks an empty registry for every filter and
+          limit; the lock-leak test probes lock lifetime through weak
+          references instead of reading the protected `_locks` map; the dry-run
+          importer test asserts neither an estate nor an import record
+          persists; the bootstrap idempotence test inserts a row between runs
+          and asserts it survives; and `estate_test_helpers` documents its
+          exported builders.
+        - Skipped with reasons: the claimed future-dated plan entry is correct
+          (the cited commit `8d26df3` is dated 2026-11-05), and no
+          `types-PyYAML` stub package is needed (`pyright` reports no
+          missing-stub diagnostic for the test file, and Pyright is not a
+          gate). The suggestion to rewrite the loader's explicit `isinstance`
+          event scan as structural pattern matching is stylistic; the current
+          form is clear, and the `getattr(event, "anchor", None)` guard
+          deliberately covers event types that declare the attribute
+          differently.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.

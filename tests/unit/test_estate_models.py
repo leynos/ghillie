@@ -7,6 +7,7 @@ keys created earlier through Python remain reachable.
 """
 
 import re
+import typing as typ
 
 import pytest
 from hypothesis import given
@@ -16,9 +17,12 @@ from ghillie.estate.errors import InvalidEstateKeyError
 from ghillie.estate.models import (
     MAX_ESTATE_KEY_LENGTH,
     NEW_ESTATE_KEY_PATTERN,
+    EstateSummary,
+    Page,
     validate_estate_key_reference,
     validate_new_estate_key,
 )
+from ghillie.estate.ports import EstateManagement
 
 _COMPILED_PATTERN = re.compile(NEW_ESTATE_KEY_PATTERN)
 
@@ -101,3 +105,12 @@ def test_reference_key_rejects_empty_and_over_long_keys(estate_key: str) -> None
     """The reference rule enforces only the length bound."""
     with pytest.raises(InvalidEstateKeyError):
         validate_estate_key_reference(estate_key)
+
+
+def test_port_annotations_resolve_at_runtime() -> None:
+    """Adapters can introspect the port without importing its models."""
+    hints = typ.get_type_hints(EstateManagement.list_estates)
+
+    assert hints["return"] == Page[EstateSummary], (
+        "the return annotation should resolve to the estate page type"
+    )

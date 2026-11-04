@@ -21,38 +21,14 @@ from ghillie.estate.errors import (
 from ghillie.estate.models import MAX_PAGE_OFFSET, PageRequest, RepositoryQuery
 from ghillie.registry.errors import ESTATE_NOT_FOUND_REASON, RegistrySyncError
 from ghillie.registry.service import RepositoryRegistryService
-from tests.unit.estate_test_helpers import (
-    build_registry,
-    build_service,
-    catalogue_document,
-    import_catalogue,
-)
+from tests.unit.estate_test_helpers import catalogue_document, import_catalogue
 
 if typ.TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
     from ghillie.estate.service import EstateManagementService
 
 _ESTATE_KEY = "demo"
 _OWNER = "org"
 _REPO_NAME = "alpha"
-
-
-@pytest.fixture
-def registry(
-    session_factory: async_sessionmaker[AsyncSession],
-) -> RepositoryRegistryService:
-    """Build a registry service over the shared test database."""
-    return build_registry(session_factory)
-
-
-@pytest.fixture
-def service(
-    session_factory: async_sessionmaker[AsyncSession],
-    registry: RepositoryRegistryService,
-) -> EstateManagementService:
-    """Build the service under test."""
-    return build_service(session_factory, registry)
 
 
 # ---------------------------------------------------------------------------

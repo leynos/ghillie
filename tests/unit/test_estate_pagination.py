@@ -13,12 +13,13 @@ from sqlalchemy import select
 
 from ghillie.catalogue.storage import Estate
 from ghillie.estate.models import RepositoryQuery
-from ghillie.estate.service import EstateManagementService
-from ghillie.registry.service import RepositoryRegistryService
 from ghillie.silver.storage import Repository
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+    from ghillie.estate.service import EstateManagementService
+    from ghillie.registry.service import RepositoryRegistryService
 
 _ESTATE_KEY = "pagination"
 _REPOSITORY_COUNT = 26
@@ -29,23 +30,6 @@ _LIMITS = range(1, 11)
 # suite's 30-second default when the host is loaded, so this module opts into
 # the longer budget the plan already reserves for database-heavy runs.
 pytestmark = pytest.mark.timeout(120)
-
-
-@pytest.fixture
-def registry(
-    session_factory: async_sessionmaker[AsyncSession],
-) -> RepositoryRegistryService:
-    """Build a registry service over the shared test database."""
-    return RepositoryRegistryService(session_factory, session_factory)
-
-
-@pytest.fixture
-def service(
-    session_factory: async_sessionmaker[AsyncSession],
-    registry: RepositoryRegistryService,
-) -> EstateManagementService:
-    """Build the service under test."""
-    return EstateManagementService(session_factory, registry=registry)
 
 
 _CATALOGUE = """
@@ -174,6 +158,17 @@ async def test_walking_pages_visits_each_repository_exactly_once(
 ) -> None:
     """Exhaustively walks 780 count, filter, and limit combinations."""
     estate_id = await _seed_estate(service, session_factory)
+
+    # Cover ``N == 0`` inside the matrix so every filter and limit sees an
+    # empty registry before any repository exists.
+    for ingestion_enabled in _FILTERS:
+        for limit in _LIMITS:
+            await _walk_pages(
+                service,
+                ingestion_enabled=ingestion_enabled,
+                limit=limit,
+                expected=[],
+            )
 
     for index in range(_REPOSITORY_COUNT):
         await _add_repository(session_factory, estate_id, index=index)

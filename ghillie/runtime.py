@@ -20,7 +20,7 @@ Configuration is driven by environment variables:
 - ``GHILLIE_STATUS_MODEL_BACKEND``: Status backend (optional; adds report
   routes when set)
 - ``GHILLIE_API_TOKEN``: Bearer token guarding the API (optional; setting
-  it enables authentication)
+  it enables authentication, and a blank value stops start-up)
 - ``GHILLIE_DB_BOOTSTRAP``: ``create-all`` creates missing tables at
   start-up (optional; any other value stops start-up)
 
@@ -84,6 +84,33 @@ def _parse_port(port_str: str) -> int:
 _BOOTSTRAP_CREATE_ALL = "create-all"
 
 
+def _read_api_token() -> str | None:
+    """Return the configured bearer token, treating an absent value as unset.
+
+    Secrets supplied by files or shell helpers often carry a trailing newline;
+    the request parser strips the supplied credential, so the configured value
+    must be stripped too or a valid token never matches.
+
+    Raises
+    ------
+    SystemExit
+        If ``GHILLIE_API_TOKEN`` is set but blank after stripping. A blank
+        value would otherwise disable authentication silently, turning a
+        misconfigured deployment into an open one.
+
+    """
+    raw = os.environ.get("GHILLIE_API_TOKEN")
+    token = (raw or "").strip() or None
+    if raw is not None and token is None:
+        log_error(
+            logger,
+            "GHILLIE_API_TOKEN is set but blank; unset it to disable "
+            "authentication or supply a non-blank token",
+        )
+        raise SystemExit(1)
+    return token
+
+
 def _read_bootstrap_setting() -> str | None:
     """Return the raw ``GHILLIE_DB_BOOTSTRAP`` value, treating blank as unset.
 
@@ -127,10 +154,7 @@ def create_app() -> falcon.asgi.App:
     from ghillie.api.app import create_app as _create_api_app
 
     bootstrap = _read_bootstrap_setting()
-    # Secrets supplied by files or shell helpers often carry a trailing
-    # newline; the request parser strips the supplied credential, so the
-    # configured value must be stripped too or a valid token never matches.
-    api_token = (os.environ.get("GHILLIE_API_TOKEN") or "").strip() or None
+    api_token = _read_api_token()
     database_url = os.environ.get("GHILLIE_DATABASE_URL")
 
     if database_url is None:
