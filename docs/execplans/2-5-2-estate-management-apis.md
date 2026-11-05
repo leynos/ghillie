@@ -517,6 +517,17 @@ per pull request.
         truthiness. It now drives the 415 media-type path, where the resource
         sets its own description, and asserts that the accepted media type
         reaches the envelope.
+        A fourth pass returned two minor findings, both accepted:
+        - `GET /estates` now normalizes `last_import.imported_at` to an aware
+          UTC timestamp at the wire boundary. SQLite drops `tzinfo` on
+          round-trip, so a self-hosted deployment previously emitted an ISO
+          string with no offset, violating the OpenAPI `format: date-time`
+          contract. A red-then-green test covers the naive case.
+        - The `ghillie/api/auth.py` module docstring claimed an unset *or
+          empty* token leaves every route open. The launcher now refuses a
+          set-but-blank token, so the docstring and the corresponding test
+          docstring state the middleware-level behaviour separately from the
+          launcher's fail-fast.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.

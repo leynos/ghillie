@@ -7,6 +7,7 @@ is covered by ``test_api_estate_errors.py``; repository listing and ingestion
 toggles are covered by ``test_api_repository_resources.py``.
 """
 
+import datetime as dt
 import json
 import typing as typ
 
@@ -105,6 +106,34 @@ def test_list_estates_renders_a_null_last_import(
     assert result.status_code == 200, "expected 200 from /estates"
     assert result.json["items"][0]["last_import"] is None, "last import should be null"
     assert result.json["items"][0]["description"] is None, "description should be null"
+
+
+def test_list_estates_normalizes_a_naive_timestamp(
+    client: falcon.testing.TestClient,
+    service: FakeEstateManagement,
+) -> None:
+    """A timestamp read back without a zone still serializes as ``date-time``.
+
+    SQLite drops ``tzinfo`` on round-trip, so a self-hosted deployment would
+    otherwise emit an ISO string without an offset and break every client
+    validating against the OpenAPI ``format: date-time`` contract.
+    """
+    service.estate_items = (
+        EstateSummary(
+            key="demo",
+            name="Demo",
+            description=None,
+            last_import_commit_sha="c1",
+            last_imported_at=dt.datetime(2026, 2, 1, 12, 30),  # noqa: DTZ001 - models the naive SQLite read.
+        ),
+    )
+
+    result = client.simulate_get("/estates")
+
+    assert result.status_code == 200, "expected 200 from /estates"
+    assert result.json["items"][0]["last_import"]["imported_at"] == (
+        "2026-02-01T12:30:00Z"
+    ), "a naive timestamp should be serialized as UTC"
 
 
 def test_list_estates_offset_past_end_is_empty(

@@ -144,7 +144,11 @@ class TestNoTokenConfigured:
         assert result.status_code == 200, "estate route should be open"
 
     def test_empty_token_is_treated_as_unconfigured(self) -> None:
-        """An empty environment value does not enable authentication."""
+        """The middleware treats a blank token as unconfigured.
+
+        The launcher rejects a set-but-blank token before this point, so the
+        fail-fast path is covered by the runtime tests instead.
+        """
         result = _client(token="").simulate_get("/estates")
 
         assert result.status_code == 200, "empty token should disable auth"
