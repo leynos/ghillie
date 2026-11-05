@@ -620,8 +620,9 @@ per pull request.
         - The duplicated tests merge into parametrized cases, and the 780-case
           pagination walk extracts `_walk_every_limit`, `_walk_every_filter`,
           and `_import_seed`.
-        Focused suites are green; the eight-gate run and the hosted
-        re-observation follow this entry.
+        Focused suites were green; the eight-gate run at `6903e14`, recorded below,
+        covers this entry (its first attempt at `507f684` failed `check-fmt`
+        on `mdtablefix` and was reformatted before the green run).
   - [x] (2026-11-05) The hosted ExecPlan assessment for PR-B found no core
         mutation or authentication defect and listed three evidence gaps,
         all now closed:
@@ -643,8 +644,28 @@ per pull request.
           newlines, so character count and byte count differ; the first two are
           accepted and the third is a 413 `payload_too_large`.
         - The PR-B scope-tolerance exception is recorded as D23.
-        Focused suites (101 tests) are green; the eight-gate run and the
-        hosted re-observation follow this entry.
+        Focused suites (101 tests) were green; the full eight-gate run at
+        `6903e14` then passed: `check-fmt`, `check-architecture` (`hecate:
+        architecture check passed`), `typecheck` (`All checks passed!`), `lint`
+        (Hecate, Ruff, Skylos), `test` (1440 passed, 11 skipped, 94 warnings,
+        exit 0), `markdownlint` (58 files, 0 issues), `nixie` (all diagrams
+        validated), and `spelling` (93.70% coverage). Logs are under
+        `/tmp/*-ghillie-2-5-2-estate-management-apis-b.out`; the hosted
+        re-observation follows.
+  - [x] (2026-11-05) The PR-B re-assessment at `6903e14` confirmed the O4,
+        O5, and D23 closures and left one narrow D21 omission: `set_ingestion`
+        logged a terminal record only for `RegistryRepositoryNotFoundError`
+        and `SQLAlchemyError`, so any other exception escaped without one. A
+        direct service caller has no HTTP catch-all to log it, so the attempt
+        vanished from the operator's view. Red run first: the new test
+        (`test_set_ingestion_logs_one_terminal_record_for_an_unexpected_error`)
+        failed because no record was written; it now passes. The fix logs one
+        `estate.set-ingestion` record naming the error class and re-raises the
+        exception unchanged, preserving the two existing translations. The
+        full eight-gate run at `ec3a80d` passed: `check-fmt`,
+        `check-architecture`, `typecheck`, `lint`, `test` (1441 passed, 11
+        skipped, 0 failed), `markdownlint`, `nixie`, and `spelling`. Logs are
+        under `/tmp/*-ghillie-2-5-2-estate-management-apis-b.out`.
   - [x] (2026-11-05) The PR-C gate run at `0655461` failed `make test` with a
         native segmentation fault in `msgspec._core`, crashing xdist worker
         `gw3` while the O4 conflict test raced two imports. The test now
