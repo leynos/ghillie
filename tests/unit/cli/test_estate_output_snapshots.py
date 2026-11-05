@@ -253,7 +253,7 @@ def _error() -> ControlPlaneError:
     return ControlPlaneError(
         "catalogue_invalid",
         "catalogue validation failed",
-        hint="Fix the issues listed above and import the catalogue again.",
+        hint="Fix the listed catalogue issues and import the catalogue again.",
         status=422,
         issues=[
             ControlPlaneIssue("catalogue_schema", "projects: 42 is not a list"),
@@ -280,7 +280,7 @@ def test_error_json_matches_the_documented_envelope() -> None:
         "error": {
             "code": "catalogue_invalid",
             "message": "catalogue validation failed",
-            "hint": "Fix the issues listed above and import the catalogue again.",
+            "hint": "Fix the listed catalogue issues and import the catalogue again.",
             "status": 422,
             "issues": [
                 {"code": "catalogue_schema", "message": "projects: 42 is not a list"},

@@ -4,7 +4,7 @@
   Error: catalogue validation failed
   Code: catalogue_invalid
   Status: 422
-  Hint: Fix the issues listed above and import the catalogue again.
+  Hint: Fix the listed catalogue issues and import the catalogue again.
   Issue: catalogue_schema: projects: 42 is not a list
   Issue: catalogue_schema: component key 'x' is invalid
   '''
@@ -13,7 +13,7 @@
   '''
   error:
     code: catalogue_invalid
-    hint: Fix the issues listed above and import the catalogue again.
+    hint: Fix the listed catalogue issues and import the catalogue again.
     issues:
     - code: catalogue_schema
       message: 'projects: 42 is not a list'
