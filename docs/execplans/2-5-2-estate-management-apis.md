@@ -634,9 +634,10 @@ per pull request.
           failed, and pre-lock rejection paths each assert a single record.
         - O4: two database-backed HTTP cases now run the real service over
           `session_factory`. An over-long `estate_name` is a 400
-          `invalid_input`, and two imports released together by a barrier race
-          the unique estate key so the loser becomes a 409 `conflict`; both
-          assert that no SQL or driver text reaches the body.
+          `invalid_input`, and a second import replays the losing insert of a
+          concurrent import so the unique estate key raises a real
+          `IntegrityError` and the response is a 409 `conflict`; both assert
+          that no SQL or driver text reaches the body.
         - O5: `test_body_limit_boundary` builds exact-byte JSON bodies at
           1 MiB − 1, 1 MiB, and 1 MiB + 1 using multibyte padding and escaped
           newlines, so character count and byte count differ; the first two are
@@ -644,6 +645,16 @@ per pull request.
         - The PR-B scope-tolerance exception is recorded as D23.
         Focused suites (101 tests) are green; the eight-gate run and the
         hosted re-observation follow this entry.
+  - [x] (2026-11-05) The PR-C gate run at `0655461` failed `make test` with a
+        native segmentation fault in `msgspec._core`, crashing xdist worker
+        `gw3` while the O4 conflict test raced two imports. The test now
+        replays the loser's insert deterministically: one import commits the
+        estate, then a patched `_ensure_estate` inserts the duplicate and
+        flushes, so the database's unique key produces the `IntegrityError`
+        the service translates. The focused module passes (16 tests). The
+        crash itself is recorded under Surprises as unexplained; the
+        two-thread `msgspec.convert` race did not reproduce in 200 fresh
+        processes. PR-B's re-gate and PR-C's rebase follow this entry.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
@@ -723,6 +734,18 @@ per pull request.
 - Observation: the local CodeRabbit CLI reviews committed history, not the
   working tree, so review repairs must be committed before a re-assessment can
   cover them. Impact: the review loop for EP-M3.
+- Observation: the O4 conflict proof raced two imports through
+  `asyncio.to_thread(parse_catalogue_text, ...)`, and one full-suite run
+  crashed an xdist worker with a native segmentation fault inside
+  `msgspec._core` at `ghillie/catalogue/loader.py`'s `msgspec.convert` call.
+  Evidence: the scrutineer's gate-5 log for PR-C head `0655461` (1 failed,
+  1529 passed, 11 skipped); the same test alone passed ten times, and 200
+  fresh processes racing two threads through the first `msgspec.convert` of
+  `Catalogue` did not reproduce it. Impact: the proof now replays the losing
+  insert deterministically instead of racing, so O4 no longer depends on
+  thread scheduling or on a concurrent parse. The crash remains unexplained
+  and is recorded here rather than attributed to a cause the evidence does not
+  support; if it recurs, capture a core dump before changing production code.
 
 - Observation: the Silver schema permits an unowned row (`estate_id` null) that
   still carries a `catalogue_repository_id`. Because the policy treats a null

@@ -6,7 +6,6 @@ mode returns the documented status and stable ``code``.
 
 from __future__ import annotations
 
-import asyncio
 import typing as typ
 
 import falcon.testing
@@ -15,6 +14,7 @@ import pytest
 
 from ghillie.api.app import AppDependencies, create_app
 from ghillie.catalogue.importer import CatalogueImporter
+from ghillie.catalogue.storage import Estate
 from ghillie.estate.errors import (
     CatalogueRejectedError,
     EstateConflictError,
@@ -300,43 +300,45 @@ async def test_conflict_through_the_real_service_is_a_409(
 ) -> None:
     """O4: a real uniqueness conflict becomes a 409 without database detail.
 
-    Two app instances share one database, and neither can see the other's
-    uncommitted estate. A barrier releases both imports after their existence
-    check, so the loser's flush hits the unique key and the service translates
-    the resulting ``IntegrityError``.
+    The first import commits the estate. The second replays the losing side of
+    a concurrent import: its existence check ran before the winner committed,
+    so it inserts the estate again and the database's unique key raises
+    ``IntegrityError``. The service must translate that into a 409 that carries
+    no storage detail.
+
+    The interleaving is replayed rather than raced. Racing two imports made the
+    proof depend on thread scheduling, and the concurrent parse it forced
+    crashed an xdist worker inside msgspec's C extension once in a full-suite
+    run. The losing insert is the behaviour under test, and it is deterministic.
     """
-    registry = build_registry(session_factory)
-    apps = [
-        create_app(
-            AppDependencies(estate_service=build_service(session_factory, registry))
-        )
-        for _ in range(2)
-    ]
-    barrier = asyncio.Barrier(2)
-    original = CatalogueImporter._ensure_estate
+    service = build_service(session_factory, build_registry(session_factory))
+    app = create_app(AppDependencies(estate_service=service))
+    transport = httpx.ASGITransport(app=typ.cast("typ.Any", app))
 
-    async def _synchronized(self: CatalogueImporter, session: AsyncSession) -> object:
-        await barrier.wait()
-        return await original(self, session)
-
-    monkeypatch.setattr(CatalogueImporter, "_ensure_estate", _synchronized)
-    body = {"commit_sha": "c1", "catalogue_yaml": catalogue_document()}
-
-    async def _import(app: object) -> httpx.Response:
-        transport = httpx.ASGITransport(app=typ.cast("typ.Any", app))
+    async def _import(commit_sha: str) -> httpx.Response:
+        body = {"commit_sha": commit_sha, "catalogue_yaml": catalogue_document()}
         async with httpx.AsyncClient(
             transport=transport, base_url="http://test"
         ) as client:
             return await client.post("/estates/demo/catalogue-import", json=body)
 
-    responses = await asyncio.wait_for(
-        asyncio.gather(*(_import(app) for app in apps)), timeout=30
-    )
+    first = await _import("c1")
+    assert first.status_code == 200, first.text
 
-    assert sorted(response.status_code for response in responses) == [200, 409], (
-        "one import should succeed and the other should conflict"
-    )
-    conflict = next(response for response in responses if response.status_code == 409)
+    async def _insert_duplicate(
+        self: CatalogueImporter, session: AsyncSession
+    ) -> Estate:
+        """Insert the estate as the loser of a race would, skipping its check."""
+        estate = Estate(key=self.estate_key, name=self.estate_name or self.estate_key)
+        session.add(estate)
+        await session.flush()
+        return estate
+
+    monkeypatch.setattr(CatalogueImporter, "_ensure_estate", _insert_duplicate)
+
+    conflict = await _import("c2")
+
+    assert conflict.status_code == 409, conflict.text
     assert conflict.json()["code"] == "conflict", "expected the conflict code"
     assert _no_storage_details(conflict.text), "the body must not leak storage detail"
 
