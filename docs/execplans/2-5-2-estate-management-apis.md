@@ -508,6 +508,10 @@ per pull request.
           "unauthenticated with a start-up warning". The reviewer labels it a
           posture suggestion rather than a defect; changing it needs a new
           decision and is outside this plan's approved scope.
+        The follow-up review of the docstring commit returned one minor
+        finding: `tests/unit/test_api_auth.py` used `-ise` spellings in
+        assertion messages. They now use the repository's en-GB Oxford `-ize`
+        form; the `unauthorized` code literal was already correct.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.

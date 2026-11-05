@@ -43,8 +43,8 @@ class TestTokenConfigured:
         """A protected route without a header is a structured 401."""
         result = client.simulate_get("/estates")
 
-        assert result.status_code == 401, "missing header should be unauthorised"
-        assert result.json["code"] == "unauthorized", "code should be unauthorised"
+        assert result.status_code == 401, "missing header should be unauthorized"
+        assert result.json["code"] == "unauthorized", "code should be unauthorized"
         assert result.headers.get("WWW-Authenticate") == "Bearer", "challenge is bearer"
 
     def test_wrong_token_is_unauthorized(
@@ -55,8 +55,8 @@ class TestTokenConfigured:
             "/estates", headers={_AUTHORIZATION: "Bearer wrong-token"}
         )
 
-        assert result.status_code == 401, "wrong token should be unauthorised"
-        assert result.json["code"] == "unauthorized", "code should be unauthorised"
+        assert result.status_code == 401, "wrong token should be unauthorized"
+        assert result.json["code"] == "unauthorized", "code should be unauthorized"
         assert "wrong-token" not in result.text, "response should not echo the token"
         assert _TOKEN not in result.text, "response should never echo the token"
 
@@ -76,8 +76,8 @@ class TestTokenConfigured:
         """Anything that is not a non-empty bearer credential is rejected."""
         result = client.simulate_get("/estates", headers={_AUTHORIZATION: header})
 
-        assert result.status_code == 401, "malformed header should be unauthorised"
-        assert result.json["code"] == "unauthorized", "code should be unauthorised"
+        assert result.status_code == 401, "malformed header should be unauthorized"
+        assert result.json["code"] == "unauthorized", "code should be unauthorized"
 
     @pytest.mark.parametrize(
         "header",
@@ -113,8 +113,8 @@ class TestTokenConfigured:
             "/estates", headers={_AUTHORIZATION: "Bearer café"}
         )
 
-        assert result.status_code == 401, "non-ascii credential should be unauthorised"
-        assert result.json["code"] == "unauthorized", "code should be unauthorised"
+        assert result.status_code == 401, "non-ascii credential should be unauthorized"
+        assert result.json["code"] == "unauthorized", "code should be unauthorized"
 
     def test_unknown_path_still_requires_a_token(
         self, client: falcon.testing.TestClient
@@ -123,7 +123,7 @@ class TestTokenConfigured:
         result = client.simulate_get("/nope")
 
         assert result.status_code == 401, "unknown path should still need a token"
-        assert result.json["code"] == "unauthorized", "code should be unauthorised"
+        assert result.json["code"] == "unauthorized", "code should be unauthorized"
 
     def test_unauthorized_response_does_not_echo_the_configured_token(
         self, client: falcon.testing.TestClient
