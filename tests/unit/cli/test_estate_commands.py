@@ -177,7 +177,7 @@ def test_import_strips_a_utf8_byte_order_mark(
 ) -> None:
     """A BOM-prefixed catalogue is read as ``utf-8-sig`` (D1)."""
     path = tmp_path / "bom.yaml"
-    path.write_text("﻿version: 1\n", encoding="utf-8")
+    path.write_text("\ufeffversion: 1\n", encoding="utf-8")
     client = harness()
     client.queue_json(_IMPORT_PAYLOAD)
 
@@ -337,6 +337,27 @@ def test_repo_set_quotes_each_path_segment(
 
     request = client.requests[0]
     assert request.url.raw_path == b"/repositories/ley%20nos/wild%2Fside/ingestion"
+
+
+def test_repo_set_refuses_a_dry_run_without_sending_a_request(
+    harness: typ.Callable[..., CliHarness],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The ingestion PATCH has no dry-run mode, so a dry run must not mutate."""
+    client = harness(dry_run=True, output="json")
+
+    result = client.invoke(
+        set_repository,
+        owner="leynos",
+        name="wildside",
+        ingestion_enabled=False,
+    )
+
+    assert result == 2
+    assert client.requests == [], "a dry run must never reach the service"
+    error = _error_document(capsys.readouterr().err)["error"]
+    assert error["code"] == "dry_run_unsupported"
+    assert "--dry-run" in error["hint"]
 
 
 # ---------------------------------------------------------------------------

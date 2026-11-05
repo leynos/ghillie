@@ -731,6 +731,15 @@ per pull request.
         now binds `transport` with `functools.partial`, the fixture exposes an
         explicit keyword signature, and the error helper takes the standard
         error text; `ty check` is clean.
+  - [x] (2026-11-05) Milestone CodeRabbit CLI review against
+        `origin/2-5-2-estate-management-apis-b` covered all 12 committed paths
+        and raised two findings. The major finding was valid: `estate repo
+        set` ignored the root `--dry-run` and sent a live PATCH. Because the
+        ingestion endpoint has no dry-run parameter, the command now refuses
+        locally with `dry_run_unsupported` and exit `2`, matching the D20
+        amendment. The trivial finding was also valid: the BOM test wrote a
+        raw U+FEFF; it now uses the visible `\ufeff` escape. A new unit test
+        asserts the refusal sends no request.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
 
@@ -993,7 +1002,11 @@ expert-panel review.
   counts it would have produced. `CatalogueImporter.import_catalogue` and
   `RepositoryRegistryService.sync_from_catalogue` gain keyword-only
   `dry_run: bool = False`. Rationale: the pre-mortem's most likely incident is
-  importing the wrong file into a live estate.
+  importing the wrong file into a live estate. The ingestion PATCH has no
+  dry-run parameter, so `ghillie estate repo set` refuses locally with
+  `dry_run_unsupported` and exit `2` when the root option is set instead of
+  silently applying the toggle. Amended after the EP-M4 milestone review showed
+  that the command was sending a live PATCH under `--dry-run`.
 - D21, observability. Each mutation attempt logs exactly one terminal
   structured line through `ghillie.logging`: operation, estate key, commit, dry
   run, counts, duration, and outcome. Import records include edge counts. A
