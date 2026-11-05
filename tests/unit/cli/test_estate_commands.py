@@ -769,6 +769,28 @@ def test_transport_failure_exits_3(
     )
 
 
+@pytest.mark.parametrize(
+    "failure",
+    [
+        pytest.param(httpx.TooManyRedirects("too many redirects"), id="redirects"),
+        pytest.param(httpx.DecodingError("cannot decode"), id="decoding"),
+    ],
+)
+def test_other_request_errors_exit_3(
+    harness: typ.Callable[..., CliHarness],
+    capsys: pytest.CaptureFixture[str],
+    failure: httpx.RequestError,
+) -> None:
+    """A request error that is not a transport error is still exit 3."""
+    client = harness(output="json")
+    client.queue_error(failure)
+
+    assert client.invoke(sync, estate_key="demo") == 3
+    error = _error_document(capsys.readouterr().err)["error"]
+    assert error["code"] == "transport"
+    assert error["hint"]
+
+
 def test_timeout_exits_3(
     harness: typ.Callable[..., CliHarness],
     capsys: pytest.CaptureFixture[str],

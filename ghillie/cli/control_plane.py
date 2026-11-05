@@ -10,6 +10,8 @@ from urllib.parse import quote
 import httpx
 
 if typ.TYPE_CHECKING:
+    import http
+
     from .config import ResolvedCliConfig
 
 _HTTP_ERROR_FALLBACK = "the control plane returned an error"
@@ -195,7 +197,7 @@ class ControlPlaneClient:
 
     def request_json(
         self,
-        method: str,
+        method: http.HTTPMethod,
         path_segments: typ.Sequence[str],
         *,
         params: typ.Mapping[str, str] | None = None,
@@ -255,7 +257,10 @@ class ControlPlaneClient:
         except httpx.TimeoutException as exc:
             message = "the control plane did not answer in time"
             raise ControlPlaneTimeoutError("timeout", message) from exc
-        except httpx.TransportError as exc:
+        except httpx.RequestError as exc:
+            # ``RequestError`` also covers redirect loops and decoding
+            # failures, which are request failures as far as the operator is
+            # concerned; letting them escape would print a traceback.
             message = "could not reach the control plane"
             raise ControlPlaneTransportError("transport", message) from exc
 

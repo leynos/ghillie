@@ -10,8 +10,6 @@ from __future__ import annotations
 import json
 import typing as typ
 
-import pytest
-
 from ghillie.cli.commands.estate import (
     import_catalogue,
     list_estates,
@@ -107,14 +105,6 @@ _TOGGLE_PAYLOAD: dict[str, object] = {
     "ingestion_enabled": False,
     "changed": True,
 }
-
-
-@pytest.fixture
-def catalogue_file(tmp_path: Path) -> Path:
-    """Write a small catalogue document and return its path."""
-    path = tmp_path / "catalogue.yaml"
-    path.write_text("version: 1\n", encoding="utf-8")
-    return path
 
 
 def test_estate_list_table_snapshot(
