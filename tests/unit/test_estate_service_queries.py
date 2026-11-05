@@ -21,6 +21,7 @@ from ghillie.estate.errors import (
 from ghillie.estate.models import MAX_PAGE_OFFSET, PageRequest, RepositoryQuery
 from ghillie.registry.errors import ESTATE_NOT_FOUND_REASON, RegistrySyncError
 from ghillie.registry.service import RepositoryRegistryService
+from tests.helpers.femtologging_capture import capture_femto_logs
 from tests.unit.estate_test_helpers import catalogue_document, import_catalogue
 
 if typ.TYPE_CHECKING:
@@ -329,6 +330,37 @@ async def test_set_ingestion_reports_each_transition(
     assert repeated.changed is False, "repeat toggle should change nothing"
     assert enabled.ingestion_enabled is True, "toggle should enable ingestion"
     assert enabled.changed is True, "enable toggle should change state"
+
+
+@pytest.mark.asyncio
+async def test_set_ingestion_escapes_a_hostile_repository_name(
+    service: EstateManagementService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A newline in the repository name cannot forge a second log line."""
+
+    async def _changed(_owner: str, _name: str, *, enabled: bool) -> bool:
+        return True
+
+    monkeypatch.setattr(service, "_toggle", _changed)
+    hostile = "alpha\nestate.set-ingestion outcome=succeeded"
+
+    with capture_femto_logs("ghillie.estate.service") as logs:
+        await service.set_ingestion(_OWNER, hostile, enabled=False)
+        logs.wait_for_timeout()
+
+    toggle_lines = [
+        record.message
+        for record in logs.records
+        if "estate.set-ingestion" in record.message
+    ]
+    assert toggle_lines, "the toggle should log one mutation line"
+    assert all("\n" not in message for message in toggle_lines), (
+        "the toggle record must stay on one line"
+    )
+    assert any("\\n" in message for message in toggle_lines), (
+        "the control character should be visible as an escape"
+    )
 
 
 @pytest.mark.asyncio

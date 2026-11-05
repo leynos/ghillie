@@ -541,6 +541,21 @@ per pull request.
           forge a second line; a red-then-green test feeds a hostile
           `commit_sha` and asserts the record stays single-line with a visible
           escape.
+        A seventh pass returned two findings, both accepted:
+        - `import_catalogue` applied `validate_new_estate_key` before the
+          lookup, so an estate created earlier through Python under a legacy
+          key (for example `"Wildside Estate"`) could never be re-imported.
+          That contradicted D16: the strict pattern belongs only to creation.
+          The method now validates the key as a reference up front and applies
+          the creation pattern inside the per-estate lock only when no row
+          exists. A red-then-green test seeds a legacy-key estate and imports
+          into it.
+        - `set_ingestion` interpolated the client-supplied `owner` and `name`
+          with `%s`. They now use `%r`, matching `_log_mutation`, and a test
+          feeds a newline-bearing name and asserts the record stays on one
+          line. `make test` also produced five `vidaimock` fixture-teardown
+          timeout errors under twelve-worker load in code untouched by this
+          branch; the next gate run confirms whether they are flaky.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
