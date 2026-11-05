@@ -26,6 +26,7 @@ class _ErrorCase(typ.NamedTuple):
     payload: dict[str, object]
     expected_code: str
     expected_hint: str
+    """Substring the hint must contain, or ``""`` to require only a non-empty hint."""
 
 
 @pytest.mark.parametrize(
@@ -137,6 +138,89 @@ class _ErrorCase(typ.NamedTuple):
             ),
             id="storage-unavailable",
         ),
+        pytest.param(
+            _ErrorCase(
+                400,
+                {
+                    "title": "Invalid input",
+                    "description": "estate_key must match the pattern",
+                    "code": "invalid_input",
+                },
+                "invalid_input",
+                "service logs",
+            ),
+            id="invalid-input",
+        ),
+        pytest.param(
+            _ErrorCase(
+                415,
+                {
+                    "title": "Unsupported media type",
+                    "description": "the body must be application/json",
+                    "code": "unsupported_media_type",
+                },
+                "unsupported_media_type",
+                "service logs",
+            ),
+            id="unsupported-media-type",
+        ),
+        pytest.param(
+            _ErrorCase(
+                405,
+                {
+                    "title": "Method not allowed",
+                    "description": "the route does not support this method",
+                    "code": "method_not_allowed",
+                },
+                "method_not_allowed",
+                "service logs",
+            ),
+            id="method-not-allowed",
+        ),
+        pytest.param(
+            _ErrorCase(
+                500,
+                {
+                    "title": "Registry sync failed",
+                    "description": "the registry sync failed",
+                    "code": "registry_sync_failed",
+                },
+                "registry_sync_failed",
+                "service logs",
+            ),
+            id="registry-sync-failed",
+        ),
+        pytest.param(
+            _ErrorCase(
+                500,
+                {
+                    "title": "Internal error",
+                    "description": "an unexpected error occurred",
+                    "code": "internal_error",
+                },
+                "internal_error",
+                "service logs",
+            ),
+            id="internal-error",
+        ),
+        pytest.param(
+            _ErrorCase(
+                302,
+                {"status": "moved"},
+                "http_302",
+                "",
+            ),
+            id="redirect-is-not-success",
+        ),
+        pytest.param(
+            _ErrorCase(
+                307,
+                {"status": "temporary-redirect"},
+                "http_307",
+                "",
+            ),
+            id="temporary-redirect-is-not-success",
+        ),
     ],
 )
 def test_http_error_maps_to_exit_3(
@@ -155,7 +239,9 @@ def test_http_error_maps_to_exit_3(
     error = error_document(capsys.readouterr().err)["error"]
     assert error["code"] == expected_code
     assert error["message"], "the message must not be empty"
-    assert expected_hint in error["hint"]
+    assert error["hint"], "the hint must not be empty"
+    if expected_hint:
+        assert expected_hint in error["hint"]
     assert error["status"] == status
 
 
