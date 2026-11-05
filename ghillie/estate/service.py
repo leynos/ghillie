@@ -404,6 +404,13 @@ class EstateManagementService:
             error = StorageUnavailableError(_STORAGE_MESSAGE)
             _log_toggle(toggle, outcome="failed", details=_failure_details(error))
             raise error from exc
+        except Exception as exc:
+            # D21: a direct service caller has no HTTP catch-all, so an
+            # unexpected failure must still leave one terminal record. The
+            # exception is re-raised unchanged: this is observability, not a
+            # translation.
+            _log_toggle(toggle, outcome="failed", details=_failure_details(exc))
+            raise
 
         previous = not enabled if changed else enabled
         _log_toggle(
