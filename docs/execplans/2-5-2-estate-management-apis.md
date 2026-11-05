@@ -528,6 +528,10 @@ per pull request.
           set-but-blank token, so the docstring and the corresponding test
           docstring state the middleware-level behaviour separately from the
           launcher's fail-fast.
+        A fifth pass returned one trivial finding: `ghillie/catalogue/queries.py`
+        annotated `estate_ids` as `typ.Sequence`. It now imports
+        `collections.abc` under `TYPE_CHECKING` and uses `cabc.Sequence`, per
+        the repository rule that ABCs come from their defining module.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.

@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ghillie.catalogue.storage import CatalogueImportRecord, Estate
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
     import datetime as dt
 
     from sqlalchemy.sql.selectable import Subquery
@@ -53,7 +54,7 @@ class EstateRow:
 def _latest_import_subquery(
     estate_key: str | None = None,
     *,
-    estate_ids: typ.Sequence[str] | None = None,
+    estate_ids: cabc.Sequence[str] | None = None,
 ) -> Subquery:
     """Rank imports per estate so the outer join can pick rank one.
 
