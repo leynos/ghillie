@@ -124,7 +124,9 @@ class AppDependencies:
     session_factory: async_sessionmaker[AsyncSession] | None = None
     reporting_service: ReportingService | None = None
     estate_service: EstateManagement | None = None
-    api_token: str | None = None
+    # The token is a secret: keep it out of the generated ``__repr__`` so it
+    # cannot leak through a log line or an exception traceback.
+    api_token: str | None = dc.field(default=None, repr=False)
     bootstrap_engine: AsyncEngine | None = None
 
 

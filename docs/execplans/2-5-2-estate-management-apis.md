@@ -555,7 +555,18 @@ per pull request.
           feeds a newline-bearing name and asserts the record stays on one
           line. `make test` also produced five `vidaimock` fixture-teardown
           timeout errors under twelve-worker load in code untouched by this
-          branch; the next gate run confirms whether they are flaky.
+          branch; the next gate run confirmed they were flaky: `test`
+          reported 1415 passed and 11 skipped with no vidaimock errors.
+        An eighth pass returned two findings:
+        - `AppDependencies.api_token` appeared in the dataclass-generated
+          `__repr__`, so a token could leak through a log line or traceback.
+          The field is now excluded from `repr`, with a red-then-green test
+          asserting the token never renders.
+        - Skipped with the earlier reason: rewriting the loader's explicit
+          `isinstance` event scan as structural pattern matching is stylistic;
+          the current form is clear, and the `getattr(event, "anchor", None)`
+          guard deliberately covers event types that declare the attribute
+          differently.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
