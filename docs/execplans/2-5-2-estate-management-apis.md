@@ -2026,8 +2026,220 @@ request.
 
 ## Artefacts and notes
 
-Record here as work proceeds: red-stage failure lines, the O1 transition
-counter, the O2 case count, seeded-mutation results, and the e2e transcript.
+### Red-stage failure lines
+
+Each milestone's tests were written and observed failing before the
+implementation. The observed lines were:
+
+- PR-A, EP-M1: `test_sync_preserves_operator_disable` and
+  `test_sync_keeps_readded_repository_disabled` failed with
+  `assert True is False`; `test_sync_reports_cross_estate_conflict` raised
+  `RegistrySyncError`; `test_sync_dry_run_leaves_registry_unchanged` raised
+  `NotImplementedError`; and the O1 state machine failed with
+  `sqlite3.IntegrityError: UNIQUE constraint failed:
+  repositories.github_owner, repositories.github_name`,
+  because the old loader could not see another estate's row.
+- PR-B, EP-M2: `test_estate_service.py` raised `NotImplementedError` from the
+  service stub, and the importer dry-run and rename tests exercised behaviour
+  that did not exist.
+- PR-C, EP-M4: the first CLI run failed at import because
+  `ghillie.cli.commands.estate` had no `MAX_REQUEST_BODY_BYTES` or
+  `NEW_ESTATE_KEY_PATTERN`.
+- PR-C, EP-M5: the BDD feature, step definitions, `RunnerTransport`, and the
+  e2e fixture were written before the harness that makes them runnable.
+
+### O1 transition counter
+
+The O1 state machine records every observed `IngestionTransition` in a
+`collections.Counter` and asserts, in the same test, that the counter covers
+every member. The witness seed produced all five transitions: `adopt`,
+`preserve`, `disable_inactive`, `disable_removed`, and `conflict`. The
+assertion is non-vacuous because a missing member fails the test rather than
+merely reducing a statistic.
+
+### O2 case count
+
+The pagination walk enumerates 26 repository counts × 10 limits × 3 filter
+values = 780 cases. It runs against `session_factory`, so the PostgreSQL
+collation is exercised under py-pglite as well as SQLite.
+
+### Seeded-mutation results
+
+Each mutation was applied to the working tree, the focused suite was run, and
+the file was restored; `git status` confirmed no residue. The O1 mutation was
+run earlier on a disposable worktree at `2a56711`; the O2–O4 mutations were run
+at `9bfc6ac`.
+
+| Obligation | Mutation                                                                             | Observed failure                                                                                                                                           |
+| ---------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| O1         | Re-add `("ingestion_enabled", cat_repo.is_active)` to the field updates in `sync.py` | `test_sync_preserves_operator_disable` failed `assert True is False`; `test_sync_transitions_are_modelled` failed `AssertionError: leynos/wildside-mockup` |
+| O2         | Fetch `limit` rows instead of `limit + 1` in `list_repositories`                     | `test_walking_pages_visits_each_repository_exactly_once` failed `AssertionError: paging should cover the same repositories in order`                       |
+| O3         | Drop the length bound from `validate_estate_key_reference`                           | The 65-character row failed `DID NOT RAISE InvalidEstateKeyError`                                                                                          |
+| O4         | Map `EstateNotFoundError` to `500` instead of `404`                                  | `test_estate_not_found` failed its status assertion                                                                                                        |
+
+O5's non-vacuity is structural rather than a seeded mutation: the boundary
+bodies are padded with multibyte characters and JSON-escaped newlines, so a
+check on characters instead of bytes cannot pass. O6's closure test fails if
+any forbidden module is imported, which is the property itself.
+
+### End-to-end transcript (success criteria 1–5)
+
+The transcript below was produced by a scratch driver that imports
+`tests.e2e.conftest._start_server`, `_stop`, and `run_cli`, starts the packaged
+runtime on a free port, and drives the console script over real HTTP. The
+tracked equivalent is `tests/e2e/test_estate_management_e2e.py`. JSON documents
+are pretty-printed here for readability; the CLI emitted each as one line.
+
+```text
+== Criterion 1: empty database answers GET /estates ==
+$ curl -s http://127.0.0.1:49575/estates
+HTTP 200
+{
+  "items": [],
+  "limit": 50,
+  "offset": 0,
+  "has_more": false,
+  "next_offset": null
+}
+
+== Criterion 2: import the catalogue ==
+$ ghillie --api-base-url <url> estate import --estate-key demo \
+    --catalogue-path examples/wildside-catalogue.yaml --commit-sha abc123
+exit=0
+estate_key: demo
+commit_sha: abc123
+state: succeeded
+dry_run: false
+skipped: false
+skipped_reason: -
+registry_sync_required: true
+projects.created: 2
+projects.updated: 0
+projects.deleted: 0
+components.created: 7
+components.updated: 0
+components.deleted: 0
+repositories.created: 6
+repositories.updated: 0
+repositories.deleted: 0
+edges.created: 6
+edges.updated: 0
+edges.deleted: 0
+
+== Criterion 3: sync the registry ==
+$ ghillie --api-base-url <url> estate sync --estate-key demo
+exit=0
+estate_key: demo
+state: succeeded
+dry_run: false
+repositories_created: 6
+repositories_updated: 0
+repositories_deactivated: 0
+repositories_conflicted: []
+repositories_left_disabled: []
+repositories_left_disabled_count: 0
+
+== Criterion 4: list repositories as JSON ==
+$ ghillie --api-base-url <url> --output json estate repo list --estate-key demo
+exit=0
+{
+  "estate_key": "demo",
+  "has_more": false,
+  "items": [
+    {"default_branch": "main", "documentation_paths": [],
+     "ingestion_enabled": true, "name": "ortho-config", "owner": "leynos"},
+    {"default_branch": "main", "documentation_paths": [],
+     "ingestion_enabled": true, "name": "pg-embedded-setup-unpriv",
+     "owner": "leynos"},
+    {"default_branch": "main", "documentation_paths": [],
+     "ingestion_enabled": true, "name": "rstest-bdd", "owner": "leynos"},
+    {"default_branch": "main",
+     "documentation_paths": ["docs/roadmap.md", "docs/adr/"],
+     "ingestion_enabled": true, "name": "wildside", "owner": "leynos"},
+    {"default_branch": "main", "documentation_paths": [],
+     "ingestion_enabled": true, "name": "wildside-engine", "owner": "leynos"},
+    {"default_branch": "main", "documentation_paths": [],
+     "ingestion_enabled": true, "name": "wildside-mockup", "owner": "leynos"}
+  ],
+  "limit": 50,
+  "next_offset": null,
+  "offset": 0
+}
+
+== Criterion 5: disable ingestion, re-import, re-sync ==
+$ ghillie --api-base-url <url> estate repo set --owner leynos --name wildside \
+    --ingestion-disabled
+exit=0
+owner: leynos
+name: wildside
+ingestion_enabled: false
+changed: true
+
+$ ghillie --api-base-url <url> estate import --estate-key demo \
+    --catalogue-path examples/wildside-catalogue.yaml --commit-sha def456
+exit=0
+estate_key: demo
+commit_sha: def456
+state: succeeded
+dry_run: false
+skipped: false
+skipped_reason: -
+registry_sync_required: true
+projects.created: 0
+projects.updated: 0
+projects.deleted: 0
+components.created: 0
+components.updated: 0
+components.deleted: 0
+repositories.created: 0
+repositories.updated: 0
+repositories.deleted: 0
+edges.created: 0
+edges.updated: 0
+edges.deleted: 0
+
+$ ghillie --api-base-url <url> --output json estate sync --estate-key demo
+exit=0
+{
+  "dry_run": false,
+  "estate_key": "demo",
+  "repositories_conflicted": [],
+  "repositories_created": 0,
+  "repositories_deactivated": 0,
+  "repositories_left_disabled": ["leynos/wildside"],
+  "repositories_left_disabled_count": 1,
+  "repositories_updated": 0,
+  "state": "succeeded"
+}
+
+$ ghillie --api-base-url <url> --output json estate repo list --estate-key demo \
+    --inactive
+exit=0
+{
+  "estate_key": "demo",
+  "has_more": false,
+  "items": [
+    {"default_branch": "main",
+     "documentation_paths": ["docs/roadmap.md", "docs/adr/"],
+     "ingestion_enabled": false, "name": "wildside", "owner": "leynos"}
+  ],
+  "limit": 50,
+  "next_offset": null,
+  "offset": 0
+}
+```
+
+### Known limitation: `estate list` reads one page
+
+`ghillie estate list` takes no `--limit` or `--offset`, so it always requests
+the service default of 50 estates and renders only that first page. The
+document is a page envelope, so `has_more` and `next_offset` are visible in
+`json` and `yaml` output, but the command cannot follow them. This is a
+deliberate scope boundary for Task 2.5.b: the estate catalogue is expected to
+hold far fewer than 50 estates, and the repository listing — the collection
+that can grow without bound — does expose paging. A future task that needs to
+enumerate more estates must add the paging options rather than assume the
+current command is complete.
 
 ## Interfaces and dependencies
 
