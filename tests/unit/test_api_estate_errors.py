@@ -218,6 +218,19 @@ def test_registry_sync_failed() -> None:
     _assert_error(result, status=500, code="registry_sync_failed")
 
 
+def test_storage_unavailable_is_logged() -> None:
+    """A handled 503 still leaves an operator-visible record."""
+    error = StorageUnavailableError("storage is unavailable")
+
+    with capture_femto_logs("ghillie.api.errors") as logs:
+        _client(error).simulate_get("/estates")
+        logs.wait_for_timeout()
+
+    assert any("Storage unavailable" in record.message for record in logs.records), (
+        "handled 503 responses should be logged"
+    )
+
+
 def test_registry_sync_failed_is_logged() -> None:
     """A handled server-side failure still leaves an operator-visible log."""
     error = RegistrySyncFailedError("the registry sync failed")

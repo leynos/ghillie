@@ -469,7 +469,9 @@ async def handle_storage_unavailable(
     resp:
         Response to populate with the error envelope.
     ex:
-        Error describing the unavailable storage without driver detail.
+        Error describing the unavailable storage without driver detail. It is
+        logged here because the chained driver exception is a server-side
+        fault the operator must be able to diagnose.
     _params:
         Falcon's per-route error-handler parameters.
 
@@ -478,6 +480,7 @@ async def handle_storage_unavailable(
     None
 
     """
+    log_exception(logger, "Storage unavailable", ex)
     _set_error(
         resp,
         status=HTTPStatus.SERVICE_UNAVAILABLE,
