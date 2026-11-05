@@ -703,7 +703,34 @@ per pull request.
         `9333bc3`: `check-fmt`, `check-architecture`, `typecheck`, `lint`,
         `test` (1442 passed, 11 skipped, 0 failed), `markdownlint`, `nixie`,
         and `spelling`. Logs are under `/tmp/gate-B-9333bc3-*.out`.
-- [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
+- [x] PR-C, EP-M4: CLI commands, rendering, and error mapping.
+  - [x] (2026-11-05) Red artefacts written:
+        `tests/unit/cli/harness.py` and `conftest.py` (a shared fake control
+        plane built on `httpx.MockTransport`), `test_estate_commands.py`,
+        `test_estate_output_snapshots.py`, `test_estate_token_redaction.py`,
+        `test_cli_import_closure.py`, and additions to `test_output.py`. The
+        first run failed at import because `ghillie.cli.commands.estate` had
+        no `MAX_REQUEST_BODY_BYTES` or `NEW_ESTATE_KEY_PATTERN`.
+  - [x] (2026-11-05) Green: `control_plane` gained the `ControlPlaneError`
+        taxonomy, the D7 envelope reader, and `request_json`, which quotes
+        each path segment, serializes a body exactly once, and maps timeout,
+        transport, HTTP, and malformed-success responses; `output` gained
+        `render_collection`, `render_document`, and `render_error`, with
+        `table` output aligned and the full document emitted for `json` and
+        `yaml`; `commands/estate.py` now performs all five verbs, applies D2,
+        D4, D5, D6, D16, and D20, rejects bad local input with exit `2`, and
+        prints the hint table plus the `SKIPPED` announcement. The two service
+        constants are duplicated under O6 with an equality test against
+        `ghillie.estate.models`.
+  - [x] (2026-11-05) Focused suites green: 111 tests in `tests/unit/cli`
+        including 10 syrupy snapshots. `ruff check` and `ruff format --check`
+        are clean. `ty` initially reported 23 diagnostics, all in the new
+        tests: the fixture factory's `**kwargs: object` could not satisfy the
+        harness constructor, the mocked client factory used `object`
+        parameters, and `pytest.CaptureResult` is not exported. The factory
+        now binds `transport` with `functools.partial`, the fixture exposes an
+        explicit keyword signature, and the error helper takes the standard
+        error text; `ty check` is clean.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
 

@@ -1,0 +1,152 @@
+# serializer version: 1
+# name: test_error_table_snapshot
+  '''
+  Error: catalogue validation failed
+  Code: catalogue_invalid
+  Status: 422
+  Hint: Fix the issues listed above and import the catalogue again.
+  Issue: catalogue_schema: projects: 42 is not a list
+  Issue: catalogue_schema: component key 'x' is invalid
+  '''
+# ---
+# name: test_error_yaml_snapshot
+  '''
+  error:
+    code: catalogue_invalid
+    hint: Fix the issues listed above and import the catalogue again.
+    issues:
+    - code: catalogue_schema
+      message: 'projects: 42 is not a list'
+    - code: catalogue_schema
+      message: component key 'x' is invalid
+    message: catalogue validation failed
+    status: 422
+  '''
+# ---
+# name: test_estate_list_table_snapshot
+  '''
+  KEY   NAME         DESCRIPTION     COMMIT  IMPORTED
+  demo  Demo Estate  Example estate  c1      2026-11-05T09:30:00+00:00
+  ops   Operations   -               -       -
+  
+  limit=50 offset=0 has_more=false next_offset=null
+  '''
+# ---
+# name: test_estate_list_yaml_snapshot
+  '''
+  has_more: false
+  items:
+  - description: Example estate
+    key: demo
+    last_import:
+      commit_sha: c1
+      imported_at: '2026-11-05T09:30:00+00:00'
+    name: Demo Estate
+  - description: null
+    key: ops
+    last_import: null
+    name: Operations
+  limit: 50
+  next_offset: null
+  offset: 0
+  '''
+# ---
+# name: test_import_table_snapshot
+  '''
+  estate_key: demo
+  commit_sha: c1
+  state: succeeded
+  dry_run: false
+  skipped: false
+  skipped_reason: -
+  registry_sync_required: true
+  projects.created: 1
+  projects.updated: 0
+  projects.deleted: 0
+  components.created: 2
+  components.updated: 0
+  components.deleted: 0
+  repositories.created: 1
+  repositories.updated: 0
+  repositories.deleted: 0
+  edges.created: 0
+  edges.updated: 0
+  edges.deleted: 0
+  '''
+# ---
+# name: test_repository_list_table_snapshot
+  '''
+  OWNER   NAME      BRANCH  INGESTION
+  leynos  wildside  main    true
+  leynos  ghillie   trunk   false
+  
+  estate_key=demo limit=50 offset=0 has_more=true next_offset=2
+  '''
+# ---
+# name: test_repository_list_yaml_snapshot
+  '''
+  estate_key: demo
+  has_more: true
+  items:
+  - default_branch: main
+    documentation_paths:
+    - docs/
+    ingestion_enabled: true
+    name: wildside
+    owner: leynos
+  - default_branch: trunk
+    documentation_paths: []
+    ingestion_enabled: false
+    name: ghillie
+    owner: leynos
+  limit: 50
+  next_offset: 2
+  offset: 0
+  '''
+# ---
+# name: test_skipped_import_table_snapshot
+  '''
+  SKIPPED: commit c1 was not imported (commit_already_imported).
+  
+  estate_key: demo
+  commit_sha: c1
+  state: succeeded
+  dry_run: false
+  skipped: true
+  skipped_reason: commit_already_imported
+  registry_sync_required: false
+  projects.created: 1
+  projects.updated: 0
+  projects.deleted: 0
+  components.created: 2
+  components.updated: 0
+  components.deleted: 0
+  repositories.created: 1
+  repositories.updated: 0
+  repositories.deleted: 0
+  edges.created: 0
+  edges.updated: 0
+  edges.deleted: 0
+  '''
+# ---
+# name: test_sync_table_snapshot
+  '''
+  estate_key: demo
+  state: succeeded
+  dry_run: false
+  repositories_created: 1
+  repositories_updated: 0
+  repositories_deactivated: 0
+  repositories_conflicted: []
+  repositories_left_disabled: ["leynos/wildside"]
+  repositories_left_disabled_count: 1
+  '''
+# ---
+# name: test_toggle_table_snapshot
+  '''
+  owner: leynos
+  name: wildside
+  ingestion_enabled: false
+  changed: true
+  '''
+# ---
