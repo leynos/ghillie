@@ -819,15 +819,43 @@ per pull request.
         the redaction case bundles its three secrets in a `NamedTuple`.
         `cs delta origin/2-5-2-estate-management-apis-b` reports no issues in
         the checked changes, and the focused estate suites pass (129 tests,
-        10 snapshots). The eight-gate run and hosted re-observation follow this
-        entry.
+        10 snapshots). The gate evidence is recorded in the entry below.
   - [x] (2026-11-05) PR-C was rebased onto PR-B's head `6903e14`, which
         carries the deterministic O4 proof. The only conflict was this
         ExecPlan's Progress section; both sides were kept, with the PR-B O4
         entry above the EP-M4 entry. The PR-C scope-tolerance exception is
         recorded as D25 (30 files, 4,746 additions, 136 deletions: 4,610 net),
         and D23's comparison figures were refreshed to PR-B's current head.
-        The eight-gate run follows this entry.
+        The gate evidence is recorded in the entry below.
+  - [x] (2026-11-05) Hosted ExecPlan assessment r1
+        (`ghillie-2-5-2-pr217-execplan-20261105-r1`) found one correctness
+        defect and four gaps, all closed:
+        - A status below 400 was treated as success, so a 302 with a JSON body
+          was rendered and the command exited 0. Success is now exactly 2xx
+          (`_HTTP_SUCCESS_MIN` and `_HTTP_SUCCESS_MAX_EXCLUSIVE`), and 302 and
+          307 regression rows assert exit 3 and a non-empty hint.
+        - The bulk re-enable recipe now collects every page before applying
+          toggles, and gives the last sync's `repositories_left_disabled` as
+          the alternative.
+        - The O4 client matrix gained `invalid_input`,
+          `unsupported_media_type`, `method_not_allowed`,
+          `registry_sync_failed`, `internal_error`, and the two redirect rows.
+        - The developers' guide and design §8.5 now name `EstateManagement`,
+          describe the CLI-to-HTTP boundary, and align the decision references
+          with this plan.
+        - The roadmap's Task 2.5.e names the import-time broker guard and the
+          Helm `DATABASE_URL`/driver mismatches from D15.
+        The `Artefacts and notes` section is complete, including the e2e
+        transcript, the seeded-mutation results, and the `estate list`
+        first-page limitation.
+  - [x] (2026-11-05) Branch C was rebased onto PR-B's new head `367327c`.
+        `check-fmt`, `check-architecture`, and `typecheck` passed at the parent
+        `05e1a02`; `make lint` rejected two magic values, which became named
+        constants. At `3b31e2c`, `lint`, `test` (1538 passed, 11 skipped, 94
+        warnings, 12 snapshots), `markdownlint` (58 files, 0 issues), `nixie`,
+        and `spelling` passed sequentially (logs `/tmp/gate-C2-*.out`). This
+        final paragraph is a Markdown-only change, so the same `check-fmt`,
+        `markdownlint`, `nixie`, and `spelling` gates cover it.
 
 ## Surprises & discoveries
 
