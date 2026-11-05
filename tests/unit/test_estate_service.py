@@ -239,6 +239,29 @@ async def test_import_reports_catalogue_issues(
 
 
 @pytest.mark.asyncio
+async def test_import_rejects_a_name_that_exceeds_storage(
+    service: EstateManagementService,
+) -> None:
+    """An over-length name is a catalogue rejection, not a storage failure.
+
+    Validation runs before the importer opens a session, so a dry run and a
+    real import fail identically and nothing reaches a ``String(255)`` column.
+    """
+    document = "\n".join(
+        [
+            "version: 1",
+            "projects:",
+            "  - key: alpha",
+            f"    name: {'x' * 256}",
+            "    components: []",
+        ]
+    )
+
+    with pytest.raises(CatalogueRejectedError, match="at most 255 characters"):
+        await import_catalogue(service, catalogue_yaml=document)
+
+
+@pytest.mark.asyncio
 async def test_import_translates_validation_from_the_importer(
     service: EstateManagementService,
     monkeypatch: pytest.MonkeyPatch,
