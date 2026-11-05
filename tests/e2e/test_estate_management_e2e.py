@@ -57,12 +57,17 @@ def _console_script() -> Path:
     return script
 
 
-def test_estate_management_journey(ghillie_server: GhillieServer) -> None:
-    """Drive import, sync, toggle, re-sync, and the raw wire contract."""
-    server = ghillie_server
-
-    imported = run_cli(
+def _import_catalogue(
+    server: GhillieServer,
+    commit_sha: str,
+    *,
+    output: str | None = None,
+) -> CliResult:
+    """Run one catalogue import for the journey's estate."""
+    prefix = [] if output is None else ["--output", output]
+    return run_cli(
         server,
+        *prefix,
         "estate",
         "import",
         "--estate-key",
@@ -70,20 +75,20 @@ def test_estate_management_journey(ghillie_server: GhillieServer) -> None:
         "--catalogue-path",
         str(_CATALOGUE),
         "--commit-sha",
-        "c1",
+        commit_sha,
     )
-    assert imported.returncode == 0, imported.detail()
-    assert "repositories.created: " in imported.stdout, imported.detail()
 
-    estates = _document(run_cli(server, "--output", "json", "estate", "list"))
-    assert any(item.get("key") == "demo" for item in _items(estates)), estates
 
-    sync = _document(
+def _sync_registry(server: GhillieServer) -> dict[str, object]:
+    """Sync the journey's estate and return the JSON document."""
+    return _document(
         run_cli(server, "--output", "json", "estate", "sync", "--estate-key", "demo")
     )
-    assert sync.get("state") == "succeeded", sync
 
-    active = _document(
+
+def _list_repositories(server: GhillieServer, state_flag: str) -> dict[str, object]:
+    """List the journey's repositories through *state_flag* as JSON."""
+    return _document(
         run_cli(
             server,
             "--output",
@@ -93,12 +98,14 @@ def test_estate_management_journey(ghillie_server: GhillieServer) -> None:
             "list",
             "--estate-key",
             "demo",
-            "--active",
+            state_flag,
         )
     )
-    assert _has_repository(active, "leynos", "wildside"), active
 
-    toggled = _document(
+
+def _toggle_ingestion(server: GhillieServer) -> dict[str, object]:
+    """Disable ingestion for the journey's repository and return the document."""
+    return _document(
         run_cli(
             server,
             "--output",
@@ -113,46 +120,38 @@ def test_estate_management_journey(ghillie_server: GhillieServer) -> None:
             "--ingestion-disabled",
         )
     )
+
+
+def test_estate_management_journey(ghillie_server: GhillieServer) -> None:
+    """Drive import, sync, toggle, re-sync, and the raw wire contract."""
+    server = ghillie_server
+
+    imported = _import_catalogue(server, "c1")
+    assert imported.returncode == 0, imported.detail()
+    assert "repositories.created: " in imported.stdout, imported.detail()
+
+    estates = _document(run_cli(server, "--output", "json", "estate", "list"))
+    assert any(item.get("key") == "demo" for item in _items(estates)), estates
+
+    sync = _sync_registry(server)
+    assert sync.get("state") == "succeeded", sync
+
+    active = _list_repositories(server, "--active")
+    assert _has_repository(active, "leynos", "wildside"), active
+
+    toggled = _toggle_ingestion(server)
     assert toggled.get("ingestion_enabled") is False, toggled
     assert toggled.get("changed") is True, toggled
 
-    reimported = _document(
-        run_cli(
-            server,
-            "--output",
-            "json",
-            "estate",
-            "import",
-            "--estate-key",
-            "demo",
-            "--catalogue-path",
-            str(_CATALOGUE),
-            "--commit-sha",
-            "c2",
-        )
-    )
+    reimported = _document(_import_catalogue(server, "c2", output="json"))
     assert reimported.get("skipped") is False, reimported
 
-    resync = _document(
-        run_cli(server, "--output", "json", "estate", "sync", "--estate-key", "demo")
-    )
+    resync = _sync_registry(server)
     left_disabled = resync.get("repositories_left_disabled")
     assert isinstance(left_disabled, list), resync
     assert "leynos/wildside" in left_disabled, resync
 
-    inactive = _document(
-        run_cli(
-            server,
-            "--output",
-            "json",
-            "estate",
-            "repo",
-            "list",
-            "--estate-key",
-            "demo",
-            "--inactive",
-        )
-    )
+    inactive = _list_repositories(server, "--inactive")
     assert _has_repository(inactive, "leynos", "wildside"), inactive
 
     console = run_cli(

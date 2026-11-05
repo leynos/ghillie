@@ -8,7 +8,11 @@ import typing as typ
 import pytest
 import ruamel.yaml
 
-from ghillie.cli.control_plane import ControlPlaneError, ControlPlaneIssue
+from ghillie.cli.control_plane import (
+    ControlPlaneError,
+    ControlPlaneIssue,
+    ControlPlaneResponse,
+)
 from ghillie.cli.output import (
     render_collection,
     render_document,
@@ -201,8 +205,9 @@ def _error() -> ControlPlaneError:
         "catalogue_invalid",
         "catalogue validation failed",
         hint="Fix the issues listed above and import again.",
-        status=422,
-        issues=[ControlPlaneIssue("catalogue_schema", "projects: 42")],
+        response=ControlPlaneResponse(
+            422, (ControlPlaneIssue("catalogue_schema", "projects: 42"),)
+        ),
     )
 
 

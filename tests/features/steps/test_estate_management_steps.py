@@ -251,33 +251,36 @@ def _maybe_document(output: str) -> dict[str, object]:
     return typ.cast("dict[str, object]", parsed) if isinstance(parsed, dict) else {}
 
 
-def _import(  # noqa: PLR0913 - one keyword per import field keeps calls readable.
-    state: ScenarioState,
-    catalogue: str | Path,
-    estate_key: str,
-    commit_sha: str,
-    *,
-    dry_run: bool = False,
-    output: str | None = None,
-) -> None:
-    """Import *catalogue* for *estate_key* at *commit_sha*."""
-    path = Path(catalogue)
+@dataclasses.dataclass(frozen=True, slots=True)
+class _ImportSpec:
+    """One catalogue import as a scenario step asks for it."""
+
+    catalogue: str | Path
+    estate_key: str
+    commit_sha: str
+    dry_run: bool = False
+    output: str | None = None
+
+
+def _import(state: ScenarioState, spec: _ImportSpec) -> None:
+    """Import the catalogue described by *spec*."""
+    path = Path(spec.catalogue)
     if not path.is_absolute():
         path = REPO_ROOT / path
     argv: list[str] = []
-    if output is not None:
-        argv += ["--output", output]
-    if dry_run:
+    if spec.output is not None:
+        argv += ["--output", spec.output]
+    if spec.dry_run:
         argv.append("--dry-run")
     argv += [
         "estate",
         "import",
         "--estate-key",
-        estate_key,
+        spec.estate_key,
         "--catalogue-path",
         str(path),
         "--commit-sha",
-        commit_sha,
+        spec.commit_sha,
     ]
     _run_argv(state, argv)
 
@@ -294,6 +297,118 @@ def _sync(state: ScenarioState, estate_key: str, *, output: str | None = None) -
         state.last_sync_document = state.last_document
 
 
+_STDERR_LABELS = {"Code": "code", "Hint": "hint"}
+
+
+def _labelled_field(line: str) -> tuple[str, str] | None:
+    """Return the ``(name, value)`` of one labelled error line, if it is one."""
+    label, separator, value = line.partition(": ")
+    name = _STDERR_LABELS.get(label)
+    if not separator or name is None:
+        return None
+    return name, value
+
+
+def _labelled_error_fields(output: str) -> dict[str, object]:
+    """Read the error code and hint from table-mode labelled lines."""
+    fields: dict[str, object] = {}
+    for line in output.splitlines():
+        pair = _labelled_field(line)
+        if pair is not None:
+            fields[pair[0]] = pair[1]
+    return fields
+
+
+def _json_error(output: str) -> dict[str, object] | None:
+    """Return the documented ``error`` object of *output*, if it has one."""
+    try:
+        parsed = json.loads(output)
+    except ValueError:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    error = parsed.get("error")
+    return typ.cast("dict[str, object]", error) if isinstance(error, dict) else None
+
+
+_IMPORT_PHRASE = (
+    'the operator imports "{catalogue}" into estate "{estate_key}" '
+    'at commit "{commit_sha}"'
+)
+"""The step phrase shared by imports that differ only in CLI options."""
+
+
+class _StepRegister(typ.Protocol):
+    """A pytest-bdd ``given``/``when`` decorator factory.
+
+    Both factories hand back the step function unchanged, so the protocol
+    describes only the registration call these helpers make.
+    """
+
+    def __call__(
+        self,
+        name: str | parsers.StepParser,
+        *,
+        stacklevel: int = ...,
+    ) -> typ.Callable[[typ.Callable[..., None]], typ.Callable[..., None]]: ...
+
+
+class _ImportStepOptions(typ.NamedTuple):
+    """Options an import step phrase contributes to its CLI invocation."""
+
+    dry_run: bool = False
+    output: str | None = None
+    assert_success: bool = False
+
+
+def _register_import(
+    register: _StepRegister,
+    phrase: str,
+    options: _ImportStepOptions | None = None,
+) -> None:
+    """Register an import step whose phrase selects the CLI options."""
+    resolved = options or _ImportStepOptions()
+
+    # ``stacklevel=2`` makes pytest-bdd register the synthetic step fixture in
+    # this module's namespace rather than in this factory's local frame.
+    @register(parsers.parse(phrase), stacklevel=2)
+    def step(
+        estate_state: ScenarioState,
+        catalogue: str,
+        estate_key: str,
+        commit_sha: str,
+    ) -> None:
+        _import(
+            estate_state,
+            _ImportSpec(
+                catalogue,
+                estate_key,
+                commit_sha,
+                dry_run=resolved.dry_run,
+                output=resolved.output,
+            ),
+        )
+        if resolved.assert_success:
+            assert estate_state.exit_code == 0, estate_state.stderr
+
+
+def _register_import_and_sync(
+    register: _StepRegister,
+    phrase: str,
+) -> None:
+    """Register a step that imports the wildside catalogue and syncs it."""
+
+    @register(parsers.parse(phrase), stacklevel=2)
+    def step(estate_state: ScenarioState, estate_key: str, commit_sha: str) -> None:
+        _import(
+            estate_state,
+            _ImportSpec(WILDSIDE_CATALOGUE, estate_key, commit_sha, output="json"),
+        )
+        assert estate_state.exit_code == 0, estate_state.stderr
+        _sync(estate_state, estate_key, output="json")
+        assert estate_state.exit_code == 0, estate_state.stderr
+
+
 def _error_fields(state: ScenarioState) -> dict[str, object]:
     """Read the error code and hint from JSON or table output.
 
@@ -301,23 +416,10 @@ def _error_fields(state: ScenarioState) -> dict[str, object]:
     labelled lines. Both carry the same stable code, so the assertions work
     whichever format the scenario asked for.
     """
-    try:
-        parsed = json.loads(state.stderr)
-    except ValueError:
-        parsed = None
-    if isinstance(parsed, dict):
-        error = parsed.get("error")
-        if isinstance(error, dict):
-            return typ.cast("dict[str, object]", error)
-    fields: dict[str, object] = {}
-    for line in state.stderr.splitlines():
-        label, separator, value = line.partition(": ")
-        if not separator:
-            continue
-        if label == "Code":
-            fields["code"] = value
-        elif label == "Hint":
-            fields["hint"] = value
+    error = _json_error(state.stderr)
+    if error is not None:
+        return error
+    fields = _labelled_error_fields(state.stderr)
     assert fields, f"no error output: {state.stderr!r}"
     return fields
 
@@ -355,38 +457,16 @@ def given_an_empty_service(estate_state: ScenarioState) -> None:
     assert estate_state.transport.requests == [], "expected a fresh transport"
 
 
-@given(
-    parsers.parse(
-        'the operator has imported "{catalogue}" into estate "{estate_key}" '
-        'at commit "{commit_sha}"'
-    )
+_register_import(
+    given,
+    'the operator has imported "{catalogue}" into estate "{estate_key}" '
+    'at commit "{commit_sha}"',
+    _ImportStepOptions(assert_success=True),
 )
-def given_a_catalogue_was_imported(
-    estate_state: ScenarioState,
-    catalogue: str,
-    estate_key: str,
-    commit_sha: str,
-) -> None:
-    """Seed one successful import."""
-    _import(estate_state, catalogue, estate_key, commit_sha)
-    assert estate_state.exit_code == 0, estate_state.stderr
-
-
-@given(
-    parsers.parse(
-        'estate "{estate_key}" has been imported at commit "{commit_sha}" and synced'
-    )
+_register_import_and_sync(
+    given,
+    'estate "{estate_key}" has been imported at commit "{commit_sha}" and synced',
 )
-def given_an_imported_and_synced_estate(
-    estate_state: ScenarioState,
-    estate_key: str,
-    commit_sha: str,
-) -> None:
-    """Seed an import and a registry sync, keeping the sync document."""
-    _import(estate_state, WILDSIDE_CATALOGUE, estate_key, commit_sha, output="json")
-    assert estate_state.exit_code == 0, estate_state.stderr
-    _sync(estate_state, estate_key, output="json")
-    assert estate_state.exit_code == 0, estate_state.stderr
 
 
 @given(parsers.parse('a catalogue file containing "{document}"'))
@@ -406,52 +486,18 @@ def given_a_catalogue_file(
 # ---------------------------------------------------------------------------
 
 
-@when(
-    parsers.parse(
-        'the operator imports "{catalogue}" into estate "{estate_key}" '
-        'at commit "{commit_sha}"'
-    )
+_register_import(when, _IMPORT_PHRASE)
+_register_import(
+    when,
+    f"{_IMPORT_PHRASE} with JSON output",
+    _ImportStepOptions(output="json"),
 )
-def when_the_operator_imports(
-    estate_state: ScenarioState,
-    catalogue: str,
-    estate_key: str,
-    commit_sha: str,
-) -> None:
-    """Import a catalogue with the default table output."""
-    _import(estate_state, catalogue, estate_key, commit_sha)
-
-
-@when(
-    parsers.parse(
-        'the operator imports "{catalogue}" into estate "{estate_key}" '
-        'at commit "{commit_sha}" with JSON output'
-    )
+_register_import(
+    when,
+    'the operator dry-run imports "{catalogue}" into estate "{estate_key}" '
+    'at commit "{commit_sha}"',
+    _ImportStepOptions(dry_run=True),
 )
-def when_the_operator_imports_json(
-    estate_state: ScenarioState,
-    catalogue: str,
-    estate_key: str,
-    commit_sha: str,
-) -> None:
-    """Import a catalogue and keep the JSON response."""
-    _import(estate_state, catalogue, estate_key, commit_sha, output="json")
-
-
-@when(
-    parsers.parse(
-        'the operator dry-run imports "{catalogue}" into estate "{estate_key}" '
-        'at commit "{commit_sha}"'
-    )
-)
-def when_the_operator_dry_run_imports(
-    estate_state: ScenarioState,
-    catalogue: str,
-    estate_key: str,
-    commit_sha: str,
-) -> None:
-    """Request an import without committing it."""
-    _import(estate_state, catalogue, estate_key, commit_sha, dry_run=True)
 
 
 @when(
@@ -468,30 +514,13 @@ def when_the_operator_imports_that_file(
     """Import the catalogue file created by the ``Given`` step."""
     path = estate_state.catalogue_path
     assert path is not None, "no ad hoc catalogue file was created"
-    _import(estate_state, path, estate_key, commit_sha)
+    _import(estate_state, _ImportSpec(path, estate_key, commit_sha))
 
 
-@when(
-    parsers.parse(
-        'the operator imports estate "{estate_key}" at commit "{commit_sha}" '
-        "and syncs it"
-    )
+_register_import_and_sync(
+    when,
+    'the operator imports estate "{estate_key}" at commit "{commit_sha}" and syncs it',
 )
-def when_the_operator_reimports_and_syncs(
-    estate_state: ScenarioState,
-    estate_key: str,
-    commit_sha: str,
-) -> None:
-    """Import a new commit and sync, retaining the sync document."""
-    _import(
-        estate_state,
-        WILDSIDE_CATALOGUE,
-        estate_key,
-        commit_sha,
-        output="json",
-    )
-    assert estate_state.exit_code == 0, estate_state.stderr
-    _sync(estate_state, estate_key, output="json")
 
 
 @when(parsers.parse('the operator runs "{arguments}"'))

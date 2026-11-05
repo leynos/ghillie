@@ -6,7 +6,7 @@ import typing as typ
 
 import pytest
 
-from tests.unit.cli.harness import BASE_URL, CliHarness
+from tests.unit.cli.harness import BASE_URL, CliHarness, make_config
 
 if typ.TYPE_CHECKING:
     from pathlib import Path
@@ -25,10 +25,12 @@ def harness(monkeypatch: pytest.MonkeyPatch) -> typ.Callable[..., CliHarness]:
     ) -> CliHarness:
         return CliHarness(
             monkeypatch,
-            output=output,
-            dry_run=dry_run,
-            api_base_url=api_base_url,
-            auth_token=auth_token,
+            make_config(
+                output=output,
+                dry_run=dry_run,
+                api_base_url=api_base_url,
+                auth_token=auth_token,
+            ),
         )
 
     return build

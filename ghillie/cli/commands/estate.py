@@ -35,7 +35,7 @@ MAX_REQUEST_BODY_BYTES = 1024 * 1024
 """Largest request body the service accepts (O5).
 
 Duplicated from :mod:`ghillie.estate.models` because the CLI must not import
-the server package (O6); :mod:`tests.unit.cli.test_estate_commands` asserts the
+the server package (O6); :mod:`tests.unit.cli.test_estate_import_commands` asserts the
 two values and the two key patterns stay equal.
 """
 
@@ -188,6 +188,86 @@ def _render_page(
     )
 
 
+def _read_catalogue(catalogue_path: Path) -> tuple[str | None, int | None]:
+    """Read the catalogue as ``utf-8-sig``, or report the local failure."""
+    try:
+        return catalogue_path.read_text(encoding="utf-8-sig"), None
+    except (OSError, UnicodeDecodeError) as exc:
+        return None, _local_failure(
+            "catalogue_file_unreadable",
+            f"cannot read catalogue file '{catalogue_path}': {exc}",
+        )
+
+
+def _encode_import_body(
+    catalogue_yaml: str,
+    *,
+    commit_sha: str,
+    estate_name: str | None,
+) -> tuple[bytes | None, int | None]:
+    """Serialize the import request and enforce the service's byte limit (O5)."""
+    body: dict[str, object] = {
+        "commit_sha": commit_sha,
+        "catalogue_yaml": catalogue_yaml,
+    }
+    if estate_name is not None:
+        body["estate_name"] = estate_name
+    encoded = encode_json_body(body)
+    if len(encoded) > MAX_REQUEST_BODY_BYTES:
+        return None, _local_failure(
+            "request_too_large",
+            f"the request body is {len(encoded)} bytes; the limit is "
+            f"{MAX_REQUEST_BODY_BYTES}",
+        )
+    return encoded, None
+
+
+def _import_body(
+    estate_key: str,
+    catalogue_path: Path,
+    *,
+    commit_sha: str,
+    estate_name: str | None,
+) -> tuple[bytes | None, int | None]:
+    """Validate the local import inputs and return the encoded request body."""
+    if not _NEW_ESTATE_KEY_RE.fullmatch(estate_key):
+        return None, _local_failure(
+            "invalid_estate_key",
+            f"estate key '{estate_key}' must match {NEW_ESTATE_KEY_PATTERN}",
+        )
+    catalogue_yaml, failure = _read_catalogue(catalogue_path)
+    if failure is not None:
+        return None, failure
+    return _encode_import_body(
+        typ.cast("str", catalogue_yaml),
+        commit_sha=commit_sha,
+        estate_name=estate_name,
+    )
+
+
+def _skipped_reason(document: dict[str, object] | None) -> str | None:
+    """Return why the server skipped the import, or ``None`` when it did not."""
+    if document is None or document.get("skipped") is not True:
+        return None
+    return str(document.get("skipped_reason") or "already imported")
+
+
+def _render_import(
+    document: dict[str, object] | None,
+    *,
+    commit_sha: str,
+) -> str:
+    """Render the import document, announcing a skipped commit in table mode."""
+    output = get_current_context().config.output
+    rendered = render_document(typ.cast("dict[str, object]", document), output=output)
+    reason = _skipped_reason(document)
+    if output == "table" and reason is not None:
+        return (
+            f"SKIPPED: commit {commit_sha} was not imported ({reason}).\n\n{rendered}"
+        )
+    return rendered
+
+
 @estate_app.command(name="import")
 def import_catalogue(
     *,
@@ -202,32 +282,14 @@ def import_catalogue(
     estate key, the file, and the serialized size are all checked before the
     request is sent, so a bad invocation never reaches the service.
     """
-    if not _NEW_ESTATE_KEY_RE.fullmatch(estate_key):
-        return _local_failure(
-            "invalid_estate_key",
-            f"estate key '{estate_key}' must match {NEW_ESTATE_KEY_PATTERN}",
-        )
-    try:
-        catalogue_yaml = catalogue_path.read_text(encoding="utf-8-sig")
-    except (OSError, UnicodeDecodeError) as exc:
-        return _local_failure(
-            "catalogue_file_unreadable",
-            f"cannot read catalogue file '{catalogue_path}': {exc}",
-        )
-
-    body: dict[str, object] = {
-        "commit_sha": commit_sha,
-        "catalogue_yaml": catalogue_yaml,
-    }
-    if estate_name is not None:
-        body["estate_name"] = estate_name
-    encoded = encode_json_body(body)
-    if len(encoded) > MAX_REQUEST_BODY_BYTES:
-        return _local_failure(
-            "request_too_large",
-            f"the request body is {len(encoded)} bytes; the limit is "
-            f"{MAX_REQUEST_BODY_BYTES}",
-        )
+    encoded, failure = _import_body(
+        estate_key,
+        catalogue_path,
+        commit_sha=commit_sha,
+        estate_name=estate_name,
+    )
+    if failure is not None:
+        return failure
 
     document, failure = _call(
         http.HTTPMethod.POST,
@@ -237,15 +299,7 @@ def import_catalogue(
     )
     if failure is not None:
         return failure
-
-    output = get_current_context().config.output
-    rendered = render_document(typ.cast("dict[str, object]", document), output=output)
-    if output == "table" and document is not None and document.get("skipped") is True:
-        reason = document.get("skipped_reason") or "already imported"
-        return (
-            f"SKIPPED: commit {commit_sha} was not imported ({reason}).\n\n{rendered}"
-        )
-    return rendered
+    return _render_import(document, commit_sha=commit_sha)
 
 
 @estate_app.command

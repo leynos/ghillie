@@ -48,23 +48,15 @@ def make_config(
 class CliHarness:
     """Drive a command function with a queued fake control plane."""
 
-    # A small fixture-facing constructor is clearer than a builder object.
-    def __init__(  # noqa: PLR0913
+    # The resolved config is one cohesive value, so passing it whole keeps this
+    # constructor to the two things a harness actually needs.
+    def __init__(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        *,
-        output: str = "table",
-        dry_run: bool = False,
-        api_base_url: str = BASE_URL,
-        auth_token: str | None = None,
+        config: ResolvedCliConfig | None = None,
     ) -> None:
         """Install the fake transport and fixed configuration for one test."""
-        self.config = make_config(
-            output=output,
-            dry_run=dry_run,
-            api_base_url=api_base_url,
-            auth_token=auth_token,
-        )
+        self.config = config or make_config()
         self.requests: list[httpx.Request] = []
         self._responses: list[Respond] = []
         self._transport = httpx.MockTransport(self._dispatch)

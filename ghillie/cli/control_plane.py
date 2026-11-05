@@ -26,6 +26,14 @@ class ControlPlaneIssue:
     message: str
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class ControlPlaneResponse:
+    """The parts of a rejected response the operator needs to see."""
+
+    status: int
+    issues: tuple[ControlPlaneIssue, ...] = ()
+
+
 class ControlPlaneError(Exception):
     """A control-plane call failed in a way the operator must see.
 
@@ -37,30 +45,37 @@ class ControlPlaneError(Exception):
         Human-readable description safe to print.
     hint:
         Suggested next action, filled in by the command layer.
-    status:
-        HTTP status, or ``None`` for a transport or local failure.
-    issues:
-        Per-field or per-item issues attached to a rejected request.
+    response:
+        Rejected HTTP response, or ``None`` for a transport or local failure.
 
     """
 
-    # Cyclopts-independent keyword options make the failure self-describing.
-    def __init__(  # noqa: PLR0913
+    # Grouping the optional fields keeps the constructor narrow while every
+    # failure still describes itself without positional-argument ambiguity.
+    def __init__(
         self,
         code: str,
         message: str,
         *,
         hint: str | None = None,
-        status: int | None = None,
-        issues: typ.Iterable[ControlPlaneIssue] = (),
+        response: ControlPlaneResponse | None = None,
     ) -> None:
         """Capture one failure without leaking transport or credential detail."""
         super().__init__(message)
         self.code = code
         self.message = message
         self.hint = hint
-        self.status = status
-        self.issues = tuple(issues)
+        self.response = response
+
+    @property
+    def status(self) -> int | None:
+        """Return the rejected HTTP status, or ``None`` for a local failure."""
+        return None if self.response is None else self.response.status
+
+    @property
+    def issues(self) -> tuple[ControlPlaneIssue, ...]:
+        """Return the issues attached to the rejected request."""
+        return () if self.response is None else self.response.issues
 
 
 class ControlPlaneHTTPError(ControlPlaneError):
@@ -134,8 +149,7 @@ def _http_error(response: httpx.Response) -> ControlPlaneHTTPError:
     return ControlPlaneHTTPError(
         code,
         message,
-        status=response.status_code,
-        issues=issues,
+        response=ControlPlaneResponse(response.status_code, issues),
     )
 
 
@@ -153,6 +167,21 @@ def _success_document(response: httpx.Response) -> dict[str, object]:
         message = "the control plane returned a response that is not a JSON object"
         raise ControlPlaneError("invalid_response", message)
     return payload
+
+
+def _quote_path(path_segments: typ.Sequence[str]) -> str:
+    """Quote each segment so a value containing ``/`` cannot change the route."""
+    return "/" + "/".join(quote(segment, safe="") for segment in path_segments)
+
+
+def _prepare_body(
+    body: typ.Mapping[str, object] | bytes | None,
+) -> tuple[bytes | None, dict[str, str]]:
+    """Return the exact bytes to send and the headers that describe them."""
+    if body is None:
+        return None, {}
+    content = body if isinstance(body, bytes) else encode_json_body(body)
+    return content, {"Content-Type": "application/json"}
 
 
 class ControlPlaneClient:
@@ -239,12 +268,8 @@ class ControlPlaneClient:
             If a successful response is not a JSON object.
 
         """
-        path = "/" + "/".join(quote(segment, safe="") for segment in path_segments)
-        content: bytes | None = None
-        headers: dict[str, str] = {}
-        if body is not None:
-            content = body if isinstance(body, bytes) else encode_json_body(body)
-            headers["Content-Type"] = "application/json"
+        path = _quote_path(path_segments)
+        content, headers = _prepare_body(body)
 
         try:
             response = self._http_client.request(
