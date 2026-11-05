@@ -512,6 +512,11 @@ per pull request.
         finding: `tests/unit/test_api_auth.py` used `-ise` spellings in
         assertion messages. They now use the repository's en-GB Oxford `-ize`
         form; the `unauthorized` code literal was already correct.
+        A third pass returned one trivial test-strength finding: the
+        Falcon-description test repeated the `/nope` case and only asserted
+        truthiness. It now drives the 415 media-type path, where the resource
+        sets its own description, and asserts that the accepted media type
+        reaches the envelope.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
