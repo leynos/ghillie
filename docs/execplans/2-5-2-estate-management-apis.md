@@ -821,6 +821,13 @@ per pull request.
         the checked changes, and the focused estate suites pass (129 tests,
         10 snapshots). The eight-gate run and hosted re-observation follow this
         entry.
+  - [x] (2026-11-05) PR-C was rebased onto PR-B's head `6903e14`, which
+        carries the deterministic O4 proof. The only conflict was this
+        ExecPlan's Progress section; both sides were kept, with the PR-B O4
+        entry above the EP-M4 entry. The PR-C scope-tolerance exception is
+        recorded as D25 (30 files, 4,746 additions, 136 deletions: 4,610 net),
+        and D23's comparison figures were refreshed to PR-B's current head.
+        The eight-gate run follows this entry.
 
 ## Surprises & discoveries
 
@@ -1103,16 +1110,19 @@ expert-panel review.
   service passes it through unchanged. Behaviour is identical to the positional
   form.
 - D23, PR-B scope-tolerance exception. PR-B exceeds the per-PR tolerance in
-  `Tolerances (exception triggers)`: GitHub's comparison against `2a56711`
-  reports 45 changed files and 7,718 net added lines, against limits of 35
-  files and 2,500 lines. The overage is an exception, not an unnoticed drift.
-  Rationale: EP-M2 and EP-M3 are one coherent plateau — the service, its
-  models, and its error vocabulary are not independently testable from the five
-  HTTP routes, the auth middleware, and the bootstrap wiring that expose them,
-  and D19 fixes that pairing in PR-B. Splitting them would leave an unexercised
-  port in one PR and an untested adapter in the next. The escalation outcome is
-  the standing instruction to continue the approved plan to completion; no
-  scope was added beyond EP-M2 and EP-M3, and no interface, dependency, or
+  `Tolerances (exception triggers)`: the comparison against PR-A's head
+  `5d7868f` reports 45 changed files, 8,298 additions, and 156 deletions: 8,142
+  net added lines, against limits of 35 files and 2,500 lines. The earlier
+  assessment measured 7,718 net against `2a56711`; PR-A's head grew when D24
+  and the deterministic O4 proof were recorded, and the comparison base moved
+  with it. The overage is an exception, not an unnoticed drift. Rationale:
+  EP-M2 and EP-M3 are one coherent plateau — the service, its models, and its
+  error vocabulary are not independently testable from the five HTTP routes,
+  the auth middleware, and the bootstrap wiring that expose them, and D19 fixes
+  that pairing in PR-B. Splitting them would leave an unexercised port in one
+  PR and an untested adapter in the next. The escalation outcome is the
+  standing instruction to continue the approved plan to completion; no scope
+  was added beyond EP-M2 and EP-M3, and no interface, dependency, or
   persisted-schema tolerance is exceeded. Recorded here so a later reviewer
   sees the deviation and its basis rather than discovering it from the
   comparison.
@@ -1128,6 +1138,21 @@ expert-panel review.
   standing instruction to continue delivery. No interface, dependency, or
   persistence tolerance is exceeded, and the file-count tolerance (35) is not
   approached.
+- D25, PR-C scope-tolerance exception. PR-C exceeds the per-PR tolerance in
+  `Tolerances (exception triggers)`: the comparison against PR-B's head
+  `6903e14` reports 30 changed files, 4,746 additions, and 136 deletions: 4,610
+  net added lines, 2,110 above the 2,500-line limit. The file-count tolerance
+  (35) is not approached. The overage is an exception, not an unnoticed drift.
+  Rationale: EP-M4, EP-M5, and EP-M6 are one coherent plateau — the five CLI
+  verbs, the rendering and error mapping they share, the behavioural and
+  end-to-end proofs that exercise them, and the documentation that describes
+  them. D19 fixes that pairing in PR-C. Splitting the proofs from the verbs
+  would leave the CLI unproved in one PR and its documentation detached in the
+  next, and the end-to-end test needs the packaged runtime the verbs introduce.
+  No scope was added beyond EP-M4 to EP-M6, and no interface, dependency, or
+  persisted-schema tolerance is exceeded. Recorded here so a later reviewer
+  sees the deviation and its basis rather than discovering it from the
+  comparison.
 - D27, pre-merge-check reconciliation. The hosted pre-merge checks raised six
   findings against PR-A. Three are actioned in this round: the title names
   roadmap task 2.5.b; `test_sync_reports_cross_estate_conflict` gives the
