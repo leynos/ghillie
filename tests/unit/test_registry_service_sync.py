@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import contextlib
+import functools
 import typing as typ
 
 import pytest
 import pytest_asyncio
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 
-from ghillie.catalogue import CatalogueImporter, RepositoryRecord
+from ghillie.catalogue import CatalogueImporter, Estate, RepositoryRecord
 from ghillie.registry import RegistrySyncError, RepositoryRegistryService
+from ghillie.registry.models import LEFT_DISABLED_PREVIEW_LIMIT
 from ghillie.silver.storage import Repository
 from tests.fixtures.specs import RepositoryCreateSpec
 
@@ -333,3 +337,170 @@ async def test_sync_dry_run_leaves_registry_unchanged(
 
     assert result.repositories_created >= 1
     assert await fetch_silver_repo(session_factory, "leynos", "wildside") is None
+
+
+@pytest.mark.asyncio
+async def test_sync_dry_run_leaves_existing_rows_unchanged(
+    session_factory: async_sessionmaker[AsyncSession],
+    registry_service: RepositoryRegistryService,
+    tmp_path: Path,
+) -> None:
+    """A dry run reports updates and removals without persisting either."""
+    initial = tmp_path / "catalogue-v1.yaml"
+    initial.write_text(
+        """
+version: 1
+projects:
+  - key: alpha
+    name: Alpha
+    components:
+      - key: alpha-api
+        name: Alpha API
+        repository:
+          owner: leynos
+          name: alpha-api
+          default_branch: main
+      - key: alpha-retired
+        name: Alpha Retired
+        repository:
+          owner: leynos
+          name: alpha-retired
+          default_branch: main
+""",
+        encoding="utf-8",
+    )
+    updated = tmp_path / "catalogue-v2.yaml"
+    updated.write_text(
+        """
+version: 1
+projects:
+  - key: alpha
+    name: Alpha
+    components:
+      - key: alpha-api
+        name: Alpha API
+        repository:
+          owner: leynos
+          name: alpha-api
+          default_branch: develop
+""",
+        encoding="utf-8",
+    )
+
+    importer = CatalogueImporter(
+        session_factory, estate_key="test", estate_name="Test Estate"
+    )
+    await importer.import_path(initial, commit_sha="dry-run-existing-1")
+    await registry_service.sync_from_catalogue("test")
+    before = await fetch_silver_repo(session_factory, "leynos", "alpha-api")
+    assert before is not None
+
+    await importer.import_path(updated, commit_sha="dry-run-existing-2")
+    result = await registry_service.sync_from_catalogue("test", dry_run=True)
+
+    assert result.repositories_updated == 1
+    assert result.repositories_deactivated == 1
+    after = await fetch_silver_repo(session_factory, "leynos", "alpha-api")
+    assert after is not None
+    assert after.default_branch == "main"
+    assert after.last_synced_at == before.last_synced_at
+    retired = await fetch_silver_repo(session_factory, "leynos", "alpha-retired")
+    assert retired is not None
+    assert retired.ingestion_enabled is True
+
+
+class _FlushFailingSession:
+    """Session proxy whose flush reports a constraint violation."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._session, name)
+
+    async def flush(self) -> None:
+        msg = "UNIQUE constraint failed: repositories.github_owner"
+        raise IntegrityError(msg, {}, Exception(msg))
+
+
+@contextlib.asynccontextmanager
+async def _flush_failing_factory(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> typ.AsyncIterator[_FlushFailingSession]:
+    async with session_factory() as session:
+        yield _FlushFailingSession(session)
+
+
+@pytest.mark.asyncio
+async def test_sync_dry_run_reports_a_flush_time_constraint_failure(
+    session_factory: async_sessionmaker[AsyncSession],
+    wildside_catalogue_path: Path,
+) -> None:
+    """A constraint failure during the dry-run flush surfaces as a sync error."""
+    importer = CatalogueImporter(
+        session_factory, estate_key="test", estate_name="Test Estate"
+    )
+    await importer.import_path(wildside_catalogue_path, commit_sha="dry-run-flush-1")
+    silver_factory = typ.cast(
+        "async_sessionmaker[AsyncSession]",
+        functools.partial(_flush_failing_factory, session_factory),
+    )
+    service = RepositoryRegistryService(session_factory, silver_factory)
+
+    with pytest.raises(RegistrySyncError, match="Database error during sync"):
+        await service.sync_from_catalogue("test", dry_run=True)
+
+
+@pytest.mark.asyncio
+async def test_sync_bounds_the_left_disabled_preview(
+    session_factory: async_sessionmaker[AsyncSession],
+    registry_service: RepositoryRegistryService,
+    tmp_path: Path,
+) -> None:
+    """More disabled repositories than the preview limit keep an exact count."""
+    total = LEFT_DISABLED_PREVIEW_LIMIT + 1
+    lines = ["version: 1", "projects:"]
+    for index in range(total):
+        lines.extend(
+            [
+                f"  - key: project-{index}",
+                f"    name: Project {index}",
+                "    components:",
+                f"      - key: component-{index}",
+                f"        name: Component {index}",
+                "        repository:",
+                "          owner: leynos",
+                f"          name: repo-{index}",
+                "          default_branch: main",
+            ]
+        )
+    catalogue = tmp_path / "catalogue.yaml"
+    catalogue.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    importer = CatalogueImporter(
+        session_factory, estate_key="test", estate_name="Test Estate"
+    )
+    await importer.import_path(catalogue, commit_sha="preview-boundary-1")
+
+    async with session_factory() as session, session.begin():
+        estate_id = await session.scalar(select(Estate.id).where(Estate.key == "test"))
+        assert estate_id is not None
+        records = (await session.scalars(select(RepositoryRecord))).all()
+        for record in records:
+            session.add(
+                Repository(
+                    github_owner=record.owner,
+                    github_name=record.name,
+                    default_branch=record.default_branch,
+                    estate_id=estate_id,
+                    catalogue_repository_id=record.id,
+                    ingestion_enabled=False,
+                    documentation_paths=[],
+                )
+            )
+
+    result = await registry_service.sync_from_catalogue("test")
+
+    assert result.repositories_left_disabled_count == total
+    assert len(result.repositories_left_disabled) == LEFT_DISABLED_PREVIEW_LIMIT
+    assert len(set(result.repositories_left_disabled)) == LEFT_DISABLED_PREVIEW_LIMIT
