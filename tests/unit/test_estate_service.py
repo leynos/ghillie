@@ -190,6 +190,25 @@ async def test_import_rejects_an_invalid_new_estate_key(
 
 
 @pytest.mark.asyncio
+async def test_import_updates_an_estate_with_a_legacy_key(
+    service: EstateManagementService,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """D16: an estate created earlier through Python stays importable.
+
+    The strict creation pattern applies only when the key does not exist yet.
+    """
+    legacy_key = "Wildside Estate"
+    async with session_factory() as session, session.begin():
+        session.add(Estate(key=legacy_key, name="Wildside Estate"))
+
+    summary = await import_catalogue(service, estate_key=legacy_key)
+
+    assert summary.estate_key == legacy_key, "import should reuse the legacy key"
+    assert summary.state == "succeeded", "import into an existing estate should succeed"
+
+
+@pytest.mark.asyncio
 async def test_import_rejects_an_explicitly_empty_document(
     service: EstateManagementService,
 ) -> None:

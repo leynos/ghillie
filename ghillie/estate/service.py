@@ -170,7 +170,8 @@ class EstateManagementService:
         Raises
         ------
         InvalidEstateKeyError
-            If ``estate_key`` does not match the creation pattern.
+            If ``estate_key`` is empty or too long, or if it names a new
+            estate and does not match the creation pattern.
         CatalogueRejectedError
             If the YAML is malformed or fails schema validation.
         EstateConflictError
@@ -179,7 +180,7 @@ class EstateManagementService:
             If the catalogue database cannot be written.
 
         """
-        validate_new_estate_key(estate_key)
+        validate_estate_key_reference(estate_key)
 
         try:
             catalogue = await asyncio.to_thread(parse_catalogue_text, catalogue_yaml)
@@ -189,6 +190,11 @@ class EstateManagementService:
         started = time.perf_counter()
         async with self._lock_for(estate_key):
             stored = await self._get_estate_row(estate_key)
+            if stored is None:
+                # D16: only a *new* estate is held to the strict creation
+                # pattern; keys created earlier through Python must stay
+                # reachable through the API.
+                validate_new_estate_key(estate_key)
             resolved_name = (
                 estate_name
                 if estate_name is not None
@@ -434,7 +440,7 @@ class EstateManagementService:
         previous = not enabled if changed else enabled
         log_info(
             logger,
-            "estate.set-ingestion owner=%s name=%s enabled=%s "
+            "estate.set-ingestion owner=%r name=%r enabled=%s "
             "previous=%s changed=%s duration_ms=%.1f outcome=succeeded",
             owner,
             name,
