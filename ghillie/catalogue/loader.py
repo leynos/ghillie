@@ -40,7 +40,10 @@ def load_catalogue(path: Path | str) -> Catalogue:
 
     try:
         text = path_obj.read_text(encoding="utf-8")
-    except OSError as exc:
+    except (OSError, UnicodeError) as exc:
+        # A file that cannot be read or decoded is an input problem, so it
+        # takes the same validation path as malformed YAML rather than
+        # escaping as a traceback.
         raise CatalogueValidationError([f"failed to parse YAML: {exc}"]) from exc
 
     return parse_catalogue_text(text)

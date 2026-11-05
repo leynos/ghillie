@@ -567,6 +567,12 @@ per pull request.
           the current form is clear, and the `getattr(event, "anchor", None)`
           guard deliberately covers event types that declare the attribute
           differently.
+        A ninth pass returned one minor finding: `load_catalogue` caught only
+        `OSError`, so a file with invalid UTF-8 raised an uncaught
+        `UnicodeDecodeError` instead of the validation report the catalogue
+        CLI prints for other read and parse failures. The read-time handler
+        now covers `UnicodeError` too, with a red-then-green test writing
+        undecodable bytes to a temporary file.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.

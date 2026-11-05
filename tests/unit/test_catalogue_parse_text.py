@@ -5,10 +5,15 @@ expands them, so an alias bomb cannot allocate exponentially even when its
 serialized form is under the 1 MiB request limit.
 """
 
+import typing as typ
+
 import pytest
 
 from ghillie.catalogue import CatalogueValidationError
-from ghillie.catalogue.loader import parse_catalogue_text
+from ghillie.catalogue.loader import load_catalogue, parse_catalogue_text
+
+if typ.TYPE_CHECKING:
+    from pathlib import Path
 
 _VALID = """
 version: 1
@@ -35,6 +40,15 @@ def test_parse_catalogue_text_accepts_a_valid_document() -> None:
     assert catalogue.projects[0].key == "alpha", (
         "catalogue should carry the project key"
     )
+
+
+def test_load_catalogue_rejects_a_file_that_is_not_utf8(tmp_path: Path) -> None:
+    """Undecodable bytes are a validation failure, not an uncaught traceback."""
+    path = tmp_path / "invalid.yaml"
+    path.write_bytes(b"version: 1\n# \xff\xfe\n")
+
+    with pytest.raises(CatalogueValidationError, match="failed to parse YAML"):
+        load_catalogue(path)
 
 
 def test_parse_catalogue_text_rejects_empty_text() -> None:
