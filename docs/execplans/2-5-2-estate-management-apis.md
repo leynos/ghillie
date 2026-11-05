@@ -338,7 +338,7 @@ per pull request.
         records that the six helpers have verified runtime callers in
         `EstateManagementService`. `make lint` and `make typecheck` then
         passed on the repaired candidate.
-- [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
+- [x] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
   - [x] (2026-11-03) Red artefacts written: `tests/unit/test_api_auth.py`,
         `test_api_estate_errors.py`, `test_api_estate_resources.py`,
         `test_openapi_estate_paths.py`, `test_runtime_wiring.py`, and
@@ -591,6 +591,14 @@ per pull request.
         exceptions are subclasses — and was applied as its own behaviour-
         preserving refactor commit, after the functional change, per the
         repository's atomic-refactor rule.
+  - [x] (2026-11-05) Final EP-M3 gate run at `1dde1aa` was green across all
+        eight gates: `check-fmt`, `check-architecture`, `typecheck`, `lint`,
+        `test` (1424 passed, 11 skipped, 94 warnings, exit 0),
+        `markdownlint`, `nixie`, and `spelling`. The milestone CodeRabbit CLI
+        review against base `2-5-2-estate-management-apis` reviewed 45 files
+        and returned no findings; the two previously skipped stylistic and
+        D14-posture suggestions were not re-raised. EP-M3 is complete and
+        PR-B is ready for publication.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
@@ -941,6 +949,33 @@ and `make typecheck`.
 Retrospective: Skylos's liveness graph misses module-private helpers called
 from async methods, so the six false positives needed an entrypoint rule with
 the caller rationale; the rule stays narrow rather than disabling the gate.
+
+### PR-B, EP-M3 (complete)
+
+Outcome: `ghillie/api/estate/` exposes the five documented endpoints over
+msgspec request and response structs. `ghillie/api/errors.py` renders the D7
+envelope with `code`, `message`, `status`, and `issues` for every failure,
+including the catch-all handler Falcon would otherwise answer with a bare 500.
+`BearerTokenMiddleware` enforces an optional token while the probes stay open,
+`AppDependencies` lets each route family appear independently, and
+`StorageBootstrapMiddleware` creates the schema only when
+`GHILLIE_DB_BOOTSTRAP` opts in. Catalogue parsing runs off the event loop,
+rejects anchors, aliases, and excessive nesting before composition, and now
+also rejects values that cannot fit their storage columns.
+
+Evidence: the ten review cycles recorded in Progress each ended in a green
+eight-gate run; the final run at `1dde1aa` reported 1424 passed, 11 skipped,
+and 94 warnings with exit 0, and the milestone CodeRabbit CLI review returned
+no findings across 45 files. The O4 and O5 server halves are covered by
+`tests/unit/test_api_estate_resources.py`, `test_api_estate_errors.py`,
+`test_api_auth.py`, and the py-pglite endpoint suite.
+
+Retrospective: ten independent review passes were needed because each pass
+looked at a different facet — wire-format contracts, log safety, validation
+ordering, secret redaction, and input decoding. Two lessons carried forward:
+validate untrusted input against the storage contract rather than mapping the
+database's error afterwards, and treat a seeded legacy key as a first-class
+case whenever a new key format is introduced.
 
 ## Context and orientation
 
