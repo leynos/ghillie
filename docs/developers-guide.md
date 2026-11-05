@@ -394,13 +394,14 @@ Task 2.5.b exposes estate configuration through one application service and two
 adapters. Keep new estate work inside that shape.
 
 - **Port first.** Add a method to
-  `ghillie.estate.ports.EstateManagementPort` and implement it in
+  `ghillie.estate.ports.EstateManagement` (D9) and implement it in
   `ghillie.estate.service.EstateManagementService`. The HTTP resources in
-  `ghillie/api/estate/resources.py` and the CLI verbs in
-  `ghillie/cli/commands/estate.py` call the port; neither imports
-  `ghillie.catalogue` or `ghillie.registry` directly. Hecate enforces the
-  boundary, and O6 requires that importing `ghillie.cli.app` loads nothing
-  under those packages or `sqlalchemy`.
+  `ghillie/api/estate/resources.py` call the port and import neither
+  `ghillie.catalogue` nor `ghillie.registry` directly. The CLI verbs in
+  `ghillie/cli/commands/estate.py` are a separate adapter: they call the HTTP
+  API, never the Python port, and may import neither the port nor those
+  packages. Hecate enforces the boundaries, and O6 requires that importing
+  `ghillie.cli.app` loads nothing under those packages or `sqlalchemy`.
 - **One error vocabulary.** Raise the exceptions in
   `ghillie.estate.errors`; the API maps them to statuses and D7 codes, and the
   CLI maps the same codes to operator hints. Do not introduce a second error

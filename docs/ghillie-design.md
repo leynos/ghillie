@@ -759,32 +759,35 @@ HTTP adapter, and the operator CLI. An operator can import a catalogue, project
 its repositories into the Silver registry, list estates and repositories, and
 toggle ingestion without writing Python.
 
-**Architecture.** `ghillie.estate.ports.EstateManagementPort` is the driving
-port. `ghillie.estate.service.EstateManagementService` implements it on top of
-`CatalogueImporter` and `RepositoryRegistryService`;
-`ghillie.api.estate.resources` and `ghillie.cli.commands.estate` are the two
-adapters. Errors are defined in `ghillie.estate.errors`, so neither adapter
-imports catalogue or registry exceptions.
+**Architecture.** `ghillie.estate.ports.EstateManagement` is the driving port
+(D9). `ghillie.estate.service.EstateManagementService` implements it on top of
+`CatalogueImporter` and `RepositoryRegistryService`. The HTTP resources in
+`ghillie.api.estate.resources` are the server adapter and call the port. The
+CLI in `ghillie.cli.commands.estate` is a separate client adapter: it calls the
+HTTP API and never the Python port, so the thin-client boundary stays intact.
+Errors are defined in `ghillie.estate.errors`, so neither adapter imports
+catalogue or registry exceptions.
 
 **Endpoints.** The five paths in §8.4 accept and return the msgspec structs in
 `ghillie/api/estate/schemas.py` (D8). Import and sync accept an optional
 `dry_run` query parameter; the ingestion `PATCH` does not. Every failure uses
 the envelope `{"title", "description", "code"}` plus optional `field`,
 `issues`, and `max_bytes` (D7). Bearer authentication applies when
-`GHILLIE_API_TOKEN` is set (D9), and `GHILLIE_DB_BOOTSTRAP=create-all` opts in
-to creating missing tables at startup (D12).
+`GHILLIE_API_TOKEN` is set (D14), and `GHILLIE_DB_BOOTSTRAP=create-all` opts in
+to creating missing tables at startup (D13).
 
 **Decisions recorded here.** D1 (the CLI reads the catalogue as UTF-8 with any
 BOM stripped and uploads JSON), D2 (sync is one synchronous call), D4 (estates
 have no lifecycle state), D5 (one tri-state repository filter and bounded
 pagination), D6 (a required ingestion toggle), D7 (the error envelope), D8
-(msgspec structs), D9 (optional bearer auth), D10 (OpenAPI 3.1 documentation),
-D12 (opt-in bootstrap), D13 (health-only mode without a database), D14 (no
-secrets in output), D15 (runtime profile hand-off to Task 2.5.e), D16 (estate
-key creation pattern), D17 (additive OpenAPI change), D18 (estate identity on
-re-import), D19 (three stacked pull requests), D20 (dry runs for import and
-sync; local refusal for the live-only toggle), and D21 (one structured log line
-per mutation).
+(msgspec structs), D9 (the driving port), D10 (no inference service, so Vidai
+Mock is not used), D12 (path naming), D13 (start-up decoupling, health-only
+mode, and opt-in schema bootstrap), D14 (optional bearer authentication; the
+token is never logged), D15 (runtime profile hand-off to Task 2.5.e), D16
+(estate key creation pattern), D17 (per-estate serialization and the
+conflict/storage-unavailable mapping), D18 (estate identity on re-import), D19
+(three stacked pull requests), D20 (dry runs for import and sync; local refusal
+for the live-only toggle), and D21 (one structured log line per mutation).
 
 **Toggle semantics.** A registry sync never re-enables a linked repository of
 the estate, so an operator toggle survives later imports and syncs; a row that

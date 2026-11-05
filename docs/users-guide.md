@@ -208,15 +208,34 @@ A toggle survives later catalogue imports and syncs:
 - A toggle applied to an ad hoc row lasts only until a catalogue entry adopts
   the row, at which point the catalogue's active flag takes over.
 
-To re-enable every repository the last sync left disabled:
+To re-enable every repository that is currently disabled, collect the whole set
+first and only then apply the toggles. Enabling a repository removes it from the
+`--inactive` filter, so paging and mutating in the same pass would shrink the
+collection and skip rows:
 
 ```bash
-ghillie --output json estate repo list --estate-key wildside --inactive \
-  | jq -r '.items[] | "\(.owner)/\(.name)"' \
-  | while IFS=/ read -r owner name; do
-      ghillie estate repo set --owner "$owner" --name "$name" --ingestion-enabled
-    done
+# 1. Collect every disabled repository across all pages.
+offset=0
+: > /tmp/wildside-disabled.txt
+while :; do
+  page=$(ghillie --output json estate repo list --estate-key wildside \
+    --inactive --limit 500 --offset "$offset")
+  jq -r '.items[] | "\(.owner)/\(.name)"' <<<"$page" >> /tmp/wildside-disabled.txt
+  jq -e '.has_more' <<<"$page" >/dev/null || break
+  offset=$(jq -r '.next_offset' <<<"$page")
+done
+
+# 2. Apply the toggles to the captured set.
+while IFS=/ read -r owner name; do
+  ghillie estate repo set --owner "$owner" --name "$name" --ingestion-enabled
+done < /tmp/wildside-disabled.txt
 ```
+
+This recipe targets every repository that is disabled now. If the intent is
+instead to re-enable exactly the set the last sync left disabled, read
+`repositories_left_disabled` from that sync's result. That list is capped at
+the first 100 slugs, so compare it with `repositories_left_disabled_count` and
+page the listing for the remainder.
 
 ### Error codes
 
