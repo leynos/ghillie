@@ -4,6 +4,11 @@ D14 keeps the token out of logs and errors; O4 keeps failure text stable. A
 distinctive token and a base URL carrying ``user:pass@`` make any leak
 unmistakable, including when the service returns ``500``, is unreachable, or
 answers with a non-JSON body.
+
+The bearer-token and URL-credential cases are separate tests: ``httpx``
+replaces a bearer header with basic auth when the URL carries credentials, so
+asserting the bearer value against a credential-bearing URL would prove
+nothing.
 """
 
 from __future__ import annotations
@@ -20,76 +25,104 @@ if typ.TYPE_CHECKING:
     from tests.unit.cli.harness import CliHarness
 
 _TOKEN = "s3cr3t-token-value"  # noqa: S105 - a fake token, not a credential
-_BASE_URL = "http://operator:hunter2@127.0.0.1:9999"
+_BASE_URL = "http://127.0.0.1:9999"
+_CREDENTIALS_URL = "http://operator:hunter2@127.0.0.1:9999"
+
+_SYNC_PAYLOAD: dict[str, object] = {
+    "estate_key": "demo",
+    "state": "succeeded",
+    "dry_run": False,
+    "repositories_created": 1,
+    "repositories_updated": 0,
+    "repositories_deactivated": 0,
+    "repositories_conflicted": [],
+    "repositories_left_disabled": [],
+    "repositories_left_disabled_count": 0,
+}
 
 
-def _assert_no_secret(*texts: str) -> None:
+def _assert_no_url_password(*texts: str) -> None:
     combined = "\n".join(texts)
-    assert _TOKEN not in combined, "the bearer token leaked into output"
     assert "hunter2" not in combined, "the URL password leaked into output"
     assert "operator:hunter2" not in combined
 
 
-def test_token_is_sent_but_never_printed_on_success(
+def test_the_bearer_token_is_sent_but_never_printed(
     harness: typ.Callable[..., CliHarness],
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """The header proves the token was used; the output proves it stayed out."""
     client = harness(api_base_url=_BASE_URL, auth_token=_TOKEN)
-    client.queue_json(
-        {
-            "estate_key": "demo",
-            "state": "succeeded",
-            "dry_run": False,
-            "repositories_created": 1,
-            "repositories_updated": 0,
-            "repositories_deactivated": 0,
-            "repositories_conflicted": [],
-            "repositories_left_disabled": [],
-            "repositories_left_disabled_count": 0,
-        }
-    )
+    client.queue_json(_SYNC_PAYLOAD)
 
     result = typ.cast("str", client.invoke(sync, estate_key="demo"))
 
-    # ``httpx`` replaces the bearer header with basic auth when the URL carries
-    # credentials, so only the presence of authentication is asserted here.
-    assert client.requests[0].headers["authorization"]
+    assert client.requests[0].headers["authorization"] == f"Bearer {_TOKEN}"
     captured = capsys.readouterr()
-    _assert_no_secret(result, captured.out, captured.err)
+    combined = "\n".join((result, captured.out, captured.err))
+    assert _TOKEN not in combined, "the bearer token leaked into output"
+
+
+def test_url_credentials_are_used_but_never_printed(
+    harness: typ.Callable[..., CliHarness],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A credential-bearing base URL authenticates without echoing the secret."""
+    client = harness(api_base_url=_CREDENTIALS_URL)
+    client.queue_json(_SYNC_PAYLOAD)
+
+    result = typ.cast("str", client.invoke(sync, estate_key="demo"))
+
+    assert client.requests[0].headers["authorization"].startswith("Basic ")
+    captured = capsys.readouterr()
+    _assert_no_url_password(result, captured.out, captured.err)
+
+
+_RESPONDERS = [
+    pytest.param(
+        lambda client: client.queue_json(
+            {"title": "Internal Server Error", "description": "boom"},
+            status=500,
+        ),
+        id="http-500",
+    ),
+    pytest.param(
+        lambda client: client.queue_raw("<html>bad gateway</html>", status=502),
+        id="non-json",
+    ),
+    pytest.param(
+        lambda client: client.queue_error(httpx.ConnectError("refused")),
+        id="transport",
+    ),
+    pytest.param(
+        lambda client: client.queue_error(httpx.ReadTimeout("timed out")),
+        id="timeout",
+    ),
+]
 
 
 @pytest.mark.parametrize(
-    "respond",
+    ("api_base_url", "auth_token", "secret"),
     [
-        pytest.param(
-            lambda client: client.queue_json(
-                {"title": "Internal Server Error", "description": "boom"},
-                status=500,
-            ),
-            id="http-500",
-        ),
-        pytest.param(
-            lambda client: client.queue_raw("<html>bad gateway</html>", status=502),
-            id="non-json",
-        ),
-        pytest.param(
-            lambda client: client.queue_error(httpx.ConnectError("refused")),
-            id="transport",
-        ),
-        pytest.param(
-            lambda client: client.queue_error(httpx.ReadTimeout("timed out")),
-            id="timeout",
-        ),
+        pytest.param(_BASE_URL, _TOKEN, _TOKEN, id="bearer-token"),
+        pytest.param(_CREDENTIALS_URL, None, "hunter2", id="url-credentials"),
     ],
 )
-def test_failures_never_print_the_token_or_url_credentials(
+@pytest.mark.parametrize("respond", _RESPONDERS)
+def test_failures_never_print_a_secret(  # noqa: PLR0913
     harness: typ.Callable[..., CliHarness],
     capsys: pytest.CaptureFixture[str],
     respond: typ.Callable[[CliHarness], None],
+    api_base_url: str,
+    auth_token: str | None,
+    secret: str,
 ) -> None:
-    """Every failure path keeps secrets out of standard error and logs."""
-    client = harness(api_base_url=_BASE_URL, auth_token=_TOKEN, output="json")
+    """Every failure path keeps its secret out of standard error and logs."""
+    client = harness(
+        api_base_url=api_base_url,
+        auth_token=auth_token,
+        output="json",
+    )
     respond(client)
 
     with capture_femto_logs("ghillie.cli") as logs:
@@ -98,5 +131,8 @@ def test_failures_never_print_the_token_or_url_credentials(
 
     assert result == 3
     captured = capsys.readouterr()
-    _assert_no_secret(captured.out, captured.err)
-    _assert_no_secret(*(record.message for record in logs.records))
+    combined = "\n".join(
+        (captured.out, captured.err, *(record.message for record in logs.records))
+    )
+    assert secret not in combined, f"{secret!r} leaked into output or logs"
+    _assert_no_url_password(combined)

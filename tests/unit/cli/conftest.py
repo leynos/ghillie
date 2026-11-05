@@ -8,6 +8,9 @@ import pytest
 
 from tests.unit.cli.harness import BASE_URL, CliHarness
 
+if typ.TYPE_CHECKING:
+    from pathlib import Path
+
 
 @pytest.fixture
 def harness(monkeypatch: pytest.MonkeyPatch) -> typ.Callable[..., CliHarness]:
@@ -29,3 +32,11 @@ def harness(monkeypatch: pytest.MonkeyPatch) -> typ.Callable[..., CliHarness]:
         )
 
     return build
+
+
+@pytest.fixture
+def catalogue_file(tmp_path: Path) -> Path:
+    """Write a small catalogue document and return its path."""
+    path = tmp_path / "catalogue.yaml"
+    path.write_text("version: 1\n", encoding="utf-8")
+    return path
