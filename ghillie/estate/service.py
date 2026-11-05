@@ -7,6 +7,7 @@ vocabulary so adapters never depend on an underlying package.
 """
 
 import asyncio
+import dataclasses
 import time
 import typing as typ
 import weakref
@@ -18,7 +19,7 @@ from sqlalchemy.exc import (
     SQLAlchemyError,
 )
 
-from ghillie.catalogue.importer import CatalogueImporter
+from ghillie.catalogue.importer import CatalogueImporter, CatalogueImportResult
 from ghillie.catalogue.loader import parse_catalogue_text
 from ghillie.catalogue.queries import EstateRow, get_estate_by_key, list_estates
 from ghillie.catalogue.validation import CatalogueValidationError
@@ -35,6 +36,7 @@ from ghillie.estate.errors import (
 from ghillie.estate.models import (
     MAX_PAGE_LIMIT,
     MAX_PAGE_OFFSET,
+    CatalogueImportRequest,
     CatalogueImportSummary,
     CountSummary,
     EstateSummary,
@@ -56,6 +58,8 @@ from ghillie.registry.errors import (
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+    from ghillie.catalogue.models import Catalogue
+    from ghillie.registry.models import SyncResult
     from ghillie.registry.service import RepositoryRegistryService
 
 logger = get_logger(__name__)
@@ -136,14 +140,10 @@ class EstateManagementService:
             next_offset=_next_offset(page.limit, page.offset, has_more=has_more),
         )
 
-    async def import_catalogue(  # noqa: PLR0913 - mirrors the documented import request contract.
+    async def import_catalogue(
         self,
         estate_key: str,
-        *,
-        catalogue_yaml: str,
-        commit_sha: str,
-        estate_name: str | None,
-        dry_run: bool,
+        request: CatalogueImportRequest,
     ) -> CatalogueImportSummary:
         """Import one catalogue document for an estate.
 
@@ -152,15 +152,8 @@ class EstateManagementService:
         estate_key:
             Key of the estate to import into. A new estate is created when the
             key does not exist.
-        catalogue_yaml:
-            Catalogue document as YAML text.
-        commit_sha:
-            Commit the document was read from.
-        estate_name:
-            Display name to store. ``None`` keeps an existing name and names a
-            new estate after its key.
-        dry_run:
-            When true, report the counts without persisting them.
+        request:
+            Catalogue document and the metadata that accompanies it.
 
         Returns
         -------
@@ -181,88 +174,62 @@ class EstateManagementService:
 
         """
         validate_estate_key_reference(estate_key)
-
-        try:
-            catalogue = await asyncio.to_thread(parse_catalogue_text, catalogue_yaml)
-        except CatalogueValidationError as exc:
-            raise _catalogue_rejected(exc) from exc
+        catalogue = await _parse_catalogue(request.catalogue_yaml)
 
         started = time.perf_counter()
         async with self._lock_for(estate_key):
-            stored = await self._get_estate_row(estate_key)
-            if stored is None:
-                # D16: only a *new* estate is held to the strict creation
-                # pattern; keys created earlier through Python must stay
-                # reachable through the API.
-                validate_new_estate_key(estate_key)
-            resolved_name = (
-                estate_name
-                if estate_name is not None
-                else (stored.name if stored is not None else None)
-            )
-            importer = CatalogueImporter(
-                self._session_factory,
-                estate_key=estate_key,
-                estate_name=resolved_name,
-            )
-            try:
-                result = await importer.import_catalogue(
-                    catalogue, commit_sha=commit_sha, dry_run=dry_run
-                )
-            except CatalogueValidationError as exc:
-                raise _catalogue_rejected(exc) from exc
-            except IntegrityError as exc:
-                raise EstateConflictError(_CONFLICT_MESSAGE) from exc
-            except SQLAlchemyError as exc:
-                raise StorageUnavailableError(_STORAGE_MESSAGE) from exc
+            result = await self._run_import(estate_key, catalogue, request)
 
-        summary = CatalogueImportSummary(
-            estate_key=estate_key,
-            commit_sha=commit_sha,
-            state="succeeded",
-            dry_run=dry_run,
-            skipped=result.skipped,
-            skipped_reason="commit_already_imported" if result.skipped else None,
-            registry_sync_required=not result.skipped and not dry_run,
-            projects=_count_summary(
-                result.projects_created,
-                result.projects_updated,
-                result.projects_deleted,
-            ),
-            components=_count_summary(
-                result.components_created,
-                result.components_updated,
-                result.components_deleted,
-            ),
-            repositories=_count_summary(
-                result.repositories_created,
-                result.repositories_updated,
-                result.repositories_deleted,
-            ),
-            edges=_count_summary(
-                result.edges_created,
-                result.edges_updated,
-                result.edges_deleted,
-            ),
-        )
+        summary = _import_summary(estate_key, request, result)
         _log_mutation(
-            "estate.import",
-            estate_key,
-            commit_sha=commit_sha,
-            dry_run=dry_run,
-            outcome="skipped" if result.skipped else "succeeded",
-            started=started,
-            details=(
-                f"projects={summary.projects.created}/"
-                f"{summary.projects.updated}/{summary.projects.deleted} "
-                f"components={summary.components.created}/"
-                f"{summary.components.updated}/{summary.components.deleted} "
-                f"repositories={summary.repositories.created}/"
-                f"{summary.repositories.updated}/"
-                f"{summary.repositories.deleted}"
+            _MutationLog(
+                operation="estate.import",
+                estate_key=estate_key,
+                commit_sha=request.commit_sha,
+                dry_run=request.dry_run,
+                started=started,
             ),
+            outcome="skipped" if result.skipped else "succeeded",
+            details=_import_details(summary),
         )
         return summary
+
+    async def _run_import(
+        self,
+        estate_key: str,
+        catalogue: Catalogue,
+        request: CatalogueImportRequest,
+    ) -> CatalogueImportResult:
+        """Run the importer under the estate lock, translating its failures."""
+        stored = await self._get_estate_row(estate_key)
+        if stored is None:
+            # D16: only a *new* estate is held to the strict creation pattern;
+            # keys created earlier through Python must stay reachable through
+            # the API.
+            validate_new_estate_key(estate_key)
+        resolved_name = (
+            request.estate_name
+            if request.estate_name is not None
+            else (stored.name if stored is not None else None)
+        )
+        importer = CatalogueImporter(
+            self._session_factory,
+            estate_key=estate_key,
+            estate_name=resolved_name,
+        )
+        try:
+            result = await importer.import_catalogue(
+                catalogue,
+                commit_sha=request.commit_sha,
+                dry_run=request.dry_run,
+            )
+        except CatalogueValidationError as exc:
+            raise _catalogue_rejected(exc) from exc
+        except IntegrityError as exc:
+            raise EstateConflictError(_CONFLICT_MESSAGE) from exc
+        except SQLAlchemyError as exc:
+            raise StorageUnavailableError(_STORAGE_MESSAGE) from exc
+        return result
 
     async def sync_registry(
         self, estate_key: str, *, dry_run: bool
@@ -299,45 +266,36 @@ class EstateManagementService:
 
         started = time.perf_counter()
         async with self._lock_for(estate_key):
-            await self._require_estate(estate_key)
-            try:
-                result = await self._registry.sync_from_catalogue(
-                    estate_key, dry_run=dry_run
-                )
-            except RegistrySyncError as exc:
-                raise _sync_error(estate_key, exc) from exc
-            except IntegrityError as exc:
-                raise EstateConflictError(_CONFLICT_MESSAGE) from exc
-            except SQLAlchemyError as exc:
-                raise RegistrySyncFailedError(_SYNC_FAILED_MESSAGE) from exc
+            result = await self._run_sync(estate_key, dry_run=dry_run)
 
-        summary = RegistrySyncSummary(
-            estate_key=estate_key,
-            state="succeeded",
-            dry_run=dry_run,
-            repositories_created=result.repositories_created,
-            repositories_updated=result.repositories_updated,
-            repositories_deactivated=result.repositories_deactivated,
-            repositories_conflicted=tuple(result.repositories_conflicted),
-            repositories_left_disabled=tuple(result.repositories_left_disabled),
-            repositories_left_disabled_count=result.repositories_left_disabled_count,
-        )
+        summary = _sync_summary(estate_key, result, dry_run=dry_run)
         _log_mutation(
-            "estate.registry-sync",
-            estate_key,
-            commit_sha=None,
-            dry_run=dry_run,
-            outcome="succeeded",
-            started=started,
-            details=(
-                f"created={summary.repositories_created} "
-                f"updated={summary.repositories_updated} "
-                f"deactivated={summary.repositories_deactivated} "
-                f"conflicted={len(summary.repositories_conflicted)} "
-                f"left_disabled={summary.repositories_left_disabled_count}"
+            _MutationLog(
+                operation="estate.registry-sync",
+                estate_key=estate_key,
+                commit_sha=None,
+                dry_run=dry_run,
+                started=started,
             ),
+            outcome="succeeded",
+            details=_sync_details(summary),
         )
         return summary
+
+    async def _run_sync(self, estate_key: str, *, dry_run: bool) -> SyncResult:
+        """Run the registry projection under the estate lock."""
+        await self._require_estate(estate_key)
+        try:
+            result = await self._registry.sync_from_catalogue(
+                estate_key, dry_run=dry_run
+            )
+        except RegistrySyncError as exc:
+            raise _sync_error(estate_key, exc) from exc
+        except IntegrityError as exc:
+            raise EstateConflictError(_CONFLICT_MESSAGE) from exc
+        except SQLAlchemyError as exc:
+            raise RegistrySyncFailedError(_SYNC_FAILED_MESSAGE) from exc
+        return result
 
     async def list_repositories(
         self, estate_key: str, query: RepositoryQuery
@@ -500,6 +458,96 @@ def _count_summary(created: int, updated: int, deleted: int) -> CountSummary:
     return CountSummary(created=created, updated=updated, deleted=deleted)
 
 
+async def _parse_catalogue(catalogue_yaml: str) -> Catalogue:
+    """Parse untrusted YAML off the event loop, translating its failures."""
+    try:
+        catalogue = await asyncio.to_thread(parse_catalogue_text, catalogue_yaml)
+    except CatalogueValidationError as exc:
+        raise _catalogue_rejected(exc) from exc
+    return catalogue
+
+
+def _import_summary(
+    estate_key: str,
+    request: CatalogueImportRequest,
+    result: CatalogueImportResult,
+) -> CatalogueImportSummary:
+    """Build the port summary from the importer's reconciliation result."""
+    return CatalogueImportSummary(
+        estate_key=estate_key,
+        commit_sha=request.commit_sha,
+        state="succeeded",
+        dry_run=request.dry_run,
+        skipped=result.skipped,
+        skipped_reason="commit_already_imported" if result.skipped else None,
+        registry_sync_required=not result.skipped and not request.dry_run,
+        projects=_count_summary(
+            result.projects_created,
+            result.projects_updated,
+            result.projects_deleted,
+        ),
+        components=_count_summary(
+            result.components_created,
+            result.components_updated,
+            result.components_deleted,
+        ),
+        repositories=_count_summary(
+            result.repositories_created,
+            result.repositories_updated,
+            result.repositories_deleted,
+        ),
+        edges=_count_summary(
+            result.edges_created,
+            result.edges_updated,
+            result.edges_deleted,
+        ),
+    )
+
+
+def _import_details(summary: CatalogueImportSummary) -> str:
+    """Render the per-record counts for the structured import log line."""
+    return (
+        f"projects={summary.projects.created}/"
+        f"{summary.projects.updated}/{summary.projects.deleted} "
+        f"components={summary.components.created}/"
+        f"{summary.components.updated}/{summary.components.deleted} "
+        f"repositories={summary.repositories.created}/"
+        f"{summary.repositories.updated}/"
+        f"{summary.repositories.deleted}"
+    )
+
+
+def _sync_summary(
+    estate_key: str,
+    result: SyncResult,
+    *,
+    dry_run: bool,
+) -> RegistrySyncSummary:
+    """Build the port summary from the registry's sync result."""
+    return RegistrySyncSummary(
+        estate_key=estate_key,
+        state="succeeded",
+        dry_run=dry_run,
+        repositories_created=result.repositories_created,
+        repositories_updated=result.repositories_updated,
+        repositories_deactivated=result.repositories_deactivated,
+        repositories_conflicted=tuple(result.repositories_conflicted),
+        repositories_left_disabled=tuple(result.repositories_left_disabled),
+        repositories_left_disabled_count=result.repositories_left_disabled_count,
+    )
+
+
+def _sync_details(summary: RegistrySyncSummary) -> str:
+    """Render the per-repository counts for the structured sync log line."""
+    return (
+        f"created={summary.repositories_created} "
+        f"updated={summary.repositories_updated} "
+        f"deactivated={summary.repositories_deactivated} "
+        f"conflicted={len(summary.repositories_conflicted)} "
+        f"left_disabled={summary.repositories_left_disabled_count}"
+    )
+
+
 def _catalogue_rejected(exc: CatalogueValidationError) -> CatalogueRejectedError:
     """Translate catalogue validation messages into port issues."""
     issues = tuple(
@@ -544,16 +592,18 @@ def _elapsed_ms(started: float) -> float:
     return (time.perf_counter() - started) * 1000
 
 
-def _log_mutation(  # noqa: PLR0913 - every structured log field is required by D21.
-    operation: str,
-    estate_key: str,
-    *,
-    commit_sha: str | None,
-    dry_run: bool,
-    outcome: str,
-    started: float,
-    details: str,
-) -> None:
+@dataclasses.dataclass(frozen=True, slots=True)
+class _MutationLog:
+    """Request-scoped fields shared by every structured mutation line (D21)."""
+
+    operation: str
+    estate_key: str
+    commit_sha: str | None
+    dry_run: bool
+    started: float
+
+
+def _log_mutation(mutation: _MutationLog, *, outcome: str, details: str) -> None:
     """Write the one structured mutation line required by D21.
 
     ``estate_key`` and ``commit_sha`` come from the request, so they are
@@ -563,11 +613,11 @@ def _log_mutation(  # noqa: PLR0913 - every structured log field is required by 
     log_info(
         logger,
         "%s estate_key=%r commit_sha=%r dry_run=%s %s duration_ms=%.1f outcome=%s",
-        operation,
-        estate_key,
-        commit_sha or "-",
-        dry_run,
+        mutation.operation,
+        mutation.estate_key,
+        mutation.commit_sha or "-",
+        mutation.dry_run,
         details,
-        _elapsed_ms(started),
+        _elapsed_ms(mutation.started),
         outcome,
     )

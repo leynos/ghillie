@@ -12,7 +12,7 @@ import pytest
 from sqlalchemy import select
 
 from ghillie.catalogue.storage import Estate
-from ghillie.estate.models import RepositoryQuery
+from ghillie.estate.models import CatalogueImportRequest, RepositoryQuery
 from ghillie.silver.storage import Repository
 
 if typ.TYPE_CHECKING:
@@ -49,18 +49,24 @@ projects:
 """
 
 
+async def _import_seed(service: EstateManagementService) -> None:
+    """Import the seed catalogue so the estate exists."""
+    await service.import_catalogue(
+        _ESTATE_KEY,
+        CatalogueImportRequest(
+            catalogue_yaml=_CATALOGUE,
+            commit_sha="seed",
+            estate_name="Pagination",
+        ),
+    )
+
+
 async def _seed_estate(
     service: EstateManagementService,
     session_factory: async_sessionmaker[AsyncSession],
 ) -> str:
     """Import a catalogue so the estate exists, then return its identifier."""
-    await service.import_catalogue(
-        _ESTATE_KEY,
-        catalogue_yaml=_CATALOGUE,
-        commit_sha="seed",
-        estate_name="Pagination",
-        dry_run=False,
-    )
+    await _import_seed(service)
     async with session_factory() as session:
         estate = await session.scalar(select(Estate))
     assert estate is not None, "catalogue import should create an estate"
@@ -150,6 +156,39 @@ async def _walk_pages(
     assert past_end.next_offset is None, "past the end should have no next offset"
 
 
+async def _walk_every_limit(
+    service: EstateManagementService,
+    *,
+    ingestion_enabled: bool | None,
+    expected: list[str],
+) -> None:
+    """Walk the pages for every supported limit under one expected order."""
+    for limit in _LIMITS:
+        await _walk_pages(
+            service,
+            ingestion_enabled=ingestion_enabled,
+            limit=limit,
+            expected=expected,
+        )
+
+
+async def _walk_every_filter(
+    service: EstateManagementService,
+    registry: RepositoryRegistryService,
+    estate_id: str,
+) -> None:
+    """Cover every ingestion filter for the repositories inserted so far."""
+    for ingestion_enabled in _FILTERS:
+        expected = await _expected_slugs(
+            registry, estate_id, ingestion_enabled=ingestion_enabled
+        )
+        await _walk_every_limit(
+            service,
+            ingestion_enabled=ingestion_enabled,
+            expected=expected,
+        )
+
+
 @pytest.mark.asyncio
 async def test_walking_pages_visits_each_repository_exactly_once(
     service: EstateManagementService,
@@ -161,28 +200,11 @@ async def test_walking_pages_visits_each_repository_exactly_once(
 
     # Cover ``N == 0`` inside the matrix so every filter and limit sees an
     # empty registry before any repository exists.
-    for ingestion_enabled in _FILTERS:
-        for limit in _LIMITS:
-            await _walk_pages(
-                service,
-                ingestion_enabled=ingestion_enabled,
-                limit=limit,
-                expected=[],
-            )
+    await _walk_every_filter(service, registry, estate_id)
 
     for index in range(_REPOSITORY_COUNT):
         await _add_repository(session_factory, estate_id, index=index)
-        for ingestion_enabled in _FILTERS:
-            expected = await _expected_slugs(
-                registry, estate_id, ingestion_enabled=ingestion_enabled
-            )
-            for limit in _LIMITS:
-                await _walk_pages(
-                    service,
-                    ingestion_enabled=ingestion_enabled,
-                    limit=limit,
-                    expected=expected,
-                )
+        await _walk_every_filter(service, registry, estate_id)
 
 
 @pytest.mark.asyncio
@@ -190,13 +212,7 @@ async def test_first_page_of_an_empty_registry_is_empty(
     service: EstateManagementService,
 ) -> None:
     """``N == 0`` is covered directly, before any repository is inserted."""
-    await service.import_catalogue(
-        _ESTATE_KEY,
-        catalogue_yaml=_CATALOGUE,
-        commit_sha="seed",
-        estate_name="Pagination",
-        dry_run=False,
-    )
+    await _import_seed(service)
 
     page = await service.list_repositories(
         _ESTATE_KEY, RepositoryQuery(limit=10, offset=0)

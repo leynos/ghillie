@@ -82,24 +82,21 @@ def test_parse_catalogue_text_rejects_duplicate_keys() -> None:
         parse_catalogue_text("version: 1\nversion: 2\nprojects: []\n")
 
 
-def test_parse_catalogue_text_rejects_anchors() -> None:
-    """A document that defines an anchor is rejected before expansion."""
-    document = """
-version: 1
-projects: &projects []
-"""
-    with pytest.raises(CatalogueValidationError, match="anchors or aliases"):
-        parse_catalogue_text(document)
-
-
-def test_parse_catalogue_text_rejects_aliases() -> None:
-    """A document that only uses an alias is rejected before expansion."""
-    document = """
-first: &shared value
-second: *shared
-version: 1
-projects: []
-"""
+@pytest.mark.parametrize(
+    "document",
+    [
+        pytest.param(
+            "version: 1\nprojects: &projects []\n",
+            id="defines-an-anchor",
+        ),
+        pytest.param(
+            "first: &shared value\nsecond: *shared\nversion: 1\nprojects: []\n",
+            id="only-uses-an-alias",
+        ),
+    ],
+)
+def test_parse_catalogue_text_rejects_anchors_and_aliases(document: str) -> None:
+    """Anchor and alias documents are rejected before expansion."""
     with pytest.raises(CatalogueValidationError, match="anchors or aliases"):
         parse_catalogue_text(document)
 

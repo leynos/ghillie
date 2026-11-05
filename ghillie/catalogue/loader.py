@@ -103,25 +103,36 @@ def _reject_unsafe_structure(text: str) -> None:
     Parsing to events does not compose the document, so this scan can inspect
     an untrusted payload before the recursive constructor runs.
     """
-    yaml = _yaml()
     depth = 0
     try:
-        for event in yaml.parse(io.StringIO(text)):
-            if isinstance(event, AliasEvent) or getattr(event, "anchor", None):
-                message = "catalogue must not use YAML anchors or aliases"
-                raise CatalogueValidationError([message])
-            if isinstance(event, (MappingStartEvent, SequenceStartEvent)):
-                depth += 1
-                if depth > _MAX_YAML_DEPTH:
-                    message = (
-                        "catalogue must not nest YAML collections deeper than "
-                        f"{_MAX_YAML_DEPTH} levels"
-                    )
-                    raise CatalogueValidationError([message])
-            elif isinstance(event, (MappingEndEvent, SequenceEndEvent)):
-                depth -= 1
+        for event in _yaml().parse(io.StringIO(text)):
+            _reject_anchor(event)
+            depth = _track_depth(event, depth)
     except YAMLError as exc:
         raise CatalogueValidationError([f"failed to parse YAML: {exc}"]) from exc
+
+
+def _reject_anchor(event: object) -> None:
+    """Reject an event that defines or references a YAML anchor."""
+    if isinstance(event, AliasEvent) or getattr(event, "anchor", None):
+        message = "catalogue must not use YAML anchors or aliases"
+        raise CatalogueValidationError([message])
+
+
+def _track_depth(event: object, depth: int) -> int:
+    """Update the collection depth for one event, rejecting excessive nesting."""
+    if isinstance(event, (MappingStartEvent, SequenceStartEvent)):
+        depth += 1
+        if depth > _MAX_YAML_DEPTH:
+            message = (
+                "catalogue must not nest YAML collections deeper than "
+                f"{_MAX_YAML_DEPTH} levels"
+            )
+            raise CatalogueValidationError([message])
+        return depth
+    if isinstance(event, (MappingEndEvent, SequenceEndEvent)):
+        return depth - 1
+    return depth
 
 
 def _yaml() -> YAML:

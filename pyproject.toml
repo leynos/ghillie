@@ -208,14 +208,25 @@ reason = "Falcon passes these middleware hooks the request, response, resource, 
 [[tool.skylos.dead_code.entrypoints]]
 type = "function"
 full_name = [
+    "ghillie.estate.service._catalogue_rejected",
     "ghillie.estate.service._elapsed_ms",
     "ghillie.estate.service._estate_summary",
+    "ghillie.estate.service._import_details",
+    "ghillie.estate.service._import_summary",
     "ghillie.estate.service._log_mutation",
     "ghillie.estate.service._next_offset",
+    "ghillie.estate.service._parse_catalogue",
+    "ghillie.estate.service._sync_details",
     "ghillie.estate.service._sync_error",
+    "ghillie.estate.service._sync_summary",
     "ghillie.estate.service._validate_page",
 ]
 reason = "Skylos's liveness graph does not resolve these module-private helpers from the async EstateManagementService methods that call them; every name has a verified runtime caller in that class."
+
+[[tool.skylos.dead_code.entrypoints]]
+type = "class"
+full_name = ["ghillie.estate.service._MutationLog"]
+reason = "Skylos's liveness graph does not resolve this module-private dataclass from the async EstateManagementService methods that construct it; both mutation log sites build it at runtime."
 
 [[tool.skylos.dead_code.entrypoints]]
 type = "variable"

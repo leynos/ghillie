@@ -17,6 +17,7 @@ from ghillie.catalogue.storage import CatalogueImportRecord, Estate
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+    from sqlalchemy.sql.selectable import Subquery
 
 
 async def _add_estate(
@@ -140,11 +141,20 @@ async def test_get_estate_by_key_returns_the_row(
     assert row.last_import_commit_sha == "abc123", "row should carry the newest commit"
 
 
+def _scoped_subquery(scope: str, estate_id: str) -> Subquery:
+    """Build the ranking subquery with the selector named by *scope*."""
+    if scope == "key":
+        return _latest_import_subquery("alpha")
+    return _latest_import_subquery(estate_ids=[estate_id])
+
+
+@pytest.mark.parametrize("scope", ["key", "estate-ids"])
 @pytest.mark.asyncio
-async def test_latest_import_subquery_scopes_to_one_estate(
+async def test_latest_import_subquery_scopes_to_the_selected_estates(
     session_factory: async_sessionmaker[AsyncSession],
+    scope: str,
 ) -> None:
-    """Scoping the ranking subquery keeps unrelated import history out."""
+    """Both selectors keep unrelated import history out of the ranking."""
     alpha = await _add_estate(session_factory, key="alpha")
     beta = await _add_estate(session_factory, key="beta")
     await _add_import(
@@ -160,36 +170,7 @@ async def test_latest_import_subquery_scopes_to_one_estate(
         imported_at=dt.datetime(2026, 1, 2, tzinfo=dt.UTC),
     )
 
-    subquery = _latest_import_subquery("alpha")
-    async with session_factory() as session:
-        rows = (await session.execute(select(subquery.c.commit_sha))).all()
-
-    assert [row.commit_sha for row in rows] == ["alpha-1"], (
-        "subquery should rank only the requested estate"
-    )
-
-
-@pytest.mark.asyncio
-async def test_latest_import_subquery_scopes_to_estate_ids(
-    session_factory: async_sessionmaker[AsyncSession],
-) -> None:
-    """The paged listing ranks imports only for the estates it selected."""
-    alpha = await _add_estate(session_factory, key="alpha")
-    beta = await _add_estate(session_factory, key="beta")
-    await _add_import(
-        session_factory,
-        alpha,
-        commit_sha="alpha-1",
-        imported_at=dt.datetime(2026, 1, 1, tzinfo=dt.UTC),
-    )
-    await _add_import(
-        session_factory,
-        beta,
-        commit_sha="beta-1",
-        imported_at=dt.datetime(2026, 1, 2, tzinfo=dt.UTC),
-    )
-
-    subquery = _latest_import_subquery(estate_ids=[alpha.id])
+    subquery = _scoped_subquery(scope, alpha.id)
     async with session_factory() as session:
         rows = (await session.execute(select(subquery.c.commit_sha))).all()
 

@@ -10,6 +10,7 @@ import typing as typ
 # adapters and documentation tools; names that live only under
 # ``TYPE_CHECKING`` are unresolvable once PEP 649 evaluates the annotations.
 from ghillie.estate.models import (  # noqa: TC001
+    CatalogueImportRequest,
     CatalogueImportSummary,
     EstateSummary,
     IngestionToggleOutcome,
@@ -59,14 +60,10 @@ class EstateManagement(typ.Protocol):
         """
         ...
 
-    async def import_catalogue(  # noqa: PLR0913 - mirrors the documented import request contract.
+    async def import_catalogue(
         self,
         estate_key: str,
-        *,
-        catalogue_yaml: str,
-        commit_sha: str,
-        estate_name: str | None,
-        dry_run: bool,
+        request: CatalogueImportRequest,
     ) -> CatalogueImportSummary:
         """Import one catalogue document for an estate.
 
@@ -75,15 +72,8 @@ class EstateManagement(typ.Protocol):
         estate_key:
             Key of the estate to import into. A new estate is created when the
             key does not exist.
-        catalogue_yaml:
-            Catalogue document as YAML text.
-        commit_sha:
-            Commit the document was read from.
-        estate_name:
-            Display name to store. ``None`` keeps an existing name and names a
-            new estate after its key.
-        dry_run:
-            When true, report the counts without persisting them.
+        request:
+            Catalogue document and the metadata that accompanies it.
 
         Returns
         -------

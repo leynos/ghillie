@@ -115,64 +115,43 @@ def test_app_dependencies_repr_does_not_expose_the_token() -> None:
 class TestCreateAppEstateRoutes:
     """Route families vary independently with their dependencies."""
 
-    def test_estate_only_app_registers_estate_routes(self) -> None:
-        """An estate service alone exposes the estate family."""
-        client = falcon.testing.TestClient(
-            create_app(AppDependencies(estate_service=EmptyEstateManagement()))
-        )
-
-        assert client.simulate_get("/estates").status_code == HTTPStatus.OK, (
-            "estate route should be registered"
-        )
-        assert (
-            client.simulate_post("/reports/repositories/acme/widgets").status_code
-            == HTTPStatus.NOT_FOUND
-        ), "reports route should be absent"
-
-    def test_reporting_only_app_does_not_register_estate_routes(
-        self, deps: AppDependencies
+    @pytest.mark.parametrize(
+        "case",
+        [
+            pytest.param((True, False, HTTPStatus.OK, False), id="estate-only"),
+            pytest.param(
+                (False, True, HTTPStatus.NOT_FOUND, True), id="reporting-only"
+            ),
+            pytest.param((True, True, HTTPStatus.OK, True), id="both"),
+            pytest.param((False, False, HTTPStatus.NOT_FOUND, False), id="neither"),
+        ],
+    )
+    def test_route_families_follow_their_dependencies(
+        self,
+        deps: AppDependencies,
+        case: tuple[bool, bool, HTTPStatus, bool],
     ) -> None:
-        """Reporting dependencies alone do not expose the estate family."""
-        client = falcon.testing.TestClient(create_app(deps))
-
-        assert client.simulate_get("/estates").status_code == HTTPStatus.NOT_FOUND, (
-            "estate route should be absent"
-        )
-        assert (
-            client.simulate_post("/reports/repositories/acme/widgets").status_code
-            != HTTPStatus.NOT_FOUND
-        ), "reports route should be registered"
-
-    def test_both_dependency_families_are_registered(
-        self, deps: AppDependencies
-    ) -> None:
-        """Supplying both services exposes both route families."""
+        """Each route family appears only when its dependencies are supplied."""
+        has_estate, has_reporting, estate_status, has_report_route = case
         client = falcon.testing.TestClient(
             create_app(
                 AppDependencies(
-                    session_factory=deps.session_factory,
-                    reporting_service=deps.reporting_service,
-                    estate_service=EmptyEstateManagement(),
+                    session_factory=deps.session_factory if has_reporting else None,
+                    reporting_service=(
+                        deps.reporting_service if has_reporting else None
+                    ),
+                    estate_service=(EmptyEstateManagement() if has_estate else None),
                 )
             )
         )
 
-        assert client.simulate_get("/estates").status_code == HTTPStatus.OK, (
-            "estate route should be registered"
+        estates_status = client.simulate_get("/estates").status_code
+        assert estates_status == estate_status, (
+            "estate route presence should follow deps"
         )
-        assert (
-            client.simulate_post("/reports/repositories/acme/widgets").status_code
-            != HTTPStatus.NOT_FOUND
-        ), "reports route should be registered"
-
-    def test_no_dependencies_registers_no_domain_routes(self) -> None:
-        """A dependency-free app keeps only the probes."""
-        client = falcon.testing.TestClient(create_app())
-
-        assert client.simulate_get("/estates").status_code == HTTPStatus.NOT_FOUND, (
-            "estate route should be absent"
+        report_status = client.simulate_post(
+            "/reports/repositories/acme/widgets"
+        ).status_code
+        assert (report_status != HTTPStatus.NOT_FOUND) is has_report_route, (
+            "reports route presence should follow deps"
         )
-        assert (
-            client.simulate_post("/reports/repositories/acme/widgets").status_code
-            == HTTPStatus.NOT_FOUND
-        ), "reports route should be absent"
