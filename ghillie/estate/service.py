@@ -213,8 +213,6 @@ class EstateManagementService:
                 raise _catalogue_rejected(exc) from exc
             except IntegrityError as exc:
                 raise EstateConflictError(_CONFLICT_MESSAGE) from exc
-            except (OperationalError, InterfaceError) as exc:
-                raise StorageUnavailableError(_STORAGE_MESSAGE) from exc
             except SQLAlchemyError as exc:
                 raise StorageUnavailableError(_STORAGE_MESSAGE) from exc
 
@@ -310,8 +308,6 @@ class EstateManagementService:
                 raise _sync_error(estate_key, exc) from exc
             except IntegrityError as exc:
                 raise EstateConflictError(_CONFLICT_MESSAGE) from exc
-            except (OperationalError, InterfaceError) as exc:
-                raise StorageUnavailableError(_STORAGE_MESSAGE) from exc
             except SQLAlchemyError as exc:
                 raise RegistrySyncFailedError(_SYNC_FAILED_MESSAGE) from exc
 
@@ -432,8 +428,6 @@ class EstateManagementService:
             changed = await self._toggle(owner, name, enabled=enabled)
         except RegistryRepositoryNotFoundError as exc:
             raise RepositoryNotFoundError(owner, name) from exc
-        except (OperationalError, InterfaceError) as exc:
-            raise StorageUnavailableError(_STORAGE_MESSAGE) from exc
         except SQLAlchemyError as exc:
             raise StorageUnavailableError(_STORAGE_MESSAGE) from exc
 

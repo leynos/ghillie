@@ -585,10 +585,12 @@ per pull request.
         issue for any value beyond `String(255)`, without echoing the
         over-length value; red-then-green unit tests cover each field at 255
         (accepted) and 256 (rejected), and a service test asserts the HTTP
-        boundary maps it to `CatalogueRejectedError`. Declined with reason:
-        collapsing the now-duplicate `except (OperationalError, InterfaceError)`
-        branch is a separate cleanup, recorded under Risks rather than mixed
-        into the functional repair.
+        boundary maps it to `CatalogueRejectedError`. The reviewer's separate
+        observation that the `except (OperationalError, InterfaceError)` branch
+        duplicates the following `SQLAlchemyError` branch is correct — both
+        exceptions are subclasses — and was applied as its own behaviour-
+        preserving refactor commit, after the functional change, per the
+        repository's atomic-refactor rule.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
