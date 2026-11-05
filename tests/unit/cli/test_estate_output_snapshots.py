@@ -17,7 +17,11 @@ from ghillie.cli.commands.estate import (
     set_repository,
     sync,
 )
-from ghillie.cli.control_plane import ControlPlaneError, ControlPlaneIssue
+from ghillie.cli.control_plane import (
+    ControlPlaneError,
+    ControlPlaneIssue,
+    ControlPlaneResponse,
+)
 from ghillie.cli.output import render_error
 
 if typ.TYPE_CHECKING:
@@ -133,15 +137,13 @@ def test_estate_list_yaml_snapshot(
     assert result == snapshot
 
 
-def test_repository_list_table_snapshot(
-    harness: typ.Callable[..., CliHarness],
-    snapshot: object,
-) -> None:
-    """The repository table shows the ingestion state and page cursor."""
-    client = harness()
+def _repository_listing(
+    harness: typ.Callable[..., CliHarness], *, output: str
+) -> object:
+    """Render the fixed repository page in *output* for a snapshot comparison."""
+    client = harness(output=output)
     client.queue_json(_REPOSITORY_PAYLOAD)
-
-    result = client.invoke(
+    return client.invoke(
         list_repositories,
         estate_key="demo",
         ingestion_enabled=None,
@@ -149,7 +151,13 @@ def test_repository_list_table_snapshot(
         offset=0,
     )
 
-    assert result == snapshot
+
+def test_repository_list_table_snapshot(
+    harness: typ.Callable[..., CliHarness],
+    snapshot: object,
+) -> None:
+    """The repository table shows the ingestion state and page cursor."""
+    assert _repository_listing(harness, output="table") == snapshot
 
 
 def test_repository_list_yaml_snapshot(
@@ -157,18 +165,7 @@ def test_repository_list_yaml_snapshot(
     snapshot: object,
 ) -> None:
     """Repository YAML keeps ``estate_key`` and the pagination metadata."""
-    client = harness(output="yaml")
-    client.queue_json(_REPOSITORY_PAYLOAD)
-
-    result = client.invoke(
-        list_repositories,
-        estate_key="demo",
-        ingestion_enabled=None,
-        limit=50,
-        offset=0,
-    )
-
-    assert result == snapshot
+    assert _repository_listing(harness, output="yaml") == snapshot
 
 
 def test_import_table_snapshot(
@@ -254,11 +251,13 @@ def _error() -> ControlPlaneError:
         "catalogue_invalid",
         "catalogue validation failed",
         hint="Fix the listed catalogue issues and import the catalogue again.",
-        status=422,
-        issues=[
-            ControlPlaneIssue("catalogue_schema", "projects: 42 is not a list"),
-            ControlPlaneIssue("catalogue_schema", "component key 'x' is invalid"),
-        ],
+        response=ControlPlaneResponse(
+            422,
+            (
+                ControlPlaneIssue("catalogue_schema", "projects: 42 is not a list"),
+                ControlPlaneIssue("catalogue_schema", "component key 'x' is invalid"),
+            ),
+        ),
     )
 
 

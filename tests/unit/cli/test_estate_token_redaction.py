@@ -101,23 +101,32 @@ _RESPONDERS = [
 ]
 
 
+class _SecretCase(typ.NamedTuple):
+    """One credential route and the value that must never be printed."""
+
+    api_base_url: str
+    auth_token: str | None
+    secret: str
+
+
 @pytest.mark.parametrize(
-    ("api_base_url", "auth_token", "secret"),
+    "case",
     [
-        pytest.param(_BASE_URL, _TOKEN, _TOKEN, id="bearer-token"),
-        pytest.param(_CREDENTIALS_URL, None, "hunter2", id="url-credentials"),
+        pytest.param(_SecretCase(_BASE_URL, _TOKEN, _TOKEN), id="bearer-token"),
+        pytest.param(
+            _SecretCase(_CREDENTIALS_URL, None, "hunter2"), id="url-credentials"
+        ),
     ],
 )
 @pytest.mark.parametrize("respond", _RESPONDERS)
-def test_failures_never_print_a_secret(  # noqa: PLR0913
+def test_failures_never_print_a_secret(
     harness: typ.Callable[..., CliHarness],
     capsys: pytest.CaptureFixture[str],
     respond: typ.Callable[[CliHarness], None],
-    api_base_url: str,
-    auth_token: str | None,
-    secret: str,
+    case: _SecretCase,
 ) -> None:
     """Every failure path keeps its secret out of standard error and logs."""
+    api_base_url, auth_token, secret = case
     client = harness(
         api_base_url=api_base_url,
         auth_token=auth_token,

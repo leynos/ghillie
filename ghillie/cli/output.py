@@ -198,6 +198,53 @@ def _format_meta_value(value: object) -> str:
     return _format_value(value)
 
 
+def _table_cells(
+    rows: list[dict[str, object]],
+    columns: typ.Sequence[Column],
+) -> list[list[str]]:
+    """Format every cell in *rows* for the requested columns."""
+    return [
+        [_format_value(_lookup(row, field)) for field, _ in columns] for row in rows
+    ]
+
+
+def _column_widths(
+    headings: list[str],
+    cells: list[list[str]],
+) -> list[int]:
+    """Return each column's width, wide enough for its heading and cells."""
+    return [
+        max(len(heading), *(len(cell[index]) for cell in cells))
+        if cells
+        else len(heading)
+        for index, heading in enumerate(headings)
+    ]
+
+
+def _align_row(values: typ.Sequence[str], widths: typ.Sequence[int]) -> str:
+    """Pad one row of *values* to *widths* and drop the trailing padding."""
+    return "  ".join(
+        value.ljust(width) for value, width in zip(values, widths, strict=True)
+    ).rstrip()
+
+
+def _render_table_body(cells: list[list[str]], widths: list[int]) -> list[str]:
+    """Render every data row, or the placeholder when the page is empty."""
+    if not cells:
+        return ["(no items)"]
+    return [_align_row(row, widths) for row in cells]
+
+
+def _render_meta_line(meta: typ.Mapping[str, object]) -> list[str]:
+    """Render the pagination metadata as a blank-line-separated footer."""
+    if not meta:
+        return []
+    footer = " ".join(
+        f"{key}={_format_meta_value(value)}" for key, value in meta.items()
+    )
+    return ["", footer]
+
+
 def _render_rows(
     rows: list[dict[str, object]],
     columns: typ.Sequence[Column],
@@ -205,35 +252,8 @@ def _render_rows(
 ) -> str:
     """Render an aligned table plus a pagination line."""
     headings = [heading for _, heading in columns]
-    cells = [
-        [_format_value(_lookup(row, field)) for field, _ in columns] for row in rows
-    ]
-    widths = [
-        max(len(heading), *(len(cell[index]) for cell in cells))
-        if cells
-        else len(heading)
-        for index, heading in enumerate(headings)
-    ]
-    lines = [
-        "  ".join(
-            heading.ljust(width)
-            for heading, width in zip(headings, widths, strict=True)
-        ).rstrip()
-    ]
-    if cells:
-        lines.extend(
-            "  ".join(
-                value.ljust(width) for value, width in zip(row, widths, strict=True)
-            ).rstrip()
-            for row in cells
-        )
-    else:
-        lines.append("(no items)")
-    if meta:
-        lines.append("")
-        lines.append(
-            " ".join(
-                f"{key}={_format_meta_value(value)}" for key, value in meta.items()
-            )
-        )
+    cells = _table_cells(rows, columns)
+    widths = _column_widths(headings, cells)
+    lines = [_align_row(headings, widths), *_render_table_body(cells, widths)]
+    lines.extend(_render_meta_line(meta))
     return "\n".join(lines)
