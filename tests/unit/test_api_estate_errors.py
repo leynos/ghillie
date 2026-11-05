@@ -247,8 +247,13 @@ def test_wrong_method_is_method_not_allowed() -> None:
 
 def test_falcon_http_error_keeps_its_description() -> None:
     """Falcon's own HTTP errors are rendered through the same envelope."""
-    result = _client(StorageUnavailableError("unused")).simulate_get("/nope")
+    result = _client(StorageUnavailableError("unused")).simulate_post(
+        "/estates/demo/catalogue-import",
+        body="{}",
+        headers={"Content-Type": "text/plain"},
+    )
 
-    body = result.json
-    assert body["title"], "fallback title should be present"
-    assert body["description"], "fallback description should be present"
+    _assert_error(result, status=415, code="unsupported_media_type")
+    assert "application/json" in result.json["description"], (
+        "the Falcon error's own description should reach the envelope"
+    )
