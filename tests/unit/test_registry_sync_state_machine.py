@@ -211,13 +211,19 @@ class EstateSyncMachine(RuleBasedStateMachine):
         """Import a fresh catalogue revision containing only ``subset``."""
         self._runner.run(self._import_subset(subset))
         for index, expected in enumerate(self._model):
-            present = index in subset
-            if expected.in_catalogue and not present and expected.owner != "other":
-                # Removing the slug prunes the catalogue record, so a later
-                # re-add starts from a fresh, active record.
-                expected.active = True
-            expected.in_catalogue = present
+            self._replay_import(expected, present=index in subset)
         self._assert_matches_db()
+
+    def _replay_import(self, expected: _ExpectedRepository, *, present: bool) -> None:
+        """Mirror one catalogue import into the model row."""
+        if not expected.in_catalogue or present:
+            expected.in_catalogue = present
+            return
+        if expected.owner != "other":
+            # Removing the slug prunes the catalogue record, so a later re-add
+            # starts from a fresh, active record.
+            expected.active = True
+        expected.in_catalogue = present
 
     @rule()
     def sync(self) -> None:
@@ -314,25 +320,31 @@ class EstateSyncMachine(RuleBasedStateMachine):
         """Replay the transition the real sync should have produced."""
         expected = self._model[index]
         if expected.owner == "other":
-            if expected.in_catalogue:
-                assert _SLUGS[index] in result.repositories_conflicted, _SLUGS[index]
-                self.transitions[IngestionTransition.CONFLICT] += 1
-            return
-        if expected.owner == "none":
-            if expected.in_catalogue:
-                self._adopt(index)
-            return
-        if not expected.linked:
-            if expected.in_catalogue:
-                self._adopt(index)
-            else:
-                self.transitions[IngestionTransition.PRESERVE] += 1
-            return
-        if expected.in_catalogue:
+            self._replay_conflict(index, expected, result)
+        elif expected.owner == "none" or not expected.linked:
+            self._replay_unlinked(index, expected)
+        elif expected.in_catalogue:
             self._preserve_or_disable_inactive(index)
         else:
-            expected.enabled = False
-            self.transitions[IngestionTransition.DISABLE_REMOVED] += 1
+            self._replay_removed(expected)
+
+    def _replay_conflict(
+        self, index: int, expected: _ExpectedRepository, result: SyncResult
+    ) -> None:
+        if not expected.in_catalogue:
+            return
+        assert _SLUGS[index] in result.repositories_conflicted, _SLUGS[index]
+        self.transitions[IngestionTransition.CONFLICT] += 1
+
+    def _replay_unlinked(self, index: int, expected: _ExpectedRepository) -> None:
+        if expected.in_catalogue:
+            self._adopt(index)
+        elif expected.owner == "this":
+            self.transitions[IngestionTransition.PRESERVE] += 1
+
+    def _replay_removed(self, expected: _ExpectedRepository) -> None:
+        expected.enabled = False
+        self.transitions[IngestionTransition.DISABLE_REMOVED] += 1
 
     def _adopt(self, index: int) -> None:
         expected = self._model[index]
