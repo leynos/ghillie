@@ -496,6 +496,19 @@ single `cyclopts` CLI, without ad hoc scripts.
   here should state which variables each profile expects and leave
   `GHILLIE_DB_BOOTSTRAP` unset in production, where migrations own the schema.
 
+  Two further D15 items remain open and belong to this task:
+
+  - **Import-time broker guard.** Importing `ghillie.api.app` or
+    `ghillie.api.factory` currently raises `RuntimeError: No Dramatiq broker
+    configured` unless `GHILLIE_ALLOW_STUB_BROKER` is set, because the
+    reporting actor is imported at module load. A worker-free `api-only`
+    profile must not require a broker to start.
+  - **Helm environment-variable and driver mismatch.** The chart and the
+    runtime disagree on the database variable name (`DATABASE_URL` versus
+    `GHILLIE_DATABASE_URL`) and on the driver scheme (`postgresql://` versus
+    the asyncpg driver the runtime expects). Reconcile both so a chart
+    deployment reaches the database it configures.
+
 ### 2.6. Deliver structured exports and required MVP metrics
 
 **Goal:** Expose required key performance indicator (KPI) and export
