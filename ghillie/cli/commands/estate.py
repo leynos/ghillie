@@ -7,6 +7,7 @@ stable code, a message, and a next-step hint, then exits ``3`` (D7, O4).
 
 from __future__ import annotations
 
+import http
 import re
 import sys
 import typing as typ
@@ -146,7 +147,7 @@ def _dry_run_params() -> dict[str, str] | None:
 
 
 def _call(
-    method: str,
+    method: http.HTTPMethod,
     path_segments: typ.Sequence[str],
     *,
     params: typ.Mapping[str, str] | None = None,
@@ -227,7 +228,7 @@ def import_catalogue(
         )
 
     document, failure = _call(
-        "POST",
+        http.HTTPMethod.POST,
         ["estates", estate_key, "catalogue-import"],
         params=_dry_run_params(),
         body=encoded,
@@ -249,7 +250,7 @@ def import_catalogue(
 def sync(*, estate_key: str) -> int | str:
     """Sync imported catalogue repositories into the registry (D2)."""
     document, failure = _call(
-        "POST",
+        http.HTTPMethod.POST,
         ["estates", estate_key, "registry-sync"],
         params=_dry_run_params(),
     )
@@ -264,7 +265,7 @@ def sync(*, estate_key: str) -> int | str:
 @estate_app.command(name="list")
 def list_estates() -> int | str:
     """List estates known to the control plane (D4)."""
-    document, failure = _call("GET", ["estates"])
+    document, failure = _call(http.HTTPMethod.GET, ["estates"])
     if failure is not None:
         return failure
     return _render_page(
@@ -285,7 +286,7 @@ def list_repositories(
     if ingestion_enabled is not None:
         params["ingestion_enabled"] = "true" if ingestion_enabled else "false"
     document, failure = _call(
-        "GET",
+        http.HTTPMethod.GET,
         ["estates", estate_key, "repositories"],
         params=params,
     )
@@ -316,7 +317,7 @@ def set_repository(
             "to apply the toggle",
         )
     document, failure = _call(
-        "PATCH",
+        http.HTTPMethod.PATCH,
         ["repositories", owner, name, "ingestion"],
         body={"ingestion_enabled": ingestion_enabled},
     )

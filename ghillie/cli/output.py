@@ -44,6 +44,23 @@ def render_collection(
     ``json`` and ``yaml`` keep the whole server document (D7), including the
     pagination metadata. ``table`` shows the requested columns and the
     metadata as a trailing line so an operator can walk the next page.
+
+    Parameters
+    ----------
+    items
+        Page items as mappings of dotted field names to values.
+    columns
+        Column field paths and headings for table output.
+    output
+        Selected output format.
+    meta
+        Pagination metadata to keep alongside the items.
+
+    Returns
+    -------
+    str
+        The rendered page, ending without a trailing newline.
+
     """
     rows = [dict(item) for item in items]
     if output == "json":
@@ -58,6 +75,19 @@ def render_document(payload: typ.Mapping[str, object], *, output: OutputFormat) 
 
     ``json`` and ``yaml`` return the server document unchanged; ``table``
     flattens nested mappings into dotted keys so counts stay readable.
+
+    Parameters
+    ----------
+    payload
+        The server document for one successful operation.
+    output
+        Selected output format.
+
+    Returns
+    -------
+    str
+        The rendered document, ending without a trailing newline.
+
     """
     if output == "json":
         return json.dumps(payload, sort_keys=True)
@@ -73,6 +103,19 @@ def render_error(error: ControlPlaneError, *, output: OutputFormat) -> str:
 
     The hint is expected to be populated by the command layer; the envelope
     omits ``status`` for local failures and ``issues`` when there are none.
+
+    Parameters
+    ----------
+    error
+        The failure to render.
+    output
+        Selected output format.
+
+    Returns
+    -------
+    str
+        The rendered failure, ending without a trailing newline.
+
     """
     document = {"error": _error_fields(error)}
     if output == "json":
@@ -137,13 +180,15 @@ def _lookup(item: cabc.Mapping[str, object], field: str) -> object:
 
 def _format_value(value: object) -> str:
     """Format one document value for table output."""
-    if value is None:
-        return "-"
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, str):
-        return value
-    return json.dumps(value)
+    match value:
+        case None:
+            return "-"
+        case bool():
+            return "true" if value else "false"
+        case str():
+            return value
+        case _:
+            return json.dumps(value)
 
 
 def _format_meta_value(value: object) -> str:
