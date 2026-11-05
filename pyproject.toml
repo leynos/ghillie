@@ -166,6 +166,7 @@ timeout = 30
 addopts = "-p cmd_mox.pytest_plugin"
 markers = [
     "configuration: marks tests about configuration handling",
+    "e2e: marks tests that start the packaged runtime as a subprocess",
     "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
     "llm: marks tests that require LLM mock infrastructure",
     "status: marks tests about status reporting",
