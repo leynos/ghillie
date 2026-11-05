@@ -249,6 +249,12 @@ per pull request.
         and removal deactivations roll back, a flush-time `IntegrityError`
         surfaces as `RegistrySyncError`, and 101 disabled repositories yield a
         100-entry preview with an exact count of 101.
+  - [x] (2026-11-05) The follow-up assessment at `3f7a959` found no remaining
+        implementation defect and confirmed all three gaps closed. It raised
+        one conformance exception: the PR-A diff is 2657 net new lines, 157
+        above the 2500-line scope tolerance. The exception is recorded as D24
+        with its rationale; the added tests are EP-M1 verification obligations
+        and cannot move to PR-B without breaking the D19 plateau boundary.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
@@ -459,6 +465,19 @@ expert-panel review.
 - D21, observability. Each mutation logs one structured line through
   `ghillie.logging`: operation, estate key, commit, dry run, counts, duration,
   and outcome. Toggles also log the old and new state.
+- D24, PR-A scope-tolerance exception. The hosted ExecPlan assessment measured
+  PR-A against `main` at `2ffdb4d` as 13 files, 2748 additions, and 91
+  deletions: 2657 net new lines, 157 above the 2500-line tolerance. The overage
+  is the three tests the same assessment requested at `3f7a959` (an
+  existing-row dry-run rollback, a flush-time `IntegrityError` translation, and
+  a 100-entry disabled preview from 101 repositories). Those tests are part of
+  EP-M1's own verification obligations, so deferring them to PR-B would break
+  the D19 plateau boundary; the alternative was shipping EP-M1 with the dry-run
+  and preview guarantees unproved. Recorded as an accepted exception under the
+  standing instruction to continue delivery. No interface, dependency, or
+  persistence tolerance is exceeded, and the file-count tolerance (35) is not
+  approached. D22 and D23 are introduced by PR-B and follow this entry once the
+  stack is applied.
 
 ## Outcomes & retrospective
 
