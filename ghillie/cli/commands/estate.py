@@ -75,6 +75,9 @@ _HINTS = {
         "Check that --catalogue-path names a readable UTF-8 file."
     ),
     "invalid_estate_key": f"Estate keys must match {NEW_ESTATE_KEY_PATTERN}.",
+    "dry_run_unsupported": (
+        "Remove --dry-run (or GHILLIE_DRY_RUN) to apply this change."
+    ),
     "request_too_large": (
         f"The serialized request must be at most {MAX_REQUEST_BODY_BYTES} bytes; "
         "shorten the catalogue."
@@ -300,7 +303,18 @@ def set_repository(
     name: str,
     ingestion_enabled: ToggleFlag,
 ) -> int | str:
-    """Set per-repository ingestion state (D6)."""
+    """Set per-repository ingestion state (D6).
+
+    The ingestion endpoint has no dry-run mode (D20 covers import and sync
+    only), and a global ``--dry-run`` must never become a live mutation. The
+    command therefore refuses locally rather than quietly applying the toggle.
+    """
+    if get_current_context().config.dry_run:
+        return _local_failure(
+            "dry_run_unsupported",
+            "`estate repo set` has no dry-run mode; re-run without --dry-run "
+            "to apply the toggle",
+        )
     document, failure = _call(
         "PATCH",
         ["repositories", owner, name, "ingestion"],
