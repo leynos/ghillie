@@ -237,6 +237,18 @@ per pull request.
         `_replay_unlinked`, and `_replay_removed`, and the import replay moved
         into `_replay_import`; behaviour is unchanged and `cs delta
         origin/main` reports no findings.
+  - [x] (2026-11-05) Hosted ExecPlan assessment asked for the O1
+        seeded-mutation evidence and for coverage of the remaining dry-run and
+        preview guarantees. The mutation was run on a disposable worktree at
+        `2a56711`: `decide_for_catalogue_repository` returned
+        `catalogue_active` for `PRESERVE`, and both
+        `test_sync_preserves_operator_disable` (`assert True is False`) and
+        `test_sync_transitions_are_modelled` (`AssertionError:
+        leynos/wildside-mockup`) failed; the file was then restored. Three
+        tests were added: a dry run over existing rows proves metadata updates
+        and removal deactivations roll back, a flush-time `IntegrityError`
+        surfaces as `RegistrySyncError`, and 101 disabled repositories yield a
+        100-entry preview with an exact count of 101.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
