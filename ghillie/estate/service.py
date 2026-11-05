@@ -173,22 +173,29 @@ class EstateManagementService:
             If the catalogue database cannot be written.
 
         """
-        validate_estate_key_reference(estate_key)
-        catalogue = await _parse_catalogue(request.catalogue_yaml)
-
         started = time.perf_counter()
-        async with self._lock_for(estate_key):
-            result = await self._run_import(estate_key, catalogue, request)
+        mutation = _MutationLog(
+            operation="estate.import",
+            estate_key=estate_key,
+            commit_sha=request.commit_sha,
+            dry_run=request.dry_run,
+            started=started,
+        )
+        try:
+            validate_estate_key_reference(estate_key)
+            catalogue = await _parse_catalogue(request.catalogue_yaml)
+            async with self._lock_for(estate_key):
+                result = await self._run_import(estate_key, catalogue, request)
+        except Exception as exc:
+            # D21: a rejected or failed attempt is still a mutation attempt, and
+            # an operator needs its outcome and duration to tell a client error
+            # apart from a storage outage.
+            _log_mutation(mutation, outcome="failed", details=_failure_details(exc))
+            raise
 
         summary = _import_summary(estate_key, request, result)
         _log_mutation(
-            _MutationLog(
-                operation="estate.import",
-                estate_key=estate_key,
-                commit_sha=request.commit_sha,
-                dry_run=request.dry_run,
-                started=started,
-            ),
+            mutation,
             outcome="skipped" if result.skipped else "succeeded",
             details=_import_details(summary),
         )
@@ -262,21 +269,25 @@ class EstateManagementService:
             If the catalogue or registry database cannot be reached.
 
         """
-        validate_estate_key_reference(estate_key)
-
         started = time.perf_counter()
-        async with self._lock_for(estate_key):
-            result = await self._run_sync(estate_key, dry_run=dry_run)
+        mutation = _MutationLog(
+            operation="estate.registry-sync",
+            estate_key=estate_key,
+            commit_sha=None,
+            dry_run=dry_run,
+            started=started,
+        )
+        try:
+            validate_estate_key_reference(estate_key)
+            async with self._lock_for(estate_key):
+                result = await self._run_sync(estate_key, dry_run=dry_run)
+        except Exception as exc:
+            _log_mutation(mutation, outcome="failed", details=_failure_details(exc))
+            raise
 
         summary = _sync_summary(estate_key, result, dry_run=dry_run)
         _log_mutation(
-            _MutationLog(
-                operation="estate.registry-sync",
-                estate_key=estate_key,
-                commit_sha=None,
-                dry_run=dry_run,
-                started=started,
-            ),
+            mutation,
             outcome="succeeded",
             details=_sync_details(summary),
         )
@@ -382,24 +393,23 @@ class EstateManagementService:
 
         """
         started = time.perf_counter()
+        toggle = _ToggleLog(owner=owner, name=name, enabled=enabled, started=started)
         try:
             changed = await self._toggle(owner, name, enabled=enabled)
         except RegistryRepositoryNotFoundError as exc:
-            raise RepositoryNotFoundError(owner, name) from exc
+            error = RepositoryNotFoundError(owner, name)
+            _log_toggle(toggle, outcome="failed", details=_failure_details(error))
+            raise error from exc
         except SQLAlchemyError as exc:
-            raise StorageUnavailableError(_STORAGE_MESSAGE) from exc
+            error = StorageUnavailableError(_STORAGE_MESSAGE)
+            _log_toggle(toggle, outcome="failed", details=_failure_details(error))
+            raise error from exc
 
         previous = not enabled if changed else enabled
-        log_info(
-            logger,
-            "estate.set-ingestion owner=%r name=%r enabled=%s "
-            "previous=%s changed=%s duration_ms=%.1f outcome=succeeded",
-            owner,
-            name,
-            enabled,
-            previous,
-            changed,
-            _elapsed_ms(started),
+        _log_toggle(
+            toggle,
+            outcome="succeeded",
+            details=f"previous={previous} changed={changed}",
         )
         return IngestionToggleOutcome(
             owner=owner,
@@ -513,8 +523,21 @@ def _import_details(summary: CatalogueImportSummary) -> str:
         f"{summary.components.updated}/{summary.components.deleted} "
         f"repositories={summary.repositories.created}/"
         f"{summary.repositories.updated}/"
-        f"{summary.repositories.deleted}"
+        f"{summary.repositories.deleted} "
+        f"edges={summary.edges.created}/"
+        f"{summary.edges.updated}/"
+        f"{summary.edges.deleted}"
     )
+
+
+def _failure_details(exc: BaseException) -> str:
+    """Render the failure class and message for the structured mutation line.
+
+    The message can quote client-supplied text, so it is rendered with ``%r``
+    for the same reason as the request fields: a newline must not be able to
+    forge a second record.
+    """
+    return f"error={type(exc).__name__} message={str(exc)!r}"
 
 
 def _sync_summary(
@@ -601,6 +624,36 @@ class _MutationLog:
     commit_sha: str | None
     dry_run: bool
     started: float
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class _ToggleLog:
+    """Request-scoped fields shared by every toggle record (D21)."""
+
+    owner: str
+    name: str
+    enabled: bool
+    started: float
+
+
+def _log_toggle(toggle: _ToggleLog, *, outcome: str, details: str) -> None:
+    """Write the structured record for one ingestion toggle.
+
+    The repository identity is rendered with ``%r`` for the same reason as
+    the estate key: both come from the request and must not be able to forge
+    a second record.
+    """
+    log_info(
+        logger,
+        "estate.set-ingestion owner=%r name=%r enabled=%s %s "
+        "duration_ms=%.1f outcome=%s",
+        toggle.owner,
+        toggle.name,
+        toggle.enabled,
+        details,
+        _elapsed_ms(toggle.started),
+        outcome,
+    )
 
 
 def _log_mutation(mutation: _MutationLog, *, outcome: str, details: str) -> None:

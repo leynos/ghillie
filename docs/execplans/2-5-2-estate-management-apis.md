@@ -622,6 +622,28 @@ per pull request.
           and `_import_seed`.
         Focused suites are green; the eight-gate run and the hosted
         re-observation follow this entry.
+  - [x] (2026-11-05) The hosted ExecPlan assessment for PR-B found no core
+        mutation or authentication defect and listed three evidence gaps,
+        all now closed:
+        - D21: `import_catalogue`, `sync_registry`, and `set_ingestion` wrap
+          their work and log exactly one terminal record on success, skip, or
+          failure, with the error class and message on failure; import records
+          now include edge counts. Red run first: the five new tests failed
+          against the previous service (missing edge counts and missing
+          failure records) and pass after the change. The success, skipped,
+          failed, and pre-lock rejection paths each assert a single record.
+        - O4: two database-backed HTTP cases now run the real service over
+          `session_factory`. An over-long `estate_name` is a 400
+          `invalid_input`, and two imports released together by a barrier race
+          the unique estate key so the loser becomes a 409 `conflict`; both
+          assert that no SQL or driver text reaches the body.
+        - O5: `test_body_limit_boundary` builds exact-byte JSON bodies at
+          1 MiB − 1, 1 MiB, and 1 MiB + 1 using multibyte padding and escaped
+          newlines, so character count and byte count differ; the first two are
+          accepted and the third is a 413 `payload_too_large`.
+        - The PR-B scope-tolerance exception is recorded as D23.
+        Focused suites (101 tests) are green; the eight-gate run and the
+        hosted re-observation follow this entry.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
@@ -874,9 +896,12 @@ expert-panel review.
   `RepositoryRegistryService.sync_from_catalogue` gain keyword-only
   `dry_run: bool = False`. Rationale: the pre-mortem's most likely incident is
   importing the wrong file into a live estate.
-- D21, observability. Each mutation logs one structured line through
-  `ghillie.logging`: operation, estate key, commit, dry run, counts, duration,
-  and outcome. Toggles also log the old and new state.
+- D21, observability. Each mutation attempt logs exactly one terminal
+  structured line through `ghillie.logging`: operation, estate key, commit, dry
+  run, counts, duration, and outcome. Import records include edge counts. A
+  failed attempt records the error class and message instead of the counts, so
+  a rejected document, a conflict, and a storage outage are distinguishable
+  without a second log line. Toggles also log the old and new state.
 - D22, catalogue-import request value. The port method is
   `import_catalogue(estate_key, request: CatalogueImportRequest)` rather than a
   five-argument signature. Rationale: the four request fields travel together
@@ -887,6 +912,20 @@ expert-panel review.
   layer constructs it from the decoded body and the `dry_run` query flag; the
   service passes it through unchanged. Behaviour is identical to the positional
   form.
+- D23, PR-B scope-tolerance exception. PR-B exceeds the per-PR tolerance in
+  `Tolerances (exception triggers)`: GitHub's comparison against `2a56711`
+  reports 45 changed files and 7,718 net added lines, against limits of 35
+  files and 2,500 lines. The overage is an exception, not an unnoticed drift.
+  Rationale: EP-M2 and EP-M3 are one coherent plateau — the service, its
+  models, and its error vocabulary are not independently testable from the five
+  HTTP routes, the auth middleware, and the bootstrap wiring that expose them,
+  and D19 fixes that pairing in PR-B. Splitting them would leave an unexercised
+  port in one PR and an untested adapter in the next. The escalation outcome is
+  the standing instruction to continue the approved plan to completion; no
+  scope was added beyond EP-M2 and EP-M3, and no interface, dependency, or
+  persisted-schema tolerance is exceeded. Recorded here so a later reviewer
+  sees the deviation and its basis rather than discovering it from the
+  comparison.
 - D24, PR-A scope-tolerance exception. The hosted ExecPlan assessment measured
   PR-A against `main` at `2ffdb4d` as 13 files, 2748 additions, and 91
   deletions: 2657 net new lines, 157 above the 2500-line tolerance. The overage
@@ -898,7 +937,7 @@ expert-panel review.
   and preview guarantees unproved. Recorded as an accepted exception under the
   standing instruction to continue delivery. No interface, dependency, or
   persistence tolerance is exceeded, and the file-count tolerance (35) is not
-  approached. D22 and D23 are introduced by PR-B.
+  approached.
 - D27, pre-merge-check reconciliation. The hosted pre-merge checks raised six
   findings against PR-A. Three are actioned in this round: the title names
   roadmap task 2.5.b; `test_sync_reports_cross_estate_conflict` gives the

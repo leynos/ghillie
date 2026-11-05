@@ -26,6 +26,7 @@ from tests.unit.estate_test_helpers import catalogue_document, import_catalogue
 
 if typ.TYPE_CHECKING:
     from ghillie.estate.service import EstateManagementService
+    from tests.helpers.femtologging_capture import FemtoLogCapture
 
 _ESTATE_KEY = "demo"
 _OWNER = "org"
@@ -208,6 +209,76 @@ async def test_sync_registry_translates_the_wrapped_cause(
         await service.sync_registry(_ESTATE_KEY, dry_run=False)
 
 
+def _mutation_lines(logs: FemtoLogCapture, operation: str) -> list[str]:
+    """Return the captured mutation records for one operation."""
+    return [record.message for record in logs.records if operation in record.message]
+
+
+@pytest.mark.asyncio
+async def test_sync_registry_logs_one_terminal_record_when_it_succeeds(
+    service: EstateManagementService,
+) -> None:
+    """D21: a successful sync emits exactly one terminal record."""
+    await import_catalogue(service)
+
+    with capture_femto_logs("ghillie.estate.service") as logs:
+        await service.sync_registry(_ESTATE_KEY, dry_run=False)
+        logs.wait_for_timeout()
+
+    lines = _mutation_lines(logs, "estate.registry-sync")
+    assert len(lines) == 1, "a successful sync should log exactly one record"
+    assert "outcome=succeeded" in lines[0], "the record should name the outcome"
+    assert "created=1" in lines[0], "the record should report the created count"
+    assert "duration_ms=" in lines[0], "the record should report its duration"
+
+
+@pytest.mark.asyncio
+async def test_sync_registry_logs_one_terminal_record_when_it_fails(
+    service: EstateManagementService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D21: a failed sync logs one terminal record with its error class."""
+    await import_catalogue(service)
+
+    async def _fail(
+        _self: RepositoryRegistryService,
+        estate_key: str,
+        *,
+        dry_run: bool = False,
+    ) -> typ.Never:
+        raise RegistrySyncError(estate_key, "Database error during sync") from (
+            IntegrityError("INSERT", {}, Exception("duplicate"))
+        )
+
+    monkeypatch.setattr(RepositoryRegistryService, "sync_from_catalogue", _fail)
+
+    with capture_femto_logs("ghillie.estate.service") as logs:
+        with pytest.raises(EstateConflictError):
+            await service.sync_registry(_ESTATE_KEY, dry_run=False)
+        logs.wait_for_timeout()
+
+    lines = _mutation_lines(logs, "estate.registry-sync")
+    assert len(lines) == 1, "a failed sync should log exactly one record"
+    assert "outcome=failed" in lines[0], "the record should name the failure"
+    assert "error=EstateConflictError" in lines[0], "the record should name the error"
+
+
+@pytest.mark.asyncio
+async def test_sync_registry_logs_a_missing_estate_as_a_failed_attempt(
+    service: EstateManagementService,
+) -> None:
+    """D21: a sync for an unknown estate still produces one terminal record."""
+    with capture_femto_logs("ghillie.estate.service") as logs:
+        with pytest.raises(EstateNotFoundError):
+            await service.sync_registry("missing", dry_run=False)
+        logs.wait_for_timeout()
+
+    lines = _mutation_lines(logs, "estate.registry-sync")
+    assert len(lines) == 1, "a missing estate should log exactly one record"
+    assert "outcome=failed" in lines[0], "the record should name the failure"
+    assert "error=EstateNotFoundError" in lines[0], "the record should name the error"
+
+
 # ---------------------------------------------------------------------------
 # list_repositories
 # ---------------------------------------------------------------------------
@@ -360,6 +431,24 @@ async def test_set_ingestion_escapes_a_hostile_repository_name(
     )
     assert any("\\n" in message for message in toggle_lines), (
         "the control character should be visible as an escape"
+    )
+
+
+@pytest.mark.asyncio
+async def test_set_ingestion_logs_one_terminal_record_when_it_fails(
+    service: EstateManagementService,
+) -> None:
+    """D21: a failed toggle logs one terminal record with its error class."""
+    with capture_femto_logs("ghillie.estate.service") as logs:
+        with pytest.raises(RepositoryNotFoundError):
+            await service.set_ingestion(_OWNER, "missing", enabled=True)
+        logs.wait_for_timeout()
+
+    lines = _mutation_lines(logs, "estate.set-ingestion")
+    assert len(lines) == 1, "a failed toggle should log exactly one record"
+    assert "outcome=failed" in lines[0], "the record should name the failure"
+    assert "error=RepositoryNotFoundError" in lines[0], (
+        "the record should name the error"
     )
 
 
