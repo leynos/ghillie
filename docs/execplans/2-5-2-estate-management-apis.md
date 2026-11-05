@@ -573,6 +573,22 @@ per pull request.
         CLI prints for other read and parse failures. The read-time handler
         now covers `UnicodeError` too, with a red-then-green test writing
         undecodable bytes to a temporary file.
+        A tenth pass returned two low-severity findings on the same lines,
+        proposing conflicting remedies for one gap: an over-length catalogue
+        value (project or component name, repository owner/name/default
+        branch) passed validation and failed at flush with `DataError`, which
+        the service reported as a 503 storage fault rather than a 422
+        rejection. The validator remedy was chosen over mapping `DataError` to
+        422, because `DataError` also covers faults unrelated to length, and
+        the validator runs before a session opens, so a dry run now fails
+        exactly as a real import does. `_validate_stored_length` records an
+        issue for any value beyond `String(255)`, without echoing the
+        over-length value; red-then-green unit tests cover each field at 255
+        (accepted) and 256 (rejected), and a service test asserts the HTTP
+        boundary maps it to `CatalogueRejectedError`. Declined with reason:
+        collapsing the now-duplicate `except (OperationalError, InterfaceError)`
+        branch is a separate cleanup, recorded under Risks rather than mixed
+        into the functional repair.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.

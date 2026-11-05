@@ -40,6 +40,15 @@ class EdgeContext(typ.NamedTuple):
 _SLUG_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 _REPO_SEGMENT_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
 
+_MAX_STORED_TEXT_LENGTH = 255
+"""Longest value the catalogue tables accept in a text column.
+
+Names and repository segments are declared as ``String(255)``. Checking the
+limit here keeps an over-length catalogue a rejected request (422) instead of
+a failed database write (503), and makes a dry run fail exactly as a real
+import would.
+"""
+
 
 class CatalogueValidationError(ValueError):
     """Raised when a catalogue instance fails structural validation."""
@@ -110,6 +119,7 @@ def _validate_project(
 
     if not project.name.strip():
         state.issues.append(f"project {project.key} is missing a name")
+    _validate_stored_length(project.name, f"project {project.key} name", state.issues)
 
     if project.programme and project.programme not in state.programme_index:
         state.issues.append(
@@ -138,6 +148,9 @@ def _validate_component(
 
     if not component.name.strip():
         state.issues.append(f"component {component.key} is missing a name")
+    _validate_stored_length(
+        component.name, f"component {component.key} name", state.issues
+    )
 
     if component.repository is not None:
         _validate_repository(component.key, component.repository, state.issues)
@@ -154,11 +167,19 @@ def _validate_repository(
                 f"component {component_key} repository {field_name} '{value}' "
                 "must contain only letters, digits, dots, underscores, or dashes"
             )
+        _validate_stored_length(
+            value, f"component {component_key} repository {field_name}", issues
+        )
 
     if not repository.default_branch.strip():
         issues.append(
             f"component {component_key} repository default_branch must not be empty"
         )
+    _validate_stored_length(
+        repository.default_branch,
+        f"component {component_key} repository default_branch",
+        issues,
+    )
 
 
 def _validate_relationships(
@@ -221,6 +242,20 @@ def _validate_programme_membership(
         issues.extend(
             f"programme {programme.key} references unknown project '{project_key}'"
             for project_key in missing_projects
+        )
+
+
+def _validate_stored_length(value: str, label: str, issues: list[str]) -> None:
+    """Record an issue when *value* does not fit its stored text column.
+
+    The value is deliberately not echoed: an over-length name can be as large
+    as the request itself, and repeating it in every issue would multiply the
+    rejection payload.
+    """
+    if len(value) > _MAX_STORED_TEXT_LENGTH:
+        issues.append(
+            f"{label} must be at most {_MAX_STORED_TEXT_LENGTH} characters "
+            f"(got {len(value)})"
         )
 
 
