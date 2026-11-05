@@ -15,7 +15,6 @@ if typ.TYPE_CHECKING:
     from .config import ResolvedCliConfig
 
 _HTTP_ERROR_FALLBACK = "the control plane returned an error"
-_HTTP_ERROR_THRESHOLD = 400
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -289,7 +288,10 @@ class ControlPlaneClient:
             message = "could not reach the control plane"
             raise ControlPlaneTransportError("transport", message) from exc
 
-        if response.status_code >= _HTTP_ERROR_THRESHOLD:
+        # Only a 2xx response completes the requested operation. A redirect is
+        # an HTTP client that did not follow it, not a success: rendering its
+        # body would report work that never happened (O4).
+        if not 200 <= response.status_code < 300:
             raise _http_error(response)
         return _success_document(response)
 
