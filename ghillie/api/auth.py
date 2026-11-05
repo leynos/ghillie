@@ -1,9 +1,11 @@
 """Optional bearer-token authentication middleware (D14).
 
-The token is configured through ``GHILLIE_API_TOKEN``. When it is unset or
-empty, every route stays open so local development needs no ceremony. When it
-is set, every route except the liveness and readiness probes requires an
-``Authorization: Bearer <token>`` header.
+The token is configured through ``GHILLIE_API_TOKEN``. When it is unset, every
+route stays open so local development needs no ceremony. When it is set, every
+route except the liveness and readiness probes requires an
+``Authorization: Bearer <token>`` header. A blank token also counts as
+unconfigured here, but the process launcher refuses that case before the app is
+built, so a misconfigured deployment cannot open itself silently.
 
 Health probes stay exempt because orchestrators cannot be expected to hold the
 API token, and a failing probe would otherwise restart a healthy process.

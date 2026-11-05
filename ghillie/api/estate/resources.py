@@ -7,6 +7,7 @@ catalogue, registry, or SQLAlchemy modules: every failure they can see is an
 :mod:`ghillie.api.errors`.
 """
 
+import datetime as dt
 import typing as typ
 from http import HTTPStatus
 
@@ -164,13 +165,26 @@ def _estate_list_response(page: Page[EstateSummary]) -> EstateListResponse:
     )
 
 
+def _as_utc(value: dt.datetime) -> dt.datetime:
+    """Return *value* as an aware UTC timestamp.
+
+    SQLite drops ``tzinfo`` on round-trip, so a timestamp read back from a
+    self-hosted database is naive. The OpenAPI schema declares
+    ``format: date-time``, which requires an offset, so the wire value is
+    normalized here rather than trusting every backend to round-trip it.
+    """
+    if value.tzinfo is None:
+        return value.replace(tzinfo=dt.UTC)
+    return value.astimezone(dt.UTC)
+
+
 def _estate_summary(item: EstateSummary) -> EstateSummaryResponse:
     """Convert one estate summary into its wire representation."""
     last_import = None
     if item.last_import_commit_sha is not None and item.last_imported_at is not None:
         last_import = LastImportResponse(
             commit_sha=item.last_import_commit_sha,
-            imported_at=item.last_imported_at,
+            imported_at=_as_utc(item.last_imported_at),
         )
     return EstateSummaryResponse(
         key=item.key,
