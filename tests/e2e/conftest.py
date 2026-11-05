@@ -4,6 +4,10 @@ The server runs as its own process with a SQLite database and the opt-in
 bootstrap enabled, so these tests exercise the real ASGI lifespan and the HTTP
 boundary rather than in-process calls. Every server is started with a bearer
 token configured, so the authenticated path is what the journeys traverse.
+
+The CLI under test runs as a child process too, and `run_cli` hands it the
+server's token through `GHILLIE_AUTH_TOKEN`, so the CLI journey crosses the
+same authenticated boundary the HTTP journeys do.
 """
 
 from __future__ import annotations
@@ -32,6 +36,17 @@ _STARTUP_ATTEMPTS = 3
 _POLL_INTERVAL_S = 0.1
 _SHUTDOWN_TIMEOUT_S = 10.0
 _REQUEST_TIMEOUT_S = 5.0
+
+_CLI_ENVIRONMENT = (
+    "GHILLIE_API_BASE_URL",
+    "GHILLIE_API_TOKEN",
+    "GHILLIE_AUTH_TOKEN",
+    "GHILLIE_DRY_RUN",
+    "GHILLIE_LOG_LEVEL",
+    "GHILLIE_NON_INTERACTIVE",
+    "GHILLIE_OUTPUT",
+    "GHILLIE_REQUEST_TIMEOUT_S",
+)
 
 _SERVER_ENVIRONMENT = (
     "GHILLIE_STATUS_MODEL_BACKEND",
@@ -63,6 +78,19 @@ class GhillieServer:
         )
 
 
+@dataclasses.dataclass(frozen=True)
+class CliResult:
+    """Captured result of one CLI invocation."""
+
+    returncode: int
+    stdout: str
+    stderr: str
+
+    def detail(self) -> str:
+        """Return the streams for a failing assertion message."""
+        return f"exit={self.returncode}\nstdout:\n{self.stdout}\nstderr:\n{self.stderr}"
+
+
 def _find_free_port() -> int:
     """Return a currently free TCP port on the loopback interface."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -71,11 +99,11 @@ def _find_free_port() -> int:
 
 
 def _child_environment(home: Path, port: int, database: Path) -> dict[str, str]:
-    """Build a deterministic environment for the server child."""
+    """Build a deterministic environment for a server or CLI child."""
     env = {
         key: value for key, value in os.environ.items() if not key.startswith("PYTEST_")
     }
-    for name in _SERVER_ENVIRONMENT:
+    for name in (*_CLI_ENVIRONMENT, *_SERVER_ENVIRONMENT):
         env.pop(name, None)
     env.update(
         {
@@ -89,6 +117,32 @@ def _child_environment(home: Path, port: int, database: Path) -> dict[str, str]:
         }
     )
     return env
+
+
+def run_cli(
+    server: GhillieServer,
+    *arguments: str,
+    executable: typ.Sequence[str] | None = None,
+) -> CliResult:
+    """Run the CLI against *server* and capture its streams."""
+    command = list(executable or [sys.executable, "-m", "ghillie.cli"])
+    command += ["--api-base-url", server.base_url, *arguments]
+    home = server.home
+    env = _child_environment(
+        home, int(server.base_url.rsplit(":", 1)[1]), home / "cli.db"
+    )
+    # The server is started with a bearer token, so the CLI must present it.
+    env["GHILLIE_AUTH_TOKEN"] = server.token
+    completed = subprocess.run(  # noqa: S603 - arguments are test-controlled
+        command,
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    return CliResult(completed.returncode, completed.stdout, completed.stderr)
 
 
 def _wait_until_serving(process: subprocess.Popen[bytes], base_url: str) -> None:
