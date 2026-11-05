@@ -190,7 +190,7 @@ ghillie
     nice
 ```
 
-### Task 2.5.a scaffold status
+### Task 2.5.a scaffold status and Task 2.5.b estate delivery
 
 The first packaged operator CLI delivery is a scaffold, not a finished control
 plane. The implemented Task 2.5.a contract is:
@@ -199,6 +199,9 @@ plane. The implemented Task 2.5.a contract is:
 - Every documented noun and verb is registered under the packaged
   `ghillie/cli/` entry point, even where later tasks still own the real backend
   behaviour.
+- Task 2.5.b replaced the estate placeholders with live control-plane calls;
+  the estate section below records their request, response, and error shapes.
+  The remaining nouns still return `status: not_implemented` placeholders.
 - Root-global options are resolved before noun dispatch. The scaffold accepts
   `--api-base-url`, `--auth-token`, `--output`, `--log-level`,
   `--request-timeout-s`, `--non-interactive` or `--interactive`, and
@@ -259,44 +262,86 @@ Options: `--cluster-name`, `--namespace`, `--follow`, `--since`.
 
 ## Estate commands (manual estate configuration)
 
+All five estate verbs call the control plane (Task 2.5.b). They honour the root
+options `--api-base-url`, `--auth-token`, `--output`, `--dry-run`, and
+`--request-timeout-s`. `json` and `yaml` print the server document unchanged;
+`table` is human-oriented. Invalid local input exits `2`; a control-plane
+failure exits `3` with the documented envelope.
+
 ### `ghillie estate import`
 
 Purpose: import catalogue definitions into estate storage.
 
 Options:
 
-- `--estate-key <key>` (required)
-- `--catalogue-path <path>` (required)
+- `--estate-key <key>` (required; must match
+  `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+- `--catalogue-path <path>` (required; read as UTF-8 with any BOM stripped)
 - `--commit-sha <sha>` (required)
-- `--estate-name <name>` (optional)
+- `--estate-name <name>` (optional; defaults to the estate key)
+- root `--dry-run` maps to `?dry_run=true`
+
+Request: `POST /estates/{estate_key}/catalogue-import` with
+`{"commit_sha", "estate_name"?, "catalogue_yaml"}`. The CLI rejects a body
+larger than 1 MiB before sending it.
+
+Response: 200 with `estate_key`, `commit_sha`, `state`, `dry_run`, `skipped`,
+`skipped_reason`, `registry_sync_required`, and `created`/`updated`/`deleted`
+counts for `projects`, `components`, `repositories`, and `edges`. A repeat of
+an imported commit returns `skipped: true`; table output leads with `SKIPPED:`.
+
+Errors: `invalid_estate_key` and `catalogue_file_unreadable` (2);
+`catalogue_invalid` (422), `conflict` (409), `payload_too_large` (413), and
+`storage_unavailable` (503) (3).
 
 ### `ghillie estate sync`
 
-Purpose: sync imported catalogue repositories into operational registry.
+Purpose: project imported catalogue repositories into the registry.
 
 Options:
 
 - `--estate-key <key>` (required)
-- `--wait/--no-wait`
+- root `--dry-run` maps to `?dry_run=true`
+
+The sync is synchronous and idempotent; there is no `--wait` flag (D2).
+Response: 200 with `estate_key`, `state`, `dry_run`, `repositories_created`,
+`repositories_updated`, `repositories_deactivated`, `repositories_conflicted`,
+`repositories_left_disabled`, and `repositories_left_disabled_count` (the first
+100 slugs).
+
+Errors: `estate_not_found` (404), `registry_sync_failed` (500).
 
 ### `ghillie estate list`
 
 Purpose: list estates known to the control plane.
 
-Options:
+Options: none. Estates have no lifecycle state, so active and inactive flags
+are rejected (D4).
 
-- `--active/--inactive`
+Request: `GET /estates` with no query parameters. Response: 200 with `items`,
+`limit`, `offset`, `has_more`, and `next_offset`; each item carries `key`,
+`name`, `description`, and `last_import` (`commit_sha`, `imported_at`).
 
 ### `ghillie estate repo list`
 
-Purpose: list repositories for an estate.
+Purpose: list repositories for one estate.
 
 Options:
 
-- `--estate-key <key>`
-- `--active/--inactive`
-- `--limit <n>`
-- `--offset <n>`
+- `--estate-key <key>` (required)
+- `--ingestion-enabled` / `--active` (select enabled rows)
+- `--ingestion-disabled` / `--inactive` (select disabled rows)
+- `--limit <n>` (1 to 500, default 50)
+- `--offset <n>` (0 or more, default 0)
+
+Omitting both filter flags lists both states (D5). Request:
+`GET /estates/{estate_key}/repositories?ingestion_enabled?&limit&offset`.
+Response: 200 with `estate_key`, `items`, and the pagination metadata; each
+item carries `owner`, `name`, `default_branch`, `ingestion_enabled`, and
+`documentation_paths`. Results are ordered by owner and name.
+
+Errors: `estate_not_found` (404); an out-of-range `--limit` or `--offset` is
+rejected locally with exit `2` before any request.
 
 ### `ghillie estate repo set`
 
@@ -306,7 +351,18 @@ Options:
 
 - `--owner <owner>` (required)
 - `--name <repo>` (required)
-- `--ingestion-enabled/--ingestion-disabled` (required)
+- `--ingestion-enabled/--ingestion-disabled` (required; exactly one)
+
+Request: `PATCH /repositories/{owner}/{name}/ingestion` with
+`{"ingestion_enabled": bool}`. Each path segment is URL-quoted, so an owner or
+name containing `/` cannot change the route. Response: 200 with `owner`, `name`,
+`ingestion_enabled`, and `changed`.
+
+The endpoint has no dry-run mode. When root `--dry-run` is set, the command
+refuses locally with `dry_run_unsupported` and exit `2` rather than applying a
+live toggle (D6, D20).
+
+Errors: `repository_not_found` (404).
 
 ## Ingestion commands (two-week manual trigger + observability)
 
@@ -465,8 +521,8 @@ Lifecycle policy for this MVP:
 | `stack logs`          | no HTTP call                                   | existing (local) | Local log streaming via Kubernetes tooling; excluded from OpenAPI.       |
 | `stack status`        | `GET /ready`, `GET /health`                    | existing         | Reuses existing readiness and liveness paths.                            |
 | `estate list`         | `GET /estates`                                 | new              | Adds estate collection endpoint using plural-resource path style.        |
-| `estate import`       | `POST /estates/{estate_key}/catalogue-import`  | new              | Follows plural-resource path style.                                      |
-| `estate sync`         | `POST /estates/{estate_key}/registry-sync`     | new              | Follows plural-resource path style.                                      |
+| `estate import`       | `POST /estates/{estate_key}/catalogue-import`  | new              | Plural-resource path; optional `dry_run` query parameter.                |
+| `estate sync`         | `POST /estates/{estate_key}/registry-sync`     | new              | Plural-resource path; optional `dry_run` query parameter.                |
 | `estate repo list`    | `GET /estates/{estate_key}/repositories`       | new              | Follows plural-resource path style.                                      |
 | `estate repo set`     | `PATCH /repositories/{owner}/{name}/ingestion` | new              | Follows plural-resource path style.                                      |
 | `ingest run`          | `POST /ingestion/runs`                         | new              | Adds run resource; aligns with run-status paths.                         |
@@ -482,7 +538,8 @@ Lifecycle policy for this MVP:
 
 ### `--wait/--no-wait` run-state contract
 
-Applies to `stack up`, `estate sync`, `ingest run`, and `report run`.
+Applies to `stack up`, `ingest run`, and `report run`. Estate sync is
+synchronous and has no wait contract (D2).
 
 Non-terminal states:
 
@@ -533,7 +590,44 @@ Output contract:
 - `--output table` for operator readability.
 - `--output json` for automation.
 - `--output yaml` for YAML-oriented operator workflows.
-- Errors should include structured fields: `code`, `message`, and `hint`.
+
+Machine-readable modes print one error envelope (D7). `status` appears only
+when the service answered, and `issues` only when it supplied per-field
+problems:
+
+```json
+{
+  "error": {
+    "code": "catalogue_invalid",
+    "message": "The catalogue is invalid.",
+    "hint": "Fix the listed catalogue issues and import the catalogue again.",
+    "status": 422,
+    "issues": [{"code": "invalid_projects", "message": "expected an array"}]
+  }
+}
+```
+
+| Code                        | Exit | Meaning                                       |
+| --------------------------- | ---- | --------------------------------------------- |
+| `invalid_estate_key`        | 2    | Key fails the creation pattern.               |
+| `catalogue_file_unreadable` | 2    | File cannot be read as UTF-8.                 |
+| `request_too_large`         | 2    | Serialized body exceeds 1 MiB.                |
+| `dry_run_unsupported`       | 2    | Dry run requested for a live-only verb.       |
+| `estate_not_found`          | 3    | Estate key is unknown.                        |
+| `repository_not_found`      | 3    | Repository slug is unknown.                   |
+| `catalogue_invalid`         | 3    | Catalogue failed schema validation (422).     |
+| `conflict`                  | 3    | Stored commit conflicts with this import.     |
+| `invalid_input`             | 3    | A request field is malformed (400).           |
+| `payload_too_large`         | 3    | The service rejected the request size (413).  |
+| `unauthorized`              | 3    | The service requires or rejected a token.     |
+| `not_found`                 | 3    | No such route, or estate routes are disabled. |
+| `storage_unavailable`       | 3    | The catalogue store is unavailable (503).     |
+| `registry_sync_failed`      | 3    | The sync failed inside the service (500).     |
+| `internal_error`            | 3    | An unexpected service failure (500).          |
+| `transport`                 | 3    | The service could not be reached.             |
+| `timeout`                   | 3    | The request exceeded the timeout.             |
+| `invalid_response`          | 3    | A successful response was not a JSON object.  |
+| `http_<status>`             | 3    | Any other non-2xx response.                   |
 
 ## Security constraints
 
