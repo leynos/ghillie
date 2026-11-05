@@ -102,6 +102,16 @@ class TestCreateAppWithDeps:
         assert result.status_code != HTTPStatus.NOT_FOUND, "route should be registered"
 
 
+def test_app_dependencies_repr_does_not_expose_the_token() -> None:
+    """A token must not leak through a repr, log line, or traceback."""
+    deps = AppDependencies(
+        estate_service=EmptyEstateManagement(),
+        api_token="s3cret-token-value",  # noqa: S106 - test credential.
+    )
+
+    assert "s3cret-token-value" not in repr(deps), "repr must not expose the token"
+
+
 class TestCreateAppEstateRoutes:
     """Route families vary independently with their dependencies."""
 
