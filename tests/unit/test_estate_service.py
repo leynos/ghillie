@@ -36,6 +36,7 @@ if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from ghillie.estate.service import EstateManagementService
+    from tests.helpers.femtologging_capture import FemtoLogCapture
 
 _ESTATE_KEY = "demo"
 
@@ -136,6 +137,91 @@ async def test_mutation_log_escapes_a_hostile_commit_sha(
     )
     assert any("\\n" in message for message in mutation_lines), (
         "the control character should be visible as an escape"
+    )
+
+
+def _mutation_lines(logs: FemtoLogCapture, operation: str) -> list[str]:
+    """Return the captured mutation records for one operation."""
+    return [record.message for record in logs.records if operation in record.message]
+
+
+@pytest.mark.asyncio
+async def test_import_logs_one_terminal_record_when_it_succeeds(
+    service: EstateManagementService,
+) -> None:
+    """D21: a successful import emits exactly one terminal record with edge counts."""
+    with capture_femto_logs("ghillie.estate.service") as logs:
+        await import_catalogue(service)
+        logs.wait_for_timeout()
+
+    lines = _mutation_lines(logs, "estate.import")
+    assert len(lines) == 1, "a successful import should log exactly one record"
+    assert "outcome=succeeded" in lines[0], "the record should name the outcome"
+    assert "edges=0/0/0" in lines[0], "the record should report edge counts"
+    assert "duration_ms=" in lines[0], "the record should report its duration"
+
+
+@pytest.mark.asyncio
+async def test_import_logs_one_terminal_record_when_it_is_skipped(
+    service: EstateManagementService,
+) -> None:
+    """D21: a repeated commit logs one terminal record, not a success line."""
+    await import_catalogue(service, commit_sha="c1")
+
+    with capture_femto_logs("ghillie.estate.service") as logs:
+        await import_catalogue(service, commit_sha="c1")
+        logs.wait_for_timeout()
+
+    lines = _mutation_lines(logs, "estate.import")
+    assert len(lines) == 1, "a skipped import should log exactly one record"
+    assert "outcome=skipped" in lines[0], "the record should name the skip"
+
+
+@pytest.mark.asyncio
+async def test_import_logs_one_terminal_record_when_it_fails(
+    service: EstateManagementService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D21: a failed attempt logs one terminal record with its error class."""
+
+    async def _conflict(
+        _self: CatalogueImporter,
+        _catalogue: object,
+        *,
+        commit_sha: str | None = None,
+        dry_run: bool = False,
+    ) -> CatalogueImportResult:
+        raise IntegrityError("INSERT", {}, Exception("duplicate"))
+
+    monkeypatch.setattr(CatalogueImporter, "import_catalogue", _conflict)
+
+    with capture_femto_logs("ghillie.estate.service") as logs:
+        with pytest.raises(EstateConflictError):
+            await import_catalogue(service)
+        logs.wait_for_timeout()
+
+    lines = _mutation_lines(logs, "estate.import")
+    assert len(lines) == 1, "a failed import should log exactly one record"
+    assert "outcome=failed" in lines[0], "the record should name the failure"
+    assert "error=EstateConflictError" in lines[0], "the record should name the error"
+    assert "duration_ms=" in lines[0], "the record should report its duration"
+
+
+@pytest.mark.asyncio
+async def test_import_logs_a_rejected_document_as_a_failed_attempt(
+    service: EstateManagementService,
+) -> None:
+    """D21: a document rejected before the lock still produces one record."""
+    with capture_femto_logs("ghillie.estate.service") as logs:
+        with pytest.raises(CatalogueRejectedError):
+            await import_catalogue(service, catalogue_yaml="version: [unclosed")
+        logs.wait_for_timeout()
+
+    lines = _mutation_lines(logs, "estate.import")
+    assert len(lines) == 1, "a rejection should log exactly one record"
+    assert "outcome=failed" in lines[0], "the record should name the failure"
+    assert "error=CatalogueRejectedError" in lines[0], (
+        "the record should name the error"
     )
 
 

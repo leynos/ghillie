@@ -307,6 +307,51 @@ def test_import_rejects_a_body_over_the_limit_by_content_length(
     assert service.imports == [], "invalid input should not reach the service"
 
 
+def _import_body_of_size(size: int) -> bytes:
+    """Return a JSON import body whose serialized form is exactly *size* bytes.
+
+    The padding mixes a multibyte character with a JSON-escaped newline, so the
+    body's character count is well below its byte count. A limit enforced on
+    characters instead of bytes would therefore accept an oversized body.
+    """
+    body = {"commit_sha": "c1", "catalogue_yaml": ""}
+    padding = size - len(json.dumps(body, ensure_ascii=False).encode())
+    assert padding >= 0, "the requested size must fit the envelope"
+    unit = "é\n"
+    unit_bytes = len(json.dumps(unit, ensure_ascii=False).encode()) - 2
+    repeats, remainder = divmod(padding, unit_bytes)
+    body["catalogue_yaml"] = unit * repeats + "x" * remainder
+    encoded = json.dumps(body, ensure_ascii=False).encode()
+    assert len(encoded) == size, "the helper must hit the requested byte size"
+    return encoded
+
+
+@pytest.mark.parametrize("offset", [-1, 0, 1])
+def test_body_limit_boundary(
+    client: falcon.testing.TestClient,
+    service: FakeEstateManagement,
+    offset: int,
+) -> None:
+    """O5: the server accepts exactly the bodies at or under the byte limit."""
+    size = _MAX_REQUEST_BODY_BYTES + offset
+    body = _import_body_of_size(size)
+    assert len(body.decode()) < size, "multibyte padding must separate bytes and chars"
+
+    result = client.simulate_post(
+        "/estates/demo/catalogue-import",
+        body=body,
+        headers={"Content-Type": "application/json"},
+    )
+
+    if offset <= 0:
+        assert result.status_code == 200, result.text
+        assert service.imports, "an accepted body should reach the service"
+    else:
+        assert result.status_code == 413, "expected 413 one byte over the limit"
+        assert result.json["code"] == "payload_too_large", "expected the size code"
+        assert service.imports == [], "an oversized body should not reach the service"
+
+
 @pytest.mark.asyncio
 async def test_import_rejects_a_streamed_body_over_the_limit() -> None:
     """A chunked body is stopped after one byte over the limit."""

@@ -6,11 +6,15 @@ mode returns the documented status and stable ``code``.
 
 from __future__ import annotations
 
+import asyncio
 import typing as typ
 
 import falcon.testing
+import httpx
+import pytest
 
 from ghillie.api.app import AppDependencies, create_app
+from ghillie.catalogue.importer import CatalogueImporter
 from ghillie.estate.errors import (
     CatalogueRejectedError,
     EstateConflictError,
@@ -23,8 +27,15 @@ from ghillie.estate.errors import (
     StorageUnavailableError,
 )
 from tests.helpers.femtologging_capture import capture_femto_logs
+from tests.unit.estate_test_helpers import (
+    build_registry,
+    build_service,
+    catalogue_document,
+)
 
 if typ.TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
     from ghillie.estate.models import (
         CatalogueImportRequest,
         CatalogueImportSummary,
@@ -251,6 +262,83 @@ def test_wrong_method_is_method_not_allowed() -> None:
     result = _client(StorageUnavailableError("unused")).simulate_delete("/estates")
 
     _assert_error(result, status=405, code="method_not_allowed")
+
+
+def _no_storage_details(text: str) -> bool:
+    """Return true when *text* carries no SQL or driver detail (D7)."""
+    lowered = text.lower()
+    forbidden = ("insert into", "duplicate key", "unique constraint", "asyncpg")
+    return not any(fragment in lowered for fragment in forbidden)
+
+
+@pytest.mark.asyncio
+async def test_over_long_field_is_invalid_input_through_the_real_service(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """O4: the over-long-field row holds over the real service and database."""
+    service = build_service(session_factory, build_registry(session_factory))
+    app = create_app(AppDependencies(estate_service=service))
+    transport = httpx.ASGITransport(app=typ.cast("typ.Any", app))
+    body = {
+        "commit_sha": "c1",
+        "catalogue_yaml": "version: 1\n",
+        "estate_name": "x" * 256,
+    }
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post("/estates/demo/catalogue-import", json=body)
+
+    assert response.status_code == 400, response.text
+    assert response.json()["code"] == "invalid_input", "expected invalid_input"
+    assert _no_storage_details(response.text), "the body must not leak storage detail"
+
+
+@pytest.mark.asyncio
+async def test_conflict_through_the_real_service_is_a_409(
+    session_factory: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """O4: a real uniqueness conflict becomes a 409 without database detail.
+
+    Two app instances share one database, and neither can see the other's
+    uncommitted estate. A barrier releases both imports after their existence
+    check, so the loser's flush hits the unique key and the service translates
+    the resulting ``IntegrityError``.
+    """
+    registry = build_registry(session_factory)
+    apps = [
+        create_app(
+            AppDependencies(estate_service=build_service(session_factory, registry))
+        )
+        for _ in range(2)
+    ]
+    barrier = asyncio.Barrier(2)
+    original = CatalogueImporter._ensure_estate
+
+    async def _synchronized(self: CatalogueImporter, session: AsyncSession) -> object:
+        await barrier.wait()
+        return await original(self, session)
+
+    monkeypatch.setattr(CatalogueImporter, "_ensure_estate", _synchronized)
+    body = {"commit_sha": "c1", "catalogue_yaml": catalogue_document()}
+
+    async def _import(app: object) -> httpx.Response:
+        transport = httpx.ASGITransport(app=typ.cast("typ.Any", app))
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as client:
+            return await client.post("/estates/demo/catalogue-import", json=body)
+
+    responses = await asyncio.wait_for(
+        asyncio.gather(*(_import(app) for app in apps)), timeout=30
+    )
+
+    assert sorted(response.status_code for response in responses) == [200, 409], (
+        "one import should succeed and the other should conflict"
+    )
+    conflict = next(response for response in responses if response.status_code == 409)
+    assert conflict.json()["code"] == "conflict", "expected the conflict code"
+    assert _no_storage_details(conflict.text), "the body must not leak storage detail"
 
 
 def test_falcon_http_error_keeps_its_description() -> None:
