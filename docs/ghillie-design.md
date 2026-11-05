@@ -750,6 +750,13 @@ The following components are implemented:
 - **Session middleware** (`SQLAlchemySessionManager`): Provides
   request-scoped `AsyncSession` instances with automatic commit/rollback/close
   per the pattern documented in `async-sqlalchemy-with-pg-and-falcon.md`.
+- **Estate management endpoints** (Task 2.5.b):
+  `POST /estates/{estate_key}/catalogue-import`,
+  `POST /estates/{estate_key}/registry-sync`, `GET /estates`,
+  `GET /estates/{estate_key}/repositories`, and
+  `PATCH /repositories/{owner}/{name}/ingestion`. They delegate to
+  `ghillie.estate.ports.EstateManagement` and render one error envelope (D7,
+  §8.5).
 - **Error handlers**: Render every failure through the shared envelope with a
   stable `code`, including Falcon's own HTTP errors and unexpected exceptions.
 
