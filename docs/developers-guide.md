@@ -413,8 +413,10 @@ adapters. Keep new estate work inside that shape.
   rather than hand-building dictionaries.
 - **One envelope.** Every failure uses `{"title", "description", "code"}` plus
   the optional `field`, `issues`, and `max_bytes` members (D7). The CLI's
-  `ControlPlaneError` reads the same members, so a new server code reaches the
-  operator without a client change.
+  `ControlPlaneError` retains the `code`, the description, and the `issues`
+  list; it does not read `field` or `max_bytes`. An unknown server code still
+  reaches the operator unchanged and gets a fallback hint, so a new code needs
+  no client change.
 - **Keep port package initializers docstring-only.**
   `ghillie/estate/__init__.py` re-exports nothing. Importing the service from
   it would pull `ghillie.catalogue` — and its Dramatiq broker guard — into

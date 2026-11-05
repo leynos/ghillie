@@ -708,8 +708,8 @@ The following components are implemented:
   `POST /estates/{estate_key}/registry-sync`, `GET /estates`,
   `GET /estates/{estate_key}/repositories`, and
   `PATCH /repositories/{owner}/{name}/ingestion`. They delegate to
-  `ghillie.estate.ports.EstateManagementPort` and render one error envelope
-  (D7, §8.5).
+  `ghillie.estate.ports.EstateManagement` and render one error envelope (D7,
+  §8.5).
 - **Error handlers**: Map `RepositoryNotFoundError` to 404, `InvalidInputError`
   to 400, and the estate exceptions to their documented codes and statuses.
 

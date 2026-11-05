@@ -856,6 +856,13 @@ per pull request.
         and `spelling` passed sequentially (logs `/tmp/gate-C2-*.out`). This
         final paragraph is a Markdown-only change, so the same `check-fmt`,
         `markdownlint`, `nixie`, and `spelling` gates cover it.
+  - [x] (2026-11-05) The r2 assessment confirmed the five r1 areas and found
+        two residual documentation statements, both corrected: §8.4 named
+        `EstateManagementPort` where the implemented protocol is
+        `EstateManagement`, and the developers' guide claimed the CLI reads
+        `field` and `max_bytes` when it reads only `code`, the description, and
+        `issues`. The CLI still carries an unknown server code with a fallback
+        hint, so no client change is needed for a new code.
 
 ## Surprises & discoveries
 
