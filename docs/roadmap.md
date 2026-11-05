@@ -437,7 +437,7 @@ single `cyclopts` CLI, without ad hoc scripts.
   for the CLI scaffold, and `pytest-bdd` coverage for help output, root option
   parsing, and invalid backend rejection.
 
-- [ ] **Task 2.5.b – Add estate-management APIs and CLI commands**
+- [x] **Task 2.5.b – Add estate-management APIs and CLI commands**
   Implement API endpoints and CLI commands for the following estate operations:
   - catalogue import per estate,
   - registry sync from catalogue,
@@ -447,6 +447,17 @@ single `cyclopts` CLI, without ad hoc scripts.
 
   *Completion criteria:* An operator can configure estate repositories end to
   end via CLI and HTTP APIs, with no direct Python scripting.
+
+  *Implemented:* The runtime exposes five estate endpoints (catalogue import,
+  registry sync, estate listing, repository listing, and ingestion toggling)
+  documented in OpenAPI 3.1, and
+  `ghillie estate import|sync|list|repo list| repo set` drives them from the
+  CLI. Import and sync support dry runs; the live-only toggle refuses one
+  locally. A registry sync preserves operator ingestion toggles (ADR-005), and
+  the work is covered by unit tests, `pytest-bdd` scenarios, and an end-to-end
+  test that runs the packaged console script against a real server process.
+  Delivered as three stacked pull requests (D19); the runtime-profile hand-off
+  remains in Task 2.5.e.
 
 - [ ] **Task 2.5.c – Add manual ingestion run APIs with run-state tracking**
   Implement explicit ingestion run triggering (`repository` or `estate` scope)
@@ -477,6 +488,13 @@ single `cyclopts` CLI, without ad hoc scripts.
 
   *Completion criteria:* `api-only` startup with no background workers is a
   documented, repeatable command path with readiness checks.
+
+  *Carried forward from Task 2.5.b (D15):* the estate control plane needs a
+  database and an optional bootstrap. `GHILLIE_DATABASE_URL` selects the
+  database, `GHILLIE_DB_BOOTSTRAP=create-all` creates missing tables for local
+  runs, and `GHILLIE_API_TOKEN` enables bearer auth. The runtime profiles added
+  here should state which variables each profile expects and leave
+  `GHILLIE_DB_BOOTSTRAP` unset in production, where migrations own the schema.
 
 ### 2.6. Deliver structured exports and required MVP metrics
 

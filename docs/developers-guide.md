@@ -388,6 +388,59 @@ Tests that need to inspect emitted logs should use the
 named logger without routing through `logging.getLogger`, which would bypass
 the femtologging integration entirely.
 
+## Estate control-plane adapters
+
+Task 2.5.b exposes estate configuration through one application service and two
+adapters. Keep new estate work inside that shape.
+
+- **Port first.** Add a method to
+  `ghillie.estate.ports.EstateManagementPort` and implement it in
+  `ghillie.estate.service.EstateManagementService`. The HTTP resources in
+  `ghillie/api/estate/resources.py` and the CLI verbs in
+  `ghillie/cli/commands/estate.py` call the port; neither imports
+  `ghillie.catalogue` or `ghillie.registry` directly. Hecate enforces the
+  boundary, and O6 requires that importing `ghillie.cli.app` loads nothing
+  under those packages or `sqlalchemy`.
+- **One error vocabulary.** Raise the exceptions in
+  `ghillie.estate.errors`; the API maps them to statuses and D7 codes, and the
+  CLI maps the same codes to operator hints. Do not introduce a second error
+  type per adapter.
+- **msgspec at the wire.** Request and response bodies are msgspec `Struct`s in
+  `ghillie/api/estate/schemas.py` (D8). Decode with
+  `msgspec.json.decode(..., type=Struct)` and let `msgspec.ValidationError`
+  become the documented `invalid_input` response. Add new fields to the structs
+  rather than hand-building dictionaries.
+- **One envelope.** Every failure uses `{"title", "description", "code"}` plus
+  the optional `field`, `issues`, and `max_bytes` members (D7). The CLI's
+  `ControlPlaneError` reads the same members, so a new server code reaches the
+  operator without a client change.
+- **Keep port package initializers docstring-only.**
+  `ghillie/estate/__init__.py` re-exports nothing. Importing the service from
+  it would pull `ghillie.catalogue` — and its Dramatiq broker guard — into
+  every consumer of the pure models, breaking O6 for the CLI and forcing broker
+  configuration on tests that only need the dataclasses. Import concrete
+  modules explicitly.
+- **Duplicated CLI constants are deliberate.** The CLI re-declares
+  `MAX_REQUEST_BODY_BYTES` and `NEW_ESTATE_KEY_PATTERN` because O6 forbids
+  importing the server-side modules. The unit tests assert equality with the
+  originals, so a change on one side fails the suite until both are updated.
+
+### Behavioural and end-to-end coverage
+
+The estate feature file (`tests/features/estate_management.feature`) drives the
+real CLI against an in-process ASGI app. The `estate_state` fixture builds the
+SQLite engine, the application service, and the Falcon app, then patches
+`ghillie.cli.control_plane.httpx.Client` to send through
+`tests/helpers/runner_transport.RunnerTransport`. That transport runs the async
+client on an `asyncio.Runner`, which bridges the synchronous CLI to the ASGI
+app without a socket.
+
+`tests/e2e/test_estate_management_e2e.py` starts the packaged runtime as a
+subprocess on a free port, runs the installed console script against it over
+real HTTP, and then repeats the key calls with raw `httpx` to prove the wire
+contract. End-to-end tests carry the `e2e` marker and are part of `make test`;
+opt out with `-m "not e2e"` when a database-backed subprocess is not wanted.
+
 ## Helm chart for local and GitOps (Git-driven operations) previews
 
 The `charts/ghillie` Helm chart deploys Ghillie to Kubernetes clusters for both
@@ -702,6 +755,23 @@ GHILLIE_TEST_DB=sqlite make test
 
 ```bash
 make helm-test
+```
+
+### Estate end-to-end tests only
+
+```bash
+uv run pytest -v tests/e2e
+```
+
+These tests start the runtime as a subprocess, so they need a free loopback
+port and a writable temporary directory. Run them without `-n auto` when
+diagnosing a failure, because the subprocess output is attached to the test
+report.
+
+### Opting out of end-to-end tests
+
+```bash
+uv run pytest -m "not e2e"
 ```
 
 ## Documentation

@@ -740,8 +740,64 @@ per pull request.
         amendment. The trivial finding was also valid: the BOM test wrote a
         raw U+FEFF; it now uses the visible `\ufeff` escape. A new unit test
         asserts the refusal sends no request.
-- [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
-- [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
+  - [x] (2026-11-05) A second milestone review of `e59b4f1` re-examined the
+        repaired work and raised eight findings, all valid and repaired in the
+        same commit. The shared `catalogue_file` fixture moved to
+        `tests/unit/cli/conftest.py`; `ControlPlaneClient.request_json` now
+        types its method as `http.HTTPMethod`; `_format_value` uses structural
+        pattern matching; the three renderers gained NumPy-style parameter and
+        return sections; `httpx.RequestError` (not only `ConnectError`) became
+        the transport branch with a parametrized test over redirect and
+        decoding errors; the redaction test split the bearer and URL-credential
+        cases because `httpx` replaces a bearer header with basic auth when the
+        URL carries credentials; `estate repo set` gained its dry-run refusal
+        test; and the BOM literal became `\ufeff`. A third review then raised
+        one stylistic finding — the `catalogue_invalid` hint said "listed
+        above" although table output prints `Hint:` before `Issue:` — and the
+        wording became "Fix the listed catalogue issues".
+- [x] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
+  - [x] (2026-11-05) Red artefacts written before the harness:
+        `tests/features/estate_management.feature` (nine scenarios covering
+        import, skipped re-import, dry run, sync and list, a disabled
+        repository surviving re-sync, unknown estate, invalid catalogue,
+        unknown repository toggle, and invalid pagination),
+        `tests/features/steps/test_estate_management_steps.py`,
+        `tests/helpers/runner_transport.py`, and `tests/e2e/` (`conftest.py`
+        plus `test_estate_management_e2e.py`).
+  - [x] (2026-11-05) The in-process harness builds a SQLite engine with
+        `StaticPool`, initializes storage, wires
+        `EstateManagementService` into `create_app`, and patches
+        `ghillie.cli.control_plane.httpx.Client` with `functools.partial` so
+        every command sends through `RunnerTransport`. `RunnerTransport`
+        re-wraps the ASGI response in a fresh synchronous `httpx.Response`;
+        returning the async response directly made the sync client raise
+        `StreamConsumed`. The e2e fixture starts the packaged runtime on a free
+        port with a clean environment, waits for `/estates` to answer, runs the
+        console script over real HTTP, and repeats key calls with raw `httpx`
+        to prove the wire contract.
+  - [x] (2026-11-05) Focused evidence: nine BDD scenarios pass, the e2e test
+        passes in 6.19s, and the full gate run at `e59b4f1` reported 1514
+        passed, 11 skipped, and 12 snapshots in 124.83s. The `e2e` marker is
+        registered in `pyproject.toml` so `-m "not e2e"` opts out.
+- [x] PR-C, EP-M6: documentation, roadmap, and final gates.
+  - [x] (2026-11-05) Documentation updated to match behaviour: the users' guide
+        gained "Estate management through the CLI and API (Task 2.5.b)" with
+        the five endpoints, request and response examples, dry runs, toggle
+        rules, the `repositories_left_disabled` and `repositories_conflicted`
+        semantics, a `jq` bulk re-enable recipe, the error-code table, and the
+        start-up variables; the CLI specification's estate section was
+        rewritten from its 2.5.a placeholders and gained the D7 envelope and
+        code table; the design document gained §8.5 and an updated §8.4 module
+        tree; the developers' guide gained the adapter, error-vocabulary,
+        msgspec, `RunnerTransport`, and `e2e` guidance; the gap analysis marks
+        estate configuration met; the roadmap marks Task 2.5.b done and
+        carries D15 into Task 2.5.e.
+  - [x] (2026-11-05) The third review's `catalogue_invalid` hint was reworded
+        and its snapshot and documentation updated. Final gates on the
+        complete working tree: `check-fmt`, `check-architecture`, `typecheck`,
+        `lint` (Hecate, Ruff, Skylos), `test` (1514 passed, 11 skipped, 12
+        snapshots, exit 0), `markdownlint` (58 files, 0 issues), `nixie`, and
+        `spelling` all green.
 
 ## Surprises & discoveries
 
@@ -1093,8 +1149,9 @@ expert-panel review.
 
 ## Outcomes & retrospective
 
-Not complete. On completion record, per pull request, what shipped against the
-success criteria, the gate results, and the hand-off of D15 to Task 2.5.e.
+Complete. Each pull request records below what shipped against the success
+criteria and its gate results; the D15 hand-off is carried in the roadmap's
+Task 2.5.e entry.
 
 ### PR-A, EP-M1 (complete)
 
@@ -1165,6 +1222,34 @@ ordering, secret redaction, and input decoding. Two lessons carried forward:
 validate untrusted input against the storage contract rather than mapping the
 database's error afterwards, and treat a seeded legacy key as a first-class
 case whenever a new key format is introduced.
+
+### PR-C, EP-M4 to EP-M6 (complete)
+
+Outcome: the `estate` CLI verbs are live. `ghillie/cli/commands/estate.py`
+implements import (local UTF-8 read with BOM stripping, key and body-size
+validation, exact serialized bytes on the wire), sync, estate listing, paged
+repository listing, and the ingestion toggle, with a local refusal for
+`--dry-run` on the live-only toggle. `ghillie/cli/control_plane.py` carries the
+error taxonomy and the D7 envelope reader, and `ghillie/cli/output.py` renders
+documents, collections, and failures for `table`, `json`, and `yaml`.
+Behavioural coverage runs the real CLI against an in-process ASGI app through
+`RunnerTransport`; the `e2e` test runs the packaged console script against a
+real server process and re-checks the wire contract with raw `httpx`.
+Documentation and the roadmap now describe the shipped behaviour.
+
+Evidence: the CLI unit suite (119 tests, 10 snapshots), nine BDD scenarios, and
+one e2e test pass. The final eight-gate run on the complete working tree
+reported 1514 passed, 11 skipped, 12 snapshots in 131.59s, with formatting,
+architecture, types, lint, Markdown, Mermaid, and spelling all clean. Three
+CodeRabbit CLI milestone reviews were triaged; every valid finding was repaired
+with a failing test first.
+
+Retrospective: the `--dry-run` gap appeared because the root option was
+threaded through the client but not checked by the one verb with no dry-run
+parameter; the fix makes the command refuse locally instead of relying on the
+server. The second review showed the same class of issue in the hint text —
+"listed above" assumed a rendering order the table output does not use — which
+is why hints now name the object rather than its position.
 
 ## Context and orientation
 
@@ -1915,9 +2000,11 @@ def parse_catalogue_text(text: str) -> Catalogue: ...
 async def init_all_storage(engine: AsyncEngine) -> None: ...
 
 # ghillie/cli/control_plane.py
+import http  # under `if TYPE_CHECKING:`
+
 class ControlPlaneClient:
     def request_json(
-        self, method: str, path_segments: cabc.Sequence[str], *,
+        self, method: http.HTTPMethod, path_segments: cabc.Sequence[str], *,
         params: cabc.Mapping[str, str] | None = None,
         body: cabc.Mapping[str, object] | None = None,
     ) -> dict[str, object]: ...
