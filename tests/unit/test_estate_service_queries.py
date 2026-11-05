@@ -453,6 +453,36 @@ async def test_set_ingestion_logs_one_terminal_record_when_it_fails(
 
 
 @pytest.mark.asyncio
+async def test_set_ingestion_logs_one_terminal_record_for_an_unexpected_error(
+    service: EstateManagementService,
+    registry: RepositoryRegistryService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D21: an unexpected toggle failure is recorded once and re-raised.
+
+    ``set_ingestion`` translates the two failures it understands. Any other
+    exception must still leave one terminal record, because a direct service
+    caller has no HTTP catch-all to log it, and the exception must reach that
+    caller unchanged.
+    """
+
+    async def _fail(_owner: str, _name: str) -> bool:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(registry, "enable_ingestion", _fail)
+
+    with capture_femto_logs("ghillie.estate.service") as logs:
+        with pytest.raises(RuntimeError, match="boom"):
+            await service.set_ingestion(_OWNER, _REPO_NAME, enabled=True)
+        logs.wait_for_timeout()
+
+    lines = _mutation_lines(logs, "estate.set-ingestion")
+    assert len(lines) == 1, "an unexpected failure should log exactly one record"
+    assert "outcome=failed" in lines[0], "the record should name the failure"
+    assert "error=RuntimeError" in lines[0], "the record should name the error"
+
+
+@pytest.mark.asyncio
 async def test_set_ingestion_translates_repository_not_found(
     service: EstateManagementService,
 ) -> None:
