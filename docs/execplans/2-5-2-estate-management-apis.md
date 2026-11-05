@@ -532,6 +532,15 @@ per pull request.
         annotated `estate_ids` as `typ.Sequence`. It now imports
         `collections.abc` under `TYPE_CHECKING` and uses `cabc.Sequence`, per
         the repository rule that ABCs come from their defining module.
+        A sixth pass returned two findings, both accepted:
+        - `handle_storage_unavailable` now logs the chained exception before
+          rendering the 503, matching the other server-fault handlers; a
+          `capture_femto_logs` test asserts the line.
+        - `_log_mutation` renders the client-supplied `estate_key` and
+          `commit_sha` with `%r`. A newline can no longer split the record or
+          forge a second line; a red-then-green test feeds a hostile
+          `commit_sha` and asserts the record stays single-line with a visible
+          escape.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.

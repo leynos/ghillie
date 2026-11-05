@@ -29,6 +29,7 @@ from ghillie.estate.errors import (
     InvalidEstateKeyError,
     StorageUnavailableError,
 )
+from tests.helpers.femtologging_capture import capture_femto_logs
 from tests.unit.estate_test_helpers import count_rows, import_catalogue
 
 if typ.TYPE_CHECKING:
@@ -108,6 +109,33 @@ async def test_import_dry_run_leaves_no_catalogue_rows(
     )
     assert await count_rows(session_factory, ProjectRecord) == 0, (
         "dry run should leave no project rows"
+    )
+
+
+@pytest.mark.asyncio
+async def test_mutation_log_escapes_a_hostile_commit_sha(
+    service: EstateManagementService,
+) -> None:
+    """D21: a control character cannot forge a second log line.
+
+    ``commit_sha`` is client-supplied and only length-checked, so a newline
+    followed by a plausible suffix must not split the structured record.
+    """
+    hostile = "c1\nestate.import estate_key=forged outcome=succeeded"
+
+    with capture_femto_logs("ghillie.estate.service") as logs:
+        await import_catalogue(service, commit_sha=hostile, dry_run=True)
+        logs.wait_for_timeout()
+
+    mutation_lines = [
+        record.message for record in logs.records if "estate.import" in record.message
+    ]
+    assert mutation_lines, "the import should log one mutation line"
+    assert all("\n" not in message for message in mutation_lines), (
+        "the mutation record must stay on one line"
+    )
+    assert any("\\n" in message for message in mutation_lines), (
+        "the control character should be visible as an escape"
     )
 
 

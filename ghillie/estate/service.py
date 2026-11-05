@@ -554,10 +554,15 @@ def _log_mutation(  # noqa: PLR0913 - every structured log field is required by 
     started: float,
     details: str,
 ) -> None:
-    """Write the one structured mutation line required by D21."""
+    """Write the one structured mutation line required by D21.
+
+    ``estate_key`` and ``commit_sha`` come from the request, so they are
+    rendered with ``%r``: a newline or other control character must appear as
+    an escape rather than split the record into a forged second line.
+    """
     log_info(
         logger,
-        "%s estate_key=%s commit_sha=%s dry_run=%s %s duration_ms=%.1f outcome=%s",
+        "%s estate_key=%r commit_sha=%r dry_run=%s %s duration_ms=%.1f outcome=%s",
         operation,
         estate_key,
         commit_sha or "-",
