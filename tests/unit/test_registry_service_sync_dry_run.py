@@ -24,6 +24,9 @@ if typ.TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+    from ghillie.registry import SyncResult
+    from tests.unit.registry_service_sync_helpers import SilverSnapshot
+
 
 @pytest.mark.asyncio
 async def test_sync_dry_run_leaves_registry_unchanged(
@@ -44,66 +47,40 @@ async def test_sync_dry_run_leaves_registry_unchanged(
     assert persisted == [], "A dry run must persist no Silver rows"
 
 
-@pytest.mark.asyncio
-async def test_sync_dry_run_leaves_existing_rows_unchanged(
-    session_factory: async_sessionmaker[AsyncSession],
-    registry_service: RepositoryRegistryService,
-    tmp_path: Path,
-) -> None:
-    """A dry run reports updates and removals without persisting either."""
-    initial = tmp_path / "catalogue-v1.yaml"
-    initial.write_text(
-        """
-version: 1
-projects:
-  - key: alpha
-    name: Alpha
-    components:
-      - key: alpha-api
+_ALPHA_API_COMPONENT = """      - key: alpha-api
         name: Alpha API
         repository:
           owner: leynos
           name: alpha-api
-          default_branch: main
-      - key: alpha-retired
+          default_branch: {branch}"""
+
+_ALPHA_RETIRED_COMPONENT = """      - key: alpha-retired
         name: Alpha Retired
         repository:
           owner: leynos
           name: alpha-retired
-          default_branch: main
-""",
-        encoding="utf-8",
-    )
-    updated = tmp_path / "catalogue-v2.yaml"
-    updated.write_text(
-        """
-version: 1
-projects:
-  - key: alpha
-    name: Alpha
-    components:
-      - key: alpha-api
-        name: Alpha API
-        repository:
-          owner: leynos
-          name: alpha-api
-          default_branch: develop
-""",
+          default_branch: main"""
+
+
+def _write_alpha_catalogue(path: Path, *, branch: str, retired: bool) -> None:
+    """Write a one-project catalogue whose alpha-api branch is configurable."""
+    components = [_ALPHA_API_COMPONENT.format(branch=branch)]
+    if retired:
+        components.append(_ALPHA_RETIRED_COMPONENT)
+    path.write_text(
+        "version: 1\nprojects:\n  - key: alpha\n    name: Alpha\n"
+        "    components:\n" + "\n".join(components) + "\n",
         encoding="utf-8",
     )
 
-    importer = CatalogueImporter(
-        session_factory, estate_key="test", estate_name="Test Estate"
-    )
-    await importer.import_path(initial, commit_sha="dry-run-existing-1")
-    await registry_service.sync_from_catalogue("test")
-    before = await fetch_silver_repo(session_factory, "leynos", "alpha-api")
-    assert before is not None, "The first sync should create alpha-api"
-    snapshot_before = await snapshot_silver_repos(session_factory)
 
-    await importer.import_path(updated, commit_sha="dry-run-existing-2")
-    result = await registry_service.sync_from_catalogue("test", dry_run=True)
-
+async def _assert_dry_run_left_rows_unchanged(
+    session_factory: async_sessionmaker[AsyncSession],
+    result: SyncResult,
+    before: Repository,
+    snapshot_before: SilverSnapshot,
+) -> None:
+    """Assert the dry run reported changes but persisted none of them."""
     assert result.repositories_updated == 1, "Dry run should report one update"
     assert result.repositories_deactivated == 1, "Dry run should report one removal"
     assert await snapshot_silver_repos(session_factory) == snapshot_before, (
@@ -119,6 +96,35 @@ projects:
     assert retired is not None, "alpha-retired should still exist after the dry run"
     assert retired.ingestion_enabled is True, (
         "Dry run must not disable a repository it would remove"
+    )
+
+
+@pytest.mark.asyncio
+async def test_sync_dry_run_leaves_existing_rows_unchanged(
+    session_factory: async_sessionmaker[AsyncSession],
+    registry_service: RepositoryRegistryService,
+    tmp_path: Path,
+) -> None:
+    """A dry run reports updates and removals without persisting either."""
+    initial = tmp_path / "catalogue-v1.yaml"
+    _write_alpha_catalogue(initial, branch="main", retired=True)
+    updated = tmp_path / "catalogue-v2.yaml"
+    _write_alpha_catalogue(updated, branch="develop", retired=False)
+
+    importer = CatalogueImporter(
+        session_factory, estate_key="test", estate_name="Test Estate"
+    )
+    await importer.import_path(initial, commit_sha="dry-run-existing-1")
+    await registry_service.sync_from_catalogue("test")
+    before = await fetch_silver_repo(session_factory, "leynos", "alpha-api")
+    assert before is not None, "The first sync should create alpha-api"
+    snapshot_before = await snapshot_silver_repos(session_factory)
+
+    await importer.import_path(updated, commit_sha="dry-run-existing-2")
+    result = await registry_service.sync_from_catalogue("test", dry_run=True)
+
+    await _assert_dry_run_left_rows_unchanged(
+        session_factory, result, before, snapshot_before
     )
 
 
