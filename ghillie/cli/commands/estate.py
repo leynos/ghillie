@@ -55,7 +55,9 @@ _HINTS = {
         "Run `ghillie estate repo list --estate-key <key>` to see the "
         "registered repositories."
     ),
-    "catalogue_invalid": "Fix the issues listed above and import the catalogue again.",
+    "catalogue_invalid": (
+        "Fix the listed catalogue issues and import the catalogue again."
+    ),
     "not_found": (
         "The endpoint is unavailable; the service may be running in health-only "
         "mode. Check that GHILLIE_DATABASE_URL is set."
