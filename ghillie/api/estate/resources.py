@@ -31,6 +31,7 @@ from ghillie.api.estate.schemas import (
 from ghillie.estate.models import (
     DEFAULT_PAGE_LIMIT,
     MAX_REQUEST_BODY_BYTES,
+    CatalogueImportRequest,
     CatalogueImportSummary,
     CountSummary,
     EstateSummary,
@@ -349,10 +350,12 @@ class CatalogueImportResource:
         body = _decode_body(await _read_body(req), ImportCatalogueRequest)
         summary = await self._estates.import_catalogue(
             estate_key,
-            catalogue_yaml=body.catalogue_yaml,
-            commit_sha=body.commit_sha,
-            estate_name=body.estate_name,
-            dry_run=_flag_param(req, "dry_run"),
+            CatalogueImportRequest(
+                catalogue_yaml=body.catalogue_yaml,
+                commit_sha=body.commit_sha,
+                estate_name=body.estate_name,
+                dry_run=_flag_param(req, "dry_run"),
+            ),
         )
         resp.media = msgspec.to_builtins(_import_response(summary))
         resp.status = HTTPStatus.OK

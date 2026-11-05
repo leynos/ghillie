@@ -599,6 +599,29 @@ per pull request.
         and returned no findings; the two previously skipped stylistic and
         D14-posture suggestions were not re-raised. EP-M3 is complete and
         PR-B is ready for publication.
+  - [x] (2026-11-05) Hosted CodeScene review of the PR-B head flagged eleven
+        findings: `EstateManagementService.import_catalogue` (large method,
+        excessive parameters, complex conditionals), `_log_mutation` (excessive
+        parameters), `_reject_unsafe_structure` (bumpy road), six duplicated
+        error handlers in `ghillie/api/errors.py`, `_build_middleware`
+        conditionals, and duplicated assertion blocks in the API, catalogue,
+        and pagination test modules. Repairs, all behaviour-preserving:
+        - `CatalogueImportRequest` (D22) replaces the five-argument port
+          method; `_run_import`, `_import_summary`, `_import_details`,
+          `_parse_catalogue`, and `_MutationLog` split the service method.
+        - `_reject_unsafe_structure` delegates to `_reject_anchor` and
+          `_track_depth`.
+        - A declarative `_ESTATE_ERROR_SPECS` table plus a shared `_Envelope`
+          and `_set_error` collapse the six estate handlers, the catalogue
+          rejection handler, and the report-validation handler into one
+          `handle_estate_error`; every remaining handler renders through the
+          same envelope builder.
+        - `_needs_auth` and `_has_bootstrap` name the middleware conditions.
+        - The duplicated tests merge into parametrized cases, and the 780-case
+          pagination walk extracts `_walk_every_limit`, `_walk_every_filter`,
+          and `_import_seed`.
+        Focused suites are green; the eight-gate run and the hosted
+        re-observation follow this entry.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
@@ -854,6 +877,16 @@ expert-panel review.
 - D21, observability. Each mutation logs one structured line through
   `ghillie.logging`: operation, estate key, commit, dry run, counts, duration,
   and outcome. Toggles also log the old and new state.
+- D22, catalogue-import request value. The port method is
+  `import_catalogue(estate_key, request: CatalogueImportRequest)` rather than a
+  five-argument signature. Rationale: the four request fields travel together
+  from the HTTP resource through the service to the importer, so grouping them
+  removes a data clump and keeps the driven port inside the repository's
+  parameter limits without a suppression. The frozen, slotted dataclass lives in
+  `ghillie.estate.models`, so the port stays free of transport types. The API
+  layer constructs it from the decoded body and the `dry_run` query flag; the
+  service passes it through unchanged. Behaviour is identical to the positional
+  form.
 - D24, PR-A scope-tolerance exception. The hosted ExecPlan assessment measured
   PR-A against `main` at `2ffdb4d` as 13 files, 2748 additions, and 91
   deletions: 2657 net new lines, 157 above the 2500-line tolerance. The overage
@@ -865,8 +898,7 @@ expert-panel review.
   and preview guarantees unproved. Recorded as an accepted exception under the
   standing instruction to continue delivery. No interface, dependency, or
   persistence tolerance is exceeded, and the file-count tolerance (35) is not
-  approached. D22 and D23 are introduced by PR-B and follow this entry once the
-  stack is applied.
+  approached. D22 and D23 are introduced by PR-B.
 - D27, pre-merge-check reconciliation. The hosted pre-merge checks raised six
   findings against PR-A. Three are actioned in this round: the title names
   roadmap task 2.5.b; `test_sync_reports_cross_estate_conflict` gives the
@@ -900,7 +932,7 @@ expert-panel review.
   inside the sync transaction, so a dry run rolls it back. Concurrent inserts
   of the same slug remain arbitrated by `uq_repositories_owner_name` and
   surface as `IntegrityError`, which D17 maps to 409. D25 and D26 are
-  introduced by branches B and C and follow this entry once the stack is
+  introduced by branch C and follow this entry once the stack is
   applied.
 
 ## Outcomes & retrospective

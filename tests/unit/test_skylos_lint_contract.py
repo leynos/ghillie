@@ -121,13 +121,20 @@ _MUTMUT_REQUIRED_COPY_PATHS: typ.Final = frozenset(
     {"Makefile", ".github/workflows/", ".gitignore"}
 )
 _RUNTIME_ENTRY_POINTS: typ.Final = {
+    "class": frozenset({"ghillie.estate.service._MutationLog"}),
     "function": frozenset(
         {
+            "ghillie.estate.service._catalogue_rejected",
             "ghillie.estate.service._elapsed_ms",
             "ghillie.estate.service._estate_summary",
+            "ghillie.estate.service._import_details",
+            "ghillie.estate.service._import_summary",
             "ghillie.estate.service._log_mutation",
             "ghillie.estate.service._next_offset",
+            "ghillie.estate.service._parse_catalogue",
+            "ghillie.estate.service._sync_details",
             "ghillie.estate.service._sync_error",
+            "ghillie.estate.service._sync_summary",
             "ghillie.estate.service._validate_page",
         }
     ),

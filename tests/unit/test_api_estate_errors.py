@@ -26,6 +26,7 @@ from tests.helpers.femtologging_capture import capture_femto_logs
 
 if typ.TYPE_CHECKING:
     from ghillie.estate.models import (
+        CatalogueImportRequest,
         CatalogueImportSummary,
         EstateSummary,
         IngestionToggleOutcome,
@@ -48,14 +49,8 @@ class _RaisingEstateManagement:
         """Raise the configured error."""
         raise self._error
 
-    async def import_catalogue(  # noqa: PLR0913 - mirrors the port signature.
-        self,
-        estate_key: str,
-        *,
-        catalogue_yaml: str,
-        commit_sha: str,
-        estate_name: str | None,
-        dry_run: bool,
+    async def import_catalogue(
+        self, estate_key: str, request: CatalogueImportRequest
     ) -> CatalogueImportSummary:
         """Raise the configured error."""
         raise self._error

@@ -97,31 +97,23 @@ def test_list_repositories_accepts_no_filter(
     assert service.repository_queries[0].ingestion_enabled is None, "no filter expected"
 
 
-@pytest.mark.parametrize("value", ["yes", "1", "TRUE", ""])
-def test_list_repositories_rejects_a_non_boolean_filter(
+@pytest.mark.parametrize(
+    "query",
+    [
+        "ingestion_enabled=yes",
+        "ingestion_enabled=1",
+        "ingestion_enabled=TRUE",
+        "ingestion_enabled=",
+        "ingestion_enabled=true&ingestion_enabled=false",
+    ],
+)
+def test_list_repositories_rejects_an_invalid_filter(
     client: falcon.testing.TestClient,
     service: FakeEstateManagement,
-    value: str,
+    query: str,
 ) -> None:
-    """The ingestion filter accepts exactly ``true`` or ``false``."""
-    result = client.simulate_get(
-        "/estates/demo/repositories", params={"ingestion_enabled": value}
-    )
-
-    assert result.status_code == 400, "expected 400 for a bad boolean"
-    assert result.json["code"] == "invalid_input", "code should be invalid_input"
-    assert result.json["field"] == "ingestion_enabled", "error should name the filter"
-    assert service.repository_queries == [], "invalid input should not reach the port"
-
-
-def test_list_repositories_rejects_a_repeated_filter(
-    client: falcon.testing.TestClient,
-    service: FakeEstateManagement,
-) -> None:
-    """A repeated filter is ambiguous and rejected."""
-    result = client.simulate_get(
-        "/estates/demo/repositories?ingestion_enabled=true&ingestion_enabled=false"
-    )
+    """Only one of exactly ``true`` or ``false`` is an acceptable filter."""
+    result = client.simulate_get(f"/estates/demo/repositories?{query}")
 
     assert result.status_code == 400, "expected 400 for a bad boolean"
     assert result.json["code"] == "invalid_input", "code should be invalid_input"
@@ -162,38 +154,23 @@ def test_toggle_accepts_both_json_media_types(
     }, "documented toggle envelope expected"
 
 
-@pytest.mark.parametrize("body", [b"{}", b'{"ingestion_enabled": null}'])
-def test_toggle_rejects_a_missing_or_null_flag(
-    client: falcon.testing.TestClient,
-    service: FakeEstateManagement,
-    body: bytes,
-) -> None:
-    """A missing or null flag is invalid input."""
-    result = client.simulate_patch(
-        "/repositories/org/alpha/ingestion",
-        body=body,
-        headers={"Content-Type": "application/json"},
-    )
-
-    assert result.status_code == 400, "expected 400 for a missing flag"
-    assert result.json["code"] == "invalid_input", "code should be invalid_input"
-    assert service.toggles == [], "invalid input should not reach the service"
-
-
 @pytest.mark.parametrize(
     "body",
     [
+        b"{}",
+        b'{"ingestion_enabled": null}',
         b'{"ingestion_enabled": 1}',
         b'{"ingestion_enabled": "true"}',
         b'{"ingestion_enabled": true, "extra": 1}',
     ],
+    ids=["missing", "null", "integer", "string", "unknown-field"],
 )
-def test_toggle_rejects_non_boolean_or_unknown_fields(
+def test_toggle_rejects_an_invalid_body(
     client: falcon.testing.TestClient,
     service: FakeEstateManagement,
     body: bytes,
 ) -> None:
-    """The toggle body is strict about types and unknown fields."""
+    """The toggle body requires a present, strictly boolean flag."""
     result = client.simulate_patch(
         "/repositories/org/alpha/ingestion",
         body=body,

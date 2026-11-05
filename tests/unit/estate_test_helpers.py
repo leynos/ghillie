@@ -31,6 +31,7 @@ Exported builders
 fixtures the doubles advertise.
 """
 
+import dataclasses
 import datetime as dt
 import typing as typ
 
@@ -39,6 +40,7 @@ from sqlalchemy import func, select
 
 from ghillie.api.app import AppDependencies, create_app
 from ghillie.estate.models import (
+    CatalogueImportRequest,
     CatalogueImportSummary,
     CountSummary,
     EstateSummary,
@@ -75,27 +77,28 @@ NOW = dt.datetime(2024, 7, 7, 12, 0, tzinfo=dt.UTC)
 DOCUMENTATION_PATHS = ("docs/", "README.md")
 
 
+def _estate_page(
+    items: tuple[EstateSummary, ...], page: PageRequest
+) -> Page[EstateSummary]:
+    """Build a single-page estate result for a port double."""
+    return Page(
+        items=items,
+        limit=page.limit,
+        offset=page.offset,
+        has_more=False,
+        next_offset=None,
+    )
+
+
 class EmptyEstateManagement:
     """Estate port double that returns an empty first page."""
 
     async def list_estates(self, page: PageRequest) -> Page[EstateSummary]:
         """Return an empty page."""
-        return Page(
-            items=(),
-            limit=page.limit,
-            offset=page.offset,
-            has_more=False,
-            next_offset=None,
-        )
+        return _estate_page((), page)
 
-    async def import_catalogue(  # noqa: PLR0913 - mirrors the port signature.
-        self,
-        estate_key: str,
-        *,
-        catalogue_yaml: str,
-        commit_sha: str,
-        estate_name: str | None,
-        dry_run: bool,
+    async def import_catalogue(
+        self, estate_key: str, request: CatalogueImportRequest
     ) -> CatalogueImportSummary:
         """Raise because route-registration tests never import a catalogue."""
         raise NotImplementedError
@@ -153,41 +156,21 @@ class FakeEstateManagement:
     async def list_estates(self, page: PageRequest) -> Page[EstateSummary]:
         """Return the configured estate page."""
         self.page_requests.append(page)
-        return Page(
-            items=self.estate_items,
-            limit=page.limit,
-            offset=page.offset,
-            has_more=False,
-            next_offset=None,
-        )
+        return _estate_page(self.estate_items, page)
 
-    async def import_catalogue(  # noqa: PLR0913 - mirrors the port signature.
-        self,
-        estate_key: str,
-        *,
-        catalogue_yaml: str,
-        commit_sha: str,
-        estate_name: str | None,
-        dry_run: bool,
+    async def import_catalogue(
+        self, estate_key: str, request: CatalogueImportRequest
     ) -> CatalogueImportSummary:
         """Record and return a fixed import summary."""
-        self.imports.append(
-            {
-                "estate_key": estate_key,
-                "catalogue_yaml": catalogue_yaml,
-                "commit_sha": commit_sha,
-                "estate_name": estate_name,
-                "dry_run": dry_run,
-            }
-        )
+        self.imports.append({"estate_key": estate_key, **dataclasses.asdict(request)})
         return CatalogueImportSummary(
             estate_key=estate_key,
-            commit_sha=commit_sha,
+            commit_sha=request.commit_sha,
             state="succeeded",
-            dry_run=dry_run,
+            dry_run=request.dry_run,
             skipped=False,
             skipped_reason=None,
-            registry_sync_required=not dry_run,
+            registry_sync_required=not request.dry_run,
             projects=CountSummary(created=1, updated=0, deleted=0),
             components=CountSummary(created=2, updated=0, deleted=1),
             repositories=CountSummary(created=1, updated=0, deleted=0),
@@ -284,26 +267,32 @@ projects:
 """
 
 
-async def import_catalogue(  # noqa: PLR0913 - keyword defaults keep each test call terse.
+class _ImportOverrides(typ.TypedDict, total=False):
+    """Per-test overrides for :func:`import_catalogue`'s defaults."""
+
+    estate_key: str
+    commit_sha: str
+    estate_name: str | None
+    dry_run: bool
+    catalogue_yaml: str | None
+
+
+async def import_catalogue(
     service: EstateManagementService,
-    *,
-    estate_key: str = "demo",
-    commit_sha: str = "c1",
-    estate_name: str | None = "Demo",
-    dry_run: bool = False,
-    catalogue_yaml: str | None = None,
+    **overrides: typ.Unpack[_ImportOverrides],
 ) -> CatalogueImportSummary:
     """Import a catalogue through the service with terse test defaults."""
     # Only ``None`` means "use the fixture"; an explicitly empty upload must
     # reach the importer so rejection tests exercise the real validation path.
+    catalogue_yaml = overrides.get("catalogue_yaml")
     document = catalogue_document() if catalogue_yaml is None else catalogue_yaml
-    return await service.import_catalogue(
-        estate_key,
+    request = CatalogueImportRequest(
         catalogue_yaml=document,
-        commit_sha=commit_sha,
-        estate_name=estate_name,
-        dry_run=dry_run,
+        commit_sha=overrides.get("commit_sha", "c1"),
+        estate_name=overrides.get("estate_name", "Demo"),
+        dry_run=overrides.get("dry_run", False),
     )
+    return await service.import_catalogue(overrides.get("estate_key", "demo"), request)
 
 
 async def count_rows(

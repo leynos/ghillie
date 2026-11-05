@@ -23,44 +23,37 @@ Register error handlers on the Falcon app::
 
 from __future__ import annotations
 
+import dataclasses
 import typing as typ
 from http import HTTPStatus
 
+from ghillie.estate.errors import (
+    CatalogueRejectedError,
+    EstateConflictError,
+    EstateNotFoundError,
+    InvalidEstateKeyError,
+    InvalidPaginationError,
+    RegistrySyncFailedError,
+    StorageUnavailableError,
+)
+from ghillie.estate.errors import (
+    RepositoryNotFoundError as EstateRepositoryNotFoundError,
+)
 from ghillie.logging import get_logger, log_exception
+from ghillie.reporting.errors import ReportValidationError
 
 if typ.TYPE_CHECKING:
     import falcon
     from falcon.asgi import Request, Response
 
-    from ghillie.estate.errors import (
-        CatalogueRejectedError,
-        EstateConflictError,
-        EstateNotFoundError,
-        InvalidEstateKeyError,
-        InvalidPaginationError,
-        RegistrySyncFailedError,
-        StorageUnavailableError,
-    )
-    from ghillie.estate.errors import (
-        RepositoryNotFoundError as EstateRepositoryNotFoundError,
-    )
-    from ghillie.reporting.errors import ReportValidationError
-
 __all__ = [
     "InvalidInputError",
     "PayloadTooLargeError",
     "RepositoryNotFoundError",
-    "handle_catalogue_rejected",
-    "handle_estate_conflict",
-    "handle_estate_not_found",
-    "handle_estate_repository_not_found",
+    "handle_estate_error",
     "handle_falcon_http_error",
-    "handle_invalid_estate_key",
     "handle_invalid_input",
-    "handle_invalid_pagination",
-    "handle_payload_too_large",
     "handle_registry_sync_failed",
-    "handle_report_validation_failed",
     "handle_repository_not_found",
     "handle_storage_unavailable",
     "handle_unexpected_error",
@@ -160,25 +153,139 @@ class PayloadTooLargeError(Exception):
         super().__init__(f"Request body must not exceed {max_bytes} bytes.")
 
 
-def _set_error(  # noqa: PLR0913 - the envelope's fields are all distinct.
-    resp: Response,
-    *,
-    status: HTTPStatus | int,
-    title: str,
-    code: str,
-    description: str,
-    extra: dict[str, typ.Any] | None = None,
-) -> None:
+@dataclasses.dataclass(frozen=True, slots=True)
+class _Envelope:
+    """One error response body and its status (D7)."""
+
+    status: HTTPStatus | int
+    title: str
+    code: str
+    description: str
+    extra: dict[str, typ.Any] | None = None
+
+
+def _set_error(resp: Response, envelope: _Envelope) -> None:
     """Set the shared error envelope on *resp*."""
     media: dict[str, typ.Any] = {
-        "title": title,
-        "description": description,
-        "code": code,
+        "title": envelope.title,
+        "description": envelope.description,
+        "code": envelope.code,
     }
-    if extra:
-        media.update(extra)
-    resp.status = status
+    if envelope.extra:
+        media.update(envelope.extra)
+    resp.status = envelope.status
     resp.media = media
+
+
+def _no_extra(_ex: object) -> dict[str, typ.Any] | None:
+    """Return no additional envelope fields."""
+    return None
+
+
+def _render_issues(issues: typ.Iterable[typ.Any]) -> list[dict[str, str]]:
+    """Render validation issues for the error envelope."""
+    return [{"code": issue.code, "message": issue.message} for issue in issues]
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class _ErrorSpec:
+    """Declarative mapping from an estate error to one response envelope."""
+
+    status: HTTPStatus
+    title: str
+    code: str
+    describe: typ.Callable[[typ.Any], str]
+    extra_fields: typ.Callable[[typ.Any], dict[str, typ.Any] | None] = _no_extra
+
+
+# Each declared domain failure has a fixed status, title, and stable code, plus
+# at most a few conditional fields. Describing them as data keeps one handler
+# from repeating the same envelope construction for every failure type.
+_ESTATE_ERROR_SPECS: dict[type[Exception], _ErrorSpec] = {
+    PayloadTooLargeError: _ErrorSpec(
+        status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+        title="Payload too large",
+        code="payload_too_large",
+        describe=str,
+        extra_fields=lambda ex: {"max_bytes": ex.max_bytes},
+    ),
+    EstateNotFoundError: _ErrorSpec(
+        status=HTTPStatus.NOT_FOUND,
+        title="Estate not found",
+        code="estate_not_found",
+        describe=str,
+    ),
+    EstateRepositoryNotFoundError: _ErrorSpec(
+        status=HTTPStatus.NOT_FOUND,
+        title="Repository not found",
+        code="repository_not_found",
+        describe=str,
+    ),
+    InvalidEstateKeyError: _ErrorSpec(
+        status=HTTPStatus.BAD_REQUEST,
+        title="Invalid input",
+        code="invalid_input",
+        describe=lambda ex: ex.reason,
+        extra_fields=lambda _ex: {"field": "estate_key"},
+    ),
+    InvalidPaginationError: _ErrorSpec(
+        status=HTTPStatus.BAD_REQUEST,
+        title="Invalid input",
+        code="invalid_input",
+        describe=lambda ex: ex.reason,
+        extra_fields=lambda ex: {"field": ex.field},
+    ),
+    EstateConflictError: _ErrorSpec(
+        status=HTTPStatus.CONFLICT,
+        title="Conflict",
+        code="conflict",
+        describe=lambda ex: str(ex) or "The write conflicts with an existing record.",
+    ),
+    CatalogueRejectedError: _ErrorSpec(
+        status=HTTPStatus.UNPROCESSABLE_ENTITY,
+        title="Catalogue invalid",
+        code="catalogue_invalid",
+        describe=lambda _ex: "The catalogue document failed validation.",
+        extra_fields=lambda ex: {"issues": _render_issues(ex.issues)},
+    ),
+    ReportValidationError: _ErrorSpec(
+        status=HTTPStatus.UNPROCESSABLE_ENTITY,
+        title="Report validation failed",
+        code="report_validation_failed",
+        describe=lambda _ex: (
+            "Generated report failed correctness checks after retries."
+        ),
+        extra_fields=lambda ex: {
+            "review_id": ex.review_id,
+            "issues": _render_issues(ex.issues),
+        },
+    ),
+}
+
+
+async def handle_estate_error(
+    _req: Request,
+    resp: Response,
+    ex: Exception,
+    _params: dict[str, typ.Any],
+) -> None:
+    """Render a declared domain failure through the shared envelope.
+
+    The app registers this handler for every type in
+    :data:`_ESTATE_ERROR_SPECS`; selecting the response from the table keeps
+    the call sites from duplicating the same construction.
+    """
+    spec = _ESTATE_ERROR_SPECS[type(ex)]
+    _set_error(
+        resp,
+        _Envelope(
+            status=spec.status,
+            title=spec.title,
+            code=spec.code,
+            description=spec.describe(ex),
+            extra=spec.extra_fields(ex),
+        ),
+    )
 
 
 async def handle_repository_not_found(
@@ -190,10 +297,12 @@ async def handle_repository_not_found(
     """Map ``RepositoryNotFoundError`` to an HTTP 404 JSON response."""
     _set_error(
         resp,
-        status=HTTPStatus.NOT_FOUND,
-        title="Repository not found",
-        code="repository_not_found",
-        description=str(ex),
+        _Envelope(
+            status=HTTPStatus.NOT_FOUND,
+            title="Repository not found",
+            code="repository_not_found",
+            description=str(ex),
+        ),
     )
 
 
@@ -207,250 +316,13 @@ async def handle_invalid_input(
     extra = {"field": ex.field} if ex.field is not None else None
     _set_error(
         resp,
-        status=HTTPStatus.BAD_REQUEST,
-        title="Invalid input",
-        code="invalid_input",
-        description=ex.reason,
-        extra=extra,
-    )
-
-
-async def handle_payload_too_large(
-    _req: Request,
-    resp: Response,
-    ex: PayloadTooLargeError,
-    _params: dict[str, typ.Any],
-) -> None:
-    """Map ``PayloadTooLargeError`` to an HTTP 413 JSON response.
-
-    Parameters
-    ----------
-    _req:
-        Request that carried the oversized body.
-    resp:
-        Response to populate with the error envelope.
-    ex:
-        Exception carrying the accepted body-size limit.
-    _params:
-        Falcon's per-route error-handler parameters.
-
-    Returns
-    -------
-    None
-
-    """
-    _set_error(
-        resp,
-        status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
-        title="Payload too large",
-        code="payload_too_large",
-        description=str(ex),
-        extra={"max_bytes": ex.max_bytes},
-    )
-
-
-async def handle_estate_not_found(
-    _req: Request,
-    resp: Response,
-    ex: EstateNotFoundError,
-    _params: dict[str, typ.Any],
-) -> None:
-    """Map an unknown estate to an HTTP 404 JSON response.
-
-    Parameters
-    ----------
-    _req:
-        Request that named the missing estate.
-    resp:
-        Response to populate with the error envelope.
-    ex:
-        Error carrying the estate key that was not found.
-    _params:
-        Falcon's per-route error-handler parameters.
-
-    Returns
-    -------
-    None
-
-    """
-    _set_error(
-        resp,
-        status=HTTPStatus.NOT_FOUND,
-        title="Estate not found",
-        code="estate_not_found",
-        description=str(ex),
-    )
-
-
-async def handle_estate_repository_not_found(
-    _req: Request,
-    resp: Response,
-    ex: EstateRepositoryNotFoundError,
-    _params: dict[str, typ.Any],
-) -> None:
-    """Map an unknown repository to an HTTP 404 JSON response.
-
-    Parameters
-    ----------
-    _req:
-        Request that named the missing repository.
-    resp:
-        Response to populate with the error envelope.
-    ex:
-        Error carrying the owner and name that were not found.
-    _params:
-        Falcon's per-route error-handler parameters.
-
-    Returns
-    -------
-    None
-
-    """
-    _set_error(
-        resp,
-        status=HTTPStatus.NOT_FOUND,
-        title="Repository not found",
-        code="repository_not_found",
-        description=str(ex),
-    )
-
-
-async def handle_invalid_estate_key(
-    _req: Request,
-    resp: Response,
-    ex: InvalidEstateKeyError,
-    _params: dict[str, typ.Any],
-) -> None:
-    """Map a rejected estate key to an HTTP 400 JSON response.
-
-    Parameters
-    ----------
-    _req:
-        Request that carried the rejected key.
-    resp:
-        Response to populate with the error envelope.
-    ex:
-        Error carrying the key and the rule it broke.
-    _params:
-        Falcon's per-route error-handler parameters.
-
-    Returns
-    -------
-    None
-
-    """
-    _set_error(
-        resp,
-        status=HTTPStatus.BAD_REQUEST,
-        title="Invalid input",
-        code="invalid_input",
-        description=ex.reason,
-        extra={"field": "estate_key"},
-    )
-
-
-async def handle_invalid_pagination(
-    _req: Request,
-    resp: Response,
-    ex: InvalidPaginationError,
-    _params: dict[str, typ.Any],
-) -> None:
-    """Map an out-of-range page limit or offset to HTTP 400.
-
-    Parameters
-    ----------
-    _req:
-        Request that carried the invalid pagination.
-    resp:
-        Response to populate with the error envelope.
-    ex:
-        Error naming the invalid field and its allowed range.
-    _params:
-        Falcon's per-route error-handler parameters.
-
-    Returns
-    -------
-    None
-
-    """
-    _set_error(
-        resp,
-        status=HTTPStatus.BAD_REQUEST,
-        title="Invalid input",
-        code="invalid_input",
-        description=ex.reason,
-        extra={"field": ex.field},
-    )
-
-
-async def handle_catalogue_rejected(
-    _req: Request,
-    resp: Response,
-    ex: CatalogueRejectedError,
-    _params: dict[str, typ.Any],
-) -> None:
-    """Map catalogue validation issues to an HTTP 422 JSON response.
-
-    Parameters
-    ----------
-    _req:
-        Request that uploaded the invalid catalogue.
-    resp:
-        Response to populate with the error envelope.
-    ex:
-        Error carrying the catalogue validation issues.
-    _params:
-        Falcon's per-route error-handler parameters.
-
-    Returns
-    -------
-    None
-
-    """
-    _set_error(
-        resp,
-        status=HTTPStatus.UNPROCESSABLE_ENTITY,
-        title="Catalogue invalid",
-        code="catalogue_invalid",
-        description="The catalogue document failed validation.",
-        extra={
-            "issues": [
-                {"code": issue.code, "message": issue.message} for issue in ex.issues
-            ]
-        },
-    )
-
-
-async def handle_estate_conflict(
-    _req: Request,
-    resp: Response,
-    ex: EstateConflictError,
-    _params: dict[str, typ.Any],
-) -> None:
-    """Map a uniqueness conflict to an HTTP 409 JSON response.
-
-    Parameters
-    ----------
-    _req:
-        Request whose write conflicted with stored state.
-    resp:
-        Response to populate with the error envelope.
-    ex:
-        Error describing the conflict without driver detail.
-    _params:
-        Falcon's per-route error-handler parameters.
-
-    Returns
-    -------
-    None
-
-    """
-    _set_error(
-        resp,
-        status=HTTPStatus.CONFLICT,
-        title="Conflict",
-        code="conflict",
-        description=str(ex) or "The write conflicts with an existing record.",
+        _Envelope(
+            status=HTTPStatus.BAD_REQUEST,
+            title="Invalid input",
+            code="invalid_input",
+            description=ex.reason,
+            extra=extra,
+        ),
     )
 
 
@@ -483,10 +355,12 @@ async def handle_storage_unavailable(
     log_exception(logger, "Storage unavailable", ex)
     _set_error(
         resp,
-        status=HTTPStatus.SERVICE_UNAVAILABLE,
-        title="Storage unavailable",
-        code="storage_unavailable",
-        description=str(ex) or "Storage is unavailable.",
+        _Envelope(
+            status=HTTPStatus.SERVICE_UNAVAILABLE,
+            title="Storage unavailable",
+            code="storage_unavailable",
+            description=str(ex) or "Storage is unavailable.",
+        ),
     )
 
 
@@ -517,10 +391,12 @@ async def handle_registry_sync_failed(
     log_exception(logger, "Registry sync failed", ex)
     _set_error(
         resp,
-        status=HTTPStatus.INTERNAL_SERVER_ERROR,
-        title="Registry sync failed",
-        code="registry_sync_failed",
-        description=str(ex) or "The registry sync failed.",
+        _Envelope(
+            status=HTTPStatus.INTERNAL_SERVER_ERROR,
+            title="Registry sync failed",
+            code="registry_sync_failed",
+            description=str(ex) or "The registry sync failed.",
+        ),
     )
 
 
@@ -565,47 +441,13 @@ async def handle_falcon_http_error(
         resp.set_headers(ex.headers)
     _set_error(
         resp,
-        status=status,
-        title=ex.title,
-        code=code,
-        description=ex.description or ex.title,
+        _Envelope(
+            status=status,
+            title=ex.title,
+            code=code,
+            description=ex.description or ex.title,
+        ),
     )
-
-
-async def handle_report_validation_failed(
-    _req: Request,
-    resp: Response,
-    ex: ReportValidationError,
-    _params: dict[str, typ.Any],
-) -> None:
-    """Map ``ReportValidationError`` to an HTTP 422 JSON response.
-
-    Parameters
-    ----------
-    _req:
-        Request that generated the invalid report.
-    resp:
-        Response to populate with the validation envelope.
-    ex:
-        Error carrying the review identifier and validation issues.
-    _params:
-        Falcon's per-route error-handler parameters.
-
-    Returns
-    -------
-    None
-
-    """
-    resp.status = HTTPStatus.UNPROCESSABLE_ENTITY
-    resp.media = {
-        "title": "Report validation failed",
-        "description": "Generated report failed correctness checks after retries.",
-        "code": "report_validation_failed",
-        "review_id": ex.review_id,
-        "issues": [
-            {"code": issue.code, "message": issue.message} for issue in ex.issues
-        ],
-    }
 
 
 async def handle_unexpected_error(
@@ -638,8 +480,10 @@ async def handle_unexpected_error(
     log_exception(logger, "Unhandled API error", ex)
     _set_error(
         resp,
-        status=HTTPStatus.INTERNAL_SERVER_ERROR,
-        title="Internal server error",
-        code="internal_error",
-        description="An unexpected error occurred.",
+        _Envelope(
+            status=HTTPStatus.INTERNAL_SERVER_ERROR,
+            title="Internal server error",
+            code="internal_error",
+            description="An unexpected error occurred.",
+        ),
     )

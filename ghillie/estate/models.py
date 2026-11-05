@@ -92,6 +92,33 @@ class CountSummary:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class CatalogueImportRequest:
+    """Inputs for importing one catalogue revision into an estate.
+
+    Grouping the document and its metadata keeps the port signature small and
+    lets adapters pass the same value through without re-listing each field.
+
+    Attributes
+    ----------
+    catalogue_yaml:
+        Catalogue document as YAML text.
+    commit_sha:
+        Commit the document was read from.
+    estate_name:
+        Display name to store. ``None`` keeps an existing name and names a new
+        estate after its key.
+    dry_run:
+        When true, report the counts without persisting them.
+
+    """
+
+    catalogue_yaml: str
+    commit_sha: str
+    estate_name: str | None = None
+    dry_run: bool = False
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class CatalogueImportSummary:
     """Result of importing one catalogue document for an estate.
 

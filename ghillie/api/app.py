@@ -36,17 +36,10 @@ from ghillie.api.errors import (
     InvalidInputError,
     PayloadTooLargeError,
     RepositoryNotFoundError,
-    handle_catalogue_rejected,
-    handle_estate_conflict,
-    handle_estate_not_found,
-    handle_estate_repository_not_found,
+    handle_estate_error,
     handle_falcon_http_error,
-    handle_invalid_estate_key,
     handle_invalid_input,
-    handle_invalid_pagination,
-    handle_payload_too_large,
     handle_registry_sync_failed,
-    handle_report_validation_failed,
     handle_repository_not_found,
     handle_storage_unavailable,
     handle_unexpected_error,
@@ -139,6 +132,13 @@ def _has_domain_deps(deps: AppDependencies | None) -> bool:
     )
 
 
+def _needs_auth(deps: AppDependencies | None) -> bool:
+    """Return True when authentication is configured or estate routes exist."""
+    return deps is not None and (
+        bool(deps.api_token) or deps.estate_service is not None
+    )
+
+
 def _build_middleware(
     deps: AppDependencies | None,
 ) -> list[AsyncMiddlewareProto]:
@@ -151,11 +151,13 @@ def _build_middleware(
     from ghillie.api.auth import BearerTokenMiddleware
 
     middleware: list[AsyncMiddlewareProto] = []
-    if deps is not None and (deps.api_token or deps.estate_service is not None):
+    if _needs_auth(deps):
         # Build the middleware whenever authentication is configured or the
         # estate routes are exposed. With no token it warns at start-up and
         # then acts as a no-op, making an unauthenticated deployment visible.
-        middleware.append(BearerTokenMiddleware(deps.api_token))
+        middleware.append(
+            BearerTokenMiddleware(typ.cast("AppDependencies", deps).api_token)
+        )
 
     if _has_domain_deps(deps):
         from ghillie.api.middleware import SQLAlchemySessionManager
@@ -168,7 +170,10 @@ def _build_middleware(
             typ.cast("AsyncMiddlewareProto", SQLAlchemySessionManager(sf))
         )
 
-    if deps is not None and deps.bootstrap_engine is not None:
+    # Bind the engine to a local so the guard's narrowing survives to the
+    # constructor argument; re-reading it through ``deps`` widens it again.
+    bootstrap_engine = deps.bootstrap_engine if deps is not None else None
+    if bootstrap_engine is not None:
         from ghillie.storage_bootstrap import StorageBootstrapMiddleware
 
         # This component implements only the ASGI lifespan hooks, so it is
@@ -176,7 +181,7 @@ def _build_middleware(
         middleware.append(
             typ.cast(
                 "AsyncMiddlewareProto",
-                StorageBootstrapMiddleware(deps.bootstrap_engine),
+                StorageBootstrapMiddleware(bootstrap_engine),
             )
         )
 
@@ -216,16 +221,14 @@ def _register_error_handlers(app: falcon.asgi.App) -> None:
     """Install the shared error envelope for every failure type (D7)."""
     app.add_error_handler(RepositoryNotFoundError, handle_repository_not_found)
     app.add_error_handler(InvalidInputError, handle_invalid_input)
-    app.add_error_handler(PayloadTooLargeError, handle_payload_too_large)
-    app.add_error_handler(ReportValidationError, handle_report_validation_failed)
-    app.add_error_handler(EstateNotFoundError, handle_estate_not_found)
-    app.add_error_handler(
-        EstateRepositoryNotFoundError, handle_estate_repository_not_found
-    )
-    app.add_error_handler(InvalidEstateKeyError, handle_invalid_estate_key)
-    app.add_error_handler(InvalidPaginationError, handle_invalid_pagination)
-    app.add_error_handler(CatalogueRejectedError, handle_catalogue_rejected)
-    app.add_error_handler(EstateConflictError, handle_estate_conflict)
+    app.add_error_handler(PayloadTooLargeError, handle_estate_error)
+    app.add_error_handler(ReportValidationError, handle_estate_error)
+    app.add_error_handler(EstateNotFoundError, handle_estate_error)
+    app.add_error_handler(EstateRepositoryNotFoundError, handle_estate_error)
+    app.add_error_handler(InvalidEstateKeyError, handle_estate_error)
+    app.add_error_handler(InvalidPaginationError, handle_estate_error)
+    app.add_error_handler(CatalogueRejectedError, handle_estate_error)
+    app.add_error_handler(EstateConflictError, handle_estate_error)
     app.add_error_handler(StorageUnavailableError, handle_storage_unavailable)
     app.add_error_handler(RegistrySyncFailedError, handle_registry_sync_failed)
     app.add_error_handler(falcon.HTTPError, handle_falcon_http_error)
