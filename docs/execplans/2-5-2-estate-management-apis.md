@@ -230,6 +230,13 @@ per pull request.
         `check-architecture`, `typecheck`, `lint` (Hecate and Skylos),
         `test` (1222 passed, 11 skipped), `markdownlint`, `nixie`, and
         `spelling`.
+  - [x] (2026-11-05) Hosted CodeScene review of the published PR-A head
+        flagged `EstateSyncMachine._apply_transition` (complex method, bumpy
+        road) and `import_subset` (complex conditional) in the O1 state
+        machine. The transition replay now dispatches to `_replay_conflict`,
+        `_replay_unlinked`, and `_replay_removed`, and the import replay moved
+        into `_replay_import`; behaviour is unchanged and `cs delta
+        origin/main` reports no findings.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
