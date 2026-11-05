@@ -738,13 +738,13 @@ per pull request.
   `asyncio.to_thread(parse_catalogue_text, ...)`, and one full-suite run
   crashed an xdist worker with a native segmentation fault inside
   `msgspec._core` at `ghillie/catalogue/loader.py`'s `msgspec.convert` call.
-  Evidence: the scrutineer's gate-5 log for PR-C head `0655461` (1 failed,
-  1529 passed, 11 skipped); the same test alone passed ten times, and 200
-  fresh processes racing two threads through the first `msgspec.convert` of
+  Evidence: the scrutineer's gate-5 log for PR-C head `0655461` (1 failed, 1529
+  passed, 11 skipped); the same test alone passed ten times, and 200 fresh
+  processes racing two threads through the first `msgspec.convert` of
   `Catalogue` did not reproduce it. Impact: the proof now replays the losing
-  insert deterministically instead of racing, so O4 no longer depends on
-  thread scheduling or on a concurrent parse. The crash remains unexplained
-  and is recorded here rather than attributed to a cause the evidence does not
+  insert deterministically instead of racing, so O4 no longer depends on thread
+  scheduling or on a concurrent parse. The crash remains unexplained and is
+  recorded here rather than attributed to a cause the evidence does not
   support; if it recurs, capture a core dump before changing production code.
 
 - Observation: the Silver schema permits an unowned row (`estate_id` null) that
