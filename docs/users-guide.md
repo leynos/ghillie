@@ -490,8 +490,11 @@ print(result.repositories_left_disabled)  # first 100 slugs
 
 If another estate already owns a repository that this estate's catalogue names,
 sync leaves that row untouched and reports the slug in
-`result.repositories_conflicted`. Resolve the overlap by removing the
-repository from one catalogue; sync will not move a row between estates.
+`result.repositories_conflicted`. Remove the repository from this estate's
+catalogue to clear the report. Sync never moves a row between estates, so the
+row stays with the owning estate; removing the slug from the owning estate's
+catalogue only disables that estate's own row and leaves this estate's report
+in place.
 
 A toggle applied to an ad hoc row lasts only until the row is adopted by a
 catalogue entry, at which point the catalogue's active flag takes over.
