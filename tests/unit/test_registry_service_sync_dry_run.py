@@ -42,7 +42,11 @@ async def test_sync_dry_run_leaves_registry_unchanged(
 
     result = await registry_service.sync_from_catalogue("test", dry_run=True)
 
-    assert result.repositories_created >= 1, "Dry run should report creations"
+    # The wildside catalogue declares exactly six repositories, so a preview
+    # must report all six rather than a vague lower bound.
+    assert result.repositories_created == 6, (
+        "Dry run should report every repository it would create"
+    )
     persisted = await snapshot_silver_repos(session_factory)
     assert persisted == [], "A dry run must persist no Silver rows"
 
