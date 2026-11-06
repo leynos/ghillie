@@ -675,7 +675,11 @@ per pull request.
         the service translates. The focused module passes (16 tests). The
         crash itself is recorded under Surprises as unexplained; the
         two-thread `msgspec.convert` race did not reproduce in 200 fresh
-        processes. PR-B's re-gate and PR-C's rebase follow this entry.
+        processes. The PR-B re-gate at `95c7886` then passed all eight gates:
+        `check-fmt`, `check-architecture`, `typecheck`, `lint`, `test` (1442
+        passed, 11 skipped, 0 failed), `markdownlint`, `nixie`, and `spelling`.
+        Logs are under `/tmp/gate-B-95c7886-*.out`. PR-C's rebase follows this
+        entry.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
