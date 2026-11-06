@@ -312,6 +312,10 @@ per pull request.
       sentence still names branch C alone. Later replays moved the branch onto
       `a7a796e`, which records the unowned-row limits the third review round
       asked for, and then onto `d6356b7`, which corrects their provenance.
+- [x] (2026-11-06) The EP-B-R11 assessment found the interfaces example still
+      sketched the five-argument `import_catalogue` that D22 replaced with a
+      `CatalogueImportRequest`. The example now matches D22 and
+      `ghillie/estate/ports.py`.
 - [x] PR-B, EP-M2: estate port, service, and catalogue queries.
   - [x] (2026-11-03) Red observed: `test_estate_service.py` hit
         `NotImplementedError` from the service stub, and the new importer
@@ -1846,8 +1850,7 @@ No new dependencies.
 class EstateManagement(typ.Protocol):
     async def list_estates(self, page: PageRequest) -> Page[EstateSummary]: ...
     async def import_catalogue(
-        self, estate_key: str, *, catalogue_yaml: str, commit_sha: str,
-        estate_name: str | None, dry_run: bool,
+        self, estate_key: str, request: CatalogueImportRequest
     ) -> CatalogueImportSummary: ...
     async def sync_registry(self, estate_key: str, *, dry_run: bool) -> RegistrySyncSummary: ...
     async def list_repositories(self, estate_key: str, query: RepositoryQuery) -> RepositoryPage: ...
