@@ -1326,8 +1326,11 @@ Obligation O3, estate-key validation (D16).
   the other draws `text()` filtered to non-matching strings (a filter that
   rejects few inputs, so no health-check suppression is needed) and asserts
   rejection. The mutation "drop the length bound" must fail the 65-character
-  row. The route-miss behaviour of `/` is pinned by a named API test expecting
-  `404` with code `not_found`.
+  row. The route-miss behaviour of `/` is pinned by
+  `tests/unit/test_api_estate_errors.py::test_estate_key_with_encoded_slash_is_not_found`,
+  which sends `%2F` inside the estate-key segment and expects `404` with code
+  `not_found`; the port double raises `StorageUnavailableError`, so routing
+  would have produced `503` and the `404` proves the route was never matched.
 
 Obligation O4, error-contract totality (D7, D17).
 

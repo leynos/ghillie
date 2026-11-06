@@ -257,6 +257,20 @@ def test_unroutable_path_is_not_found() -> None:
     _assert_error(result, status=404, code="not_found")
 
 
+def test_estate_key_with_encoded_slash_is_not_found() -> None:
+    """An encoded slash misses the estate route instead of reaching the port.
+
+    The port double raises ``StorageUnavailableError``, so a matched route
+    would answer ``503``. A ``404`` therefore proves the slash-bearing key was
+    never routed, which is the D16 behaviour the ExecPlan records.
+    """
+    result = _client(StorageUnavailableError("unused")).simulate_get(
+        "/estates/wildside%2Fengine/repositories"
+    )
+
+    _assert_error(result, status=404, code="not_found")
+
+
 def test_wrong_method_is_method_not_allowed() -> None:
     """A known path with an unsupported method is a structured 405."""
     result = _client(StorageUnavailableError("unused")).simulate_delete("/estates")
