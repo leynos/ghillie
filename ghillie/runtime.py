@@ -5,10 +5,10 @@ deployments.  It delegates to :func:`ghillie.api.app.create_app` for
 application construction while keeping the ``ghillie.runtime:create_app``
 Granian entrypoint stable.
 
-When ``GHILLIE_DATABASE_URL`` is set, the runtime builds full
-``AppDependencies`` (session factory, reporting service) so the app
-includes both health and domain endpoints.  Otherwise it starts in
-health-only mode.
+When ``GHILLIE_DATABASE_URL`` is set, the runtime builds estate-management
+dependencies so the app includes the estate endpoints. Report routes are
+added only when ``GHILLIE_STATUS_MODEL_BACKEND`` is also set. Otherwise it
+starts in health-only mode.
 
 Configuration is driven by environment variables:
 
@@ -16,7 +16,13 @@ Configuration is driven by environment variables:
 - ``GHILLIE_PORT``: Listen port (default ``8080``)
 - ``GHILLIE_LOG_LEVEL``: Log level (default ``INFO``)
 - ``GHILLIE_DATABASE_URL``: Database connection URL (optional; enables
-  domain endpoints when set)
+  estate endpoints when set)
+- ``GHILLIE_STATUS_MODEL_BACKEND``: Status backend (optional; adds report
+  routes when set)
+- ``GHILLIE_API_TOKEN``: Bearer token guarding the API (optional; setting
+  it enables authentication, and a blank value stops start-up)
+- ``GHILLIE_DB_BOOTSTRAP``: ``create-all`` creates missing tables at
+  start-up (optional; any other value stops start-up)
 
 Run the service directly with ``python -m ghillie.runtime``.
 """
@@ -75,13 +81,68 @@ def _parse_port(port_str: str) -> int:
     return port
 
 
+_BOOTSTRAP_CREATE_ALL = "create-all"
+
+
+def _read_api_token() -> str | None:
+    """Return the configured bearer token, treating an absent value as unset.
+
+    Secrets supplied by files or shell helpers often carry a trailing newline;
+    the request parser strips the supplied credential, so the configured value
+    must be stripped too or a valid token never matches.
+
+    Raises
+    ------
+    SystemExit
+        If ``GHILLIE_API_TOKEN`` is set but blank after stripping. A blank
+        value would otherwise disable authentication silently, turning a
+        misconfigured deployment into an open one.
+
+    """
+    raw = os.environ.get("GHILLIE_API_TOKEN")
+    token = (raw or "").strip() or None
+    if raw is not None and token is None:
+        log_error(
+            logger,
+            "GHILLIE_API_TOKEN is set but blank; unset it to disable "
+            "authentication or supply a non-blank token",
+        )
+        raise SystemExit(1)
+    return token
+
+
+def _read_bootstrap_setting() -> str | None:
+    """Return the raw ``GHILLIE_DB_BOOTSTRAP`` value, treating blank as unset.
+
+    Raises
+    ------
+    SystemExit
+        If the value is neither blank nor ``create-all``. An unknown mode is
+        an operator error: starting with a half-configured schema is worse
+        than refusing to start.
+
+    """
+    raw = os.environ.get("GHILLIE_DB_BOOTSTRAP")
+    if raw is None or not raw.strip():
+        return None
+    if raw != _BOOTSTRAP_CREATE_ALL:
+        log_error(
+            logger,
+            "Invalid GHILLIE_DB_BOOTSTRAP value: %r (expected %r or unset)",
+            raw,
+            _BOOTSTRAP_CREATE_ALL,
+        )
+        raise SystemExit(1)
+    return raw
+
+
 def create_app() -> falcon.asgi.App:
     """Create and configure the Falcon ASGI application.
 
-    When ``GHILLIE_DATABASE_URL`` is set, builds full domain
-    dependencies (session factory, reporting service) so the app
-    includes the ``POST /reports/repositories/{owner}/{name}``
-    endpoint.  Otherwise only ``/health`` and ``/ready`` are available.
+    When ``GHILLIE_DATABASE_URL`` is set, builds the estate service so the
+    app includes the estate endpoints. Report routes are added only when
+    ``GHILLIE_STATUS_MODEL_BACKEND`` is also set. Otherwise only ``/health``
+    and ``/ready`` are available.
 
     Returns
     -------
@@ -89,25 +150,53 @@ def create_app() -> falcon.asgi.App:
         Configured Falcon ASGI application.
 
     """
+    from ghillie.api.app import AppDependencies
     from ghillie.api.app import create_app as _create_api_app
 
+    # Granian calls this factory in a worker process, so the parent's logging
+    # configuration does not reach it. Without this call the worker's
+    # application logs, including D21's mutation lines, are discarded.
+    configure_logging(os.environ.get("GHILLIE_LOG_LEVEL"))
+
+    bootstrap = _read_bootstrap_setting()
+    api_token = _read_api_token()
     database_url = os.environ.get("GHILLIE_DATABASE_URL")
 
     if database_url is None:
-        return _create_api_app()
+        log_info(
+            logger,
+            "Starting API in health-only mode (set GHILLIE_DATABASE_URL to "
+            "enable estate endpoints)",
+        )
+        return _create_api_app(AppDependencies(api_token=api_token))
 
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-    from ghillie.api.app import AppDependencies
-    from ghillie.api.factory import build_reporting_service
+    from ghillie.api.factory import build_estate_service, build_reporting_service
 
     engine = create_async_engine(database_url)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
-    reporting_service = build_reporting_service(session_factory)
+    estate_service = build_estate_service(session_factory)
+
+    has_status_backend = bool(os.environ.get("GHILLIE_STATUS_MODEL_BACKEND"))
+    reporting_service = (
+        build_reporting_service(session_factory) if has_status_backend else None
+    )
+
+    log_info(
+        logger,
+        "Starting API with estate endpoints (reports=%s, auth=%s, bootstrap=%s)",
+        has_status_backend,
+        api_token is not None,
+        bootstrap is not None,
+    )
 
     deps = AppDependencies(
         session_factory=session_factory,
         reporting_service=reporting_service,
+        estate_service=estate_service,
+        api_token=api_token,
+        bootstrap_engine=engine if bootstrap is not None else None,
     )
     return _create_api_app(deps)
 

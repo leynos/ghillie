@@ -1,8 +1,9 @@
 """Application factory for the Ghillie Falcon ASGI application.
 
 This module provides ``create_app()`` which builds and configures the
-Falcon ASGI application with health endpoints and, when database
-dependencies are available, domain endpoints for report generation.
+Falcon ASGI application with health endpoints and, when the relevant
+dependencies are available, estate-management and report-generation
+endpoints.
 
 Usage
 -----
@@ -17,6 +18,7 @@ Create a full app with domain endpoints::
     deps = AppDependencies(
         session_factory=session_factory,
         reporting_service=reporting_service,
+        estate_service=estate_service,
     )
     app = create_app(deps)
 
@@ -27,21 +29,40 @@ from __future__ import annotations
 import dataclasses as dc
 import typing as typ
 
+import falcon
 import falcon.asgi
 
 from ghillie.api.errors import (
     InvalidInputError,
+    PayloadTooLargeError,
     RepositoryNotFoundError,
+    handle_estate_error,
+    handle_falcon_http_error,
     handle_invalid_input,
-    handle_report_validation_failed,
+    handle_registry_sync_failed,
     handle_repository_not_found,
+    handle_storage_unavailable,
+    handle_unexpected_error,
 )
 from ghillie.api.health.resources import HealthResource, ReadyResource
+from ghillie.estate.errors import (
+    CatalogueRejectedError,
+    EstateConflictError,
+    EstateNotFoundError,
+    InvalidEstateKeyError,
+    InvalidPaginationError,
+    RegistrySyncFailedError,
+    StorageUnavailableError,
+)
+from ghillie.estate.errors import (
+    RepositoryNotFoundError as EstateRepositoryNotFoundError,
+)
 from ghillie.reporting.errors import ReportValidationError
 
 if typ.TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+    from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+    from ghillie.estate.ports import EstateManagement
     from ghillie.reporting.service import ReportingService
 
 __all__ = ["AppDependencies", "create_app"]
@@ -73,9 +94,9 @@ class AsyncMiddlewareProto(typ.Protocol):
 class AppDependencies:
     """Dependencies for the Falcon ASGI application.
 
-    When ``session_factory`` and ``reporting_service`` are both provided,
-    the application includes session middleware and domain endpoints.
-    Otherwise only health endpoints are registered.
+    Each route family is independent: estate routes appear whenever
+    ``estate_service`` is supplied, while reporting routes additionally need
+    ``session_factory`` and ``reporting_service``.
 
     Attributes
     ----------
@@ -83,11 +104,23 @@ class AppDependencies:
         Async session factory for database access.
     reporting_service
         Reporting service for on-demand report generation.
+    estate_service
+        Estate-management port backing the estate endpoints.
+    api_token
+        Optional bearer token. When set, every route except the probes
+        requires it.
+    bootstrap_engine
+        Engine whose schema is created at ASGI start-up when supplied.
 
     """
 
     session_factory: async_sessionmaker[AsyncSession] | None = None
     reporting_service: ReportingService | None = None
+    estate_service: EstateManagement | None = None
+    # The token is a secret: keep it out of the generated ``__repr__`` so it
+    # cannot leak through a log line or an exception traceback.
+    api_token: str | None = dc.field(default=None, repr=False)
+    bootstrap_engine: AsyncEngine | None = None
 
 
 def _has_domain_deps(deps: AppDependencies | None) -> bool:
@@ -99,15 +132,115 @@ def _has_domain_deps(deps: AppDependencies | None) -> bool:
     )
 
 
+def _needs_auth(deps: AppDependencies | None) -> bool:
+    """Return True when authentication is configured or estate routes exist."""
+    return deps is not None and (
+        bool(deps.api_token) or deps.estate_service is not None
+    )
+
+
+def _build_middleware(
+    deps: AppDependencies | None,
+) -> list[AsyncMiddlewareProto]:
+    """Assemble the middleware stack in the order it must run.
+
+    Authentication runs first so an unauthenticated request never opens a
+    database session. The bootstrap middleware only implements the ASGI
+    lifespan hooks, which is why it is appended last.
+    """
+    from ghillie.api.auth import BearerTokenMiddleware
+
+    middleware: list[AsyncMiddlewareProto] = []
+    if _needs_auth(deps):
+        # Build the middleware whenever authentication is configured or the
+        # estate routes are exposed. With no token it warns at start-up and
+        # then acts as a no-op, making an unauthenticated deployment visible.
+        middleware.append(
+            BearerTokenMiddleware(typ.cast("AppDependencies", deps).api_token)
+        )
+
+    if _has_domain_deps(deps):
+        from ghillie.api.middleware import SQLAlchemySessionManager
+
+        deps_with_session = typ.cast("AppDependencies", deps)
+        sf = typ.cast(
+            "async_sessionmaker[AsyncSession]", deps_with_session.session_factory
+        )
+        middleware.append(
+            typ.cast("AsyncMiddlewareProto", SQLAlchemySessionManager(sf))
+        )
+
+    # Bind the engine to a local so the guard's narrowing survives to the
+    # constructor argument; re-reading it through ``deps`` widens it again.
+    bootstrap_engine = deps.bootstrap_engine if deps is not None else None
+    if bootstrap_engine is not None:
+        from ghillie.storage_bootstrap import StorageBootstrapMiddleware
+
+        # This component implements only the ASGI lifespan hooks, so it is
+        # cast to the request/response protocol the list is typed with.
+        middleware.append(
+            typ.cast(
+                "AsyncMiddlewareProto",
+                StorageBootstrapMiddleware(bootstrap_engine),
+            )
+        )
+
+    return middleware
+
+
+def _register_estate_routes(app: falcon.asgi.App, estates: EstateManagement) -> None:
+    """Register every estate-management route on *app*."""
+    from ghillie.api.estate.resources import (
+        CatalogueImportResource,
+        EstateCollectionResource,
+        EstateRepositoryCollectionResource,
+        RegistrySyncResource,
+        RepositoryIngestionResource,
+    )
+
+    app.add_route("/estates", EstateCollectionResource(estates=estates))
+    app.add_route(
+        "/estates/{estate_key}/catalogue-import",
+        CatalogueImportResource(estates=estates),
+    )
+    app.add_route(
+        "/estates/{estate_key}/registry-sync",
+        RegistrySyncResource(estates=estates),
+    )
+    app.add_route(
+        "/estates/{estate_key}/repositories",
+        EstateRepositoryCollectionResource(estates=estates),
+    )
+    app.add_route(
+        "/repositories/{owner}/{name}/ingestion",
+        RepositoryIngestionResource(estates=estates),
+    )
+
+
+def _register_error_handlers(app: falcon.asgi.App) -> None:
+    """Install the shared error envelope for every failure type (D7)."""
+    app.add_error_handler(RepositoryNotFoundError, handle_repository_not_found)
+    app.add_error_handler(InvalidInputError, handle_invalid_input)
+    app.add_error_handler(PayloadTooLargeError, handle_estate_error)
+    app.add_error_handler(ReportValidationError, handle_estate_error)
+    app.add_error_handler(EstateNotFoundError, handle_estate_error)
+    app.add_error_handler(EstateRepositoryNotFoundError, handle_estate_error)
+    app.add_error_handler(InvalidEstateKeyError, handle_estate_error)
+    app.add_error_handler(InvalidPaginationError, handle_estate_error)
+    app.add_error_handler(CatalogueRejectedError, handle_estate_error)
+    app.add_error_handler(EstateConflictError, handle_estate_error)
+    app.add_error_handler(StorageUnavailableError, handle_storage_unavailable)
+    app.add_error_handler(RegistrySyncFailedError, handle_registry_sync_failed)
+    app.add_error_handler(falcon.HTTPError, handle_falcon_http_error)
+    # Every failure reaching a client must use the envelope, including one no
+    # domain handler anticipated.
+    app.add_error_handler(Exception, handle_unexpected_error)
+
+
 def create_app(
     dependencies: AppDependencies | None = None,
 ) -> falcon.asgi.App:
     """Create and configure the Falcon ASGI application.
-
-    When *dependencies* provides a session factory and reporting service,
-    the app includes ``SQLAlchemySessionManager`` middleware and the
-    ``POST /reports/repositories/{owner}/{name}`` endpoint.  Otherwise
-    only ``/health`` and ``/ready`` are registered.
 
     Parameters
     ----------
@@ -121,40 +254,27 @@ def create_app(
         Configured Falcon ASGI application.
 
     """
-    middleware: list[AsyncMiddlewareProto] = []
-
-    # Narrow once: _has_domain_deps guarantees non-None fields.
-    deps = dependencies if _has_domain_deps(dependencies) else None
-    if deps is not None:
-        from ghillie.api.middleware import SQLAlchemySessionManager
-
-        sf = typ.cast("async_sessionmaker[AsyncSession]", deps.session_factory)
-        middleware.append(
-            typ.cast(
-                "AsyncMiddlewareProto",
-                SQLAlchemySessionManager(sf),
-            )
-        )
-
-    app = falcon.asgi.App(middleware=middleware)
+    deps = dependencies
+    app = falcon.asgi.App(middleware=_build_middleware(deps))
 
     # Health endpoints are always available
     app.add_route("/health", HealthResource())
     app.add_route("/ready", ReadyResource())
 
-    # Domain endpoints require database dependencies
-    if deps is not None:
+    # Domain endpoints require their own dependencies.
+    if _has_domain_deps(deps):
         from ghillie.api.gold.resources import ReportResource
 
-        rs = typ.cast("ReportingService", deps.reporting_service)
+        deps_with_reporting = typ.cast("AppDependencies", deps)
+        rs = typ.cast("ReportingService", deps_with_reporting.reporting_service)
         app.add_route(
             "/reports/repositories/{owner}/{name}",
             ReportResource(reporting_service=rs),
         )
 
-    # Error handlers
-    app.add_error_handler(RepositoryNotFoundError, handle_repository_not_found)
-    app.add_error_handler(InvalidInputError, handle_invalid_input)
-    app.add_error_handler(ReportValidationError, handle_report_validation_failed)
+    if deps is not None and deps.estate_service is not None:
+        _register_estate_routes(app, deps.estate_service)
+
+    _register_error_handlers(app)
 
     return app

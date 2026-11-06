@@ -16,6 +16,7 @@ import falcon.testing
 import pytest
 
 from ghillie.api.app import AppDependencies, create_app
+from tests.unit.estate_test_helpers import EmptyEstateManagement
 
 
 @pytest.fixture
@@ -99,3 +100,58 @@ class TestCreateAppWithDeps:
         """With deps, report endpoint is registered (not 404)."""
         result = full_client.simulate_post("/reports/repositories/acme/widgets")
         assert result.status_code != HTTPStatus.NOT_FOUND, "route should be registered"
+
+
+def test_app_dependencies_repr_does_not_expose_the_token() -> None:
+    """A token must not leak through a repr, log line, or traceback."""
+    deps = AppDependencies(
+        estate_service=EmptyEstateManagement(),
+        api_token="s3cret-token-value",  # noqa: S106 - test credential.
+    )
+
+    assert "s3cret-token-value" not in repr(deps), "repr must not expose the token"
+
+
+class TestCreateAppEstateRoutes:
+    """Route families vary independently with their dependencies."""
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            pytest.param((True, False, HTTPStatus.OK, False), id="estate-only"),
+            pytest.param(
+                (False, True, HTTPStatus.NOT_FOUND, True), id="reporting-only"
+            ),
+            pytest.param((True, True, HTTPStatus.OK, True), id="both"),
+            pytest.param((False, False, HTTPStatus.NOT_FOUND, False), id="neither"),
+        ],
+    )
+    def test_route_families_follow_their_dependencies(
+        self,
+        deps: AppDependencies,
+        case: tuple[bool, bool, HTTPStatus, bool],
+    ) -> None:
+        """Each route family appears only when its dependencies are supplied."""
+        has_estate, has_reporting, estate_status, has_report_route = case
+        client = falcon.testing.TestClient(
+            create_app(
+                AppDependencies(
+                    session_factory=deps.session_factory if has_reporting else None,
+                    reporting_service=(
+                        deps.reporting_service if has_reporting else None
+                    ),
+                    estate_service=(EmptyEstateManagement() if has_estate else None),
+                )
+            )
+        )
+
+        estates_status = client.simulate_get("/estates").status_code
+        assert estates_status == estate_status, (
+            "estate route presence should follow deps"
+        )
+        report_status = client.simulate_post(
+            "/reports/repositories/acme/widgets"
+        ).status_code
+        assert (report_status != HTTPStatus.NOT_FOUND) is has_report_route, (
+            "reports route presence should follow deps"
+        )

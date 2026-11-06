@@ -195,6 +195,40 @@ full_name = [
 reason = "SQLAlchemy supplies the TypeDecorator dialect argument as part of its bind and result conversion protocol."
 
 [[tool.skylos.dead_code.entrypoints]]
+type = "parameter"
+full_name = [
+    "ghillie.api.auth.BearerTokenMiddleware.process_request.resp",
+    "ghillie.api.auth.BearerTokenMiddleware.process_response.req",
+    "ghillie.api.auth.BearerTokenMiddleware.process_response.resp",
+    "ghillie.api.auth.BearerTokenMiddleware.process_response.resource",
+    "ghillie.api.auth.BearerTokenMiddleware.process_response.req_succeeded",
+]
+reason = "Falcon passes these middleware hooks the request, response, resource, and success flag positionally; the bearer-token check only needs the request and must keep the names its protocol declares."
+
+[[tool.skylos.dead_code.entrypoints]]
+type = "function"
+full_name = [
+    "ghillie.estate.service._catalogue_rejected",
+    "ghillie.estate.service._elapsed_ms",
+    "ghillie.estate.service._estate_summary",
+    "ghillie.estate.service._import_details",
+    "ghillie.estate.service._import_summary",
+    "ghillie.estate.service._log_mutation",
+    "ghillie.estate.service._next_offset",
+    "ghillie.estate.service._parse_catalogue",
+    "ghillie.estate.service._sync_details",
+    "ghillie.estate.service._sync_error",
+    "ghillie.estate.service._sync_summary",
+    "ghillie.estate.service._validate_page",
+]
+reason = "Skylos's liveness graph does not resolve these module-private helpers from the async EstateManagementService methods that call them; every name has a verified runtime caller in that class."
+
+[[tool.skylos.dead_code.entrypoints]]
+type = "class"
+full_name = ["ghillie.estate.service._MutationLog"]
+reason = "Skylos's liveness graph does not resolve this module-private dataclass from the async EstateManagementService methods that construct it; both mutation log sites build it at runtime."
+
+[[tool.skylos.dead_code.entrypoints]]
 type = "variable"
 full_name = [
     "ghillie.bronze.storage.UTCDateTime.impl",
@@ -215,6 +249,7 @@ prefixes = [
     "ghillie.reporting.actor",
     "ghillie.runtime",
     "ghillie.status.factory",
+    "ghillie.storage_bootstrap",
 ]
 allowed = [
     "application",
@@ -230,6 +265,9 @@ name = "domain_ports"
 prefixes = [
     "ghillie.common",
     "ghillie.catalogue.models",
+    "ghillie.estate.errors",
+    "ghillie.estate.models",
+    "ghillie.estate.ports",
     "ghillie.evidence.models",
     "ghillie.registry.models",
     "ghillie.registry.policy",
@@ -254,6 +292,7 @@ prefixes = [
     "ghillie.catalogue.watch",
     "ghillie.evidence.classification",
     "ghillie.evidence.event_targets",
+    "ghillie.estate",  # generic — domain_ports leaf prefixes must precede this
     "ghillie.evidence.project_service",
     "ghillie.evidence.service",
     "ghillie.github.errors",
@@ -307,6 +346,7 @@ allowed = [
 name = "outbound_adapter"
 prefixes = [
     "ghillie.bronze.storage",
+    "ghillie.catalogue.queries",
     "ghillie.catalogue.storage",
     "ghillie.github.client",
     "ghillie.gold.storage",

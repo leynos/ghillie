@@ -16,6 +16,7 @@ from ghillie.catalogue import (
     Component,
     ComponentEdgeRecord,
     ComponentRecord,
+    Estate,
     ProjectRecord,
     Repository,
     RepositoryRecord,
@@ -511,3 +512,85 @@ projects:
     repo_count, component_with_repo = asyncio.run(_repo_usage())
     assert repo_count == 1
     assert component_with_repo == 1
+
+
+def test_importer_dry_run_leaves_no_rows(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """D20: a dry run reports counts after flushing, then rolls back."""
+    importer = CatalogueImporter(
+        session_factory, estate_key="dry", estate_name="Dry Estate"
+    )
+
+    result = asyncio.run(
+        importer.import_path(
+            Path("examples/wildside-catalogue.yaml"),
+            commit_sha="dry123",
+            dry_run=True,
+        )
+    )
+
+    assert result.projects_created == EXPECTED_PROJECTS, "dry run should count projects"
+    assert result.components_created == EXPECTED_COMPONENTS, (
+        "dry run should count components"
+    )
+    assert result.repositories_created == EXPECTED_REPOS, (
+        "dry run should count repositories"
+    )
+    assert result.edges_created == EXPECTED_EDGES, "dry run should count edges"
+    assert _count_rows(session_factory) == (0, 0, 0, 0), "dry run should leave no rows"
+
+    async def _persistence() -> tuple[int, int]:
+        async with session_factory() as session:
+            estates = (await session.scalars(select(Estate))).all()
+            imports = (await session.scalars(select(CatalogueImportRecord))).all()
+            return len(estates), len(imports)
+
+    assert asyncio.run(_persistence()) == (0, 0), (
+        "dry run should not persist the estate or its import record"
+    )
+
+
+def test_importer_keeps_the_estate_description_on_rename(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """D18: catalogues carry no description, so a rename must not clear one."""
+    importer = CatalogueImporter(
+        session_factory, estate_key="demo", estate_name="First Name"
+    )
+    asyncio.run(
+        importer.import_path(
+            Path("examples/wildside-catalogue.yaml"), commit_sha="first"
+        )
+    )
+
+    async def _set_description() -> None:
+        async with session_factory() as session, session.begin():
+            estate = await session.scalar(select(Estate).where(Estate.key == "demo"))
+            assert estate is not None, (
+                "estate should exist before setting its description"
+            )
+            estate.description = "Maintained outside the catalogue"
+
+    asyncio.run(_set_description())
+
+    renamed = CatalogueImporter(
+        session_factory, estate_key="demo", estate_name="Second Name"
+    )
+    asyncio.run(
+        renamed.import_path(
+            Path("examples/wildside-catalogue.yaml"), commit_sha="second"
+        )
+    )
+
+    async def _read_estate() -> Estate:
+        async with session_factory() as session:
+            estate = await session.scalar(select(Estate).where(Estate.key == "demo"))
+            assert estate is not None, "estate should exist after the rename"
+            return estate
+
+    estate = asyncio.run(_read_estate())
+    assert estate.name == "Second Name", "rename should update the name"
+    assert estate.description == "Maintained outside the catalogue", (
+        "rename should keep the description"
+    )

@@ -270,3 +270,4 @@ class TestReportResource422:
         result = client.simulate_post("/reports/repositories/acme/widgets")
         assert result.json["review_id"] == "rev-42", "wrong review_id"
         assert "issues" in result.json, "response should contain issues"
+        assert result.json["code"] == "report_validation_failed", "wrong code"
