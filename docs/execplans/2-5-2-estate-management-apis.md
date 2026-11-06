@@ -890,6 +890,10 @@ per pull request.
         warnings, 12 snapshots), `markdownlint` (58 files, 0 issues), `nixie`,
         and `spelling` (logs `/tmp/gate-C-a096bf5-*.out`). This entry is a
         Markdown-only change, so the same four Markdown gates cover it.
+  - [x] (2026-11-06) PR-A then repaired the hosted CodeScene finding and
+        PR-B was rebased onto it, so branch C was replayed onto PR-B's
+        `94398e0`: 20 replayed commits, one plan conflict resolved by keeping
+        the D28 paragraph, and decision order unchanged.
 
 ## Surprises & discoveries
 
