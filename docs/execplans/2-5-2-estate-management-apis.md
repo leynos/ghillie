@@ -871,6 +871,12 @@ per pull request.
         the field-update mutation; the O1 row now names the policy mutation
         that failed, and the text records that the field-update mutation
         passed.
+  - [x] (2026-11-06) PR-B corrected its ExecPlan Progress entry to record the
+        eight-gate pass at `95c7886`; branch C was then rebased onto that head
+        (`27c0efd`). `check-fmt`, `markdownlint`, `nixie`, and `spelling`
+        passed at the rebased head `ca2a258` (logs
+        `/tmp/gate-C-ca2a258-*.out`). This entry is a Markdown-only change, so
+        the same four gates cover it.
 
 ## Surprises & discoveries
 
