@@ -296,6 +296,16 @@ per pull request.
       section also says what the D28 tests are — deterministic stale-view and
       missed-read regressions — rather than implying overlapping-transaction
       coverage.
+- [x] (2026-11-06) The follow-up review corrected that round's account of the
+      two limits. The ownership-only limit is not inherited: at the PR base the
+      claim was unconditional and `_update_silver_repository` applied
+      `estate_id` itself, so the change counted; D28's conditional claim
+      introduced the gap. Only the removal-path limit predates D28. The entry
+      now says so, and says that no normal production path creating the state
+      was identified rather than that none exists. The Verification section no
+      longer says every D28 test drives a sync:
+      `test_claim_unowned_repository_is_atomic_under_a_stale_view` calls the
+      claim primitive directly.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
@@ -356,20 +366,23 @@ per pull request.
   still carries a `catalogue_repository_id`. Because the policy treats a null
   `estate_id` as adoptable, and therefore as owned for its purposes, such a row
   falls through to the removal and update paths like an owned one. No normal
-  production path creates that state: adoption applies only to unlinked rows,
-  and creation always sets `estate_id`. Two narrow limits follow, both reached
-  only by rows written directly to the database, and both unchanged from the
-  base, so EP-M1 records them rather than adding special cases.
-  - An ownership-only claim does not register as an update.
-    `_claim_unowned_repository` mirrors the new `estate_id` onto the loaded row,
-    so `_update_silver_repository` afterwards finds every field already equal.
-    The claim commits, but `repositories_updated` does not increment and
-    `last_synced_at` does not advance for that row.
-  - The removal path judges ownership from the loaded view. If the slug is
-    absent from this estate's catalogue and is enabled, the removal path
-    disables it — including when another estate claimed the row after this
-    sync loaded its view. Closing that would need the same conditional
-    ownership check in the removal path that D28 added to the claim.
+  production path that creates that state was identified: adoption applies only
+  to unlinked rows, and creation always sets `estate_id`. Two narrow limits
+  follow. EP-M1 records both rather than adding special cases, and they do not
+  share an origin.
+  - An ownership-only claim does not register as an update. D28 introduced this
+    limit. `_claim_unowned_repository` mirrors the new `estate_id` onto the
+    loaded row, so `_update_silver_repository` afterwards finds every field
+    already equal. The claim commits, but `repositories_updated` does not
+    increment and `last_synced_at` does not advance for that row. At the PR
+    base the claim was unconditional and `_update_silver_repository` applied
+    `estate_id` itself, so the same change was counted.
+  - The removal path judges ownership from the loaded view. This limit predates
+    D28 and is unchanged by it. If the slug is absent from this estate's
+    catalogue and is enabled, the removal path disables it — including when
+    another estate claimed the row after this sync loaded its view. Closing
+    that would need the same conditional ownership check in the removal path
+    that D28 added to the claim.
 
 ## Decision log
 
@@ -872,15 +885,20 @@ Obligation O6, CLI import closure (`TDD-CLI-THIN`).
 - Non-vacuity: the test also asserts that `ghillie.cli.commands.estate` is in
   the loaded set, proving the estate commands were imported.
 
-Concurrency of adoption (D28): `tests/unit/test_registry_service_sync.py`
-proves that a stale view cannot claim an unowned row, that a sync whose claim
-matches no row reports a conflict, and that a lost insert preserves the
-`IntegrityError` cause for the 409 mapping. These are deterministic stale-view
-and missed-read regressions: each test drives one sync against a deliberately
-stale view or a claim the database cannot match, and asserts the reported
-outcome. None of them exercises two overlapping transactions, so they must not
-be read as a concurrency proof; what they establish is that a lost claim is
-reported rather than silently overwriting the winner.
+Concurrency of adoption (D28): three tests in
+`tests/unit/test_registry_service_sync.py` cover the adoption boundary.
+`test_claim_unowned_repository_is_atomic_under_a_stale_view` calls
+`_claim_unowned_repository` directly, first with the winner's session and then
+with a row loaded before that claim committed, and asserts the second call
+claims nothing. `test_sync_reports_conflict_when_adoption_loses_a_race` drives
+one sync whose claim matches no row and asserts the reported conflict.
+`test_concurrent_insert_surfaces_as_a_conflict_cause` drives one sync whose
+loaded view misses a row it then re-inserts, and asserts that the lost insert
+preserves the `IntegrityError` cause for the 409 mapping. None of the three
+exercises two overlapping transactions, so they are deterministic stale-view
+and missed-read regressions rather than a concurrency proof; what they
+establish is that a lost claim is reported instead of silently overwriting the
+winner.
 
 Residual gaps: the per-estate lock is in-process, so concurrent requests across
 replicas are not serialized (single replica in MVP); adoption of an unowned row
