@@ -93,6 +93,23 @@ def test_create_all_bootstrap_value_is_accepted(
     assert isinstance(create_app(), falcon.asgi.App), "runtime should build the app"
 
 
+def test_create_app_configures_logging_for_the_worker(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Granian calls the factory in a worker, so the factory configures logging."""
+    _set_database(monkeypatch, tmp_path)
+    monkeypatch.setenv("GHILLIE_LOG_LEVEL", "DEBUG")
+    levels: list[str | None] = []
+
+    from ghillie import runtime
+
+    monkeypatch.setattr(runtime, "configure_logging", levels.append)
+
+    runtime.create_app()
+
+    assert levels == ["DEBUG"], "the factory should apply GHILLIE_LOG_LEVEL"
+
+
 def test_blank_api_token_fails_fast(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

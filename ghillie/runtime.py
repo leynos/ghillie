@@ -153,6 +153,11 @@ def create_app() -> falcon.asgi.App:
     from ghillie.api.app import AppDependencies
     from ghillie.api.app import create_app as _create_api_app
 
+    # Granian calls this factory in a worker process, so the parent's logging
+    # configuration does not reach it. Without this call the worker's
+    # application logs, including D21's mutation lines, are discarded.
+    configure_logging(os.environ.get("GHILLIE_LOG_LEVEL"))
+
     bootstrap = _read_bootstrap_setting()
     api_token = _read_api_token()
     database_url = os.environ.get("GHILLIE_DATABASE_URL")
