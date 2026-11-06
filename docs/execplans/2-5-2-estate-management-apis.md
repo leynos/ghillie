@@ -311,6 +311,14 @@ per pull request.
 - Observation: `/tmp` contains a stray `bisect.py`, so Python run with `/tmp`
   as its working directory cannot import the standard library. Impact: run
   scratch Python with `-I` from the repository root.
+- Observation: the Silver schema permits an unowned row (`estate_id` null) that
+  still carries a `catalogue_repository_id`. If such a row is enabled and its
+  slug is absent from the synced estate's catalogue, the removal path disables
+  it, because the row is linked and the estate does not own it. No normal
+  production path creates that state: adoption applies only to unlinked rows,
+  and creation always sets `estate_id`. The behaviour is unchanged from the
+  base and is the conservative choice for a row reachable only by direct
+  database writes, so EP-M1 keeps it rather than adding a special case.
 
 ## Decision log
 
@@ -693,9 +701,13 @@ Obligation O1, toggle ownership under sync (D3).
   while the model records each observed transition in a `collections.Counter`;
   the same test then asserts the counter covers every `IngestionTransition`
   member. This avoids `event()` statistics (not assertable) and cross-worker
-  counters (broken by `-n auto`). Seeded mutation: re-adding
+  counters (broken by `-n auto`). Seeded mutation: changing
+  `decide_for_catalogue_repository` to return `catalogue_active` for `PRESERVE`
+  makes both the named test and the machine fail. Re-adding
   `("ingestion_enabled", cat_repo.is_active)` to the field updates in `sync.py`
-  must make both the named test and the machine fail.
+  is behaviourally equivalent, because the policy block reasserts
+  `decision.ingestion_enabled` afterwards; it was run and both tests still
+  passed, so it is not usable as non-vacuity evidence.
 
 Obligation O2, pagination completeness (D4, D5).
 
