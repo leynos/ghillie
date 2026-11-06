@@ -94,6 +94,13 @@ ghillie estate import \
   --estate-name "Wildside"
 ```
 
+The CLI applies the creation pattern to every import, while the service applies
+it only when creating a new estate. An estate created earlier through Python
+may therefore have a key that the CLI rejects, such as `Wildside Estate`.
+Re-import into such an estate with the HTTP API directly;
+`ghillie estate import` exits `2` with `invalid_estate_key` before sending a
+request.
+
 The response reports the commit, the resulting state, and created, updated, and
 deleted counts for projects, components, repositories, and edges:
 

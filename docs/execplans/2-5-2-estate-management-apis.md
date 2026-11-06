@@ -1188,6 +1188,16 @@ expert-panel review.
   persisted-schema tolerance is exceeded. Recorded here so a later reviewer
   sees the deviation and its basis rather than discovering it from the
   comparison.
+- D26, legacy estate-key re-import. The EP-C-R4 assessment found that
+  `ghillie estate import` rejects any key outside the creation pattern, so an
+  estate created earlier through Python under a key such as `Wildside Estate`
+  can be re-imported through the HTTP API but not through the CLI. D16 and
+  EP-M4 explicitly require the CLI pre-validation, and the service already
+  applies the pattern only to new estates. Rather than revise an approved
+  requirement without authorization, this plan keeps the CLI behaviour and
+  records the limitation in the users' guide and under Artefacts and notes. A
+  future change that permits legacy keys must move creation validation wholly
+  to the service and add a CLI-to-service regression test.
 - D27, pre-merge-check reconciliation. The hosted pre-merge checks raised six
   findings against PR-A. Three are actioned in this round: the title names
   roadmap task 2.5.b; `test_sync_reports_cross_estate_conflict` gives the
@@ -2275,6 +2285,24 @@ hold far fewer than 50 estates, and the repository listing — the collection
 that can grow without bound — does expose paging. A future task that needs to
 enumerate more estates must add the paging options rather than assume the
 current command is complete.
+
+### Known limitation: legacy estate keys cannot be re-imported through the CLI
+
+D16 requires the CLI to pre-validate every import key against the creation
+pattern `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`, and EP-M4 repeats that
+requirement. The service applies the same pattern only when it creates an
+estate, so an estate created earlier through Python may hold a key the CLI
+rejects. `ghillie estate import` exits `2` with `invalid_estate_key` for such a
+key and sends no request, while `POST /estates/{estate_key}/catalogue-import`
+re-imports into the existing estate successfully.
+
+The approved rule and legacy reachability conflict. Because D16 is an explicit
+EP-M4 requirement, this plan keeps the CLI behaviour and records the limitation
+rather than revising the rule without authorization. The limitation is
+documented in the users' guide. A future task that needs legacy-key re-import
+from the CLI must change D16 so that creation validation stays with the
+service, which can determine whether the estate already exists, and add a
+CLI-to-service regression test.
 
 ## Interfaces and dependencies
 
