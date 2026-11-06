@@ -263,6 +263,16 @@ per pull request.
         EP-A-R7 asked to drop the broader "behaviourally equivalent" claim; the
         text now says only that the final ingestion flag is preserved and notes
         the changed-row side effect.
+- [x] (2026-11-06) Reached the hosted pre-merge checks. The PR title now names
+      roadmap task 2.5.b. Two test gaps were closed: the cross-estate conflict
+      test gives the foreign row distinct metadata and compares a full field
+      snapshot before and after sync, and the dry run asserts the exact
+      six-repository projection instead of a lower bound.
+      `docs/developers-guide.md` gained a "Registry synchronization" section
+      covering the policy transitions, their `domain_ports` placement, the
+      `dry_run` rollback contract, and the `SyncResult` fields. The remaining
+      three pre-merge findings are recorded as D27 with evidence for why each
+      is outside the approved scope.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
@@ -493,6 +503,29 @@ expert-panel review.
   standing instruction to continue delivery. No interface, dependency, or
   persistence tolerance is exceeded, and the file-count tolerance (35) is not
   approached. D22 and D23 are introduced by PR-B and follow this entry once the
+  stack is applied.
+- D27, pre-merge-check reconciliation. The hosted pre-merge checks raised six
+  findings against PR-A. Three are actioned in this round: the title names
+  roadmap task 2.5.b; `test_sync_reports_cross_estate_conflict` gives the
+  foreign row a distinct branch, catalogue link, documentation paths, and sync
+  time, then proves a full field snapshot is unchanged; and the dry run asserts
+  the exact six-repository creation count. Three are dispositions:
+  1. A "2.0.0 migration document" has no basis here: `pyproject.toml` declares
+     version 1.0.0, and no release or migration process exists. The users' guide
+     already signposts toggle ownership, conflict reporting, the result fields,
+     and `dry_run`.
+  2. Ownership is already enforced atomically at the persistence boundary by
+     the unique constraint `uq_repositories_owner_name`, and D17 maps
+     `IntegrityError` to 409. Turning a losing concurrent claim into a reported
+     conflict instead of a failed sync is a behaviour refinement; D17 and the
+     Verification plan's stated residual gap cover concurrent requests across
+     replicas only, so this is a design change outside the approved plan.
+  3. The repository has no metrics or tracing stack, and the plan forbids new
+     runtime dependencies and persisted-schema changes. D21 specifies exactly
+     one structured line per mutation at the estate-service boundary; adding a
+     second line in the registry module would contradict that. Metrics and
+     tracing are a cross-cutting platform decision, not an EP-M1 deliverable.
+  D25 and D26 are introduced by branches B and C and follow this entry once the
   stack is applied.
 
 ## Outcomes & retrospective
