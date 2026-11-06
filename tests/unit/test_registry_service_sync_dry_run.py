@@ -180,7 +180,12 @@ async def test_sync_bounds_the_left_disabled_preview(
     tmp_path: Path,
 ) -> None:
     """More disabled repositories than the preview limit keep an exact count."""
-    total = LEFT_DISABLED_PREVIEW_LIMIT + 1
+    # Pin the documented limit instead of deriving it from the constant under
+    # test, so widening the constant cannot silently widen the expectation too.
+    assert LEFT_DISABLED_PREVIEW_LIMIT == 100, (
+        "The disabled preview limit is a documented contract of 100 entries"
+    )
+    total = 101
     lines = ["version: 1", "projects:"]
     for index in range(total):
         lines.extend(
@@ -226,9 +231,9 @@ async def test_sync_bounds_the_left_disabled_preview(
     assert result.repositories_left_disabled_count == total, (
         "The count must cover every disabled repository, not just the preview"
     )
-    assert len(result.repositories_left_disabled) == LEFT_DISABLED_PREVIEW_LIMIT, (
-        "The preview list must stop at the configured limit"
+    assert len(result.repositories_left_disabled) == 100, (
+        "The preview list must stop at exactly 100 entries"
     )
-    assert len(set(result.repositories_left_disabled)) == LEFT_DISABLED_PREVIEW_LIMIT, (
+    assert len(set(result.repositories_left_disabled)) == 100, (
         "The preview list must not contain duplicate slugs"
     )
