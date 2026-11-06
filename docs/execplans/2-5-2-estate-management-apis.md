@@ -282,6 +282,11 @@ per pull request.
       primitive under a stale view, the losing sync path, and the insert race's
       preserved `IntegrityError` cause; the Silver snapshot helper now includes
       `is_active`, `created_at`, and `updated_at`.
+- [x] (2026-11-06) The hosted CodeScene review of `4866f8e` failed the advisory
+      rule gate on `test_concurrent_insert_surfaces_as_a_conflict_cause`
+      (excess function arguments). The test now inserts its foreign row
+      directly instead of taking the `create_repo` fixture, and the local
+      `cs check` reports a code health score of `10.00` for the module.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
