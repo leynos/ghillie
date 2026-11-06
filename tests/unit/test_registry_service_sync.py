@@ -8,9 +8,11 @@ import typing as typ
 import pytest
 import pytest_asyncio
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 
 from ghillie.catalogue import CatalogueImporter, RepositoryRecord
 from ghillie.registry import RegistrySyncError, RepositoryRegistryService
+from ghillie.registry import sync as sync_module
 from ghillie.silver.storage import Repository
 from tests.fixtures.specs import RepositoryCreateSpec
 from tests.unit.registry_service_sync_helpers import (
@@ -356,3 +358,127 @@ async def test_sync_reports_cross_estate_conflict(
     assert (
         await snapshot_silver_repo(session_factory, "leynos", "wildside") == before
     ), "A conflict must leave every field of the foreign row untouched"
+
+
+@pytest.mark.asyncio
+async def test_claim_unowned_repository_is_atomic_under_a_stale_view(
+    session_factory: async_sessionmaker[AsyncSession],
+    create_estates: tuple[str, str],
+    create_repo: CreateRepoFn,
+) -> None:
+    """Only the first claim of an unowned row succeeds; a stale view loses."""
+    estate_a_id, estate_b_id = create_estates
+    await create_repo("leynos", "adoptme", spec=RepositoryCreateSpec())
+
+    async with session_factory() as stale_session:
+        stale_rows = await sync_module._load_silver_repositories(
+            stale_session, estate_a_id, ["leynos/adoptme"]
+        )
+        # End the read transaction but keep the loaded view, which is what a
+        # sync that read before the other estate committed would hold.
+        await stale_session.commit()
+        stale_row = stale_rows["leynos/adoptme"]
+
+    async with session_factory() as winner_session:
+        winner_rows = await sync_module._load_silver_repositories(
+            winner_session, estate_b_id, ["leynos/adoptme"]
+        )
+        claimed = await sync_module._claim_unowned_repository(
+            winner_session, winner_rows["leynos/adoptme"], estate_b_id
+        )
+        assert claimed, "The first claim of an unowned row should succeed"
+        await winner_session.commit()
+
+    async with session_factory() as loser_session:
+        claimed = await sync_module._claim_unowned_repository(
+            loser_session, stale_row, estate_a_id
+        )
+        assert not claimed, "A stale view must not overwrite the winning claim"
+        await loser_session.rollback()
+
+    repo = await fetch_silver_repo(session_factory, "leynos", "adoptme")
+    assert repo is not None, "The adopted row should still exist"
+    assert repo.estate_id == estate_b_id, "The winning estate must keep the row"
+
+
+@pytest.mark.asyncio
+async def test_sync_reports_conflict_when_adoption_loses_a_race(
+    session_factory: async_sessionmaker[AsyncSession],
+    create_estates: tuple[str, str],
+    wildside_catalogue_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A sync that loses an adoption race reports a conflict, not a claim."""
+    _estate_a_id, estate_b_id = create_estates
+    async with session_factory() as session, session.begin():
+        session.add(
+            Repository(
+                github_owner="leynos",
+                github_name="wildside",
+                default_branch="main",
+            )
+        )
+    importer = CatalogueImporter(
+        session_factory, estate_key="estate-a", estate_name="Estate A"
+    )
+    await importer.import_path(wildside_catalogue_path, commit_sha="adoption-race-1")
+
+    original = sync_module._load_silver_repositories
+
+    async def _racing_load(
+        session: AsyncSession,
+        estate_id: str | None,
+        catalogue_slugs: typ.Iterable[str],
+    ) -> dict[str, Repository]:
+        """Return the pre-claim view after another estate has claimed the row."""
+        async with session_factory() as stale_session:
+            stale = await original(stale_session, estate_id, catalogue_slugs)
+        async with session_factory() as winner_session:
+            winner = await original(winner_session, estate_b_id, catalogue_slugs)
+            winner["leynos/wildside"].estate_id = estate_b_id
+            await winner_session.commit()
+        return stale
+
+    monkeypatch.setattr(sync_module, "_load_silver_repositories", _racing_load)
+
+    result = await RepositoryRegistryService(
+        session_factory, session_factory
+    ).sync_from_catalogue("estate-a")
+
+    assert "leynos/wildside" in result.repositories_conflicted, (
+        "A sync that loses the adoption race must report a conflict"
+    )
+    repo = await fetch_silver_repo(session_factory, "leynos", "wildside")
+    assert repo is not None, "The adopted row should still exist"
+    assert repo.estate_id == estate_b_id, "The winner's claim must stand"
+
+
+@pytest.mark.asyncio
+async def test_concurrent_insert_surfaces_as_a_conflict_cause(
+    session_factory: async_sessionmaker[AsyncSession],
+    create_repo: CreateRepoFn,
+    wildside_catalogue_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A lost insert race keeps the unique-constraint cause for a 409 answer."""
+    await create_repo("leynos", "wildside", spec=RepositoryCreateSpec())
+    importer = CatalogueImporter(
+        session_factory, estate_key="estate-a", estate_name="Estate A"
+    )
+    await importer.import_path(wildside_catalogue_path, commit_sha="insert-race-1")
+
+    async def _empty_load(*_args: object, **_kwargs: object) -> dict[str, Repository]:
+        """Simulate a sync whose read missed a row another sync inserted."""
+        return {}
+
+    monkeypatch.setattr(sync_module, "_load_silver_repositories", _empty_load)
+
+    with pytest.raises(RegistrySyncError) as excinfo:
+        await RepositoryRegistryService(
+            session_factory, session_factory
+        ).sync_from_catalogue("estate-a")
+
+    assert isinstance(excinfo.value.__cause__, IntegrityError), (
+        "A lost insert must preserve the unique-constraint cause so the API "
+        "can answer 409"
+    )

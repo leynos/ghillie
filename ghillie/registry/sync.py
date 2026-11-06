@@ -28,7 +28,7 @@ from __future__ import annotations
 import dataclasses
 import typing as typ
 
-from sqlalchemy import select, tuple_
+from sqlalchemy import select, tuple_, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
@@ -248,7 +248,40 @@ def _silver_state(
     )
 
 
-def _sync_one_repository(
+async def _claim_unowned_repository(
+    session: AsyncSession,
+    silver_repo: Repository,
+    estate_id: str | None,
+) -> bool:
+    """Claim an unowned Silver row for this estate, returning False if lost.
+
+    An unowned row is adoptable by any estate, so two syncs for different
+    estates can both decide to claim it. The owner/name uniqueness constraint
+    arbitrates a race to *insert* the same repository; it cannot arbitrate a
+    race to adopt an existing row, because changing `estate_id` leaves the
+    owner/name pair unique. A conditional UPDATE makes the claim itself
+    atomic, so the loser updates nothing and must report a conflict instead of
+    overwriting the winner's claim.
+    """
+    if estate_id is None or silver_repo.estate_id is not None:
+        return True
+
+    claimed_id = await session.scalar(
+        update(Repository)
+        .where(Repository.id == silver_repo.id, Repository.estate_id.is_(None))
+        .values(estate_id=estate_id)
+        .returning(Repository.id)
+        .execution_options(synchronize_session=False)
+    )
+    if claimed_id is None:
+        return False
+
+    # The statement bypassed the identity map, so mirror the claim locally.
+    silver_repo.estate_id = estate_id
+    return True
+
+
+async def _sync_one_repository(
     context: _SilverSyncContext,
     slug: str,
     cat_repo: RepositoryRecord,
@@ -269,6 +302,12 @@ def _sync_one_repository(
     if silver_repo is None:
         context.session.add(_create_silver_repository(cat_repo, context, decision))
         context.result.repositories_created += 1
+        return
+
+    if not await _claim_unowned_repository(
+        context.session, silver_repo, context.estate_id
+    ):
+        context.result.repositories_conflicted.append(slug)
         return
 
     changed = _update_silver_repository(context, silver_repo, cat_repo, decision)
@@ -301,7 +340,7 @@ async def _sync_repositories(
     )
 
     for slug, cat_repo in plan.catalogue_repos.items():
-        _sync_one_repository(context, slug, cat_repo)
+        await _sync_one_repository(context, slug, cat_repo)
 
     _deactivate_removed_repositories(context, set(plan.catalogue_repos))
 
