@@ -306,6 +306,12 @@ per pull request.
       longer says every D28 test drives a sync:
       `test_claim_unowned_repository_is_atomic_under_a_stale_view` calls the
       claim primitive directly.
+- [x] (2026-11-06) Rebased onto PR-A's `38f3cac` so this branch carries the
+      CodeScene repair. One plan conflict was resolved by keeping PR-A's
+      CodeScene bullet ahead of this branch's EP-M2 block, and D28's closing
+      sentence still names branch C alone. Later replays moved the branch onto
+      `a7a796e`, which records the unowned-row limits the third review round
+      asked for, and then onto `d6356b7`, which corrects their provenance.
 - [x] PR-B, EP-M2: estate port, service, and catalogue queries.
   - [x] (2026-11-03) Red observed: `test_estate_service.py` hit
         `NotImplementedError` from the service stub, and the new importer
@@ -680,6 +686,14 @@ per pull request.
         passed, 11 skipped, 0 failed), `markdownlint`, `nixie`, and `spelling`.
         Logs are under `/tmp/gate-B-95c7886-*.out`. PR-C's rebase follows this
         entry.
+  - [x] (2026-11-06) Rebased onto PR-A's `497283b`, which closes the hosted
+        pre-merge checks. The three plan conflicts were resolved by keeping
+        PR-A's D27 block alongside this branch's D22/D23 entries; `git diff
+        497283b HEAD` names the same implementation, test, and documentation
+        changes as the pre-rebase diff. The full eight gates passed at
+        `9333bc3`: `check-fmt`, `check-architecture`, `typecheck`, `lint`,
+        `test` (1442 passed, 11 skipped, 0 failed), `markdownlint`, `nixie`,
+        and `spelling`. Logs are under `/tmp/gate-B-9333bc3-*.out`.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
@@ -1019,8 +1033,7 @@ expert-panel review.
   inside the sync transaction, so a dry run rolls it back. Concurrent inserts
   of the same slug remain arbitrated by `uq_repositories_owner_name` and
   surface as `IntegrityError`, which D17 maps to 409. D25 and D26 are
-  introduced by branch C and follow this entry once the stack is
-  applied.
+  introduced by branch C and follow this entry once the stack is applied.
 
 ## Outcomes & retrospective
 
