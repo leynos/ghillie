@@ -255,6 +255,14 @@ per pull request.
         above the 2500-line scope tolerance. The exception is recorded as D24
         with its rationale; the added tests are EP-M1 verification obligations
         and cannot move to PR-B without breaking the D19 plateau boundary.
+  - [x] (2026-11-06) The EP-A-R6 assessment asked to reconcile the O1
+        seeded-mutation record. Running the specified field-update mutation
+        showed both O1 tests still pass: the policy block reasserts the final
+        flag, though the scalar loop can still mark the row changed. The plan
+        now records that result and names the policy mutation that did fail.
+        EP-A-R7 asked to drop the broader "behaviourally equivalent" claim; the
+        text now says only that the final ingestion flag is preserved and notes
+        the changed-row side effect.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
@@ -705,9 +713,12 @@ Obligation O1, toggle ownership under sync (D3).
   `decide_for_catalogue_repository` to return `catalogue_active` for `PRESERVE`
   makes both the named test and the machine fail. Re-adding
   `("ingestion_enabled", cat_repo.is_active)` to the field updates in `sync.py`
-  is behaviourally equivalent, because the policy block reasserts
-  `decision.ingestion_enabled` afterwards; it was run and both tests still
-  passed, so it is not usable as non-vacuity evidence.
+  preserves the final ingestion flag, because the policy block reasserts
+  `decision.ingestion_enabled` afterwards, but the scalar loop can still mark
+  the row changed before the policy restores the flag, so it can increment
+  `repositories_updated` and advance `last_synced_at`. It was run and both
+  tests still passed, so it is not usable as non-vacuity evidence for the
+  final-flag invariant.
 
 Obligation O2, pagination completeness (D4, D5).
 
