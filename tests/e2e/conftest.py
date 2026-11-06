@@ -52,6 +52,7 @@ class GhillieServer:
 
     base_url: str
     home: Path
+    database: Path
     log_path: Path
     process: subprocess.Popen[bytes]
 
@@ -186,7 +187,7 @@ def _start_server(tmp_path: Path) -> GhillieServer:
             last_error = exc
             _stop(process)
             continue
-        return GhillieServer(base_url, home, log_path, process)
+        return GhillieServer(base_url, home, database, log_path, process)
     message = f"could not start the Ghillie runtime after {_STARTUP_ATTEMPTS} attempts"
     raise RuntimeError(message) from last_error
 

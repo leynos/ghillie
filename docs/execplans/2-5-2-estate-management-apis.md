@@ -316,11 +316,13 @@ per pull request.
       sketched the five-argument `import_catalogue` that D22 replaced with a
       `CatalogueImportRequest`. The example now matches D22 and
       `ghillie/estate/ports.py`.
-- [x] (2026-11-06) The EP-C-R8 assessment of branch C left the EP-M5
-      Granian-to-Falcon lifespan check open. Probing the packaged runtime
-      showed that Granian's worker discarded the application logs, so the
-      bootstrap lines never reached the operator. D29 configures logging in
-      the factory; branch C's end-to-end test proves the startup hook runs.
+- [x] (2026-11-06) Discharged the EP-C-R8 open verification item. A new
+      end-to-end test starts the packaged runtime on a fresh database with
+      `GHILLIE_DB_BOOTSTRAP=create-all` and asserts the five layer tables and
+      `init_all_storage`'s two log lines. Its first run failed because
+      Granian's worker discarded application logs, so the bootstrap lines
+      never appeared; D29, introduced by PR-B, configures logging in the
+      factory. The test now passes and was repeated three times.
 - [x] PR-B, EP-M2: estate port, service, and catalogue queries.
   - [x] (2026-11-03) Red observed: `test_estate_service.py` hit
         `NotImplementedError` from the service stub, and the new importer
@@ -1517,11 +1519,9 @@ Axioms (not verified here): Falcon routes by URI template after
 percent-decoding the path; SQL `ORDER BY owner, name LIMIT ... OFFSET ...` is
 deterministic because owner and name are unique together; msgspec enforces
 `forbid_unknown_fields` and `Meta` constraints; Cyclopts maps `name` and
-`negative` lists as observed in the spike; Granian's `ASGI` interface delivers
-lifespan events (exercised by the end-to-end test, which fails if the bootstrap
-does not run); `httpx.MockTransport` and `httpx.ASGITransport` faithfully
-present requests and responses; `ruamel.yaml`'s event parser reports anchors
-and aliases.
+`negative` lists as observed in the spike; `httpx.MockTransport` and
+`httpx.ASGITransport` faithfully present requests and responses;
+`ruamel.yaml`'s event parser reports anchors and aliases.
 
 Obligation O1, toggle ownership under sync (D3).
 
@@ -1667,6 +1667,16 @@ exercises two overlapping transactions, so they are deterministic stale-view
 and missed-read regressions rather than a concurrency proof; what they
 establish is that a lost claim is reported instead of silently overwriting the
 winner.
+
+Startup bootstrap (D13, D29): `tests/e2e/test_runtime_bootstrap_e2e.py` starts
+the packaged runtime with `GHILLIE_DB_BOOTSTRAP=create-all` on a fresh database
+and asserts that one table from each layer exists and that `init_all_storage`'s
+two log lines follow the runtime's start-up line. Together those show Granian's
+ASGI interface delivered the lifespan event to
+`StorageBootstrapMiddleware.process_startup`, and that the worker's application
+logs reach the operator. The check is not vacuous: the fixture cannot answer
+`GET /estates` without the tables, and the same assertions failed before D29
+because the worker's log lines were discarded.
 
 Residual gaps: the per-estate lock is in-process, so concurrent requests across
 replicas are not serialized (single replica in MVP); adoption of an unowned row
