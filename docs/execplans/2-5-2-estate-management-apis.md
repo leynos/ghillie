@@ -1191,13 +1191,15 @@ expert-panel review.
 - D26, legacy estate-key re-import. The EP-C-R4 assessment found that
   `ghillie estate import` rejects any key outside the creation pattern, so an
   estate created earlier through Python under a key such as `Wildside Estate`
-  can be re-imported through the HTTP API but not through the CLI. D16 and
-  EP-M4 explicitly require the CLI pre-validation, and the service already
-  applies the pattern only to new estates. Rather than revise an approved
-  requirement without authorization, this plan keeps the CLI behaviour and
-  records the limitation in the users' guide and under Artefacts and notes. A
-  future change that permits legacy keys must move creation validation wholly
-  to the service and add a CLI-to-service regression test.
+  can be re-imported through the HTTP API but not through the CLI. The HTTP
+  workaround covers only routable keys: a key containing `/` misses the estate
+  route and returns `404` with `not_found`. D16 and EP-M4 explicitly require
+  the CLI pre-validation, and the service already applies the pattern only to
+  new estates. Rather than revise an approved requirement without
+  authorization, this plan keeps the CLI behaviour and records the limitation
+  in the users' guide and under Artefacts and notes. A future change that
+  permits legacy keys must move creation validation wholly to the service and
+  add a CLI-to-service regression test.
 - D27, pre-merge-check reconciliation. The hosted pre-merge checks raised six
   findings against PR-A. Three are actioned in this round: the title names
   roadmap task 2.5.b; `test_sync_reports_cross_estate_conflict` gives the
@@ -2295,6 +2297,12 @@ estate, so an estate created earlier through Python may hold a key the CLI
 rejects. `ghillie estate import` exits `2` with `invalid_estate_key` for such a
 key and sends no request, while `POST /estates/{estate_key}/catalogue-import`
 re-imports into the existing estate successfully.
+
+The HTTP workaround needs a routable key. Falcon decodes `%2F` before routing,
+so a key containing `/` misses the estate route and returns `404` with
+`not_found`; such an estate cannot be re-imported through either interface.
+`tests/unit/test_api_estate_errors.py::test_estate_key_with_encoded_slash_is_not_found`
+pins that route miss.
 
 The approved rule and legacy reachability conflict. Because D16 is an explicit
 EP-M4 requirement, this plan keeps the CLI behaviour and records the limitation

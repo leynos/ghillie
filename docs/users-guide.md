@@ -101,6 +101,10 @@ Re-import into such an estate with the HTTP API directly;
 `ghillie estate import` exits `2` with `invalid_estate_key` before sending a
 request.
 
+That workaround needs a routable key. A key containing `/` cannot be routed, so
+`POST /estates/{estate_key}/catalogue-import` returns `404` with `not_found`
+and the estate cannot be re-imported through either interface.
+
 The response reports the commit, the resulting state, and created, updated, and
 deleted counts for projects, components, repositories, and edges:
 
