@@ -273,6 +273,15 @@ per pull request.
       `dry_run` rollback contract, and the `SyncResult` fields. The remaining
       three pre-merge findings are recorded as D27 with evidence for why each
       is outside the approved scope.
+- [x] (2026-11-06) The second hosted review round corrected D27's claim about
+      `uq_repositories_owner_name` and asked for concurrent-adoption coverage.
+      Adoption of an unowned row is now claimed with a conditional update that
+      matches only rows where `estate_id` is null (D28), so a sync that loses
+      the race reports a conflict instead of replacing the winner's claim. New
+      tests cover the
+      primitive under a stale view, the losing sync path, and the insert race's
+      preserved `IntegrityError` cause; the Silver snapshot helper now includes
+      `is_active`, `created_at`, and `updated_at`.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
@@ -514,19 +523,31 @@ expert-panel review.
      version 1.0.0, and no release or migration process exists. The users' guide
      already signposts toggle ownership, conflict reporting, the result fields,
      and `dry_run`.
-  2. Ownership is already enforced atomically at the persistence boundary by
-     the unique constraint `uq_repositories_owner_name`, and D17 maps
-     `IntegrityError` to 409. Turning a losing concurrent claim into a reported
-     conflict instead of a failed sync is a behaviour refinement; D17 and the
-     Verification plan's stated residual gap cover concurrent requests across
-     replicas only, so this is a design change outside the approved plan.
+  2. Ownership of an existing row is not arbitrated by
+     `uq_repositories_owner_name`: that constraint guards concurrent *inserts*
+     of the same owner/name, and D17 maps the resulting `IntegrityError` to
+     409. It cannot arbitrate two estates adopting the same unowned row,
+     because changing `estate_id` leaves the owner/name pair unique. The
+     second review round made that distinction explicit, so the adoption claim
+     is now a conditional `UPDATE ... WHERE estate_id IS NULL` (D28) and the
+     losing sync reports a conflict. The earlier wording overstated the
+     constraint's reach and is corrected here.
   3. The repository has no metrics or tracing stack, and the plan forbids new
      runtime dependencies and persisted-schema changes. D21 specifies exactly
      one structured line per mutation at the estate-service boundary; adding a
      second line in the registry module would contradict that. Metrics and
      tracing are a cross-cutting platform decision, not an EP-M1 deliverable.
-  D25 and D26 are introduced by branches B and C and follow this entry once the
-  stack is applied.
+- D28, atomic adoption of an unowned Silver row. `_claim_unowned_repository`
+  issues a conditional update of `estate_id` that matches only rows where
+  `estate_id` is null, and treats a zero row count as a conflict. This closes
+  the race the owner/name constraint cannot see: two estates syncing
+  concurrently can both read the same unowned row, and without the conditional
+  update the later writer silently replaces the earlier claim. The claim runs
+  inside the sync transaction, so a dry run rolls it back. Concurrent inserts
+  of the same slug remain arbitrated by `uq_repositories_owner_name` and
+  surface as `IntegrityError`, which D17 maps to 409. D25 and D26 are
+  introduced by branches B and C and follow this entry once the stack is
+  applied.
 
 ## Outcomes & retrospective
 
@@ -827,8 +848,15 @@ Obligation O6, CLI import closure (`TDD-CLI-THIN`).
 - Non-vacuity: the test also asserts that `ghillie.cli.commands.estate` is in
   the loaded set, proving the estate commands were imported.
 
-Residual gaps: concurrent requests across replicas are not serialized (single
-replica in MVP); OpenAPI conformance is structural only (paths, methods,
+Concurrency of adoption (D28): `tests/unit/test_registry_service_sync.py`
+proves that a stale view cannot claim an unowned row, that a sync losing the
+adoption race reports a conflict, and that a lost insert preserves the
+`IntegrityError` cause for the 409 mapping.
+
+Residual gaps: the per-estate lock is in-process, so concurrent requests across
+replicas are not serialized (single replica in MVP); adoption of an unowned row
+and insertion of a new row are still arbitrated atomically at the persistence
+boundary (D28). OpenAPI conformance is structural only (paths, methods,
 operation IDs, schema names and required properties) until Task 2.6.c.
 
 ## Plan of work
