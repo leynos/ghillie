@@ -51,6 +51,7 @@ class RepositoryCreateSpec:
     estate_id: str | None = None
     catalogue_repository_id: str | None = None
     documentation_paths: tuple[str, ...] | None = None
+    last_synced_at: dt.datetime | None = None
 
 
 class CreateRepoFn(typ.Protocol):

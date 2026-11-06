@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import typing as typ
 
 import pytest
@@ -12,7 +13,10 @@ from ghillie.catalogue import CatalogueImporter, RepositoryRecord
 from ghillie.registry import RegistrySyncError, RepositoryRegistryService
 from ghillie.silver.storage import Repository
 from tests.fixtures.specs import RepositoryCreateSpec
-from tests.unit.registry_service_sync_helpers import fetch_silver_repo
+from tests.unit.registry_service_sync_helpers import (
+    fetch_silver_repo,
+    snapshot_silver_repo,
+)
 
 if typ.TYPE_CHECKING:
     from pathlib import Path
@@ -308,15 +312,20 @@ async def test_sync_reports_cross_estate_conflict(
     """A repository owned by another estate is reported, not stolen or failed."""
     registry_service = RepositoryRegistryService(session_factory, session_factory)
     _estate_a_id, estate_b_id = create_estates
+    foreign_synced_at = dt.datetime(2026, 1, 2, 3, 4, 5, tzinfo=dt.UTC)
     await create_repo(
         "leynos",
         "wildside",
         spec=RepositoryCreateSpec(
             ingestion_enabled=True,
+            default_branch="release",
             estate_id=estate_b_id,
             catalogue_repository_id="cat-repo-b",
+            documentation_paths=("docs/other-estate.md",),
+            last_synced_at=foreign_synced_at,
         ),
     )
+    before = await snapshot_silver_repo(session_factory, "leynos", "wildside")
 
     importer = CatalogueImporter(
         session_factory, estate_key="estate-a", estate_name="Estate A"
@@ -332,3 +341,18 @@ async def test_sync_reports_cross_estate_conflict(
     assert repo is not None, "The conflicting repository should still exist"
     assert repo.estate_id == estate_b_id, "The row must stay with its owning estate"
     assert repo.ingestion_enabled is True, "A conflict must not disable the row"
+    assert repo.catalogue_repository_id == "cat-repo-b", (
+        "A conflict must not re-point the row at this estate's catalogue entry"
+    )
+    assert repo.default_branch == "release", (
+        "A conflict must not overwrite the owning estate's branch metadata"
+    )
+    assert tuple(repo.documentation_paths) == ("docs/other-estate.md",), (
+        "A conflict must not overwrite the owning estate's documentation paths"
+    )
+    assert repo.last_synced_at == foreign_synced_at, (
+        "A conflict must not restamp the owning estate's last sync time"
+    )
+    assert (
+        await snapshot_silver_repo(session_factory, "leynos", "wildside") == before
+    ), "A conflict must leave every field of the foreign row untouched"

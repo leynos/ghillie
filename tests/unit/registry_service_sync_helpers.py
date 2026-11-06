@@ -29,6 +29,21 @@ async def fetch_silver_repo(
         )
 
 
+def _repository_fields(repo: Repository) -> tuple[object, ...]:
+    """Return every mutable field of a Silver row as a comparable tuple."""
+    return (
+        repo.id,
+        repo.github_owner,
+        repo.github_name,
+        repo.default_branch,
+        repo.estate_id,
+        repo.catalogue_repository_id,
+        repo.ingestion_enabled,
+        repo.last_synced_at,
+        tuple(repo.documentation_paths),
+    )
+
+
 async def snapshot_silver_repos(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> SilverSnapshot:
@@ -46,17 +61,20 @@ async def snapshot_silver_repos(
                 )
             )
         ).all()
-        return [
-            (
-                repo.id,
-                repo.github_owner,
-                repo.github_name,
-                repo.default_branch,
-                repo.estate_id,
-                repo.catalogue_repository_id,
-                repo.ingestion_enabled,
-                repo.last_synced_at,
-                tuple(repo.documentation_paths),
+        return [_repository_fields(repo) for repo in repositories]
+
+
+async def snapshot_silver_repo(
+    session_factory: async_sessionmaker[AsyncSession],
+    owner: str,
+    name: str,
+) -> tuple[object, ...] | None:
+    """Snapshot one Silver row so a test can prove it did not change."""
+    async with session_factory() as session:
+        repo = await session.scalar(
+            select(Repository).where(
+                Repository.github_owner == owner,
+                Repository.github_name == name,
             )
-            for repo in repositories
-        ]
+        )
+        return None if repo is None else _repository_fields(repo)
