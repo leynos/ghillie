@@ -455,12 +455,18 @@ async def test_sync_reports_conflict_when_adoption_loses_a_race(
 @pytest.mark.asyncio
 async def test_concurrent_insert_surfaces_as_a_conflict_cause(
     session_factory: async_sessionmaker[AsyncSession],
-    create_repo: CreateRepoFn,
     wildside_catalogue_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A lost insert race keeps the unique-constraint cause for a 409 answer."""
-    await create_repo("leynos", "wildside", spec=RepositoryCreateSpec())
+    async with session_factory() as session, session.begin():
+        session.add(
+            Repository(
+                github_owner="leynos",
+                github_name="wildside",
+                default_branch="main",
+            )
+        )
     importer = CatalogueImporter(
         session_factory, estate_key="estate-a", estate_name="Estate A"
     )
