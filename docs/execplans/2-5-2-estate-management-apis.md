@@ -896,6 +896,10 @@ per pull request.
         PR-B was rebased onto it, so branch C was replayed onto PR-B's
         `94398e0`: 20 replayed commits, one plan conflict resolved by keeping
         the D28 paragraph, and decision order unchanged.
+  - [x] (2026-11-06) PR-A then corrected the unowned-row limit provenance at
+        `d6356b7` and PR-B was replayed onto it, so branch C was replayed onto
+        PR-B's `747d6dc`. The replay applied cleanly and changed only this
+        plan; PR-C's own commits are unchanged.
 
 ## Surprises & discoveries
 
