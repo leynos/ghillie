@@ -316,6 +316,11 @@ per pull request.
       sketched the five-argument `import_catalogue` that D22 replaced with a
       `CatalogueImportRequest`. The example now matches D22 and
       `ghillie/estate/ports.py`.
+- [x] (2026-11-06) The EP-C-R8 assessment of branch C left the EP-M5
+      Granian-to-Falcon lifespan check open. Probing the packaged runtime
+      showed that Granian's worker discarded the application logs, so the
+      bootstrap lines never reached the operator. D29 configures logging in
+      the factory; branch C's end-to-end test proves the startup hook runs.
 - [x] PR-B, EP-M2: estate port, service, and catalogue queries.
   - [x] (2026-11-03) Red observed: `test_estate_service.py` hit
         `NotImplementedError` from the service stub, and the new importer
@@ -1038,6 +1043,13 @@ expert-panel review.
   of the same slug remain arbitrated by `uq_repositories_owner_name` and
   surface as `IntegrityError`, which D17 maps to 409. D25 and D26 are
   introduced by branch C and follow this entry once the stack is applied.
+- D29, worker logging configuration. `create_app` applies `GHILLIE_LOG_LEVEL`
+  through `configure_logging` before building the app. Granian calls the
+  factory in a worker process, so the configuration `main` performs in the
+  parent never reaches it; without this call the worker's application logs,
+  including D21's mutation lines, are discarded. `force=False` leaves an
+  existing handler in place, so in-process callers such as the unit tests are
+  unaffected.
 
 ## Outcomes & retrospective
 
