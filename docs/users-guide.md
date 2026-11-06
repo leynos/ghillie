@@ -25,8 +25,9 @@ Shared root configuration is resolved before noun dispatch with this precedence:
 
 Task 2.5.a delivers the command contract, shared config resolution, control
 plane client wiring, and local runtime adapter selection for `cuprum` and
-`python-api`. Most verbs still return deterministic placeholder payloads until
-later roadmap tasks attach the real estate, ingestion, export, metrics, and
+`python-api`. The estate verbs are live (see "Estate management through the CLI
+and API"); the other nouns still return deterministic placeholder payloads
+until their roadmap tasks attach the real ingestion, export, metrics, and
 reporting backends.
 
 Two useful checks:
@@ -43,6 +44,268 @@ uv run ghillie --api-base-url http://127.0.0.1:9999 report run --help
 ```
 
 This proves the shared root options are accepted before the noun command.
+
+## Estate management through the CLI and API (Task 2.5.b)
+
+The estate verbs are live. Every verb is a thin HTTP call to the control plane:
+local validation rejects bad input before any request is sent, and any
+control-plane failure exits `3` with a stable code, a message, and an operator
+hint. Shared root options come before the noun:
+
+```bash
+ghillie --api-base-url http://127.0.0.1:8080 \
+        --auth-token "$GHILLIE_API_TOKEN" \
+        --output json \
+        estate list
+```
+
+| Root option           | Purpose                                             |
+| --------------------- | --------------------------------------------------- |
+| `--api-base-url`      | Service base URL.                                   |
+| `--auth-token`        | Bearer token; needed when the service enables auth. |
+| `--output`            | `table`, `json`, or `yaml`.                         |
+| `--dry-run`           | Preview import and sync; `repo set` refuses it.     |
+| `--request-timeout-s` | Per-request timeout in seconds.                     |
+
+`json` and `yaml` print the server document unchanged, so scripts can rely on
+the full response. `table` is for humans and may change between releases.
+
+The five endpoints behind the verbs are:
+
+| Method and path                                | Purpose                          |
+| ---------------------------------------------- | -------------------------------- |
+| `POST /estates/{estate_key}/catalogue-import`  | Import a catalogue document.     |
+| `POST /estates/{estate_key}/registry-sync`     | Project repositories to Silver.  |
+| `GET /estates`                                 | List estates.                    |
+| `GET /estates/{estate_key}/repositories`       | List repositories for an estate. |
+| `PATCH /repositories/{owner}/{name}/ingestion` | Set the ingestion toggle.        |
+
+### Import a catalogue
+
+`ghillie estate import` reads a UTF-8 catalogue locally (a byte-order mark is
+stripped), checks the estate key against `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`
+and the serialized request against the 1 MiB limit, then uploads the document:
+
+```bash
+ghillie estate import \
+  --estate-key wildside \
+  --catalogue-path examples/wildside-catalogue.yaml \
+  --commit-sha "$(git rev-parse HEAD)" \
+  --estate-name "Wildside"
+```
+
+The CLI applies the creation pattern to every import, while the service applies
+it only when creating a new estate. An estate created earlier through Python
+may therefore have a key that the CLI rejects, such as `Wildside Estate`.
+Re-import into such an estate with the HTTP API directly;
+`ghillie estate import` exits `2` with `invalid_estate_key` before sending a
+request.
+
+That workaround needs a routable key. A key containing `/` cannot be routed, so
+`POST /estates/{estate_key}/catalogue-import` returns `404` with `not_found`
+and the estate cannot be re-imported through either interface.
+
+The response reports the commit, the resulting state, and created, updated, and
+deleted counts for projects, components, repositories, and edges:
+
+```json
+{
+  "estate_key": "wildside",
+  "commit_sha": "1f0c2a9",
+  "state": "succeeded",
+  "dry_run": false,
+  "skipped": false,
+  "skipped_reason": null,
+  "registry_sync_required": true,
+  "projects": {"created": 1, "updated": 0, "deleted": 0},
+  "components": {"created": 4, "updated": 0, "deleted": 0},
+  "repositories": {"created": 2, "updated": 0, "deleted": 0},
+  "edges": {"created": 3, "updated": 0, "deleted": 0}
+}
+```
+
+Re-importing a commit that is already stored does no work. The response says so
+with `"skipped": true` and a reason such as `commit_already_imported`, and
+table output leads with a `SKIPPED:` line.
+
+A dry run previews the import and rolls the transaction back:
+
+```bash
+ghillie --dry-run estate import \
+  --estate-key wildside \
+  --catalogue-path examples/wildside-catalogue.yaml \
+  --commit-sha "preview"
+```
+
+The response carries the counts the import would have produced, and the estate
+list is unchanged afterwards.
+
+### Sync the registry
+
+`ghillie estate sync` projects the estate's catalogue repositories into the
+Silver registry:
+
+```bash
+ghillie --output json estate sync --estate-key wildside
+```
+
+```json
+{
+  "estate_key": "wildside",
+  "state": "succeeded",
+  "dry_run": false,
+  "repositories_created": 2,
+  "repositories_updated": 0,
+  "repositories_deactivated": 0,
+  "repositories_conflicted": [],
+  "repositories_left_disabled": [],
+  "repositories_left_disabled_count": 0
+}
+```
+
+The sync is synchronous and idempotent; there is no wait flag. A dry run
+returns the same shape with `"dry_run": true` and changes nothing.
+
+### List estates and repositories
+
+```bash
+ghillie estate list
+ghillie --output json estate repo list --estate-key wildside --active
+ghillie estate repo list --estate-key wildside --inactive --limit 50 --offset 0
+```
+
+Estates have no lifecycle state, so `estate list` accepts no active or inactive
+flag. Repository listing is paginated (`limit` 1 to 500, default 50; `offset`
+at least 0) and ordered by owner and name. `--active` and `--inactive` select
+one ingestion state; omitting both lists both.
+
+### Enable or disable ingestion
+
+```bash
+ghillie estate repo set --owner leynos --name wildside --ingestion-disabled
+ghillie estate repo set --owner leynos --name wildside --ingestion-enabled
+```
+
+The toggle is required; the CLI rejects a call that names neither state with
+exit `2`. The response says what changed:
+
+```json
+{
+  "owner": "leynos",
+  "name": "wildside",
+  "ingestion_enabled": false,
+  "changed": true
+}
+```
+
+The ingestion endpoint has no dry-run mode, so `estate repo set` under
+`--dry-run` refuses locally with `dry_run_unsupported` and exit `2` rather than
+quietly applying the toggle.
+
+### Toggle rules across syncs
+
+A toggle survives later catalogue imports and syncs:
+
+- Sync creates rows, adopts unlinked rows, and disables rows that leave the
+  catalogue, but it never re-enables a linked row of the estate.
+- A repository removed from the catalogue and later re-added stays disabled
+  until an operator enables it. The sync result names it in
+  `repositories_left_disabled` (the first 100 slugs) with a matching
+  `repositories_left_disabled_count`.
+- If another estate already owns a repository named by this estate's
+  catalogue, sync leaves that row untouched and reports the slug in
+  `repositories_conflicted`. Remove the overlap from one catalogue; sync will
+  not move a row between estates.
+- A toggle applied to an ad hoc row lasts only until a catalogue entry adopts
+  the row, at which point the catalogue's active flag takes over.
+
+To re-enable every repository that is currently disabled, collect the whole set
+first and only then apply the toggles. Enabling a repository removes it from the
+`--inactive` filter, so paging and mutating in the same pass would shrink the
+collection and skip rows:
+
+```bash
+# 1. Collect every disabled repository across all pages.
+offset=0
+: > /tmp/wildside-disabled.txt
+while :; do
+  page=$(ghillie --output json estate repo list --estate-key wildside \
+    --inactive --limit 500 --offset "$offset")
+  jq -r '.items[] | "\(.owner)/\(.name)"' <<<"$page" >> /tmp/wildside-disabled.txt
+  jq -e '.has_more' <<<"$page" >/dev/null || break
+  offset=$(jq -r '.next_offset' <<<"$page")
+done
+
+# 2. Apply the toggles to the captured set.
+while IFS=/ read -r owner name; do
+  ghillie estate repo set --owner "$owner" --name "$name" --ingestion-enabled
+done < /tmp/wildside-disabled.txt
+```
+
+This recipe targets every repository that is disabled now. If the intent is
+instead to re-enable exactly the set the last sync left disabled, read
+`repositories_left_disabled` from that sync's result. That list is capped at
+the first 100 slugs, so compare it with `repositories_left_disabled_count` and
+page the listing for the remainder.
+
+### Error codes
+
+Failures exit `2` for invalid local input and `3` for control-plane failures.
+Machine-readable modes print an envelope such as:
+
+```json
+{
+  "error": {
+    "code": "catalogue_invalid",
+    "message": "The catalogue is invalid.",
+    "hint": "Fix the listed catalogue issues and import the catalogue again.",
+    "status": 422,
+    "issues": [{"code": "invalid_projects", "message": "expected an array"}]
+  }
+}
+```
+
+| Code                        | Exit | Meaning                                       |
+| --------------------------- | ---- | --------------------------------------------- |
+| `invalid_estate_key`        | 2    | Key fails the creation pattern.               |
+| `catalogue_file_unreadable` | 2    | File cannot be read as UTF-8.                 |
+| `request_too_large`         | 2    | Serialized body exceeds 1 MiB.                |
+| `dry_run_unsupported`       | 2    | Dry run requested for a live-only verb.       |
+| `estate_not_found`          | 3    | Estate key is unknown.                        |
+| `repository_not_found`      | 3    | Repository slug is unknown.                   |
+| `catalogue_invalid`         | 3    | Catalogue failed schema validation.           |
+| `conflict`                  | 3    | The stored commit conflicts with this import. |
+| `invalid_input`             | 3    | A request field is malformed.                 |
+| `payload_too_large`         | 3    | The service rejected the request size.        |
+| `unauthorized`              | 3    | The service requires or rejected a token.     |
+| `not_found`                 | 3    | No such route, or estate routes are off.      |
+| `storage_unavailable`       | 3    | The catalogue store is unavailable.           |
+| `registry_sync_failed`      | 3    | The sync failed inside the service.           |
+| `internal_error`            | 3    | An unexpected service failure.                |
+| `transport`                 | 3    | The service could not be reached.             |
+| `timeout`                   | 3    | The request exceeded the timeout.             |
+| `invalid_response`          | 3    | A successful response was not a JSON object.  |
+| `http_<status>`             | 3    | Any other non-2xx response.                   |
+
+### Starting the service for these verbs
+
+The estate endpoints need a database. `GHILLIE_DATABASE_URL` selects it; when
+it is unset the runtime starts in health-only mode and the estate routes answer
+`404`. The opt-in bootstrap creates the schema on startup:
+
+```bash
+export GHILLIE_DATABASE_URL="sqlite+aiosqlite:///ghillie.db"
+export GHILLIE_DB_BOOTSTRAP=create-all
+export GHILLIE_API_TOKEN="$(cat ~/.config/ghillie/api-token)"
+export GHILLIE_ALLOW_STUB_BROKER=1
+uv run python -m ghillie.runtime
+```
+
+`GHILLIE_API_TOKEN` enables bearer authentication for every endpoint except the
+health probes; clients must then send `--auth-token` or set
+`GHILLIE_AUTH_TOKEN`. `GHILLIE_ALLOW_STUB_BROKER=1` permits the stub event
+broker used by local runs. In production the schema is migrated rather than
+created, so leave `GHILLIE_DB_BOOTSTRAP` unset.
 
 ## Estate catalogue (Phase 1.1)
 
@@ -417,7 +680,11 @@ layer ingestion pipeline. It enables controlled GitHub event ingestion by
 synchronizing repositories from the catalogue and providing toggle controls for
 enabling or disabling ingestion per repository.
 
-### Synchronizing catalogue repositories to Silver
+Operators use the CLI and API described in "Estate management through the CLI
+and API"; the Python calls below are the programmatic alternative for scripts
+that embed Ghillie.
+
+### Programmatic alternative: synchronizing catalogue repositories to Silver
 
 The `RepositoryRegistryService` projects catalogue `RepositoryRecord` entries
 into the Silver `Repository` table. Repositories not present in the catalogue
@@ -454,7 +721,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-### Enabling and disabling ingestion
+### Programmatic alternative: enabling and disabling ingestion
 
 Each Silver repository has an `ingestion_enabled` flag that controls whether
 the ingestion worker should process events for that repository. The registry

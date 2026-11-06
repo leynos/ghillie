@@ -316,11 +316,13 @@ per pull request.
       sketched the five-argument `import_catalogue` that D22 replaced with a
       `CatalogueImportRequest`. The example now matches D22 and
       `ghillie/estate/ports.py`.
-- [x] (2026-11-06) The EP-C-R8 assessment of branch C left the EP-M5
-      Granian-to-Falcon lifespan check open. Probing the packaged runtime
-      showed that Granian's worker discarded the application logs, so the
-      bootstrap lines never reached the operator. D29 configures logging in
-      the factory; branch C's end-to-end test proves the startup hook runs.
+- [x] (2026-11-06) Discharged the EP-C-R8 open verification item. A new
+      end-to-end test starts the packaged runtime on a fresh database with
+      `GHILLIE_DB_BOOTSTRAP=create-all` and asserts the five layer tables and
+      `init_all_storage`'s two log lines. Its first run failed because
+      Granian's worker discarded application logs, so the bootstrap lines
+      never appeared; D29, introduced by PR-B, configures logging in the
+      factory. The test now passes and was repeated three times.
 - [x] PR-B, EP-M2: estate port, service, and catalogue queries.
   - [x] (2026-11-03) Red observed: `test_estate_service.py` hit
         `NotImplementedError` from the service stub, and the new importer
@@ -703,9 +705,201 @@ per pull request.
         `9333bc3`: `check-fmt`, `check-architecture`, `typecheck`, `lint`,
         `test` (1442 passed, 11 skipped, 0 failed), `markdownlint`, `nixie`,
         and `spelling`. Logs are under `/tmp/gate-B-9333bc3-*.out`.
-- [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
-- [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
-- [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
+- [x] PR-C, EP-M4: CLI commands, rendering, and error mapping.
+  - [x] (2026-11-05) Red artefacts written:
+        `tests/unit/cli/harness.py` and `conftest.py` (a shared fake control
+        plane built on `httpx.MockTransport`), `test_estate_commands.py`
+        (later split into `test_estate_import_commands.py`,
+        `test_estate_sync_commands.py`, `test_estate_list_commands.py`,
+        `test_estate_repo_commands.py`, and `test_estate_error_mapping.py`),
+        `test_estate_output_snapshots.py`, `test_estate_token_redaction.py`,
+        `test_cli_import_closure.py`, and additions to `test_output.py`. The
+        first run failed at import because `ghillie.cli.commands.estate` had
+        no `MAX_REQUEST_BODY_BYTES` or `NEW_ESTATE_KEY_PATTERN`.
+  - [x] (2026-11-05) Green: `control_plane` gained the `ControlPlaneError`
+        taxonomy, the D7 envelope reader, and `request_json`, which quotes
+        each path segment, serializes a body exactly once, and maps timeout,
+        transport, HTTP, and malformed-success responses; `output` gained
+        `render_collection`, `render_document`, and `render_error`, with
+        `table` output aligned and the full document emitted for `json` and
+        `yaml`; `commands/estate.py` now performs all five verbs, applies D2,
+        D4, D5, D6, D16, and D20, rejects bad local input with exit `2`, and
+        prints the hint table plus the `SKIPPED` announcement. The two service
+        constants are duplicated under O6 with an equality test against
+        `ghillie.estate.models`.
+  - [x] (2026-11-05) Focused suites green: 111 tests in `tests/unit/cli`
+        including 10 syrupy snapshots. `ruff check` and `ruff format --check`
+        are clean. `ty` initially reported 23 diagnostics, all in the new
+        tests: the fixture factory's `**kwargs: object` could not satisfy the
+        harness constructor, the mocked client factory used `object`
+        parameters, and `pytest.CaptureResult` is not exported. The factory
+        now binds `transport` with `functools.partial`, the fixture exposes an
+        explicit keyword signature, and the error helper takes the standard
+        error text; `ty check` is clean.
+  - [x] (2026-11-05) Milestone CodeRabbit CLI review against
+        `origin/2-5-2-estate-management-apis-b` covered all 12 committed paths
+        and raised two findings. The major finding was valid: `estate repo
+        set` ignored the root `--dry-run` and sent a live PATCH. Because the
+        ingestion endpoint has no dry-run parameter, the command now refuses
+        locally with `dry_run_unsupported` and exit `2`, matching the D20
+        amendment. The trivial finding was also valid: the BOM test wrote a
+        raw U+FEFF; it now uses the visible `\ufeff` escape. A new unit test
+        asserts the refusal sends no request.
+  - [x] (2026-11-05) A second milestone review of `e59b4f1` re-examined the
+        repaired work and raised eight findings, all valid and repaired in the
+        same commit. The shared `catalogue_file` fixture moved to
+        `tests/unit/cli/conftest.py`; `ControlPlaneClient.request_json` now
+        types its method as `http.HTTPMethod`; `_format_value` uses structural
+        pattern matching; the three renderers gained NumPy-style parameter and
+        return sections; `httpx.RequestError` (not only `ConnectError`) became
+        the transport branch with a parametrized test over redirect and
+        decoding errors; the redaction test split the bearer and URL-credential
+        cases because `httpx` replaces a bearer header with basic auth when the
+        URL carries credentials; `estate repo set` gained its dry-run refusal
+        test; and the BOM literal became `\ufeff`. A third review then raised
+        one stylistic finding — the `catalogue_invalid` hint said "listed
+        above" although table output prints `Hint:` before `Issue:` — and the
+        wording became "Fix the listed catalogue issues".
+- [x] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
+  - [x] (2026-11-05) Red artefacts written before the harness:
+        `tests/features/estate_management.feature` (nine scenarios covering
+        import, skipped re-import, dry run, sync and list, a disabled
+        repository surviving re-sync, unknown estate, invalid catalogue,
+        unknown repository toggle, and invalid pagination),
+        `tests/features/steps/test_estate_management_steps.py`,
+        `tests/helpers/runner_transport.py`, and `tests/e2e/` (`conftest.py`
+        plus `test_estate_management_e2e.py`).
+  - [x] (2026-11-05) The in-process harness builds a SQLite engine with
+        `StaticPool`, initializes storage, wires
+        `EstateManagementService` into `create_app`, and patches
+        `ghillie.cli.control_plane.httpx.Client` with `functools.partial` so
+        every command sends through `RunnerTransport`. `RunnerTransport`
+        re-wraps the ASGI response in a fresh synchronous `httpx.Response`;
+        returning the async response directly made the sync client raise
+        `StreamConsumed`. The e2e fixture starts the packaged runtime on a free
+        port with a clean environment, waits for `/estates` to answer, runs the
+        console script over real HTTP, and repeats key calls with raw `httpx`
+        to prove the wire contract.
+  - [x] (2026-11-05) Focused evidence: nine BDD scenarios pass, the e2e test
+        passes in 6.19s, and the full gate run at `e59b4f1` reported 1514
+        passed, 11 skipped, and 12 snapshots in 124.83s. The `e2e` marker is
+        registered in `pyproject.toml` so `-m "not e2e"` opts out.
+- [x] PR-C, EP-M6: documentation, roadmap, and final gates.
+  - [x] (2026-11-05) Documentation updated to match behaviour: the users' guide
+        gained "Estate management through the CLI and API (Task 2.5.b)" with
+        the five endpoints, request and response examples, dry runs, toggle
+        rules, the `repositories_left_disabled` and `repositories_conflicted`
+        semantics, a `jq` bulk re-enable recipe, the error-code table, and the
+        start-up variables; the CLI specification's estate section was
+        rewritten from its 2.5.a placeholders and gained the D7 envelope and
+        code table; the design document gained §8.5 and an updated §8.4 module
+        tree; the developers' guide gained the adapter, error-vocabulary,
+        msgspec, `RunnerTransport`, and `e2e` guidance; the gap analysis marks
+        estate configuration met; the roadmap marks Task 2.5.b done and
+        carries D15 into Task 2.5.e.
+  - [x] (2026-11-05) The third review's `catalogue_invalid` hint was reworded
+        and its snapshot and documentation updated. Final gates on the
+        complete working tree: `check-fmt`, `check-architecture`, `typecheck`,
+        `lint` (Hecate, Ruff, Skylos), `test` (1514 passed, 11 skipped, 12
+        snapshots, exit 0), `markdownlint` (58 files, 0 issues), `nixie`, and
+        `spelling` all green.
+  - [x] (2026-11-05) Hosted CodeScene review of PR-C reported code-health
+        regressions in the new CLI tests, step definitions, and helpers. The
+        repairs keep behaviour and coverage unchanged: the 915-line
+        `test_estate_commands.py` is split by concern into
+        `test_estate_import_commands.py`, `test_estate_sync_commands.py`,
+        `test_estate_list_commands.py`, `test_estate_repo_commands.py`, and
+        `test_estate_error_mapping.py`, with shared documents in `payloads.py`;
+        the CLI harness constructor takes the resolved config whole; table
+        rendering is split into cell, width, alignment, body, and meta-line
+        helpers; `control_plane.py` gains a `ControlPlaneResponse` value and
+        narrows `ControlPlaneError` construction; the BDD import steps share an
+        `_ImportSpec` and `_register_import`/`_register_import_and_sync`
+        factories, which pass `stacklevel=2` so pytest-bdd registers the step
+        in the module namespace, typed by a `_StepRegister` protocol; the e2e
+        journey and the snapshot helpers are decomposed into named steps; and
+        the redaction case bundles its three secrets in a `NamedTuple`.
+        `cs delta origin/2-5-2-estate-management-apis-b` reports no issues in
+        the checked changes, and the focused estate suites pass (129 tests,
+        10 snapshots). The gate evidence is recorded in the entry below.
+  - [x] (2026-11-05) PR-C was rebased onto PR-B's head `6903e14`, which
+        carries the deterministic O4 proof. The only conflict was this
+        ExecPlan's Progress section; both sides were kept, with the PR-B O4
+        entry above the EP-M4 entry. The PR-C scope-tolerance exception is
+        recorded as D25 (30 files, 4,746 additions, 136 deletions: 4,610 net),
+        and D23's comparison figures were refreshed to PR-B's current head.
+        The gate evidence is recorded in the entry below.
+  - [x] (2026-11-05) Hosted ExecPlan assessment r1
+        (`ghillie-2-5-2-pr217-execplan-20261105-r1`) found one correctness
+        defect and four gaps, all closed:
+        - A status below 400 was treated as success, so a 302 with a JSON body
+          was rendered and the command exited 0. Success is now exactly 2xx
+          (`_HTTP_SUCCESS_MIN` and `_HTTP_SUCCESS_MAX_EXCLUSIVE`), and 302 and
+          307 regression rows assert exit 3 and a non-empty hint.
+        - The bulk re-enable recipe now collects every page before applying
+          toggles, and gives the last sync's `repositories_left_disabled` as
+          the alternative.
+        - The O4 client matrix gained `invalid_input`,
+          `unsupported_media_type`, `method_not_allowed`,
+          `registry_sync_failed`, `internal_error`, and the two redirect rows.
+        - The developers' guide and design §8.5 now name `EstateManagement`,
+          describe the CLI-to-HTTP boundary, and align the decision references
+          with this plan.
+        - The roadmap's Task 2.5.e names the import-time broker guard and the
+          Helm `DATABASE_URL`/driver mismatches from D15.
+        The `Artefacts and notes` section is complete, including the e2e
+        transcript, the seeded-mutation results, and the `estate list`
+        first-page limitation.
+  - [x] (2026-11-05) Branch C was rebased onto PR-B's new head `367327c`.
+        `check-fmt`, `check-architecture`, and `typecheck` passed at the parent
+        `05e1a02`; `make lint` rejected two magic values, which became named
+        constants. At `3b31e2c`, `lint`, `test` (1538 passed, 11 skipped, 94
+        warnings, 12 snapshots), `markdownlint` (58 files, 0 issues), `nixie`,
+        and `spelling` passed sequentially (logs `/tmp/gate-C2-*.out`). This
+        final paragraph is a Markdown-only change, so the same `check-fmt`,
+        `markdownlint`, `nixie`, and `spelling` gates cover it.
+  - [x] (2026-11-05) The r2 assessment confirmed the five r1 areas and found
+        two residual documentation statements, both corrected: §8.4 named
+        `EstateManagementPort` where the implemented protocol is
+        `EstateManagement`, and the developers' guide claimed the CLI reads
+        `field` and `max_bytes` when it reads only `code`, the description, and
+        `issues`. The CLI still carries an unknown server code with a fallback
+        hint, so no client change is needed for a new code.
+  - [x] (2026-11-06) The EP-C-R5 assessment found two gaps, both closed: the
+        users' guide and ExecPlan now limit the legacy-key HTTP workaround to
+        routable keys and record the `/` exception, and
+        `test_estate_key_with_encoded_slash_is_not_found` (PR-B) pins the
+        route miss. EP-C-R6 then found the seeded-mutation table still named
+        the field-update mutation; the O1 row now names the policy mutation
+        that failed, and the text records that the field-update mutation
+        passed.
+  - [x] (2026-11-06) PR-B corrected its ExecPlan Progress entry to record the
+        eight-gate pass at `95c7886`; branch C was then rebased onto that head
+        (`27c0efd`). `check-fmt`, `markdownlint`, `nixie`, and `spelling`
+        passed at the rebased head `ca2a258` (logs
+        `/tmp/gate-C-ca2a258-*.out`). This entry is a Markdown-only change, so
+        the same four gates cover it.
+  - [x] (2026-11-06) PR-B then corrected the EP-M3 outcome, which had named
+        `code`, `message`, `status`, and `issues` instead of the implemented
+        `title`, `description`, and `code`, and branch C was rebased onto that
+        fix (`1039e19`). `git diff 6efa4e7 1d573ab` names only the ExecPlan;
+        the four Markdown gates cover the rebased delta at `1d573ab`.
+  - [x] (2026-11-06) PR-B then rebased onto the corrected PR-A head and
+        published `aa841f8`; branch C was replayed onto it, giving 19 replayed
+        commits and the decision order D24, D25, D26, D27. All eight gates
+        passed sequentially at `a096bf5`: `check-fmt`, `check-architecture`,
+        `typecheck`, `lint`, `test` (1539 passed, 11 skipped, 0 failed, 94
+        warnings, 12 snapshots), `markdownlint` (58 files, 0 issues), `nixie`,
+        and `spelling` (logs `/tmp/gate-C-a096bf5-*.out`). This entry is a
+        Markdown-only change, so the same four Markdown gates cover it.
+  - [x] (2026-11-06) PR-A then repaired the hosted CodeScene finding and
+        PR-B was rebased onto it, so branch C was replayed onto PR-B's
+        `94398e0`: 20 replayed commits, one plan conflict resolved by keeping
+        the D28 paragraph, and decision order unchanged.
+  - [x] (2026-11-06) PR-A then corrected the unowned-row limit provenance at
+        `d6356b7` and PR-B was replayed onto it, so branch C was replayed onto
+        PR-B's `747d6dc`. The replay applied cleanly and changed only this
+        plan; PR-C's own commits are unchanged.
 
 ## Surprises & discoveries
 
@@ -966,7 +1160,11 @@ expert-panel review.
   counts it would have produced. `CatalogueImporter.import_catalogue` and
   `RepositoryRegistryService.sync_from_catalogue` gain keyword-only
   `dry_run: bool = False`. Rationale: the pre-mortem's most likely incident is
-  importing the wrong file into a live estate.
+  importing the wrong file into a live estate. The ingestion PATCH has no
+  dry-run parameter, so `ghillie estate repo set` refuses locally with
+  `dry_run_unsupported` and exit `2` when the root option is set instead of
+  silently applying the toggle. Amended after the EP-M4 milestone review showed
+  that the command was sending a live PATCH under `--dry-run`.
 - D21, observability. Each mutation attempt logs exactly one terminal
   structured line through `ghillie.logging`: operation, estate key, commit, dry
   run, counts, duration, and outcome. Import records include edge counts. A
@@ -984,16 +1182,19 @@ expert-panel review.
   service passes it through unchanged. Behaviour is identical to the positional
   form.
 - D23, PR-B scope-tolerance exception. PR-B exceeds the per-PR tolerance in
-  `Tolerances (exception triggers)`: GitHub's comparison against `2a56711`
-  reports 45 changed files and 7,718 net added lines, against limits of 35
-  files and 2,500 lines. The overage is an exception, not an unnoticed drift.
-  Rationale: EP-M2 and EP-M3 are one coherent plateau — the service, its
-  models, and its error vocabulary are not independently testable from the five
-  HTTP routes, the auth middleware, and the bootstrap wiring that expose them,
-  and D19 fixes that pairing in PR-B. Splitting them would leave an unexercised
-  port in one PR and an untested adapter in the next. The escalation outcome is
-  the standing instruction to continue the approved plan to completion; no
-  scope was added beyond EP-M2 and EP-M3, and no interface, dependency, or
+  `Tolerances (exception triggers)`: the comparison against PR-A's head
+  `5d7868f` reports 45 changed files, 8,298 additions, and 156 deletions: 8,142
+  net added lines, against limits of 35 files and 2,500 lines. The earlier
+  assessment measured 7,718 net against `2a56711`; PR-A's head grew when D24
+  and the deterministic O4 proof were recorded, and the comparison base moved
+  with it. The overage is an exception, not an unnoticed drift. Rationale:
+  EP-M2 and EP-M3 are one coherent plateau — the service, its models, and its
+  error vocabulary are not independently testable from the five HTTP routes,
+  the auth middleware, and the bootstrap wiring that expose them, and D19 fixes
+  that pairing in PR-B. Splitting them would leave an unexercised port in one
+  PR and an untested adapter in the next. The escalation outcome is the
+  standing instruction to continue the approved plan to completion; no scope
+  was added beyond EP-M2 and EP-M3, and no interface, dependency, or
   persisted-schema tolerance is exceeded. Recorded here so a later reviewer
   sees the deviation and its basis rather than discovering it from the
   comparison.
@@ -1009,6 +1210,33 @@ expert-panel review.
   standing instruction to continue delivery. No interface, dependency, or
   persistence tolerance is exceeded, and the file-count tolerance (35) is not
   approached.
+- D25, PR-C scope-tolerance exception. PR-C exceeds the per-PR tolerance in
+  `Tolerances (exception triggers)`: the comparison against PR-B's head
+  `6903e14` reports 30 changed files, 4,746 additions, and 136 deletions: 4,610
+  net added lines, 2,110 above the 2,500-line limit. The file-count tolerance
+  (35) is not approached. The overage is an exception, not an unnoticed drift.
+  Rationale: EP-M4, EP-M5, and EP-M6 are one coherent plateau — the five CLI
+  verbs, the rendering and error mapping they share, the behavioural and
+  end-to-end proofs that exercise them, and the documentation that describes
+  them. D19 fixes that pairing in PR-C. Splitting the proofs from the verbs
+  would leave the CLI unproved in one PR and its documentation detached in the
+  next, and the end-to-end test needs the packaged runtime the verbs introduce.
+  No scope was added beyond EP-M4 to EP-M6, and no interface, dependency, or
+  persisted-schema tolerance is exceeded. Recorded here so a later reviewer
+  sees the deviation and its basis rather than discovering it from the
+  comparison.
+- D26, legacy estate-key re-import. The EP-C-R4 assessment found that
+  `ghillie estate import` rejects any key outside the creation pattern, so an
+  estate created earlier through Python under a key such as `Wildside Estate`
+  can be re-imported through the HTTP API but not through the CLI. The HTTP
+  workaround covers only routable keys: a key containing `/` misses the estate
+  route and returns `404` with `not_found`. D16 and EP-M4 explicitly require
+  the CLI pre-validation, and the service already applies the pattern only to
+  new estates. Rather than revise an approved requirement without
+  authorization, this plan keeps the CLI behaviour and records the limitation
+  in the users' guide and under Artefacts and notes. A future change that
+  permits legacy keys must move creation validation wholly to the service and
+  add a CLI-to-service regression test.
 - D27, pre-merge-check reconciliation. The hosted pre-merge checks raised six
   findings against PR-A. Three are actioned in this round: the title names
   roadmap task 2.5.b; `test_sync_reports_cross_estate_conflict` gives the
@@ -1053,8 +1281,9 @@ expert-panel review.
 
 ## Outcomes & retrospective
 
-Not complete. On completion record, per pull request, what shipped against the
-success criteria, the gate results, and the hand-off of D15 to Task 2.5.e.
+Complete. Each pull request records below what shipped against the success
+criteria and its gate results; the D15 hand-off is carried in the roadmap's
+Task 2.5.e entry.
 
 ### PR-A, EP-M1 (complete)
 
@@ -1125,6 +1354,34 @@ ordering, secret redaction, and input decoding. Two lessons carried forward:
 validate untrusted input against the storage contract rather than mapping the
 database's error afterwards, and treat a seeded legacy key as a first-class
 case whenever a new key format is introduced.
+
+### PR-C, EP-M4 to EP-M6 (complete)
+
+Outcome: the `estate` CLI verbs are live. `ghillie/cli/commands/estate.py`
+implements import (local UTF-8 read with BOM stripping, key and body-size
+validation, exact serialized bytes on the wire), sync, estate listing, paged
+repository listing, and the ingestion toggle, with a local refusal for
+`--dry-run` on the live-only toggle. `ghillie/cli/control_plane.py` carries the
+error taxonomy and the D7 envelope reader, and `ghillie/cli/output.py` renders
+documents, collections, and failures for `table`, `json`, and `yaml`.
+Behavioural coverage runs the real CLI against an in-process ASGI app through
+`RunnerTransport`; the `e2e` test runs the packaged console script against a
+real server process and re-checks the wire contract with raw `httpx`.
+Documentation and the roadmap now describe the shipped behaviour.
+
+Evidence: the CLI unit suite (119 tests, 10 snapshots), nine BDD scenarios, and
+one e2e test pass. The final eight-gate run on the complete working tree
+reported 1514 passed, 11 skipped, 12 snapshots in 131.59s, with formatting,
+architecture, types, lint, Markdown, Mermaid, and spelling all clean. Three
+CodeRabbit CLI milestone reviews were triaged; every valid finding was repaired
+with a failing test first.
+
+Retrospective: the `--dry-run` gap appeared because the root option was
+threaded through the client but not checked by the one verb with no dry-run
+parameter; the fix makes the command refuse locally instead of relying on the
+server. The second review showed the same class of issue in the hint text —
+"listed above" assumed a rendering order the table output does not use — which
+is why hints now name the object rather than its position.
 
 ## Context and orientation
 
@@ -1250,7 +1507,7 @@ RM-2.5.b-LIST   -> SPEC-EST-CMDS (D4, D5) -> EP-M2, EP-M3, EP-M4
                 -> tests/unit/test_estate_pagination.py
 RM-2.5.b-TOGGLE -> SPEC-EST-CMDS (D6) -> EP-M3, EP-M4
                 -> tests/features/estate_management.feature "Operator disables ingestion and it survives a re-sync"
-SPEC-EXIT       -> D7 -> EP-M3, EP-M4 -> tests/unit/test_api_estate_errors.py, tests/unit/cli/test_estate_commands.py
+SPEC-EXIT       -> D7 -> EP-M3, EP-M4 -> tests/unit/test_api_estate_errors.py, tests/unit/cli/test_estate_error_mapping.py
 SPEC-SEC        -> D14 -> EP-M3, EP-M4 -> tests/unit/test_api_auth.py, tests/unit/cli/test_estate_token_redaction.py
 TDD-CLI-THIN    -> Constraint -> EP-M4 -> tests/unit/cli/test_cli_import_closure.py
 RM-2.5.b-DONE   -> D13 -> EP-M5 -> tests/e2e/test_estate_management_e2e.py
@@ -1266,11 +1523,9 @@ Axioms (not verified here): Falcon routes by URI template after
 percent-decoding the path; SQL `ORDER BY owner, name LIMIT ... OFFSET ...` is
 deterministic because owner and name are unique together; msgspec enforces
 `forbid_unknown_fields` and `Meta` constraints; Cyclopts maps `name` and
-`negative` lists as observed in the spike; Granian's `ASGI` interface delivers
-lifespan events (exercised by the end-to-end test, which fails if the bootstrap
-does not run); `httpx.MockTransport` and `httpx.ASGITransport` faithfully
-present requests and responses; `ruamel.yaml`'s event parser reports anchors
-and aliases.
+`negative` lists as observed in the spike; `httpx.MockTransport` and
+`httpx.ASGITransport` faithfully present requests and responses;
+`ruamel.yaml`'s event parser reports anchors and aliases.
 
 Obligation O1, toggle ownership under sync (D3).
 
@@ -1354,7 +1609,7 @@ Obligation O3, estate-key validation (D16).
   accepted keys and `text()` for arbitrary strings, asserting
   `accepted == bool(pattern.fullmatch(s))`.
 - Artefact: `tests/unit/test_estate_models.py`; the CLI equality check lives
-  in `tests/unit/cli/test_estate_commands.py`.
+  in `tests/unit/cli/test_estate_import_commands.py`.
 - Non-vacuity: the property is split so each outcome class is generated by
   construction: one test draws keys from `from_regex` and asserts acceptance;
   the other draws `text()` filtered to non-matching strings (a filter that
@@ -1376,7 +1631,7 @@ Obligation O4, error-contract totality (D7, D17).
 - Artefacts: `tests/unit/test_api_estate_errors.py` (resource rows with a fake
   port; length-overflow and conflict rows against the real service on
   `session_factory`, so PostgreSQL behaviour is exercised),
-  `tests/unit/cli/test_estate_commands.py::test_errors_exit_3`.
+  `tests/unit/cli/test_estate_error_mapping.py::test_http_error_maps_to_exit_3`.
 - Non-vacuity: each row asserts the exact status and code; mutation "map
   `EstateNotFoundError` to 500" must fail its row.
 
@@ -1387,7 +1642,8 @@ Obligation O5, size-limit agreement (D1).
   bytes of serialized body, using a catalogue padded with multibyte characters
   and JSON-escaped newlines.
 - Artefact: `tests/unit/test_api_estate_resources.py::test_body_limit_boundary`
-  and `tests/unit/cli/test_estate_commands.py::test_import_body_limit_boundary`.
+  and
+  `tests/unit/cli/test_estate_import_commands.py::test_import_body_limit_boundary`.
 - Non-vacuity: the multibyte padding makes text length and byte length differ,
   so a check on characters instead of bytes fails.
 
@@ -1415,6 +1671,16 @@ exercises two overlapping transactions, so they are deterministic stale-view
 and missed-read regressions rather than a concurrency proof; what they
 establish is that a lost claim is reported instead of silently overwriting the
 winner.
+
+Startup bootstrap (D13, D29): `tests/e2e/test_runtime_bootstrap_e2e.py` starts
+the packaged runtime with `GHILLIE_DB_BOOTSTRAP=create-all` on a fresh database
+and asserts that one table from each layer exists and that `init_all_storage`'s
+two log lines follow the runtime's start-up line. Together those show Granian's
+ASGI interface delivered the lifespan event to
+`StorageBootstrapMiddleware.process_startup`, and that the worker's application
+logs reach the operator. The check is not vacuous: the fixture cannot answer
+`GET /estates` without the tables, and the same assertions failed before D29
+because the worker's log lines were discarded.
 
 Residual gaps: the per-estate lock is in-process, so concurrent requests across
 replicas are not serialized (single replica in MVP); adoption of an unowned row
@@ -1605,10 +1871,12 @@ when the serialized body exceeds the limit; it prints a prominent `SKIPPED`
 line in table mode. Apply D2, D4, D5, D6, and D20. Keep
 `ghillie/cli/commands/ingest.py` untouched.
 
-Tests first: `tests/unit/cli/test_estate_commands.py` (method, path, query, and
-body per verb via `httpx.MockTransport`; local validation exits `2` with no
-request recorded; O4 client half; O5 client half; pattern equality),
-`tests/unit/cli/test_output.py` additions,
+Tests first: the estate CLI test modules (method, path, query, and body per
+verb via `httpx.MockTransport`; local validation exits `2` with no request
+recorded; O4 client half; O5 client half; pattern equality), split by concern
+into `test_estate_import_commands.py`, `test_estate_sync_commands.py`,
+`test_estate_list_commands.py`, `test_estate_repo_commands.py`, and
+`test_estate_error_mapping.py`, `tests/unit/cli/test_output.py` additions,
 `tests/unit/cli/test_estate_output_snapshots.py` (syrupy snapshots of `table`
 and `yaml` output and of error output, from fixed fake responses; `json`
 compared by parsed equality), `tests/unit/cli/test_estate_token_redaction.py`
@@ -1850,8 +2118,249 @@ request.
 
 ## Artefacts and notes
 
-Record here as work proceeds: red-stage failure lines, the O1 transition
-counter, the O2 case count, seeded-mutation results, and the e2e transcript.
+### Red-stage failure lines
+
+Each milestone's tests were written and observed failing before the
+implementation. The observed lines were:
+
+- PR-A, EP-M1: `test_sync_preserves_operator_disable` and
+  `test_sync_keeps_readded_repository_disabled` failed with
+  `assert True is False`; `test_sync_reports_cross_estate_conflict` raised
+  `RegistrySyncError`; `test_sync_dry_run_leaves_registry_unchanged` raised
+  `NotImplementedError`; and the O1 state machine failed with
+  `sqlite3.IntegrityError: UNIQUE constraint failed:
+  repositories.github_owner, repositories.github_name`,
+  because the old loader could not see another estate's row.
+- PR-B, EP-M2: `test_estate_service.py` raised `NotImplementedError` from the
+  service stub, and the importer dry-run and rename tests exercised behaviour
+  that did not exist.
+- PR-C, EP-M4: the first CLI run failed at import because
+  `ghillie.cli.commands.estate` had no `MAX_REQUEST_BODY_BYTES` or
+  `NEW_ESTATE_KEY_PATTERN`.
+- PR-C, EP-M5: the BDD feature, step definitions, `RunnerTransport`, and the
+  e2e fixture were written before the harness that makes them runnable.
+
+### O1 transition counter
+
+The O1 state machine records every observed `IngestionTransition` in a
+`collections.Counter` and asserts, in the same test, that the counter covers
+every member. The witness seed produced all five transitions: `adopt`,
+`preserve`, `disable_inactive`, `disable_removed`, and `conflict`. The
+assertion is non-vacuous because a missing member fails the test rather than
+merely reducing a statistic.
+
+### O2 case count
+
+The pagination walk enumerates 26 repository counts × 10 limits × 3 filter
+values = 780 cases. It runs against `session_factory`, so the PostgreSQL
+collation is exercised under py-pglite as well as SQLite.
+
+### Seeded-mutation results
+
+Each mutation was applied to the working tree, the focused suite was run, and
+the file was restored; `git status` confirmed no residue. The O1 mutation was
+run earlier on a disposable worktree at `2a56711`; the O2–O4 mutations were run
+at `9bfc6ac`.
+
+| Obligation | Mutation                                                                      | Observed failure                                                                                                                                           |
+| ---------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| O1         | Return `catalogue_active` for `PRESERVE` in `decide_for_catalogue_repository` | `test_sync_preserves_operator_disable` failed `assert True is False`; `test_sync_transitions_are_modelled` failed `AssertionError: leynos/wildside-mockup` |
+| O2         | Fetch `limit` rows instead of `limit + 1` in `list_repositories`              | `test_walking_pages_visits_each_repository_exactly_once` failed `AssertionError: paging should cover the same repositories in order`                       |
+| O3         | Drop the length bound from `validate_estate_key_reference`                    | The 65-character row failed `DID NOT RAISE InvalidEstateKeyError`                                                                                          |
+| O4         | Map `EstateNotFoundError` to `500` instead of `404`                           | `test_estate_not_found` failed its status assertion                                                                                                        |
+
+The field-update mutation the plan previously named, re-adding
+`("ingestion_enabled", cat_repo.is_active)` to `sync.py`, was also run and both
+O1 tests passed. The policy block reasserts the final flag, so the mutation is
+not usable as non-vacuity evidence for the final-flag invariant.
+
+O5's non-vacuity is structural rather than a seeded mutation: the boundary
+bodies are padded with multibyte characters and JSON-escaped newlines, so a
+check on characters instead of bytes cannot pass. O6's closure test fails if
+any forbidden module is imported, which is the property itself.
+
+### End-to-end transcript (success criteria 1–5)
+
+The transcript below was produced by a scratch driver that imports
+`tests.e2e.conftest._start_server`, `_stop`, and `run_cli`, starts the packaged
+runtime on a free port, and drives the console script over real HTTP. The
+tracked equivalent is `tests/e2e/test_estate_management_e2e.py`. JSON documents
+are pretty-printed here for readability; the CLI emitted each as one line.
+
+```text
+== Criterion 1: empty database answers GET /estates ==
+$ curl -s http://127.0.0.1:49575/estates
+HTTP 200
+{
+  "items": [],
+  "limit": 50,
+  "offset": 0,
+  "has_more": false,
+  "next_offset": null
+}
+
+== Criterion 2: import the catalogue ==
+$ ghillie --api-base-url <url> estate import --estate-key demo \
+    --catalogue-path examples/wildside-catalogue.yaml --commit-sha abc123
+exit=0
+estate_key: demo
+commit_sha: abc123
+state: succeeded
+dry_run: false
+skipped: false
+skipped_reason: -
+registry_sync_required: true
+projects.created: 2
+projects.updated: 0
+projects.deleted: 0
+components.created: 7
+components.updated: 0
+components.deleted: 0
+repositories.created: 6
+repositories.updated: 0
+repositories.deleted: 0
+edges.created: 6
+edges.updated: 0
+edges.deleted: 0
+
+== Criterion 3: sync the registry ==
+$ ghillie --api-base-url <url> estate sync --estate-key demo
+exit=0
+estate_key: demo
+state: succeeded
+dry_run: false
+repositories_created: 6
+repositories_updated: 0
+repositories_deactivated: 0
+repositories_conflicted: []
+repositories_left_disabled: []
+repositories_left_disabled_count: 0
+
+== Criterion 4: list repositories as JSON ==
+$ ghillie --api-base-url <url> --output json estate repo list --estate-key demo
+exit=0
+{
+  "estate_key": "demo",
+  "has_more": false,
+  "items": [
+    {"default_branch": "main", "documentation_paths": [],
+     "ingestion_enabled": true, "name": "ortho-config", "owner": "leynos"},
+    {"default_branch": "main", "documentation_paths": [],
+     "ingestion_enabled": true, "name": "pg-embedded-setup-unpriv",
+     "owner": "leynos"},
+    {"default_branch": "main", "documentation_paths": [],
+     "ingestion_enabled": true, "name": "rstest-bdd", "owner": "leynos"},
+    {"default_branch": "main",
+     "documentation_paths": ["docs/roadmap.md", "docs/adr/"],
+     "ingestion_enabled": true, "name": "wildside", "owner": "leynos"},
+    {"default_branch": "main", "documentation_paths": [],
+     "ingestion_enabled": true, "name": "wildside-engine", "owner": "leynos"},
+    {"default_branch": "main", "documentation_paths": [],
+     "ingestion_enabled": true, "name": "wildside-mockup", "owner": "leynos"}
+  ],
+  "limit": 50,
+  "next_offset": null,
+  "offset": 0
+}
+
+== Criterion 5: disable ingestion, re-import, re-sync ==
+$ ghillie --api-base-url <url> estate repo set --owner leynos --name wildside \
+    --ingestion-disabled
+exit=0
+owner: leynos
+name: wildside
+ingestion_enabled: false
+changed: true
+
+$ ghillie --api-base-url <url> estate import --estate-key demo \
+    --catalogue-path examples/wildside-catalogue.yaml --commit-sha def456
+exit=0
+estate_key: demo
+commit_sha: def456
+state: succeeded
+dry_run: false
+skipped: false
+skipped_reason: -
+registry_sync_required: true
+projects.created: 0
+projects.updated: 0
+projects.deleted: 0
+components.created: 0
+components.updated: 0
+components.deleted: 0
+repositories.created: 0
+repositories.updated: 0
+repositories.deleted: 0
+edges.created: 0
+edges.updated: 0
+edges.deleted: 0
+
+$ ghillie --api-base-url <url> --output json estate sync --estate-key demo
+exit=0
+{
+  "dry_run": false,
+  "estate_key": "demo",
+  "repositories_conflicted": [],
+  "repositories_created": 0,
+  "repositories_deactivated": 0,
+  "repositories_left_disabled": ["leynos/wildside"],
+  "repositories_left_disabled_count": 1,
+  "repositories_updated": 0,
+  "state": "succeeded"
+}
+
+$ ghillie --api-base-url <url> --output json estate repo list --estate-key demo \
+    --inactive
+exit=0
+{
+  "estate_key": "demo",
+  "has_more": false,
+  "items": [
+    {"default_branch": "main",
+     "documentation_paths": ["docs/roadmap.md", "docs/adr/"],
+     "ingestion_enabled": false, "name": "wildside", "owner": "leynos"}
+  ],
+  "limit": 50,
+  "next_offset": null,
+  "offset": 0
+}
+```
+
+### Known limitation: `estate list` reads one page
+
+`ghillie estate list` takes no `--limit` or `--offset`, so it always requests
+the service default of 50 estates and renders only that first page. The
+document is a page envelope, so `has_more` and `next_offset` are visible in
+`json` and `yaml` output, but the command cannot follow them. This is a
+deliberate scope boundary for Task 2.5.b: the estate catalogue is expected to
+hold far fewer than 50 estates, and the repository listing — the collection
+that can grow without bound — does expose paging. A future task that needs to
+enumerate more estates must add the paging options rather than assume the
+current command is complete.
+
+### Known limitation: legacy estate keys cannot be re-imported through the CLI
+
+D16 requires the CLI to pre-validate every import key against the creation
+pattern `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`, and EP-M4 repeats that
+requirement. The service applies the same pattern only when it creates an
+estate, so an estate created earlier through Python may hold a key the CLI
+rejects. `ghillie estate import` exits `2` with `invalid_estate_key` for such a
+key and sends no request, while `POST /estates/{estate_key}/catalogue-import`
+re-imports into the existing estate successfully.
+
+The HTTP workaround needs a routable key. Falcon decodes `%2F` before routing,
+so a key containing `/` misses the estate route and returns `404` with
+`not_found`; such an estate cannot be re-imported through either interface.
+`tests/unit/test_api_estate_errors.py::test_estate_key_with_encoded_slash_is_not_found`
+pins that route miss.
+
+The approved rule and legacy reachability conflict. Because D16 is an explicit
+EP-M4 requirement, this plan keeps the CLI behaviour and records the limitation
+rather than revising the rule without authorization. The limitation is
+documented in the users' guide. A future task that needs legacy-key re-import
+from the CLI must change D16 so that creation validation stays with the
+service, which can determine whether the estate already exists, and add a
+CLI-to-service regression test.
 
 ## Interfaces and dependencies
 
@@ -1875,9 +2384,11 @@ def parse_catalogue_text(text: str) -> Catalogue: ...
 async def init_all_storage(engine: AsyncEngine) -> None: ...
 
 # ghillie/cli/control_plane.py
+import http  # under `if TYPE_CHECKING:`
+
 class ControlPlaneClient:
     def request_json(
-        self, method: str, path_segments: cabc.Sequence[str], *,
+        self, method: http.HTTPMethod, path_segments: cabc.Sequence[str], *,
         params: cabc.Mapping[str, str] | None = None,
         body: cabc.Mapping[str, object] | None = None,
     ) -> dict[str, object]: ...
