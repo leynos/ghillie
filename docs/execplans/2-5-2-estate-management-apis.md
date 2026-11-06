@@ -877,6 +877,11 @@ per pull request.
         passed at the rebased head `ca2a258` (logs
         `/tmp/gate-C-ca2a258-*.out`). This entry is a Markdown-only change, so
         the same four gates cover it.
+  - [x] (2026-11-06) PR-B then corrected the EP-M3 outcome, which had named
+        `code`, `message`, `status`, and `issues` instead of the implemented
+        `title`, `description`, and `code`, and branch C was rebased onto that
+        fix (`1039e19`). `git diff 6efa4e7 1d573ab` names only the ExecPlan;
+        the four Markdown gates cover the rebased delta at `1d573ab`.
 
 ## Surprises & discoveries
 
