@@ -1073,14 +1073,15 @@ the caller rationale; the rule stays narrow rather than disabling the gate.
 
 Outcome: `ghillie/api/estate/` exposes the five documented endpoints over
 msgspec request and response structs. `ghillie/api/errors.py` renders the D7
-envelope with `code`, `message`, `status`, and `issues` for every failure,
-including the catch-all handler Falcon would otherwise answer with a bare 500.
-`BearerTokenMiddleware` enforces an optional token while the probes stay open,
-`AppDependencies` lets each route family appear independently, and
-`StorageBootstrapMiddleware` creates the schema only when
-`GHILLIE_DB_BOOTSTRAP` opts in. Catalogue parsing runs off the event loop,
-rejects anchors, aliases, and excessive nesting before composition, and now
-also rejects values that cannot fit their storage columns.
+envelope — `title`, `description`, and a stable `code`, plus optional fields
+such as `field`, `issues`, or `max_bytes` — for every failure, with the HTTP
+status carried separately on the response, including the catch-all handler
+Falcon would otherwise answer with a bare 500. `BearerTokenMiddleware` enforces
+an optional token while the probes stay open, `AppDependencies` lets each route
+family appear independently, and `StorageBootstrapMiddleware` creates the
+schema only when `GHILLIE_DB_BOOTSTRAP` opts in. Catalogue parsing runs off the
+event loop, rejects anchors, aliases, and excessive nesting before composition,
+and now also rejects values that cannot fit their storage columns.
 
 Evidence: the ten review cycles recorded in Progress each ended in a green
 eight-gate run; the final run at `1dde1aa` reported 1424 passed, 11 skipped,
