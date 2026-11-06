@@ -882,6 +882,14 @@ per pull request.
         `title`, `description`, and `code`, and branch C was rebased onto that
         fix (`1039e19`). `git diff 6efa4e7 1d573ab` names only the ExecPlan;
         the four Markdown gates cover the rebased delta at `1d573ab`.
+  - [x] (2026-11-06) PR-B then rebased onto the corrected PR-A head and
+        published `aa841f8`; branch C was replayed onto it, giving 19 replayed
+        commits and the decision order D24, D25, D26, D27. All eight gates
+        passed sequentially at `a096bf5`: `check-fmt`, `check-architecture`,
+        `typecheck`, `lint`, `test` (1539 passed, 11 skipped, 0 failed, 94
+        warnings, 12 snapshots), `markdownlint` (58 files, 0 issues), `nixie`,
+        and `spelling` (logs `/tmp/gate-C-a096bf5-*.out`). This entry is a
+        Markdown-only change, so the same four Markdown gates cover it.
 
 ## Surprises & discoveries
 
