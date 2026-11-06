@@ -476,11 +476,12 @@ for repo in active_repos:
 page = await service.list_active_repositories(limit=100, offset=0)
 ```
 
-A toggle survives later catalogue imports and syncs. Sync creates rows, adopts
-unlinked rows, and disables rows that leave the catalogue, but it never
-re-enables a linked row of the estate. A repository that is removed from the
-catalogue and later re-added therefore stays disabled until an operator enables
-it again. The sync result names those repositories:
+For an active linked repository, sync preserves the operator's ingestion flag.
+Sync creates rows, adopts unlinked rows, and disables rows whose catalogue
+entry becomes inactive or leaves the catalogue; it never re-enables a linked
+row of the estate. A repository that is removed from the catalogue and later
+re-added therefore stays disabled until an operator enables it again. The sync
+result names those repositories:
 
 ```python
 result = await service.sync_from_catalogue("wildside")
