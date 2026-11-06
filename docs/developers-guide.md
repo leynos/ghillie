@@ -264,6 +264,11 @@ runs the whole projection inside one Silver transaction:
 - with `dry_run=True`, the same work runs and the transaction is rolled back, so
   the call returns the counts it would have produced and persists nothing.
 
+Adoption of an unowned row is atomic. The sync claims it with a conditional
+update and reports a conflict if another estate claimed it first, so concurrent
+syncs cannot silently replace each other's claim. A race to insert the same
+repository is arbitrated by the owner/name uniqueness constraint.
+
 Either way the call returns a `SyncResult`. `repositories_created`,
 `repositories_updated`, and `repositories_deactivated` count the changes.
 `repositories_conflicted` lists this estate's catalogue slugs that another

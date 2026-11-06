@@ -41,6 +41,9 @@ def _repository_fields(repo: Repository) -> tuple[object, ...]:
         repo.ingestion_enabled,
         repo.last_synced_at,
         tuple(repo.documentation_paths),
+        repo.is_active,
+        repo.created_at,
+        repo.updated_at,
     )
 
 
