@@ -863,6 +863,14 @@ per pull request.
         `field` and `max_bytes` when it reads only `code`, the description, and
         `issues`. The CLI still carries an unknown server code with a fallback
         hint, so no client change is needed for a new code.
+  - [x] (2026-11-06) The EP-C-R5 assessment found two gaps, both closed: the
+        users' guide and ExecPlan now limit the legacy-key HTTP workaround to
+        routable keys and record the `/` exception, and
+        `test_estate_key_with_encoded_slash_is_not_found` (PR-B) pins the
+        route miss. EP-C-R6 then found the seeded-mutation table still named
+        the field-update mutation; the O1 row now names the policy mutation
+        that failed, and the text records that the field-update mutation
+        passed.
 
 ## Surprises & discoveries
 
@@ -2117,12 +2125,17 @@ the file was restored; `git status` confirmed no residue. The O1 mutation was
 run earlier on a disposable worktree at `2a56711`; the O2–O4 mutations were run
 at `9bfc6ac`.
 
-| Obligation | Mutation                                                                             | Observed failure                                                                                                                                           |
-| ---------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| O1         | Re-add `("ingestion_enabled", cat_repo.is_active)` to the field updates in `sync.py` | `test_sync_preserves_operator_disable` failed `assert True is False`; `test_sync_transitions_are_modelled` failed `AssertionError: leynos/wildside-mockup` |
-| O2         | Fetch `limit` rows instead of `limit + 1` in `list_repositories`                     | `test_walking_pages_visits_each_repository_exactly_once` failed `AssertionError: paging should cover the same repositories in order`                       |
-| O3         | Drop the length bound from `validate_estate_key_reference`                           | The 65-character row failed `DID NOT RAISE InvalidEstateKeyError`                                                                                          |
-| O4         | Map `EstateNotFoundError` to `500` instead of `404`                                  | `test_estate_not_found` failed its status assertion                                                                                                        |
+| Obligation | Mutation                                                                      | Observed failure                                                                                                                                           |
+| ---------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| O1         | Return `catalogue_active` for `PRESERVE` in `decide_for_catalogue_repository` | `test_sync_preserves_operator_disable` failed `assert True is False`; `test_sync_transitions_are_modelled` failed `AssertionError: leynos/wildside-mockup` |
+| O2         | Fetch `limit` rows instead of `limit + 1` in `list_repositories`              | `test_walking_pages_visits_each_repository_exactly_once` failed `AssertionError: paging should cover the same repositories in order`                       |
+| O3         | Drop the length bound from `validate_estate_key_reference`                    | The 65-character row failed `DID NOT RAISE InvalidEstateKeyError`                                                                                          |
+| O4         | Map `EstateNotFoundError` to `500` instead of `404`                           | `test_estate_not_found` failed its status assertion                                                                                                        |
+
+The field-update mutation the plan previously named, re-adding
+`("ingestion_enabled", cat_repo.is_active)` to `sync.py`, was also run and both
+O1 tests passed. The policy block reasserts the final flag, so the mutation is
+not usable as non-vacuity evidence for the final-flag invariant.
 
 O5's non-vacuity is structural rather than a seeded mutation: the boundary
 bodies are padded with multibyte characters and JSON-escaped newlines, so a
