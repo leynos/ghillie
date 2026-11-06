@@ -287,6 +287,15 @@ per pull request.
       (excess function arguments). The test now inserts its foreign row
       directly instead of taking the `create_repo` fixture, and the local
       `cs check` reports a code health score of `10.00` for the module.
+- [x] (2026-11-06) The third hosted review round accepted the two repaired
+      dispositions and asked for the exceptional-state limits to stay explicit.
+      The Surprises entry now names both: an ownership-only claim commits
+      without advancing `repositories_updated` or `last_synced_at`, and the
+      removal path judges ownership from the loaded view, so a row another
+      estate claimed after the load can still be disabled. The Verification
+      section also says what the D28 tests are — deterministic stale-view and
+      missed-read regressions — rather than implying overlapping-transaction
+      coverage.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
@@ -344,13 +353,23 @@ per pull request.
   as its working directory cannot import the standard library. Impact: run
   scratch Python with `-I` from the repository root.
 - Observation: the Silver schema permits an unowned row (`estate_id` null) that
-  still carries a `catalogue_repository_id`. If such a row is enabled and its
-  slug is absent from the synced estate's catalogue, the removal path disables
-  it, because the row is linked and the estate does not own it. No normal
+  still carries a `catalogue_repository_id`. Because the policy treats a null
+  `estate_id` as adoptable, and therefore as owned for its purposes, such a row
+  falls through to the removal and update paths like an owned one. No normal
   production path creates that state: adoption applies only to unlinked rows,
-  and creation always sets `estate_id`. The behaviour is unchanged from the
-  base and is the conservative choice for a row reachable only by direct
-  database writes, so EP-M1 keeps it rather than adding a special case.
+  and creation always sets `estate_id`. Two narrow limits follow, both reached
+  only by rows written directly to the database, and both unchanged from the
+  base, so EP-M1 records them rather than adding special cases.
+  - An ownership-only claim does not register as an update.
+    `_claim_unowned_repository` mirrors the new `estate_id` onto the loaded row,
+    so `_update_silver_repository` afterwards finds every field already equal.
+    The claim commits, but `repositories_updated` does not increment and
+    `last_synced_at` does not advance for that row.
+  - The removal path judges ownership from the loaded view. If the slug is
+    absent from this estate's catalogue and is enabled, the removal path
+    disables it — including when another estate claimed the row after this
+    sync loaded its view. Closing that would need the same conditional
+    ownership check in the removal path that D28 added to the claim.
 
 ## Decision log
 
@@ -854,9 +873,14 @@ Obligation O6, CLI import closure (`TDD-CLI-THIN`).
   the loaded set, proving the estate commands were imported.
 
 Concurrency of adoption (D28): `tests/unit/test_registry_service_sync.py`
-proves that a stale view cannot claim an unowned row, that a sync losing the
-adoption race reports a conflict, and that a lost insert preserves the
-`IntegrityError` cause for the 409 mapping.
+proves that a stale view cannot claim an unowned row, that a sync whose claim
+matches no row reports a conflict, and that a lost insert preserves the
+`IntegrityError` cause for the 409 mapping. These are deterministic stale-view
+and missed-read regressions: each test drives one sync against a deliberately
+stale view or a claim the database cannot match, and asserts the reported
+outcome. None of them exercises two overlapping transactions, so they must not
+be read as a concurrency proof; what they establish is that a lost claim is
+reported rather than silently overwriting the winner.
 
 Residual gaps: the per-estate lock is in-process, so concurrent requests across
 replicas are not serialized (single replica in MVP); adoption of an unowned row
