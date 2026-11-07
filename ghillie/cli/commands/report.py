@@ -18,6 +18,7 @@ report_app = App(name="report", help="Trigger and observe reporting runs.")
 
 
 def _api_placeholder(verb: str, **fields: object) -> str:
+    """Render the not-implemented placeholder response for a report verb."""
     context = get_current_context()
     with ControlPlaneClient(context.config):
         return render_output(

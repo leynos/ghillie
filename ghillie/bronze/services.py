@@ -173,6 +173,7 @@ class RawEventWriter:
         envelope: RawEventEnvelope,
         dedupe_key: str,
     ) -> RawEvent | None:
+        """Return the existing raw event matching the source system and dedupe key."""
         stmt = select(RawEvent).where(
             RawEvent.source_system == envelope.source_system,
             RawEvent.dedupe_key == dedupe_key,

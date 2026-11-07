@@ -17,6 +17,7 @@ metrics_app = App(name="metrics", help="Query MVP metrics views.")
 
 
 def _api_placeholder(verb: str, **fields: object) -> str:
+    """Render the not-implemented placeholder response for a metrics verb."""
     context = get_current_context()
     with ControlPlaneClient(context.config):
         return render_output(

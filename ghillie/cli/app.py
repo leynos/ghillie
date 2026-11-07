@@ -138,6 +138,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _split_option_with_value(token: str) -> tuple[str, str] | None:
+    """Split a ``--flag=VALUE`` token into its name and value, or None."""
     if "=" not in token:
         return None
     option_name, option_value = token.split("=", 1)
@@ -145,6 +146,7 @@ def _split_option_with_value(token: str) -> tuple[str, str] | None:
 
 
 def _coerce_root_value(field_name: str, raw_value: str) -> object:
+    """Coerce a root option value, parsing the request timeout as a float."""
     if field_name == "request_timeout_s":
         try:
             return float(raw_value)
@@ -162,6 +164,7 @@ def _apply_valued_option(
 
 
 def _coerce_result_to_exit_code(result: object) -> int:
+    """Map a command result to an exit code, printing string results."""
     if result is None:
         return 0
     if isinstance(result, int):
@@ -182,6 +185,7 @@ def _is_invalid_backend_choice(message: str) -> bool:
 
 
 def _format_cyclopts_error(error: CycloptsError) -> str:
+    """Return a readable message for a cyclopts error, fixing --backend choices."""
     message = str(error)
     if _is_invalid_backend_choice(message):
         parts = message.split('"')

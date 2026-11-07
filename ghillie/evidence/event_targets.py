@@ -36,6 +36,7 @@ class EventTargetExtractor:
     def _handle_commit_event(
         self, targets: EventTargets, payload: dict[str, typ.Any]
     ) -> None:
+        """Record the commit SHA from a commit event payload, if it is a string."""
         sha = payload.get("sha")
         if isinstance(sha, str):
             targets.commit_shas.add(sha)
@@ -43,6 +44,7 @@ class EventTargetExtractor:
     def _handle_pull_request_event(
         self, targets: EventTargets, payload: dict[str, typ.Any]
     ) -> None:
+        """Record the pull request ID from a pull request event payload, if valid."""
         pr_id = self._coerce_int(payload.get("id"))
         if pr_id is not None:
             targets.pull_request_ids.add(pr_id)
@@ -50,6 +52,7 @@ class EventTargetExtractor:
     def _handle_issue_event(
         self, targets: EventTargets, payload: dict[str, typ.Any]
     ) -> None:
+        """Record the issue ID from an issue event payload, if valid."""
         issue_id = self._coerce_int(payload.get("id"))
         if issue_id is not None:
             targets.issue_ids.add(issue_id)
@@ -57,6 +60,7 @@ class EventTargetExtractor:
     def _handle_doc_change_event(
         self, targets: EventTargets, payload: dict[str, typ.Any]
     ) -> None:
+        """Record the commit SHA and path from a doc change event payload."""
         commit_sha = payload.get("commit_sha")
         path = payload.get("path")
         if isinstance(commit_sha, str) and isinstance(path, str):

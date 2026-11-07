@@ -511,6 +511,7 @@ class EvidenceBundleService:
         """Convert Commit models to CommitEvidence structs."""
 
         def build_commit(c: Commit) -> CommitEvidence:
+            """Convert one Commit into a CommitEvidence with its work type."""
             return CommitEvidence(
                 sha=c.sha,
                 message=c.message,
@@ -527,6 +528,7 @@ class EvidenceBundleService:
         """Convert PullRequest models to PullRequestEvidence structs."""
 
         def build_pr(pr: PullRequest) -> PullRequestEvidence:
+            """Convert one PullRequest into a PullRequestEvidence with its work type."""
             return PullRequestEvidence(
                 id=pr.id,
                 number=pr.number,
@@ -547,6 +549,7 @@ class EvidenceBundleService:
         """Convert Issue models to IssueEvidence structs."""
 
         def build_issue(i: Issue) -> IssueEvidence:
+            """Convert one Issue into an IssueEvidence with its work type."""
             return IssueEvidence(
                 id=i.id,
                 number=i.number,

@@ -22,6 +22,7 @@ export_app = App(name="export", help="Export structured MVP data artefacts.")
 
 
 def _api_placeholder(verb: str, **fields: object) -> str:
+    """Render the not-implemented placeholder response for an export verb."""
     context = get_current_context()
     with ControlPlaneClient(context.config):
         return render_output(
@@ -62,6 +63,7 @@ def _export_command(
     sink: ExportSinkOptions,
     **extra_fields: object,
 ) -> str:
+    """Render an export placeholder for ``kind`` with shared options."""
     return _api_placeholder(
         kind,
         **_flatten_target(target),

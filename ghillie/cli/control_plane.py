@@ -65,6 +65,7 @@ class ControlPlaneClient:
 
 
 def _headers_for(config: ResolvedCliConfig) -> dict[str, str]:
+    """Build default request headers, adding a bearer token when one is set."""
     headers = {"User-Agent": "ghillie/0.1"}
     if config.auth_token:
         headers["Authorization"] = f"Bearer {config.auth_token}"
