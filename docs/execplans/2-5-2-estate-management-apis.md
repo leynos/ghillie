@@ -336,14 +336,19 @@ per pull request.
 - [x] (2026-11-07) The R15 assessment reply accepted the lost-insert repair but
       raised a further concurrency defect: the sync loop followed catalogue
       order, so two estates with different orders could deadlock and lose one
-      estate's conflict reports. Both write loops now sort their slugs, and
-      `test_sync_writes_slugs_in_sorted_order` proves the ordering with a
-      reversed catalogue; it fails when the sort is reverted. The same reply
-      asked for the Postgres run to be reproducible from committed
-      configuration, so `tests/conftest.py` now accepts a
+      estate's conflict reports. The sync now makes one sorted pass over the
+      catalogue and Silver slugs, flushing each, and
+      `test_sync_writes_slugs_in_sorted_order` proves it with a reversed
+      catalogue and a row outside it. A follow-up reply noted that two separate
+      phases would still take their locks in two orders;
+      `test_overlapping_syncs_across_both_phases_do_not_deadlock` fails with
+      `RegistrySyncError` on the two-phase order and passes on the one-pass
+      order. The same reply asked for the Postgres run to be reproducible from
+      committed configuration, so `tests/conftest.py` now accepts a
       `postgresql+asyncpg://` URL in `GHILLIE_TEST_DB` and resets that
-      database's `public` schema per test. All 21 tests in the three sync
-      modules pass against Postgres 17 with no skips.
+      database's `public` schema per test; it raises under `pytest-xdist`,
+      which shares one schema. All 22 tests in the three sync modules pass
+      against Postgres 17 with no skips.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
@@ -640,15 +645,20 @@ expert-panel review.
   both supported dialects. A dialect without an upsert construct falls back to
   the plain insert.
 
-  Both write loops visit slugs in sorted order. Catalogue order is not
-  guaranteed to agree between two estates, and disagreeing orders let each sync
-  hold a row the other is waiting for, which Postgres resolves by aborting one
-  transaction and losing that estate's remaining conflict reports. Sorting
-  gives every sync the same lock order, which is the deadlock-avoidance rule
-  PostgreSQL documents for explicit locking.
-  `test_sync_writes_slugs_in_sorted_order` drives the loop with a reversed
-  catalogue and asserts the writes still arrive sorted; it fails with the
-  repair reverted.
+  The sync makes one sorted pass over the union of catalogue and Silver slugs,
+  flushing each slug before the next. Catalogue order is not guaranteed to
+  agree between two estates, and separate claim and removal passes would give
+  the two phases different orders, so either sync could hold a row the other
+  waits for; Postgres resolves that by aborting one transaction and losing that
+  estate's remaining conflict reports. One sorted, flushed pass gives every
+  sync the same lock order, which is the deadlock-avoidance rule PostgreSQL
+  documents for explicit locking. `test_sync_writes_slugs_in_sorted_order`
+  drives the pass with a reversed catalogue and a row outside it, and asserts
+  both phases write in one sorted order.
+  `test_overlapping_syncs_across_both_phases_do_not_deadlock` runs two syncs
+  where each estate claims one unowned row and removes the other's; against
+  Postgres 17 it passes on the one-pass order and aborts with
+  `RegistrySyncError` on the two-phase order.
 
   D25 and D26 are introduced by branches B and C and follow this entry once the
   stack is applied.
@@ -982,10 +992,12 @@ to Postgres. The suite's default py-pglite path cannot supply one on this host:
 the pinned asyncpg rejects PGlite's TLS upgrade, and a connection that does
 succeed hangs in `engine.dispose()`. `GHILLIE_TEST_DB` therefore also accepts a
 `postgresql+asyncpg://` URL, which `tests/conftest.py` uses to reset the
-database's `public` schema per test and initialize storage there. Against
-Postgres 17 in a throwaway container, all 21 tests in the three sync modules
-passed with no skips, and the insert test fails with `RegistrySyncError` when
-the repair is reverted.
+database's `public` schema per test and initialize storage there. That reset
+needs a serial run, so the fixture raises under `pytest-xdist` and the guides
+point at `uv run pytest` rather than `make test`. Against Postgres 17 in a
+throwaway container, all 22 tests in the three sync modules passed with no
+skips, and the insert test fails with `RegistrySyncError` when the repair is
+reverted.
 
 Residual gaps: the per-estate lock is in-process, so concurrent requests across
 replicas are not serialized (single replica in MVP); adoption of an unowned row

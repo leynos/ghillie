@@ -432,15 +432,19 @@ async def _sync_repositories(
         result=result,
     )
 
-    # Write in slug order so two estates syncing the same repositories take
-    # their row locks in the same order. Catalogue order is not guaranteed to
-    # agree between estates, and disagreeing orders let each sync hold a row
-    # the other is waiting for, which Postgres resolves by aborting one of
-    # them and losing that estate's conflict report for the rest of the run.
-    for slug in sorted(plan.catalogue_repos):
-        await _sync_one_repository(context, slug, plan.catalogue_repos[slug])
-
-    _deactivate_removed_repositories(context, set(plan.catalogue_repos))
+    # One sorted pass over both phases, flushing each slug before the next.
+    # Two estates syncing the same repositories must take their row locks in
+    # the same order, or each can hold a row the other is waiting for and
+    # Postgres resolves it by aborting one of them. Catalogue order is not
+    # guaranteed to agree between estates, and a separate removal pass would
+    # give the two phases two different orders, so the union is walked once and
+    # every write for a slug is flushed before the next slug is touched.
+    for slug in sorted(set(plan.catalogue_repos) | set(silver_repos)):
+        if slug in plan.catalogue_repos:
+            await _sync_one_repository(context, slug, plan.catalogue_repos[slug])
+        else:
+            _deactivate_removed_repository(context, slug)
+        await session.flush()
 
 
 def _create_silver_repository(
@@ -461,26 +465,22 @@ def _create_silver_repository(
     )
 
 
-def _deactivate_removed_repositories(
+def _deactivate_removed_repository(
     context: _SilverSyncContext,
-    seen_slugs: set[str],
+    slug: str,
 ) -> None:
-    """Deactivate repositories that are no longer in this estate's catalogue."""
-    # Sorted for the same lock-ordering reason as the sync loop above.
-    for slug in sorted(context.silver_repos):
-        silver_repo = context.silver_repos[slug]
-        if slug in seen_slugs:
-            continue
-        decision = decide_for_removed_repository(
-            _silver_state(silver_repo, context.estate_id)
-        )
-        if decision.transition is not IngestionTransition.DISABLE_REMOVED:
-            continue
-        if not silver_repo.ingestion_enabled:
-            continue
-        silver_repo.ingestion_enabled = False
-        silver_repo.last_synced_at = context.now
-        context.result.repositories_deactivated += 1
+    """Deactivate one repository that is no longer in this estate's catalogue."""
+    silver_repo = context.silver_repos[slug]
+    decision = decide_for_removed_repository(
+        _silver_state(silver_repo, context.estate_id)
+    )
+    if decision.transition is not IngestionTransition.DISABLE_REMOVED:
+        return
+    if not silver_repo.ingestion_enabled:
+        return
+    silver_repo.ingestion_enabled = False
+    silver_repo.last_synced_at = context.now
+    context.result.repositories_deactivated += 1
 
 
 def _update_silver_repository(
