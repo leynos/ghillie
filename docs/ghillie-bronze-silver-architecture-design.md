@@ -1252,13 +1252,43 @@ controls.
 
 1. Load catalogue `RepositoryRecord` entries for an estate via component
    definitions.
-2. Match Silver repositories by slug (`owner/name`).
-3. Upsert: create new Silver rows or update existing ones with catalogue
-   metadata.
-4. Deactivate: repositories removed from catalogue have `ingestion_enabled` set
+2. Load Silver rows owned by the estate, unowned rows, and rows whose slug the
+   catalogue names, so rows owned by another estate are seen.
+3. Match Silver repositories by slug (`owner/name`).
+4. Upsert: create new Silver rows or update existing ones with catalogue
+   metadata. Catalogue metadata (branch, documentation paths, link) is always
+   refreshed; `ingestion_enabled` is decided separately.
+5. Deactivate: repositories removed from catalogue have `ingestion_enabled` set
    to `False` (soft disable, no deletion).
-5. Ad hoc repositories created by the Silver transformer default to
+6. Ad hoc repositories created by the Silver transformer default to
    `ingestion_enabled=False` to prevent uncontrolled event processing.
+
+**Ingestion ownership:**
+
+`ghillie.registry.policy` decides the ingestion flag, and sync writes it only
+when the decision differs from the stored value. The rules are recorded in
+[ADR-005](adr-005-registry-sync-preserves-operator-ingestion-toggles.md):
+
+| Row state               | Catalogue state   | Transition            |
+| ----------------------- | ----------------- | --------------------- |
+| absent                  | present, active   | `ADOPT` (enabled)     |
+| absent                  | present, inactive | `ADOPT` (disabled)    |
+| unlinked, this estate   | present           | `ADOPT`               |
+| linked, this estate     | present, active   | `PRESERVE`            |
+| linked, this estate     | present, inactive | `DISABLE_INACTIVE`    |
+| linked, this estate     | absent            | `DISABLE_REMOVED`     |
+| unlinked, this estate   | absent            | `PRESERVE`            |
+| owned by another estate | present           | `CONFLICT` (reported) |
+| owned by another estate | absent            | `CONFLICT` (silent)   |
+
+A linked row of the estate is never moved from disabled to enabled by sync.
+`SyncResult.repositories_conflicted` names catalogue slugs that another estate
+owns, and `repositories_left_disabled` previews (first 100) the linked rows
+that stay disabled because an operator turned them off, with an exact count in
+`repositories_left_disabled_count`.
+
+`sync_from_catalogue(estate_key, dry_run=True)` runs the same projection inside
+its transaction and rolls it back, returning the counts it would have produced.
 
 **Usage:**
 

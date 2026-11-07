@@ -476,6 +476,38 @@ for repo in active_repos:
 page = await service.list_active_repositories(limit=100, offset=0)
 ```
 
+For an active linked repository, sync preserves the operator's ingestion flag.
+Sync creates rows, adopts unlinked rows, and disables rows whose catalogue
+entry becomes inactive or leaves the catalogue; it never re-enables a linked
+row of the estate. A repository that is removed from the catalogue and later
+re-added therefore stays disabled until an operator enables it again. The sync
+result names those repositories:
+
+```python
+result = await service.sync_from_catalogue("wildside")
+print(result.repositories_left_disabled_count)
+print(result.repositories_left_disabled)  # first 100 slugs
+```
+
+If another estate already owns a repository that this estate's catalogue names,
+sync leaves that row untouched and reports the slug in
+`result.repositories_conflicted`. Remove the repository from this estate's
+catalogue to clear the report. Sync never moves a row between estates, so the
+row stays with the owning estate; removing the slug from the owning estate's
+catalogue only disables that estate's own row and leaves this estate's report
+in place.
+
+A toggle applied to an ad hoc row lasts only until the row is adopted by a
+catalogue entry, at which point the catalogue's active flag takes over.
+
+To preview a sync without changing anything, pass `dry_run=True`. The result
+reports the counts the sync would have produced, and the transaction is rolled
+back:
+
+```python
+preview = await service.sync_from_catalogue("wildside", dry_run=True)
+```
+
 ### Ad hoc repositories
 
 When the Silver transformer encounters events for repositories not in the
@@ -555,7 +587,10 @@ The test fixtures now attempt to start a py-pglite Postgres instance by default
 so behavioural and unit tests exercise real Postgres semantics. If py-pglite
 cannot start (for example, Node.js is missing), the fixtures automatically fall
 back to SQLite to keep the suite runnable. To force SQLite explicitly, set
-`GHILLIE_TEST_DB=sqlite` before invoking `make test`. See
+`GHILLIE_TEST_DB=sqlite` before invoking `make test`. To run against an
+existing Postgres instead, set `GHILLIE_TEST_DB` to a
+`postgresql+asyncpg://user:password@host:port/database` URL; the fixtures reset
+that database's `public` schema per test, so point it at a disposable one. See
 `docs/testing-sqlalchemy-with-pytest-and-py-pglite.md` for full guidance.
 
 ## GitHub ingestion observability (Phase 1.3.d)

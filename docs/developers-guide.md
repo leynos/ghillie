@@ -233,6 +233,55 @@ The current policy groups modules as composition roots, domain ports,
 application modules, inbound adapters, and outbound adapters. The adoption
 rationale is recorded in `docs/adr-003-adopt-hecate-for-architecture-checks.md`.
 
+## Registry synchronization
+
+Catalogue synchronization projects an estate's catalogue components into the
+Silver `Repository` table. The policy that decides each repository's
+`ingestion_enabled` flag is separate from the persistence work, so the rules
+can be read and tested without a database.
+
+`ghillie.registry.policy` holds that decision as a pure function. The module
+imports only the standard library, which is why Hecate groups it under
+`domain_ports`; keep it that way when changing the module. The transitions it
+produces are:
+
+| Row state               | Catalogue state   | Transition            |
+| ----------------------- | ----------------- | --------------------- |
+| absent                  | present, active   | `ADOPT` (enabled)     |
+| absent                  | present, inactive | `ADOPT` (disabled)    |
+| unlinked, this estate   | present           | `ADOPT`               |
+| linked, this estate     | present, active   | `PRESERVE`            |
+| linked, this estate     | present, inactive | `DISABLE_INACTIVE`    |
+| linked, this estate     | absent            | `DISABLE_REMOVED`     |
+| unlinked, this estate   | absent            | `PRESERVE`            |
+| owned by another estate | present           | `CONFLICT` (reported) |
+| owned by another estate | absent            | `CONFLICT` (silent)   |
+
+`RepositoryRegistryService.sync_from_catalogue(estate_key, *, dry_run=False)`
+runs the whole projection inside one Silver transaction:
+
+- with `dry_run=False`, the rows it created, updated, or disabled are committed;
+- with `dry_run=True`, the same work runs and the transaction is rolled back, so
+  the call returns the counts it would have produced and persists nothing.
+
+Adoption of an unowned row is atomic. The sync claims it with a conditional
+update and reports a conflict if another estate claimed it first, so concurrent
+syncs cannot silently replace each other's claim. A race to insert the same
+repository is arbitrated by the owner/name uniqueness constraint.
+
+Either way the call returns a `SyncResult`. `repositories_created`,
+`repositories_updated`, and `repositories_deactivated` count the changes.
+`repositories_conflicted` lists this estate's catalogue slugs that another
+estate owns; sync leaves those rows untouched. `repositories_left_disabled`
+previews the linked rows that stay disabled because an operator turned them
+off, and `repositories_left_disabled_count` carries the exact total beyond the
+preview limit.
+
+The rules and their rationale are recorded in
+[ADR-005](adr-005-registry-sync-preserves-operator-ingestion-toggles.md), and
+the surrounding catalogue and Silver design is in
+[the Bronze/Silver architecture design](ghillie-bronze-silver-architecture-design.md#92-repository-discovery-and-registration-phase-13a).
+
 ## Dead-code detection
 
 `make lint` runs Skylos `4.33.2` as an isolated `uv tool` with Python 3.14
@@ -648,6 +697,21 @@ Force SQLite for faster local iteration:
 ```bash
 GHILLIE_TEST_DB=sqlite make test
 ```
+
+Point the suite at an existing Postgres when py-pglite cannot start, for
+example to run the overlapping-transaction tests in
+`tests/unit/test_registry_service_sync_concurrency.py`:
+
+```bash
+GHILLIE_TEST_DB=postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/ghillie_test \
+    uv run pytest -q tests/
+```
+
+The fixture drops and recreates the `public` schema before each test, so use a
+disposable database and never a shared one. Run serially, as above: `make test`
+uses `pytest -n auto`, and parallel workers would each reset the same schema
+while other workers were using it. The fixture raises rather than run under
+`pytest-xdist`.
 
 ### Helm chart tests only
 
