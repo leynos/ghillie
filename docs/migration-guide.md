@@ -6,7 +6,7 @@ releases. The repository has not yet published a 2.0.0 release:
 major release. They apply to any deployment upgrading from the 1.x
 registry-sync semantics.
 
-## Registry synchronisation in 2.0.0
+## Registry synchronization in 2.0.0
 
 ### Ingestion toggles belong to the operator
 
