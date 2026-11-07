@@ -49,8 +49,9 @@ field, CLI verb, or persisted schema changes:
   preview.
 
 The preview and count say that ingestion is off, not why: a row can have been
-disabled by an operator or by an earlier removal. Catalogue rows the sync no
-longer names are counted in `repositories_deactivated` instead.
+disabled by an operator or by an earlier removal. `repositories_deactivated`
+counts only removed rows that this sync turned from enabled to disabled, so a
+removed row an operator had already disabled is not counted again.
 
 ### Dry runs
 

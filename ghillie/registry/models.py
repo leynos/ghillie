@@ -47,8 +47,9 @@ class SyncResult:
     ``repositories_left_disabled`` preview and its exact count report active
     catalogue repositories whose linked Silver row is still disabled after the
     sync. They say that ingestion is off, not why: a row may have been disabled
-    by an operator or by an earlier removal. Rows the catalogue no longer names
-    are not reported here; they appear in ``repositories_deactivated`` instead.
+    by an operator or by an earlier removal. ``repositories_deactivated`` counts
+    only removed rows that this sync turned from enabled to disabled, so a
+    removed row an operator had already disabled is not counted again.
     """
 
     estate_key: str

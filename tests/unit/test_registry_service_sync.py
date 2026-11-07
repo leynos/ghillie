@@ -173,6 +173,41 @@ async def test_sync_deactivates_removed_catalogue_repository(
 
 
 @pytest.mark.asyncio
+async def test_sync_does_not_count_already_disabled_removed_repository(
+    session_factory: async_sessionmaker[AsyncSession],
+    registry_service: RepositoryRegistryService,
+    import_and_sync: typ.Callable[[Path, str], typ.Awaitable[SyncResult]],
+    wildside_catalogue_path: Path,
+) -> None:
+    """A removed row that was already disabled is not a new deactivation.
+
+    ``repositories_deactivated`` counts removed rows this sync turned off. An
+    operator's earlier disable is not a new transition, so the count stays zero
+    even though the row leaves the catalogue.
+    """
+    await import_and_sync(wildside_catalogue_path, "test-already-off-1")
+    disabled = await registry_service.disable_ingestion("leynos", "wildside-engine")
+    assert disabled is True, "The operator disable should succeed"
+
+    async with session_factory() as session, session.begin():
+        await session.execute(
+            delete(RepositoryRecord).where(
+                RepositoryRecord.owner == "leynos",
+                RepositoryRecord.name == "wildside-engine",
+            )
+        )
+
+    result = await registry_service.sync_from_catalogue("test")
+
+    assert result.repositories_deactivated == 0, (
+        "A removed row that was already disabled is not a new deactivation"
+    )
+    repo = await fetch_silver_repo(session_factory, "leynos", "wildside-engine")
+    assert repo is not None, "The Silver row should still exist"
+    assert repo.ingestion_enabled is False, "The row must stay disabled"
+
+
+@pytest.mark.asyncio
 async def test_sync_does_not_deactivate_other_estate_repositories(
     create_estates: tuple[str, str],
     create_repo: CreateRepoFn,

@@ -293,9 +293,10 @@ estate owns; sync leaves those rows untouched. `repositories_left_disabled`
 previews the active catalogue repositories whose linked Silver row is still
 disabled after the sync, and `repositories_left_disabled_count` carries the
 exact total beyond the preview limit. The pair says that ingestion is off, not
-why: a row can have been disabled by an operator or by an earlier removal, and
-catalogue rows the sync no longer sees are counted in
-`repositories_deactivated` instead.
+why: a row can have been disabled by an operator or by an earlier removal.
+`repositories_deactivated` counts only removed rows that this sync turned from
+enabled to disabled, so a removed row an operator had already disabled is not
+counted again.
 
 The rules and their rationale are recorded in
 [ADR-005](adr-005-registry-sync-preserves-operator-ingestion-toggles.md), the
