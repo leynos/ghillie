@@ -67,6 +67,10 @@ def _counts(
     """Return project/component/edge/repository counts from the database."""
 
     async def _inner() -> tuple[int, int, int, int]:
+        """Count distinct project IDs and the component, edge and repository rows.
+
+        Project IDs are counted from the component rows.
+        """
         async with session_factory() as session:
             projects = (
                 await session.scalars(select(ComponentRecord.project_id).distinct())
@@ -122,6 +126,7 @@ def repository_present(import_context: ImportContext) -> None:
     """Ensure the repository row exists with the expected default branch."""
 
     async def _assert_repo() -> None:
+        """Assert the leynos/wildside repository exists and defaults to ``main``."""
         async with import_context["session_factory"]() as session:
             repo = await session.scalar(
                 select(RepositoryRecord).where(
@@ -143,6 +148,7 @@ def dependency_edge_present(import_context: ImportContext) -> None:
     """Verify the expected component edge is persisted."""
 
     async def _assert_edge() -> None:
+        """Assert the wildside-core to wildside-engine depends_on edge exists."""
         async with import_context["session_factory"]() as session:
             core = await session.scalar(
                 select(ComponentRecord).where(ComponentRecord.key == "wildside-core")
@@ -196,6 +202,7 @@ def project_configuration_persisted(import_context: ImportContext) -> None:
     """Ensure project-level noise, docs, and status preferences are stored."""
 
     async def _assert_project() -> None:
+        """Assert the wildside project keeps its noise, docs and status settings."""
         async with import_context["session_factory"]() as session:
             project = await session.scalar(
                 select(ProjectRecord).where(ProjectRecord.key == "wildside")
@@ -214,6 +221,7 @@ def repository_documentation_paths(import_context: ImportContext) -> None:
     """Validate repository-level documentation paths are persisted."""
 
     async def _assert_repo_docs() -> None:
+        """Assert the leynos/wildside documentation paths are unique, in order."""
         async with import_context["session_factory"]() as session:
             repository = await session.scalar(
                 select(RepositoryRecord).where(
@@ -246,6 +254,7 @@ def repository_without_documentation_paths(
     """Validate repositories without documentation config default to empty paths."""
 
     async def _assert_repo_no_docs() -> None:
+        """Assert the named repository has no documentation paths."""
         async with import_context["session_factory"]() as session:
             repository = await session.scalar(
                 select(RepositoryRecord).where(

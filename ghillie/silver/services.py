@@ -150,6 +150,12 @@ class RawEventTransformer:
     async def _upsert_event_fact(
         session: AsyncSession, raw_event: RawEvent
     ) -> EventFact:
+        """Return the EventFact for a raw event, inserting it if none exists.
+
+        Raise ``RawEventTransformError`` for a payload mismatch found by the
+        initial lookup. After an insert conflict, return an existing fact
+        without comparing payloads.
+        """
         raw_event_id = raw_event.id
 
         existing = await session.scalar(

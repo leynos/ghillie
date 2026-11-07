@@ -121,6 +121,7 @@ def _resolve(package: str, environment: dict[str, str]) -> str:
     """
 
     def substitute(match: re.Match[str]) -> str:
+        """Return the variable's value, or the undefined marker if it is unset."""
         return environment.get(match.group("name"), "<undefined>")
 
     return SHELL_VARIABLE.sub(substitute, package)

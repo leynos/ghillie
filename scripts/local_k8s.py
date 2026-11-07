@@ -42,6 +42,7 @@ def handle_cli_errors[**P](func: typ.Callable[P, int]) -> typ.Callable[P, int]:
 
     @functools.wraps(func)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> int:
+        """Call the handler and map known errors to a non-zero exit code."""
         try:
             return int(func(*args, **kwargs))
         except LocalK8sError as e:
