@@ -24,6 +24,7 @@ class TestWorkTypeEnum:
     """Tests for WorkType enum."""
 
     def test_work_type_values(self) -> None:
+        """Check that each WorkType member has its expected string value."""
         assert WorkType.FEATURE == "feature"
         assert WorkType.BUG == "bug"
         assert WorkType.REFACTOR == "refactor"
@@ -32,6 +33,7 @@ class TestWorkTypeEnum:
         assert WorkType.UNKNOWN == "unknown"
 
     def test_work_type_is_str_enum(self) -> None:
+        """Check that WorkType members format as their string values."""
         assert str(WorkType.FEATURE) == "feature"
         assert f"type: {WorkType.BUG}" == "type: bug"
 
@@ -40,6 +42,7 @@ class TestReportStatusEnum:
     """Tests for ReportStatus enum."""
 
     def test_report_status_values(self) -> None:
+        """Check that each ReportStatus member has its expected string value."""
         assert ReportStatus.ON_TRACK == "on_track"
         assert ReportStatus.AT_RISK == "at_risk"
         assert ReportStatus.BLOCKED == "blocked"
@@ -50,6 +53,7 @@ class TestRepositoryMetadata:
     """Tests for RepositoryMetadata struct."""
 
     def test_slug_property(self) -> None:
+        """Check that the slug joins owner and name with a slash."""
         metadata = RepositoryMetadata(
             id="abc-123",
             owner="octo",
@@ -60,6 +64,7 @@ class TestRepositoryMetadata:
         assert metadata.slug == "octo/reef"
 
     def test_default_values(self) -> None:
+        """Check that estate_id defaults to None and documentation_paths is empty."""
         metadata = RepositoryMetadata(
             id="abc-123",
             owner="octo",
@@ -71,6 +76,7 @@ class TestRepositoryMetadata:
         assert metadata.documentation_paths == ()
 
     def test_frozen_immutability(self) -> None:
+        """Check that assigning to a RepositoryMetadata field raises AttributeError."""
         metadata = RepositoryMetadata(
             id="abc-123",
             owner="octo",
@@ -83,6 +89,7 @@ class TestRepositoryMetadata:
             mutable_metadata.owner = "other"
 
     def test_msgspec_encoding_roundtrip(self) -> None:
+        """Check that RepositoryMetadata survives a msgspec JSON round trip."""
         metadata = RepositoryMetadata(
             id="abc-123",
             owner="octo",
@@ -104,6 +111,7 @@ class TestCommitEvidence:
     """Tests for CommitEvidence struct."""
 
     def test_default_values(self) -> None:
+        """Check the default values of a CommitEvidence built from a SHA alone."""
         commit = CommitEvidence(sha="abc123")
 
         assert commit.message is None
@@ -114,6 +122,7 @@ class TestCommitEvidence:
         assert commit.is_merge_commit is False
 
     def test_full_construction(self) -> None:
+        """Check that the supplied CommitEvidence fields are stored."""
         committed_at = dt.datetime(2024, 7, 15, 10, 30, tzinfo=dt.UTC)
         commit = CommitEvidence(
             sha="abc123def456",
@@ -130,6 +139,7 @@ class TestCommitEvidence:
         assert commit.work_type == WorkType.FEATURE
 
     def test_frozen_immutability(self) -> None:
+        """Check that assigning to a CommitEvidence field raises AttributeError."""
         commit = CommitEvidence(sha="abc123")
         mutable_commit = typ.cast("typ.Any", commit)
 
@@ -141,6 +151,7 @@ class TestPullRequestEvidence:
     """Tests for PullRequestEvidence struct."""
 
     def test_default_values(self) -> None:
+        """Check the defaults of a PullRequestEvidence built from required fields."""
         pr = PullRequestEvidence(id=123, number=45, title="Add feature")
 
         assert pr.author_login is None
@@ -153,6 +164,7 @@ class TestPullRequestEvidence:
         assert pr.is_draft is False
 
     def test_full_construction(self) -> None:
+        """Check that PullRequestEvidence labels and work type are stored as given."""
         created_at = dt.datetime(2024, 7, 10, tzinfo=dt.UTC)
         merged_at = dt.datetime(2024, 7, 15, tzinfo=dt.UTC)
 
@@ -177,6 +189,7 @@ class TestIssueEvidence:
     """Tests for IssueEvidence struct."""
 
     def test_default_values(self) -> None:
+        """Check the defaults of an IssueEvidence built from required fields."""
         issue = IssueEvidence(id=789, number=12, title="Bug report")
 
         assert issue.author_login is None
@@ -185,6 +198,7 @@ class TestIssueEvidence:
         assert issue.work_type == WorkType.UNKNOWN
 
     def test_full_construction(self) -> None:
+        """Check that IssueEvidence labels and work type are stored as given."""
         issue = IssueEvidence(
             id=789,
             number=12,
@@ -204,6 +218,7 @@ class TestDocumentationEvidence:
     """Tests for DocumentationEvidence struct."""
 
     def test_default_flags(self) -> None:
+        """Check that is_roadmap and is_adr default to False."""
         doc = DocumentationEvidence(
             path="README.md",
             change_type="modified",
@@ -215,6 +230,7 @@ class TestDocumentationEvidence:
         assert doc.is_adr is False
 
     def test_roadmap_flag(self) -> None:
+        """Check that is_roadmap can be set to True."""
         doc = DocumentationEvidence(
             path="docs/roadmap.md",
             change_type="added",
@@ -230,6 +246,7 @@ class TestPreviousReportSummary:
     """Tests for PreviousReportSummary struct."""
 
     def test_default_values(self) -> None:
+        """Check the default highlights, risks and event count of a summary."""
         summary = PreviousReportSummary(
             report_id="rpt-123",
             window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
@@ -242,6 +259,7 @@ class TestPreviousReportSummary:
         assert summary.event_count == 0
 
     def test_full_construction(self) -> None:
+        """Check that the supplied summary fields are stored."""
         summary = PreviousReportSummary(
             report_id="rpt-123",
             window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
@@ -261,6 +279,7 @@ class TestWorkTypeGrouping:
     """Tests for WorkTypeGrouping struct."""
 
     def test_default_values(self) -> None:
+        """Check that counts default to zero and sample titles to empty."""
         grouping = WorkTypeGrouping(work_type=WorkType.FEATURE)
 
         assert grouping.commit_count == 0
@@ -269,6 +288,7 @@ class TestWorkTypeGrouping:
         assert grouping.sample_titles == ()
 
     def test_full_construction(self) -> None:
+        """Check that the supplied grouping counts and titles are stored."""
         grouping = WorkTypeGrouping(
             work_type=WorkType.BUG,
             commit_count=5,
@@ -287,6 +307,7 @@ class TestRepositoryEvidenceBundle:
 
     @pytest.fixture
     def sample_metadata(self) -> RepositoryMetadata:
+        """Provide a RepositoryMetadata instance for bundle tests."""
         return RepositoryMetadata(
             id="abc-123",
             owner="octo",
@@ -295,6 +316,7 @@ class TestRepositoryEvidenceBundle:
         )
 
     def test_minimal_construction(self, sample_metadata: RepositoryMetadata) -> None:
+        """Check that a bundle defaults its collections to empty tuples."""
         bundle = RepositoryEvidenceBundle(
             repository=sample_metadata,
             window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
@@ -310,6 +332,7 @@ class TestRepositoryEvidenceBundle:
     def test_total_event_count_property(
         self, sample_metadata: RepositoryMetadata
     ) -> None:
+        """Check that total_event_count sums all evidence collections."""
         bundle = RepositoryEvidenceBundle(
             repository=sample_metadata,
             window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
@@ -335,6 +358,7 @@ class TestRepositoryEvidenceBundle:
     def test_has_previous_context_false(
         self, sample_metadata: RepositoryMetadata
     ) -> None:
+        """Check that has_previous_context is False without previous reports."""
         bundle = RepositoryEvidenceBundle(
             repository=sample_metadata,
             window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
@@ -346,6 +370,7 @@ class TestRepositoryEvidenceBundle:
     def test_has_previous_context_true(
         self, sample_metadata: RepositoryMetadata
     ) -> None:
+        """Check that has_previous_context is True with previous reports."""
         previous = PreviousReportSummary(
             report_id="rpt-1",
             window_start=dt.datetime(2024, 6, 24, tzinfo=dt.UTC),
@@ -363,6 +388,7 @@ class TestRepositoryEvidenceBundle:
         assert bundle.has_previous_context is True
 
     def test_frozen_immutability(self, sample_metadata: RepositoryMetadata) -> None:
+        """Check that assigning to a bundle field raises AttributeError."""
         bundle = RepositoryEvidenceBundle(
             repository=sample_metadata,
             window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
@@ -376,6 +402,7 @@ class TestRepositoryEvidenceBundle:
     def test_msgspec_encoding_roundtrip(
         self, sample_metadata: RepositoryMetadata
     ) -> None:
+        """Check that a bundle survives a msgspec JSON round trip."""
         bundle = RepositoryEvidenceBundle(
             repository=sample_metadata,
             window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
