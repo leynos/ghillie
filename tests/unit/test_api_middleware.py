@@ -23,6 +23,7 @@ class _MockSession:
     """Lightweight mock of an AsyncSession for middleware tests."""
 
     def __init__(self, *, is_active: bool = True) -> None:
+        """Store the active flag and create the async session mocks."""
         self.is_active = is_active
         self.commit = mock.AsyncMock()
         self.rollback = mock.AsyncMock()

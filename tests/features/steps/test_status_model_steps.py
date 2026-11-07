@@ -642,6 +642,7 @@ def when_summarize_with_mock(status_model_context: StatusModelContext) -> None:
     """Run the mock status model on the evidence bundle."""
 
     async def _summarize() -> RepositoryStatusResult:
+        """Return the mock model's summary of the evidence bundle."""
         model = MockStatusModel()
         return await model.summarize_repository(status_model_context["evidence_bundle"])
 

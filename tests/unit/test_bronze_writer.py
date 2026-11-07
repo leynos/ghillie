@@ -34,6 +34,7 @@ def test_ingest_preserves_payload_and_timestamps(
     occurred_at = dt.datetime(2024, 6, 1, 8, 30, tzinfo=dt.UTC)
 
     async def _run() -> RawEvent:
+        """Ingest the envelope and return the stored raw event."""
         return await writer.ingest(
             RawEventEnvelope(
                 source_system="github",
@@ -50,6 +51,7 @@ def test_ingest_preserves_payload_and_timestamps(
     assert isinstance(payload["when"], dt.datetime)
 
     async def _load() -> RawEvent:
+        """Load the stored raw event by ID."""
         async with session_factory() as session:
             stored = await session.get(RawEvent, raw_event.id)
             assert stored is not None
@@ -83,6 +85,7 @@ def test_ingest_rejects_naive_occurred_at(
     occurred_at = dt.datetime(2024, 6, 1, 8, 30)  # noqa: DTZ001
 
     async def _run() -> None:
+        """Ingest an envelope with a naive occurred_at."""
         await writer.ingest(
             RawEventEnvelope(
                 source_system="github",
@@ -107,6 +110,7 @@ def test_ingest_is_idempotent(
     occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.UTC)
 
     async def _run() -> tuple[RawEvent, RawEvent]:
+        """Ingest the same envelope twice and return both results."""
         first = await writer.ingest(
             RawEventEnvelope(
                 source_system="github",
@@ -133,6 +137,7 @@ def test_ingest_is_idempotent(
     assert first.id == second.id
 
     async def _count_rows() -> int:
+        """Count the raw event rows in the database."""
         async with session_factory() as session:
             return int(
                 await session.scalar(select(func.count()).select_from(RawEvent)) or 0
@@ -160,6 +165,7 @@ def test_ingest_is_idempotent_under_concurrency(
     )
 
     async def _run_concurrent() -> list[RawEvent]:
+        """Ingest the envelope five times concurrently."""
         tasks = [writer.ingest(envelope) for _ in range(5)]
         return await asyncio.gather(*tasks)
 
@@ -168,6 +174,7 @@ def test_ingest_is_idempotent_under_concurrency(
     assert len(ids) == 1
 
     async def _count_rows() -> int:
+        """Count the raw event rows in the database."""
         async with session_factory() as session:
             return int(
                 await session.scalar(select(func.count()).select_from(RawEvent)) or 0

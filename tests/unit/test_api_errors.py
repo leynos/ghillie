@@ -28,6 +28,7 @@ class _NotFoundResource:
     async def on_get(
         self, req: falcon.asgi.Request, resp: falcon.asgi.Response
     ) -> None:
+        """Raise RepositoryNotFoundError for ``acme/widgets``."""
         raise RepositoryNotFoundError("acme", "widgets")
 
 
@@ -37,6 +38,7 @@ class _BadRequestResource:
     async def on_get(
         self, req: falcon.asgi.Request, resp: falcon.asgi.Response
     ) -> None:
+        """Raise InvalidInputError with no field set."""
         msg = "invalid parameter"
         raise InvalidInputError(msg)
 
@@ -47,6 +49,7 @@ class _BadRequestWithFieldResource:
     async def on_get(
         self, req: falcon.asgi.Request, resp: falcon.asgi.Response
     ) -> None:
+        """Raise InvalidInputError with the ``count`` field set."""
         msg = "must be positive"
         raise InvalidInputError(msg, field="count")
 

@@ -153,12 +153,15 @@ class _FailingAsyncIterator:
     """Async iterator that raises a configured exception on iteration."""
 
     def __init__(self, error: BaseException) -> None:
+        """Store the exception to raise on iteration."""
         self._error = error
 
     def __aiter__(self) -> _FailingAsyncIterator:
+        """Return the iterator itself."""
         return self
 
     async def __anext__(self) -> GitHubIngestedEvent:
+        """Raise the stored error on the first iteration."""
         raise self._error
 
 

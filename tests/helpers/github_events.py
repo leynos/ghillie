@@ -84,6 +84,7 @@ def _create_numbered_item_event(
     occurred_at: dt.datetime,
     spec: _NumberedItemSpec,
 ) -> GitHubIngestedEvent:
+    """Create a numbered item event from the given specification."""
     payload: dict[str, typ.Any] = {
         "id": spec.item_id,
         "number": spec.item_id,

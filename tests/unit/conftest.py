@@ -69,6 +69,7 @@ __all__ = [
 
 
 def _find_repo_root(start: Path) -> Path:
+    """Return the nearest directory at or above ``start`` with pyproject.toml."""
     for parent in (start, *start.parents):
         if (parent / "pyproject.toml").exists():
             return parent
@@ -98,6 +99,7 @@ def create_repo(session_factory: async_sessionmaker[AsyncSession]) -> CreateRepo
         *,
         spec: RepositoryCreateSpec | None = None,
     ) -> None:
+        """Insert a repository row with the given owner, name and spec."""
         create_spec = spec or RepositoryCreateSpec()
         async with session_factory() as session, session.begin():
             repo = Repository(
@@ -119,6 +121,7 @@ def fetch_repo(session_factory: async_sessionmaker[AsyncSession]) -> FetchRepoFn
     """Return a factory for fetching repositories by owner/name."""
 
     async def _fetch(owner: str, name: str) -> Repository | None:
+        """Return the repository with the given owner and name, or None."""
         async with session_factory() as session:
             return await session.scalar(
                 select(Repository).where(
