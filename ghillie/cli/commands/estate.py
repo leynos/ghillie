@@ -15,6 +15,7 @@ repo_app = App(name="repo", help="Manage estate repository configuration.")
 
 
 def _api_placeholder(noun: str, verb: str, **fields: object) -> str:
+    """Render the not-implemented placeholder response for an estate verb."""
     context = get_current_context()
     with ControlPlaneClient(context.config):
         return render_output(

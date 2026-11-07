@@ -176,6 +176,10 @@ _HTTP_ERROR_STATUS_THRESHOLD = int(HTTPStatus.BAD_REQUEST)
 
 
 def _ensure_tzaware(value: dt.datetime, *, field: str) -> dt.datetime:
+    """Convert to UTC, rejecting ``tzinfo is None``.
+
+    A ``tzinfo`` with no UTC offset is accepted as local time.
+    """
     if value.tzinfo is None:
         msg = f"{field} must be timezone-aware"
         raise ValueError(msg)
@@ -183,6 +187,7 @@ def _ensure_tzaware(value: dt.datetime, *, field: str) -> dt.datetime:
 
 
 def _parse_github_datetime(value: str) -> dt.datetime:
+    """Parse an ISO 8601 GitHub timestamp into an aware UTC datetime."""
     text = value.replace("Z", "+00:00")
     parsed = dt.datetime.fromisoformat(text)
     if parsed.tzinfo is None:
@@ -192,6 +197,7 @@ def _parse_github_datetime(value: str) -> dt.datetime:
 
 
 def _label_names(labels: dict[str, typ.Any] | None) -> list[str]:
+    """Return the label names from a GraphQL labels connection."""
     if not labels:
         return []
     nodes = labels.get("nodes") or []
@@ -207,6 +213,7 @@ def _label_names(labels: dict[str, typ.Any] | None) -> list[str]:
 
 
 def _maybe_login(author: dict[str, typ.Any] | None) -> str | None:
+    """Return the author login, or None when it is absent."""
     if not author:
         return None
     login = author.get("login")
@@ -214,6 +221,7 @@ def _maybe_login(author: dict[str, typ.Any] | None) -> str | None:
 
 
 def _coerce_pr_state(state: str, merged_at: str | None) -> str:
+    """Lowercase the PR state, reporting closed PRs with a merge time as merged."""
     lowered = state.lower()
     if lowered == "closed" and merged_at:
         return "merged"
@@ -221,6 +229,7 @@ def _coerce_pr_state(state: str, merged_at: str | None) -> str:
 
 
 def _classify_documentation_path(path: str) -> tuple[bool, bool]:
+    """Return ``(is_roadmap, is_adr)`` flags for a documentation path."""
     lowered = path.lower()
     is_roadmap = "roadmap" in lowered
     normalised = PureWindowsPath(lowered).as_posix()
@@ -246,6 +255,7 @@ def _connection_edges(
     *,
     field: str,
 ) -> list[dict[str, typ.Any]]:
+    """Return the dict edges of a connection, rejecting a missing edge list."""
     edges = connection.get("edges")
     if not isinstance(edges, list):
         raise GitHubResponseShapeError.missing(f"{field}.edges")
@@ -259,6 +269,7 @@ def _commit_event_from_node(
     *,
     cursor: str | None = None,
 ) -> GitHubIngestedEvent | None:
+    """Build a commit event from a node newer than ``since``, else None."""
     oid = node.get("oid")
     committed_date = node.get("committedDate")
     if not isinstance(oid, str) or not isinstance(committed_date, str):
@@ -296,6 +307,7 @@ def _iter_commit_events(
     edges: list[dict[str, typ.Any]],
     since: dt.datetime,
 ) -> cabc.Iterator[GitHubIngestedEvent]:
+    """Yield commit events from connection edges newer than ``since``."""
     for edge in edges:
         cursor = edge.get("cursor")
         node = edge.get("node")
@@ -355,6 +367,7 @@ def _doc_change_event_from_edge(
     since: dt.datetime,
     spec: _DocChangeSpec,
 ) -> GitHubIngestedEvent | None:
+    """Build a doc change event for the spec path from an edge, if newer."""
     cursor = edge.get("cursor")
     node = edge.get("node")
     if not isinstance(node, dict):
@@ -397,6 +410,7 @@ def _iter_doc_change_events(
     since: dt.datetime,
     spec: _DocChangeSpec,
 ) -> cabc.Iterator[GitHubIngestedEvent]:
+    """Yield doc change events from connection edges newer than ``since``."""
     for edge in edges:
         event = _doc_change_event_from_edge(
             repo,
@@ -556,6 +570,10 @@ def _events_from_nodes(
     since: dt.datetime,
     node_to_event: NodeToEvent,
 ) -> tuple[list[GitHubIngestedEvent], bool]:
+    """Convert entries through the callback and report whether to stop paging.
+
+    Current callers pass connection edges.
+    """
     events: list[GitHubIngestedEvent] = []
     should_stop = False
     for node in nodes:

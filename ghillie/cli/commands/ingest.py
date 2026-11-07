@@ -13,6 +13,7 @@ ingest_app = App(name="ingest", help="Trigger and observe ingestion runs.")
 
 
 def _api_placeholder(verb: str, **fields: object) -> str:
+    """Render the not-implemented placeholder response for an ingest verb."""
     context = get_current_context()
     with ControlPlaneClient(context.config):
         return render_output(

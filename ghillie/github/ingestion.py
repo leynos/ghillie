@@ -103,6 +103,8 @@ class _RepositoryIngestionContext:
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class _WatermarkAttrs:
+    """Attribute names for one stream's cursor, seen-at and watermark fields."""
+
     cursor: str
     seen: str
     watermark: str
@@ -281,6 +283,10 @@ class GitHubIngestionWorker:
         self,
         context: _RepositoryIngestionContext,
     ) -> int:
+        """Ingest documentation changes from the watermark or initial lookback.
+
+        The start time is then moved back by the configured overlap.
+        """
         offsets = context.offsets
         since = self._since_for(offsets.last_doc_ingested_at, now=context.now)
         after = offsets.last_doc_cursor
@@ -368,6 +374,11 @@ class GitHubIngestionWorker:
         *,
         kind: typ.Literal["commit", "pull_request", "issue"],
     ) -> int:
+        """Ingest one activity kind from its watermark or initial lookback.
+
+        The start time is then moved back by the configured overlap, and the
+        kind's offsets are updated.
+        """
         watermark_attr = _KIND_WATERMARK_ATTR[kind]
         cursor_attr = _KIND_CURSOR_ATTR[kind]
         offsets = context.offsets
@@ -420,6 +431,7 @@ class GitHubIngestionWorker:
         *,
         noise: CompiledNoiseFilters,
     ) -> _StreamIngestionResult:
+        """Write stream events to Bronze, honouring noise filters and the limit."""
         max_seen: dt.datetime | None = None
         last_cursor: str | None = None
         ingested = 0
@@ -465,6 +477,7 @@ class GitHubIngestionWorker:
         return baseline - self._config.overlap
 
     async def _load_or_create_offsets(self, repo_slug: str) -> GithubIngestionOffset:
+        """Return the offsets row for a repository, creating it when absent."""
         async with self._session_factory() as session:
             existing = await session.scalar(
                 select(GithubIngestionOffset).where(
@@ -492,6 +505,7 @@ class GitHubIngestionWorker:
             return offsets
 
     async def _persist_offsets(self, offsets: GithubIngestionOffset) -> None:
+        """Merge the offsets row into the database in one transaction."""
         async with self._session_factory() as session, session.begin():
             await session.merge(offsets)
 
@@ -550,6 +564,7 @@ class GitHubIngestionWorker:
 
 
 def _max_dt(left: dt.datetime | None, right: dt.datetime | None) -> dt.datetime | None:
+    """Return the later of two optional datetimes, ignoring None values."""
     if left is None:
         return right
     if right is None:

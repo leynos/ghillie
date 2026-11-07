@@ -22,6 +22,7 @@ if typ.TYPE_CHECKING:
 
 
 def _normalise_path(path: str) -> str:
+    """Normalise a path to POSIX form, trimming surrounding whitespace."""
     stripped = path.strip()
     if not stripped:
         return ""
@@ -31,10 +32,12 @@ def _normalise_path(path: str) -> str:
 
 
 def _normalise_text(value: str) -> str:
+    """Trim and lowercase text for case-insensitive comparison."""
     return value.strip().lower()
 
 
 def _iter_author_candidates(payload: dict[str, typ.Any]) -> cabc.Iterator[str]:
+    """Yield the non-blank author login, name and email from a payload."""
     for key in ("author_login", "author_name", "author_email"):
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
@@ -54,6 +57,7 @@ def _extract_metadata_message(metadata: typ.Any) -> str | None:  # noqa: ANN401
 
 
 def _title_for_payload(payload: dict[str, typ.Any]) -> str | None:
+    """Return the first non-blank title or message, else the metadata message."""
     for key in ("title", "message"):
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
@@ -63,6 +67,7 @@ def _title_for_payload(payload: dict[str, typ.Any]) -> str | None:
 
 
 def _labels_for_payload(payload: dict[str, typ.Any]) -> list[str]:
+    """Return the non-blank string labels from a payload."""
     labels = payload.get("labels")
     if not isinstance(labels, list):
         return []
@@ -70,6 +75,7 @@ def _labels_for_payload(payload: dict[str, typ.Any]) -> list[str]:
 
 
 def _path_for_payload(payload: dict[str, typ.Any]) -> str | None:
+    """Return the payload path when it is a non-blank string, else None."""
     value = payload.get("path")
     if isinstance(value, str) and value.strip():
         return value
@@ -96,6 +102,7 @@ class CompiledNoiseFilters:
         )
 
     def _matches_author(self, payload: dict[str, typ.Any]) -> bool:
+        """Return True when an author field matches an ignored author."""
         if not self.ignore_authors:
             return False
         return any(
@@ -104,6 +111,7 @@ class CompiledNoiseFilters:
         )
 
     def _matches_label(self, payload: dict[str, typ.Any]) -> bool:
+        """Return True when any label matches an ignored label."""
         if not self.ignore_labels:
             return False
         return any(
@@ -112,6 +120,11 @@ class CompiledNoiseFilters:
         )
 
     def _matches_title_prefix(self, payload: dict[str, typ.Any]) -> bool:
+        """Match an ignored prefix against the normalized title.
+
+        The title is the first available of the title, message and metadata
+        message, in that order.
+        """
         if not self.ignore_title_prefixes:
             return False
         title = _title_for_payload(payload)
@@ -121,6 +134,7 @@ class CompiledNoiseFilters:
         return any(lowered.startswith(prefix) for prefix in self.ignore_title_prefixes)
 
     def _matches_path(self, payload: dict[str, typ.Any]) -> bool:
+        """Return True when the path matches an ignored glob pattern."""
         if not self.ignore_paths:
             return False
         path = _path_for_payload(payload)

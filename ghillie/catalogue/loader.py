@@ -39,6 +39,7 @@ def load_catalogue(path: Path | str) -> Catalogue:
 
 
 def _yaml() -> YAML:
+    """Build a safe YAML 1.2 loader that rejects duplicate keys."""
     yaml = YAML(typ="safe")
     yaml.version = YAML_VERSION
     yaml.allow_duplicate_keys = False

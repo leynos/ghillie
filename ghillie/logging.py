@@ -108,7 +108,9 @@ class _SupportsLog(typ.Protocol):
         *,
         exc_info: object | None = None,
         stack_info: bool = False,
-    ) -> str | None: ...
+    ) -> str | None:
+        """Log a message at the given level."""
+        ...
 
 
 def _log_at_level(
