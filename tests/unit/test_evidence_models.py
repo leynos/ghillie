@@ -122,7 +122,7 @@ class TestCommitEvidence:
         assert commit.is_merge_commit is False
 
     def test_full_construction(self) -> None:
-        """Check that the supplied CommitEvidence fields are stored."""
+        """Check the supplied SHA, message and work type."""
         committed_at = dt.datetime(2024, 7, 15, 10, 30, tzinfo=dt.UTC)
         commit = CommitEvidence(
             sha="abc123def456",
@@ -259,7 +259,7 @@ class TestPreviousReportSummary:
         assert summary.event_count == 0
 
     def test_full_construction(self) -> None:
-        """Check that the supplied summary fields are stored."""
+        """Check the status, highlight count and event count of a populated summary."""
         summary = PreviousReportSummary(
             report_id="rpt-123",
             window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),
@@ -288,7 +288,7 @@ class TestWorkTypeGrouping:
         assert grouping.sample_titles == ()
 
     def test_full_construction(self) -> None:
-        """Check that the supplied grouping counts and titles are stored."""
+        """Check the work type, commit count and number of sample titles."""
         grouping = WorkTypeGrouping(
             work_type=WorkType.BUG,
             commit_count=5,
@@ -316,7 +316,10 @@ class TestRepositoryEvidenceBundle:
         )
 
     def test_minimal_construction(self, sample_metadata: RepositoryMetadata) -> None:
-        """Check that a bundle defaults its collections to empty tuples."""
+        """Check that bundle collections default to empty tuples.
+
+        Commits, pull requests, issues and documentation changes are all covered.
+        """
         bundle = RepositoryEvidenceBundle(
             repository=sample_metadata,
             window_start=dt.datetime(2024, 7, 1, tzinfo=dt.UTC),

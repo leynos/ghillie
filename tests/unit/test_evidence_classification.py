@@ -76,7 +76,7 @@ class TestClassifyByLabels:
         assert classify_by_labels(["bug", "feature"]) == WorkType.BUG
 
     def test_custom_config(self) -> None:
-        """Check that a custom config replaces the default label sets."""
+        """Check custom feature and bug labels, and reject the default feature label."""
         config = ClassificationConfig(
             feature_labels=("new-stuff",),
             bug_labels=("broken",),
@@ -120,7 +120,7 @@ class TestClassifyByTitle:
         assert classify_by_title("update dependency versions") == WorkType.CHORE
 
     def test_word_boundary_fix_pattern(self) -> None:
-        """Check that the fix pattern matches whole words only."""
+        """Check that `fixes` and `fixed` match, but `prefix-fix` does not."""
         # "fix" should match as a word, not as part of another word
         assert classify_by_title("This fixes the bug") == WorkType.BUG
         assert classify_by_title("Fixed the issue") == WorkType.BUG
@@ -141,7 +141,7 @@ class TestClassifyByTitle:
         assert classify_by_title("REFACTOR: clean up") == WorkType.REFACTOR
 
     def test_bug_takes_priority(self) -> None:
-        """Check that the fix pattern wins over feature patterns."""
+        """Check that a title beginning with `fix:` classifies as BUG."""
         # "fix" pattern should match before feature patterns
         assert classify_by_title("fix: add error handling") == WorkType.BUG
 
@@ -185,7 +185,7 @@ class TestClassifyEntity:
         assert classify_entity(pr, config) == WorkType.FEATURE
 
     def test_issue_label_takes_priority(self) -> None:
-        """Check that an issue label outranks a conflicting title."""
+        """Check that an issue with a bug label classifies as BUG."""
         issue = mock.MagicMock()
         issue.labels = ["bug"]
         issue.title = "Feature request: dark mode"
