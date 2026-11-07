@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import typing as typ
 
@@ -452,13 +453,100 @@ async def test_sync_reports_conflict_when_adoption_loses_a_race(
     assert repo.estate_id == estate_b_id, "The winner's claim must stand"
 
 
-@pytest.mark.asyncio
-async def test_concurrent_insert_surfaces_as_a_conflict_cause(
+def _require_overlapping_transactions(
     session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Skip unless the backend can run two write transactions at once.
+
+    SQLite serialises writers, so the interleaving these tests need surfaces as
+    a lock error rather than the constraint violation a Postgres deployment
+    sees. The suite prefers py-pglite Postgres and falls back to SQLite.
+    """
+    bind = session_factory.kw.get("bind")
+    dialect = getattr(bind, "dialect", None)
+    if dialect is None or dialect.name != "postgresql":
+        pytest.skip("overlapping write transactions need Postgres MVCC")
+
+
+async def _import_for_estate(
+    session_factory: async_sessionmaker[AsyncSession],
+    catalogue_path: Path,
+    estate_key: str,
+    commit_sha: str,
+) -> None:
+    """Import the catalogue for one estate.
+
+    Imports run one at a time: the catalogue tables are global, so only the
+    sync that follows is meant to overlap. The display name is derived from the
+    key, which is how the fixtures name these estates.
+    """
+    importer = CatalogueImporter(
+        session_factory,
+        estate_key=estate_key,
+        estate_name=estate_key.replace("-", " ").title(),
+    )
+    await importer.import_path(catalogue_path, commit_sha=commit_sha)
+
+
+def _synchronise_silver_load(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make both syncs finish their Silver read before either writes.
+
+    Real concurrent syncs interleave unpredictably. A barrier forces the one
+    interleaving that matters here: both loads run first, so neither sync can
+    see what the other is about to write.
+    """
+    original = sync_module._load_silver_repositories
+    both_loaded = asyncio.Barrier(2)
+
+    async def _load_then_wait(
+        session: AsyncSession,
+        estate_id: str | None,
+        catalogue_slugs: typ.Iterable[str],
+    ) -> dict[str, Repository]:
+        rows = await original(session, estate_id, catalogue_slugs)
+        await both_loaded.wait()
+        return rows
+
+    monkeypatch.setattr(sync_module, "_load_silver_repositories", _load_then_wait)
+
+
+async def _run_two_syncs(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> list[SyncResult | BaseException]:
+    """Sync estate-a and estate-b at the same time and collect both outcomes."""
+
+    async def _sync(estate_key: str) -> SyncResult:
+        service = RepositoryRegistryService(session_factory, session_factory)
+        return await service.sync_from_catalogue(estate_key)
+
+    gathered = await asyncio.wait_for(
+        asyncio.gather(
+            _sync("estate-a"),
+            _sync("estate-b"),
+            return_exceptions=True,
+        ),
+        timeout=60,
+    )
+    return list(gathered)
+
+
+def _completed(results: list[SyncResult | BaseException]) -> list[SyncResult]:
+    """Return the successful results, failing when a sync aborted."""
+    failures = [result for result in results if isinstance(result, BaseException)]
+    assert not failures, f"Neither overlapping sync should abort: {failures!r}"
+    return [typ.cast("SyncResult", result) for result in results]
+
+
+@pytest.mark.asyncio
+async def test_overlapping_syncs_adopt_an_unowned_row_once(
+    session_factory: async_sessionmaker[AsyncSession],
+    create_estates: tuple[str, str],
     wildside_catalogue_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A lost insert race keeps the unique-constraint cause for a 409 answer."""
+    """Two estates racing to adopt one unowned row leave it with one owner."""
+    estate_a_id, estate_b_id = create_estates
+    _require_overlapping_transactions(session_factory)
     async with session_factory() as session, session.begin():
         session.add(
             Repository(
@@ -467,10 +555,84 @@ async def test_concurrent_insert_surfaces_as_a_conflict_cause(
                 default_branch="main",
             )
         )
-    importer = CatalogueImporter(
-        session_factory, estate_key="estate-a", estate_name="Estate A"
+    await _import_for_estate(
+        session_factory, wildside_catalogue_path, "estate-a", "adopt-a"
     )
-    await importer.import_path(wildside_catalogue_path, commit_sha="insert-race-1")
+    await _import_for_estate(
+        session_factory, wildside_catalogue_path, "estate-b", "adopt-b"
+    )
+    _synchronise_silver_load(monkeypatch)
+
+    completed = _completed(await _run_two_syncs(session_factory))
+
+    repo = await fetch_silver_repo(session_factory, "leynos", "wildside")
+    assert repo is not None, "The adopted row should still exist"
+    assert repo.estate_id in {estate_a_id, estate_b_id}, (
+        "Exactly one estate must own the adopted row"
+    )
+    winner_index = 0 if repo.estate_id == estate_a_id else 1
+    assert "leynos/wildside" not in completed[winner_index].repositories_conflicted, (
+        "The estate that won the adoption must not report a conflict"
+    )
+    assert "leynos/wildside" in completed[1 - winner_index].repositories_conflicted, (
+        "The estate that lost the adoption must report the conflict"
+    )
+
+
+@pytest.mark.asyncio
+async def test_overlapping_syncs_insert_each_slug_once(
+    session_factory: async_sessionmaker[AsyncSession],
+    create_estates: tuple[str, str],
+    wildside_catalogue_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two syncs racing to insert the same slugs create six rows, not twelve."""
+    estate_a_id, estate_b_id = create_estates
+    _require_overlapping_transactions(session_factory)
+    await _import_for_estate(
+        session_factory, wildside_catalogue_path, "estate-a", "race-a"
+    )
+    await _import_for_estate(
+        session_factory, wildside_catalogue_path, "estate-b", "race-b"
+    )
+    _synchronise_silver_load(monkeypatch)
+
+    completed = _completed(await _run_two_syncs(session_factory))
+
+    assert sum(result.repositories_created for result in completed) == 6, (
+        "Each of the six catalogue slugs must be inserted exactly once"
+    )
+    assert sum(len(result.repositories_conflicted) for result in completed) == 6, (
+        "Every slug lost to the other estate must be reported once"
+    )
+    repo = await fetch_silver_repo(session_factory, "leynos", "wildside")
+    assert repo is not None, "The raced repository should exist"
+    assert repo.estate_id in {estate_a_id, estate_b_id}, (
+        "The surviving row must belong to exactly one estate"
+    )
+
+
+@pytest.mark.asyncio
+async def test_lost_insert_reports_a_conflict_instead_of_aborting(
+    session_factory: async_sessionmaker[AsyncSession],
+    create_estates: tuple[str, str],
+    wildside_catalogue_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A sync whose read missed another estate's row reports it, not aborts."""
+    _estate_a_id, estate_b_id = create_estates
+    async with session_factory() as session, session.begin():
+        session.add(
+            Repository(
+                github_owner="leynos",
+                github_name="wildside",
+                default_branch="main",
+                estate_id=estate_b_id,
+            )
+        )
+    await _import_for_estate(
+        session_factory, wildside_catalogue_path, "estate-a", "lost-insert"
+    )
 
     async def _empty_load(*_args: object, **_kwargs: object) -> dict[str, Repository]:
         """Simulate a sync whose read missed a row another sync inserted."""
@@ -478,12 +640,70 @@ async def test_concurrent_insert_surfaces_as_a_conflict_cause(
 
     monkeypatch.setattr(sync_module, "_load_silver_repositories", _empty_load)
 
+    result = await RepositoryRegistryService(
+        session_factory, session_factory
+    ).sync_from_catalogue("estate-a")
+
+    assert "leynos/wildside" in result.repositories_conflicted, (
+        "A lost insert must be reported as a conflict, not abort the estate sync"
+    )
+    repo = await fetch_silver_repo(session_factory, "leynos", "wildside")
+    assert repo is not None, "The winning row should still exist"
+    assert repo.estate_id == estate_b_id, "The winning estate must keep the row"
+
+
+@pytest.mark.asyncio
+async def test_insert_failure_without_a_surviving_row_still_aborts(
+    session_factory: async_sessionmaker[AsyncSession],
+    create_estates: tuple[str, str],
+    wildside_catalogue_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An integrity failure that no racing insert explains is not swallowed."""
+    _estate_a_id, estate_b_id = create_estates
+    async with session_factory() as session, session.begin():
+        # Owned by the other estate so the syncing estate never loads it; the
+        # collision must come from the primary key alone.
+        placeholder = Repository(
+            github_owner="leynos",
+            github_name="placeholder",
+            default_branch="main",
+            estate_id=estate_b_id,
+        )
+        session.add(placeholder)
+        await session.flush()
+        placeholder_id = placeholder.id
+    await _import_for_estate(
+        session_factory,
+        wildside_catalogue_path,
+        "estate-a",
+        "unexplained-integrity",
+    )
+
+    original_create = sync_module._create_silver_repository
+
+    def _colliding_create(
+        cat_repo: RepositoryRecord,
+        context: object,
+        decision: object,
+    ) -> Repository:
+        """Create the row with a primary key an unrelated row already uses."""
+        created = original_create(
+            cat_repo,
+            typ.cast("typ.Any", context),
+            typ.cast("typ.Any", decision),
+        )
+        created.id = placeholder_id
+        return created
+
+    monkeypatch.setattr(sync_module, "_create_silver_repository", _colliding_create)
+
     with pytest.raises(RegistrySyncError) as excinfo:
         await RepositoryRegistryService(
             session_factory, session_factory
         ).sync_from_catalogue("estate-a")
 
     assert isinstance(excinfo.value.__cause__, IntegrityError), (
-        "A lost insert must preserve the unique-constraint cause so the API "
-        "can answer 409"
+        "An integrity failure with no surviving row must keep its cause so the "
+        "API can still answer 409"
     )
