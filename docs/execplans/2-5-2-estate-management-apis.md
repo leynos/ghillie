@@ -325,6 +325,25 @@ per pull request.
       existing evidence: no 2.0.0 release exists to migrate from, and D21's one
       structured line per mutation is already implemented in the estate service
       that PR-B adds.
+- [x] (2026-11-07) The repair's repair commit `57ca6e1` failed the hosted
+      CodeScene critical-rule gate: `test_registry_service_sync.py` scored
+      8.82 for Low Cohesion, because the concurrency harness and the four race
+      witnesses gave the file a second cluster of shared data. The four
+      concurrency tests and their five helpers moved to
+      `tests/unit/test_registry_service_sync_concurrency.py`; both modules now
+      score 10.00 and `cs check` reports neither finding. No test body changed,
+      and the focused run is unchanged at 18 passed, 2 skipped.
+- [x] (2026-11-07) The R15 assessment reply accepted the lost-insert repair but
+      raised a further concurrency defect: the sync loop followed catalogue
+      order, so two estates with different orders could deadlock and lose one
+      estate's conflict reports. Both write loops now sort their slugs, and
+      `test_sync_writes_slugs_in_sorted_order` proves the ordering with a
+      reversed catalogue; it fails when the sort is reverted. The same reply
+      asked for the Postgres run to be reproducible from committed
+      configuration, so `tests/conftest.py` now accepts a
+      `postgresql+asyncpg://` URL in `GHILLIE_TEST_DB` and resets that
+      database's `public` schema per test. All 21 tests in the three sync
+      modules pass against Postgres 17 with no skips.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
@@ -621,6 +640,16 @@ expert-panel review.
   both supported dialects. A dialect without an upsert construct falls back to
   the plain insert.
 
+  Both write loops visit slugs in sorted order. Catalogue order is not
+  guaranteed to agree between two estates, and disagreeing orders let each sync
+  hold a row the other is waiting for, which Postgres resolves by aborting one
+  transaction and losing that estate's remaining conflict reports. Sorting
+  gives every sync the same lock order, which is the deadlock-avoidance rule
+  PostgreSQL documents for explicit locking.
+  `test_sync_writes_slugs_in_sorted_order` drives the loop with a reversed
+  catalogue and asserts the writes still arrive sorted; it fails with the
+  repair reverted.
+
   D25 and D26 are introduced by branches B and C and follow this entry once the
   stack is applied.
 
@@ -717,7 +746,8 @@ base URL, timeout, and bearer token. `ghillie/cli/output.py`
 as callers).
 
 Test infrastructure: `tests/conftest.py` `session_factory` (py-pglite
-PostgreSQL, SQLite when `GHILLIE_TEST_DB=sqlite`); `tests/unit/conftest.py`
+PostgreSQL, SQLite when `GHILLIE_TEST_DB=sqlite`, an external Postgres when
+`GHILLIE_TEST_DB` is a `postgresql+asyncpg://` URL); `tests/unit/conftest.py`
 (`registry_service`, `create_repo`, `fetch_repo`, `wildside_catalogue_path`);
 BDD features in `tests/features/*.feature` with steps in
 `tests/features/steps/` (pattern: `test_on_demand_report_steps.py`); API unit
@@ -923,8 +953,8 @@ Obligation O6, CLI import closure (`TDD-CLI-THIN`).
 - Non-vacuity: the test also asserts that `ghillie.cli.commands.estate` is in
   the loaded set, proving the estate commands were imported.
 
-Concurrency of adoption and insertion (D28): six tests in
-`tests/unit/test_registry_service_sync.py` cover the boundary.
+Concurrency of adoption and insertion (D28): six tests cover the boundary. Four
+live in `tests/unit/test_registry_service_sync.py`.
 `test_claim_unowned_repository_is_atomic_under_a_stale_view` calls
 `_claim_unowned_repository` directly, first with the winner's session and then
 with a row loaded before that claim committed, and asserts the second call
@@ -938,17 +968,24 @@ collision that no racing insert explains and asserts the `IntegrityError` cause
 is preserved for the 409 mapping. Those four are deterministic stale-view and
 missed-read regressions.
 
+The remaining two live in
+`tests/unit/test_registry_service_sync_concurrency.py`, a module split out of
+the first because the concurrency harness gave the combined file low cohesion
+under CodeScene's critical-rule gate.
 `test_overlapping_syncs_adopt_an_unowned_row_once` and
 `test_overlapping_syncs_insert_each_slug_once` do run two syncs at once: a
 barrier holds both Silver reads until each has finished, then both write. They
 assert that one estate keeps the row, that the loser reports the conflict, and
 that six slugs produce six rows and six conflicts rather than twelve inserts.
 They need a backend with MVCC, so they skip unless the session factory is bound
-to Postgres. The suite's default py-pglite path cannot supply one here: the
-pinned asyncpg rejects PGlite's TLS upgrade, and a connection that does succeed
-hangs in `engine.dispose()`. Both tests were executed against Postgres 17 in a
-throwaway container through a temporary local fixture override, and the insert
-test fails with `RegistrySyncError` when the repair is reverted.
+to Postgres. The suite's default py-pglite path cannot supply one on this host:
+the pinned asyncpg rejects PGlite's TLS upgrade, and a connection that does
+succeed hangs in `engine.dispose()`. `GHILLIE_TEST_DB` therefore also accepts a
+`postgresql+asyncpg://` URL, which `tests/conftest.py` uses to reset the
+database's `public` schema per test and initialize storage there. Against
+Postgres 17 in a throwaway container, all 21 tests in the three sync modules
+passed with no skips, and the insert test fails with `RegistrySyncError` when
+the repair is reverted.
 
 Residual gaps: the per-estate lock is in-process, so concurrent requests across
 replicas are not serialized (single replica in MVP); adoption of an unowned row
