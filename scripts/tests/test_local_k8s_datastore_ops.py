@@ -180,6 +180,7 @@ class TestCnpgWaitForReady:
         def mock_run(
             args: list[str], **kwargs: object
         ) -> subprocess.CompletedProcess[str]:
+            """Record the call and return a pre-flight pod listing or success."""
             calls.append(tuple(args))
             if args[1:3] == ["get", "pods"]:
                 # Pre-flight check passes

@@ -344,6 +344,7 @@ def show_environment_status(cluster_name: str, namespace: str) -> int:
     try:
 
         def _action(cfg: Config, env: dict[str, str]) -> None:
+            """Print the cluster name, namespace and environment status."""
             print(f"Status for cluster: {cluster_name}")
             print(f"Namespace: {namespace}")
             print()

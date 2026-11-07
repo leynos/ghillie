@@ -50,6 +50,7 @@ def _count_raw_events(ingestion_context: IngestionContext, slug: str) -> int:
     """Count raw events for a given repository slug."""
 
     async def _count() -> int:
+        """Count the raw events recorded for the repository slug."""
         async with ingestion_context["session_factory"]() as session:
             ids = (
                 await session.scalars(
@@ -132,6 +133,7 @@ def ingestion_context(tmp_path: Path) -> typ.Iterator[IngestionContext]:
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'ingestion.db'}")
 
     async def _init() -> None:
+        """Create the Bronze and Silver storage tables."""
         await init_bronze_storage(engine)
         await init_silver_storage(engine)
 
@@ -152,6 +154,7 @@ def managed_repository_registered(
     ingestion_context["repo_slug"] = slug
 
     async def _create() -> None:
+        """Insert an ingestion-enabled Silver repository row for the slug."""
         async with ingestion_context["session_factory"]() as session, session.begin():
             session.add(
                 Repository(
@@ -176,6 +179,7 @@ def _build_event_configuration(
     list[GitHubIngestedEvent],
     dict[str, dt.datetime],
 ]:
+    """Build fake GitHub events and expected offsets from the delta specs."""
     owner, name = parse_repo_slug(slug)
     now = _BASE_TIME
 
@@ -237,6 +241,7 @@ def run_worker(ingestion_context: IngestionContext, slug: str) -> None:
     """Run the ingestion worker once for the specified repository."""
 
     async def _run() -> None:
+        """Run the ingestion worker for the repository matching the slug."""
         service = ingestion_context["registry_service"]
         repos = await service.list_active_repositories()
         repo = next(repo for repo in repos if repo.slug == slug)
@@ -260,6 +265,7 @@ def raw_events_exist(ingestion_context: IngestionContext, slug: str) -> None:
     owner, name = parse_repo_slug(slug)
 
     async def _assert() -> None:
+        """Assert Bronze raw events exist with the expected types and payloads."""
         async with ingestion_context["session_factory"]() as session:
             events = (
                 await session.scalars(
@@ -332,6 +338,7 @@ def offsets_advance(ingestion_context: IngestionContext, slug: str) -> None:
     expected = ingestion_context["expected_offsets"]
 
     async def _assert() -> None:
+        """Assert the stored ingestion offsets match the expected timestamps."""
         async with ingestion_context["session_factory"]() as session:
             offsets = await session.scalar(
                 select(GithubIngestionOffset).where(

@@ -206,6 +206,7 @@ def create_repo_report(
     )
 
     async def _create() -> None:
+        """Create the Silver repository and its report for leynos/wildside."""
         cat_repo_id = await get_catalogue_repo_id(session_factory, "leynos", "wildside")
         machine_summary: dict[str, object] = {
             "status": rp.status,

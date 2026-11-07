@@ -142,6 +142,7 @@ def ingest_raw_event_twice(bronze_context: BronzeContext) -> None:
     )
 
     async def _ingest() -> None:
+        """Ingest the envelope twice and assert both calls resolve to one row."""
         writer = bronze_context["writer"]
         first = await writer.ingest(envelope)
         second = await writer.ingest(envelope)
@@ -159,6 +160,7 @@ def ingest_raw_event_timezone_error(bronze_context: BronzeContext) -> None:
     payload = bronze_context["payload"]
 
     async def _ingest() -> None:
+        """Ingest the envelope with the stored timestamp, expecting an error."""
         writer = bronze_context["writer"]
         await writer.ingest(
             RawEventEnvelope(
@@ -181,6 +183,7 @@ def assert_single_raw_event(bronze_context: BronzeContext) -> None:
     """Ensure dedupe rules keep the Bronze table append-only per event."""
 
     async def _count() -> int:
+        """Count the Bronze raw event rows."""
         async with bronze_context["session_factory"]() as session:
             rows = (await session.scalars(select(RawEvent))).all()
             return len(rows)
@@ -199,6 +202,7 @@ def assert_payload_preserved(bronze_context: BronzeContext) -> None:
     raw_event_id = bronze_context["raw_event_id"]
 
     async def _load() -> RawEvent:
+        """Load the stored raw event, asserting that it exists."""
         async with bronze_context["session_factory"]() as session:
             raw_event = await session.get(RawEvent, raw_event_id)
             assert raw_event is not None, "raw event missing from database"
@@ -235,6 +239,7 @@ def corrupt_raw_event_payload(bronze_context: BronzeContext) -> None:
     """Mutate the raw event payload and reset to pending for reprocessing."""
 
     async def _mutate() -> None:
+        """Overwrite the raw event payload and reset its state to pending."""
         async with bronze_context["session_factory"]() as session, session.begin():
             raw = await session.get(RawEvent, bronze_context["raw_event_id"])
             assert raw is not None, "expected raw event to exist before mutation"
@@ -249,6 +254,7 @@ def assert_single_event_fact(bronze_context: BronzeContext) -> None:
     """Ensure Silver records link back to the originating Bronze row."""
 
     async def _count() -> tuple[int, int | None]:
+        """Count the event facts and read the raw event's transform state."""
         async with bronze_context["session_factory"]() as session:
             facts = (await session.scalars(select(EventFact))).all()
             raw_event = await session.get(RawEvent, bronze_context["raw_event_id"])
@@ -268,6 +274,7 @@ def assert_event_fact_payload(bronze_context: BronzeContext) -> None:
     """Cross-check payload fidelity between Bronze and Silver."""
 
     async def _load() -> tuple[dict[str, object], dict[str, object]]:
+        """Load the first event fact and the raw event, returning both payloads."""
         async with bronze_context["session_factory"]() as session:
             fact = await session.scalar(select(EventFact))
             raw_event = await session.get(RawEvent, bronze_context["raw_event_id"])
@@ -293,6 +300,7 @@ def assert_raw_event_marked_failed(bronze_context: BronzeContext) -> None:
     """Ensure corrupted payload leads to FAILED state."""
 
     async def _load() -> RawEvent:
+        """Load the raw event, asserting that it is present."""
         async with bronze_context["session_factory"]() as session:
             raw = await session.get(RawEvent, bronze_context["raw_event_id"])
             assert raw is not None, "expected raw event to be present for failure check"
@@ -316,6 +324,7 @@ def assert_event_fact_count_one(bronze_context: BronzeContext) -> None:
     """Verify no duplicate EventFacts were created."""
 
     async def _count() -> int:
+        """Count the event facts."""
         async with bronze_context["session_factory"]() as session:
             return len((await session.scalars(select(EventFact))).all())
 

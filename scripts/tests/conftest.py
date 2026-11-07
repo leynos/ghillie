@@ -122,6 +122,7 @@ def mock_subprocess_run(
     def _mock_run(
         args: list[str], **kwargs: object
     ) -> subprocess.CompletedProcess[str]:
+        """Record the subprocess call and return a successful CompletedProcess."""
         capture.calls.append(tuple(args))
         if "input" in kwargs:
             capture.inputs.append(str(kwargs["input"]))
@@ -184,6 +185,7 @@ def make_subprocess_mock(
     """
 
     def mock_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        """Record the call and return a result, optionally failing namespace checks."""
         calls.append(tuple(args))
         # Simulate namespace check: return non-zero if namespace_exists=False
         returncode = 0

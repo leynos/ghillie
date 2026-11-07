@@ -31,6 +31,7 @@ def register(event_type: str) -> cabc.Callable[[EntityTransformer], EntityTransf
     """Register an entity transformer."""
 
     def _inner(func: EntityTransformer) -> EntityTransformer:
+        """Store ``func`` as the transformer for ``event_type`` and return it."""
         _registry[event_type] = func
         return func
 

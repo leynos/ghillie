@@ -241,6 +241,7 @@ async def _generate_reports_for_estate_async(
     semaphore = asyncio.Semaphore(_MAX_CONCURRENT_REPORTS)
 
     async def bounded_report(repo_id: str) -> Report | None:
+        """Generate a repository report while holding the concurrency semaphore."""
         async with semaphore:
             return await service.run_for_repository(repo_id, as_of=as_of)
 
@@ -313,6 +314,7 @@ def _run_actor_async[T](
     session_factory = _get_or_create_session_factory(database_url)
 
     async def run() -> T:
+        """Build the reporting service and await ``async_fn`` with it."""
         service = _build_service(database_url)
         return await async_fn(service, session_factory, as_of)
 
@@ -355,6 +357,7 @@ def generate_report_job(
         _session_factory: SessionFactory,
         as_of: dt.datetime | None,
     ) -> str | None:
+        """Generate the repository report and return its ID, or None."""
         report = await _generate_report_async(service, repository_id, as_of=as_of)
         return report.id if report else None
 
@@ -397,6 +400,7 @@ def generate_reports_for_estate_job(
         session_factory: SessionFactory,
         as_of: dt.datetime | None,
     ) -> list[str | None]:
+        """Generate reports for the estate and return their IDs, or None."""
         reports = await _generate_reports_for_estate_async(
             service=service,
             session_factory=session_factory,

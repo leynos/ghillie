@@ -46,9 +46,11 @@ class SubprocessMock:
         }
 
     def _handle_which(self, args: list[str]) -> tuple[str, int]:
+        """Return a fake /usr/bin path for the requested executable."""
         return f"/usr/bin/{args[1]}", 0
 
     def _handle_k3d(self, args: list[str]) -> tuple[str, int]:
+        """Return canned k3d output for cluster list and kubeconfig commands."""
         if args[1:3] == ["cluster", "list"]:
             # k3d cluster list -o json returns JSON array with port mappings
             if self.cluster_exists:
@@ -69,6 +71,7 @@ class SubprocessMock:
         return "", 0  # create, delete, image import
 
     def _handle_kubectl(self, args: list[str]) -> tuple[str, int]:
+        """Return canned kubectl output, treating the namespace as absent."""
         if args[1:3] == ["get", "namespace"]:
             return "", 1  # namespace doesn't exist
         if args[1:3] == ["get", "secret"]:
@@ -81,6 +84,7 @@ class SubprocessMock:
         return "", 0  # create, apply, wait, logs, rollout
 
     def _handle_kubectl_get_secret(self, args: list[str]) -> tuple[str, int]:
+        """Return base64-encoded jsonpath credentials for CNPG and Valkey secrets."""
         joined = " ".join(args)
         # Check for jsonpath output format (can be "-o jsonpath" or "-o=jsonpath")
         if "jsonpath" in joined:
@@ -95,9 +99,11 @@ class SubprocessMock:
         return "", 0
 
     def _handle_helm(self, _args: list[str]) -> tuple[str, int]:
+        """Return empty output, reporting success for helm commands."""
         return "", 0  # repo, upgrade, uninstall all succeed
 
     def _handle_docker(self, _args: list[str]) -> tuple[str, int]:
+        """Return empty output, reporting success for docker commands."""
         return "", 0  # build succeeds
 
     def __call__(
@@ -260,12 +266,14 @@ def when_run_up_with_skip_build(
 
 # Then steps - assertions on captured calls
 def _has_call(ctx: LocalK8sContext, prefix: tuple[str, ...]) -> bool:
+    """Check whether any captured call starts with the given prefix."""
     return any(c[: len(prefix)] == prefix for c in ctx["captured_calls"])
 
 
 def _has_call_containing(
     ctx: LocalK8sContext, prefix: tuple[str, ...], text: str
 ) -> bool:
+    """Check whether a call with the given prefix contains the text."""
     calls = [c for c in ctx["captured_calls"] if c[: len(prefix)] == prefix]
     return any(text.lower() in str(c).lower() for c in calls)
 

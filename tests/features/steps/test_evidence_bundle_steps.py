@@ -212,6 +212,7 @@ def given_repo_with_previous_report(evidence_context: EvidenceContext) -> None:
     events = [commit_envelope(repo_slug, "abc123", commit_time)]
 
     async def _setup_with_report() -> None:
+        """Set up the repository and add a previous repository report."""
         await _setup_repo_from_events(evidence_context, events)
 
         # Create previous report
@@ -276,6 +277,7 @@ def given_repo_report_covers_commit(evidence_context: EvidenceContext) -> None:
     """Create a repository report that covers the commit event."""
 
     async def _create_report() -> None:
+        """Store a repository report that covers the commit event fact."""
         event_fact_id = await _fetch_commit_event_fact_id(evidence_context, "abc123")
         evidence_context["covered_event_fact_id"] = event_fact_id
 
@@ -299,6 +301,7 @@ def given_project_report_covers_commit(evidence_context: EvidenceContext) -> Non
     """Create a project report that covers the commit event."""
 
     async def _create_report() -> None:
+        """Store a project report, with its project, that covers the commit event."""
         event_fact_id = await _fetch_commit_event_fact_id(evidence_context, "abc123")
         evidence_context["covered_event_fact_id"] = event_fact_id
 

@@ -97,6 +97,7 @@ def _make_wait_for_cnpg_ready_mock(
     """Create a subprocess.run mock for wait_for_cnpg_ready scenarios."""
 
     def mock_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        """Return a canned pods listing or raise the configured wait error."""
         if args[1:3] == ["get", "pods"]:
             return subprocess.CompletedProcess(
                 args=args,
