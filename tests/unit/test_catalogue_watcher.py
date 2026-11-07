@@ -107,7 +107,7 @@ def test_watcher_enqueues_on_new_commit(
 
     @dramatiq.actor(broker=broker)
     def fake_import(catalogue_path: str, database_url: str, **_: object) -> None:
-        return None
+        """Act as a no-op import actor that returns immediately."""
 
     config = CatalogueWatcherConfig(branch="main", actor=fake_import)
     watcher = GitCatalogueWatcher(
