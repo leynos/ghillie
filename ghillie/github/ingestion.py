@@ -283,7 +283,10 @@ class GitHubIngestionWorker:
         self,
         context: _RepositoryIngestionContext,
     ) -> int:
-        """Ingest documentation change events since the last watermark."""
+        """Ingest documentation changes from the watermark or initial lookback.
+
+        The start time is then moved back by the configured overlap.
+        """
         offsets = context.offsets
         since = self._since_for(offsets.last_doc_ingested_at, now=context.now)
         after = offsets.last_doc_cursor
@@ -371,7 +374,11 @@ class GitHubIngestionWorker:
         *,
         kind: typ.Literal["commit", "pull_request", "issue"],
     ) -> int:
-        """Ingest one activity kind since its watermark and update its offsets."""
+        """Ingest one activity kind from its watermark or initial lookback.
+
+        The start time is then moved back by the configured overlap, and the
+        kind's offsets are updated.
+        """
         watermark_attr = _KIND_WATERMARK_ATTR[kind]
         cursor_attr = _KIND_CURSOR_ATTR[kind]
         offsets = context.offsets

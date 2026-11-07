@@ -138,7 +138,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _split_option_with_value(token: str) -> tuple[str, str] | None:
-    """Split a ``--flag=VALUE`` token into its name and value, or None."""
+    """Split any token containing ``=`` at the first ``=``, or return ``None``."""
     if "=" not in token:
         return None
     option_name, option_value = token.split("=", 1)
@@ -185,7 +185,10 @@ def _is_invalid_backend_choice(message: str) -> bool:
 
 
 def _format_cyclopts_error(error: CycloptsError) -> str:
-    """Return a readable message for a cyclopts error, fixing --backend choices."""
+    """Return the error message, rewriting recognized invalid ``--backend`` messages.
+
+    The rewrite applies only when a quoted value is present.
+    """
     message = str(error)
     if _is_invalid_backend_choice(message):
         parts = message.split('"')

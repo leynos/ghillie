@@ -176,7 +176,10 @@ _HTTP_ERROR_STATUS_THRESHOLD = int(HTTPStatus.BAD_REQUEST)
 
 
 def _ensure_tzaware(value: dt.datetime, *, field: str) -> dt.datetime:
-    """Return ``value`` in UTC, rejecting naive datetimes."""
+    """Convert to UTC, rejecting ``tzinfo is None``.
+
+    A ``tzinfo`` with no UTC offset is accepted as local time.
+    """
     if value.tzinfo is None:
         msg = f"{field} must be timezone-aware"
         raise ValueError(msg)
@@ -567,7 +570,10 @@ def _events_from_nodes(
     since: dt.datetime,
     node_to_event: NodeToEvent,
 ) -> tuple[list[GitHubIngestedEvent], bool]:
-    """Convert nodes to events, reporting whether pagination should stop."""
+    """Convert entries through the callback and report whether to stop paging.
+
+    Current callers pass connection edges.
+    """
     events: list[GitHubIngestedEvent] = []
     should_stop = False
     for node in nodes:

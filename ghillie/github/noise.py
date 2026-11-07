@@ -120,7 +120,11 @@ class CompiledNoiseFilters:
         )
 
     def _matches_title_prefix(self, payload: dict[str, typ.Any]) -> bool:
-        """Return True when the title starts with an ignored prefix."""
+        """Match an ignored prefix against the normalized title.
+
+        The title is the first available of the title, message and metadata
+        message, in that order.
+        """
         if not self.ignore_title_prefixes:
             return False
         title = _title_for_payload(payload)
