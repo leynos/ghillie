@@ -33,6 +33,7 @@ if typ.TYPE_CHECKING:
 
 
 def _valid_result() -> RepositoryStatusResult:
+    """Return a result that passes validation."""
     return RepositoryStatusResult(
         summary="acme/widget is on track with 3 events.",
         status=ReportStatus.ON_TRACK,

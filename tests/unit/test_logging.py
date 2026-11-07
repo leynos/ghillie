@@ -31,6 +31,7 @@ class _FakeLogger:
     """Collects log calls for assertions."""
 
     def __init__(self) -> None:
+        """Initialize an empty list of recorded calls."""
         self.calls: list[tuple[str, str, object | None, bool]] = []
 
     def log(
@@ -42,6 +43,7 @@ class _FakeLogger:
         exc_info: object | None = None,
         stack_info: bool = False,
     ) -> str:
+        """Record the call and return the message unchanged."""
         self.calls.append((level, message, exc_info, stack_info))
         return message
 
@@ -236,6 +238,7 @@ def test_configure_logging(
     captured: dict[str, object] = {}
 
     def fake_basic_config(**kwargs: object) -> None:
+        """Capture the keyword arguments passed to basicConfig."""
         captured.update(kwargs)
 
     monkeypatch.setattr("ghillie.logging.basicConfig", fake_basic_config)

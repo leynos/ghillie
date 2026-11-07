@@ -38,6 +38,7 @@ async def test_ingest_events_stream_handles_empty_stream(
     )
 
     async def _events() -> typ.AsyncIterator[GitHubIngestedEvent]:
+        """Yield no events, simulating an empty stream."""
         for event in ():
             yield event
 
@@ -80,6 +81,7 @@ async def test_ingest_events_stream_sets_resume_cursor_when_truncated(
     )
 
     async def _events() -> typ.AsyncIterator[GitHubIngestedEvent]:
+        """Yield the prepared events in the order they were built."""
         for event in events:
             yield event
 
@@ -136,6 +138,7 @@ async def test_ingest_events_stream_advances_cursors_for_dropped_events(
     ]
 
     async def _events() -> typ.AsyncIterator[GitHubIngestedEvent]:
+        """Yield the prepared events in the order they were built."""
         for event in events:
             yield event
 

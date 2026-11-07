@@ -83,6 +83,7 @@ class _StaticMetricsStatusModel:
         metrics: ModelInvocationMetrics,
         delay_s: float = 0.0,
     ) -> None:
+        """Store the metrics to report and the optional delay in seconds."""
         self._metrics = metrics
         self._delay_s = delay_s
         self.last_invocation_metrics: ModelInvocationMetrics | None = None
@@ -91,6 +92,7 @@ class _StaticMetricsStatusModel:
         self,
         evidence: RepositoryEvidenceBundle,
     ) -> RepositoryStatusResult:
+        """Record the fixed metrics, optionally delay, and return a valid result."""
         del evidence
         if self._delay_s > 0:
             await asyncio.sleep(self._delay_s)
@@ -105,6 +107,7 @@ class _NoMetricsStatusModel:
         self,
         evidence: RepositoryEvidenceBundle,
     ) -> RepositoryStatusResult:
+        """Return a valid result without recording any invocation metrics."""
         del evidence
         return _valid_result()
 
@@ -113,6 +116,7 @@ class _RetryingMetricsStatusModel:
     """Status model that fails validation once, then succeeds."""
 
     def __init__(self) -> None:
+        """Initialize the attempt counter and clear the recorded metrics."""
         self._attempt = 0
         self.last_invocation_metrics: ModelInvocationMetrics | None = None
 
@@ -120,6 +124,7 @@ class _RetryingMetricsStatusModel:
         self,
         evidence: RepositoryEvidenceBundle,
     ) -> RepositoryStatusResult:
+        """Return an invalid result on the first attempt, then a valid one."""
         del evidence
         self._attempt += 1
         if self._attempt == 1:

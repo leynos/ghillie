@@ -98,6 +98,7 @@ class _SuccessfulCompletionTransport(httpx.AsyncBaseTransport):
         *,
         usage_payloads: tuple[ResponseData | None, ...],
     ) -> None:
+        """Store the usage payloads, falling back to a single ``None`` entry."""
         self._usage_payloads = usage_payloads or (None,)
         self._index = 0
 

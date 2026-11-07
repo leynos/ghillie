@@ -56,6 +56,7 @@ def test_control_plane_client_does_not_send_auth_header_when_token_is_none() -> 
     captured_headers: dict[str, str] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
+        """Capture the request headers and return an OK response."""
         nonlocal captured_headers
         captured_headers = dict(request.headers)
         return httpx.Response(200, json={"ok": True})
@@ -120,6 +121,7 @@ def test_control_plane_client_context_manager_closes_on_exception() -> None:
     )
 
     def _raise_in_context(client: ControlPlaneClient) -> None:
+        """Raise a RuntimeError to exercise context-manager cleanup."""
         raise RuntimeError("boom")
 
     try:

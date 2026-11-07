@@ -15,6 +15,8 @@ class TestStatusModelProtocol:
         """StatusModel protocol supports isinstance checks."""
 
         class NotAStatusModel:
+            """Plain class that does not implement the StatusModel protocol."""
+
             pass
 
         assert not isinstance(NotAStatusModel(), StatusModel)

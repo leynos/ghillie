@@ -328,7 +328,10 @@ async def test_compile_noise_filters_defaults_to_noop_on_catalogue_error(
     repo = make_repo_info()
 
     class _FailingCatalogueSessionFactory:
+        """Session factory whose catalogue lookup always fails."""
+
         def __call__(self) -> AsyncSession:
+            """Raise an OperationalError instead of returning a session."""
             statement = "SELECT 1"
             raise OperationalError(statement, {}, Exception("boom"))
 
