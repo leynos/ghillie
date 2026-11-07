@@ -715,6 +715,18 @@ Force SQLite for faster local iteration:
 GHILLIE_TEST_DB=sqlite make test
 ```
 
+Point the suite at an existing Postgres when py-pglite cannot start, for
+example to run the overlapping-transaction tests in
+`tests/unit/test_registry_service_sync_concurrency.py`:
+
+```bash
+GHILLIE_TEST_DB=postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/ghillie_test \
+    make test
+```
+
+The fixture drops and recreates the `public` schema before each test, so use a
+disposable database and never a shared one.
+
 ### Helm chart tests only
 
 ```bash

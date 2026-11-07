@@ -432,8 +432,13 @@ async def _sync_repositories(
         result=result,
     )
 
-    for slug, cat_repo in plan.catalogue_repos.items():
-        await _sync_one_repository(context, slug, cat_repo)
+    # Write in slug order so two estates syncing the same repositories take
+    # their row locks in the same order. Catalogue order is not guaranteed to
+    # agree between estates, and disagreeing orders let each sync hold a row
+    # the other is waiting for, which Postgres resolves by aborting one of
+    # them and losing that estate's conflict report for the rest of the run.
+    for slug in sorted(plan.catalogue_repos):
+        await _sync_one_repository(context, slug, plan.catalogue_repos[slug])
 
     _deactivate_removed_repositories(context, set(plan.catalogue_repos))
 
@@ -461,7 +466,9 @@ def _deactivate_removed_repositories(
     seen_slugs: set[str],
 ) -> None:
     """Deactivate repositories that are no longer in this estate's catalogue."""
-    for slug, silver_repo in context.silver_repos.items():
+    # Sorted for the same lock-ordering reason as the sync loop above.
+    for slug in sorted(context.silver_repos):
+        silver_repo = context.silver_repos[slug]
         if slug in seen_slugs:
             continue
         decision = decide_for_removed_repository(

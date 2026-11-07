@@ -587,7 +587,10 @@ The test fixtures now attempt to start a py-pglite Postgres instance by default
 so behavioural and unit tests exercise real Postgres semantics. If py-pglite
 cannot start (for example, Node.js is missing), the fixtures automatically fall
 back to SQLite to keep the suite runnable. To force SQLite explicitly, set
-`GHILLIE_TEST_DB=sqlite` before invoking `make test`. See
+`GHILLIE_TEST_DB=sqlite` before invoking `make test`. To run against an
+existing Postgres instead, set `GHILLIE_TEST_DB` to a
+`postgresql+asyncpg://user:password@host:port/database` URL; the fixtures reset
+that database's `public` schema per test, so point it at a disposable one. See
 `docs/testing-sqlalchemy-with-pytest-and-py-pglite.md` for full guidance.
 
 ## GitHub ingestion observability (Phase 1.3.d)

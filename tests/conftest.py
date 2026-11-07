@@ -9,6 +9,7 @@ import socket
 import typing as typ
 
 import pytest_asyncio
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -35,8 +36,24 @@ except ImportError:  # pragma: no cover - optional dependency
 logger = get_logger(__name__)
 
 
+def _external_postgres_url() -> str | None:
+    """Return an explicitly configured Postgres URL, if any.
+
+    ``GHILLIE_TEST_DB`` normally names a backend (``pglite`` or ``sqlite``).
+    Setting it to a ``postgresql+asyncpg://`` URL runs the suite against an
+    external Postgres instead, which is how the overlapping-transaction tests
+    are reproduced without py-pglite.
+    """
+    value = os.getenv("GHILLIE_TEST_DB", "").strip()
+    if value.startswith("postgresql+asyncpg://"):
+        return value
+    return None
+
+
 def _should_use_pglite() -> bool:
     """Return True when tests should run against py-pglite Postgres."""
+    if _external_postgres_url() is not None:
+        return False
     target = os.getenv("GHILLIE_TEST_DB", "pglite").lower()
     return target != "sqlite" and _PGLITE_AVAILABLE
 
@@ -109,6 +126,27 @@ async def _try_setup_pglite(
         return (engine, engine_cm)
 
 
+async def _setup_external_postgres(url: str) -> AsyncEngine:
+    """Create an engine for an external Postgres and initialise storage.
+
+    The ``public`` schema is dropped first so every test starts from an empty
+    database. Without that, rows from an earlier test leak into the next one
+    and the concurrency tests see state they did not create. This is only
+    reached when ``GHILLIE_TEST_DB`` names a URL, so the destructive reset is
+    always an explicit opt-in.
+    """
+    engine = create_async_engine(url)
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
+            await connection.execute(text("CREATE SCHEMA public"))
+        await _init_all_storage(engine)
+    except Exception:
+        await engine.dispose()
+        raise
+    return engine
+
+
 async def _setup_sqlite(tmp_path: Path) -> AsyncEngine:
     """Create a SQLite engine and initialise all storage layers."""
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'ghillie_test.db'}")
@@ -124,13 +162,17 @@ async def _setup_sqlite(tmp_path: Path) -> AsyncEngine:
 async def session_factory(
     tmp_path: Path,
 ) -> typ.AsyncIterator[async_sessionmaker[AsyncSession]]:
-    """Yield a fresh async session factory backed by sqlite."""
+    """Yield a fresh async session factory for the configured test database."""
     engine_cm = None
-    result = await _try_setup_pglite(tmp_path)
-    if result is not None:
-        engine, engine_cm = result
+    external_url = _external_postgres_url()
+    if external_url is not None:
+        engine = await _setup_external_postgres(external_url)
     else:
-        engine = await _setup_sqlite(tmp_path)
+        result = await _try_setup_pglite(tmp_path)
+        if result is not None:
+            engine, engine_cm = result
+        else:
+            engine = await _setup_sqlite(tmp_path)
 
     factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
