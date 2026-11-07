@@ -290,13 +290,17 @@ Either way the call returns a `SyncResult`. `repositories_created`,
 `repositories_updated`, and `repositories_deactivated` count the changes.
 `repositories_conflicted` lists this estate's catalogue slugs that another
 estate owns; sync leaves those rows untouched. `repositories_left_disabled`
-previews the linked rows that stay disabled because an operator turned them
-off, and `repositories_left_disabled_count` carries the exact total beyond the
-preview limit.
+previews the active catalogue repositories whose linked Silver row is still
+disabled after the sync, and `repositories_left_disabled_count` carries the
+exact total beyond the preview limit. The pair says that ingestion is off, not
+why: a row can have been disabled by an operator or by an earlier removal, and
+catalogue rows the sync no longer sees are counted in
+`repositories_deactivated` instead.
 
 The rules and their rationale are recorded in
-[ADR-005](adr-005-registry-sync-preserves-operator-ingestion-toggles.md), and
-the surrounding catalogue and Silver design is in
+[ADR-005](adr-005-registry-sync-preserves-operator-ingestion-toggles.md), the
+upgrade actions in the [migration guide](migration-guide.md), and the
+surrounding catalogue and Silver design is in
 [the Bronze/Silver architecture design](ghillie-bronze-silver-architecture-design.md#92-repository-discovery-and-registration-phase-13a).
 
 ## Dead-code detection

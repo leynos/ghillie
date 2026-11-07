@@ -349,6 +349,15 @@ per pull request.
       database's `public` schema per test; it raises under `pytest-xdist`,
       which shares one schema. All 22 tests in the three sync modules pass
       against Postgres 17 with no skips.
+- [x] (2026-11-07) The review of `0693e93` returned four pre-merge rows. Three
+      are actioned: the disabled preview is now asserted exactly (two tests,
+      both mutation-checked); `docs/migration-guide.md` records the 2.0.0
+      upgrade actions and is linked from the users' and developers' guides; and
+      the `SyncResult` docstring plus both design documents now say the preview
+      reports that ingestion is off, not why. The observability row is rebutted
+      with D21 (one structured line per mutation, implemented in the estate
+      service that PR-B adds) and D27 (metrics and tracing are a platform
+      decision), per the plan's prohibition on new runtime dependencies.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
@@ -599,10 +608,14 @@ expert-panel review.
   foreign row a distinct branch, catalogue link, documentation paths, and sync
   time, then proves a full field snapshot is unchanged; and the dry run asserts
   the exact six-repository creation count. Three are dispositions:
-  1. A "2.0.0 migration document" has no basis here: `pyproject.toml` declares
+  1. ~~A "2.0.0 migration document" has no basis here: `pyproject.toml` declares
      version 1.0.0, and no release or migration process exists. The users' guide
      already signposts toggle ownership, conflict reporting, the result fields,
-     and `dry_run`.
+     and `dry_run`.~~ **Superseded 2026-11-07.** Later review rounds raised this
+     row again, and the cost of satisfying it is one page, so
+     `docs/migration-guide.md` now records the upgrade actions. It is framed as
+     the next major release: `pyproject.toml` still declares 1.0.0, so the guide
+     says explicitly that 2.0.0 is unpublished and the changes ship there.
   2. Ownership of an existing row is not arbitrated by
      `uq_repositories_owner_name`: that constraint guards concurrent *inserts*
      of the same owner/name, and D17 maps the resulting `IntegrityError` to
@@ -998,6 +1011,19 @@ point at `uv run pytest` rather than `make test`. Against Postgres 17 in a
 throwaway container, all 22 tests in the three sync modules passed with no
 skips, and the insert test fails with `RegistrySyncError` when the repair is
 reverted.
+
+The disabled preview is asserted exactly, not by membership.
+`test_sync_previews_only_disabled_linked_repositories` links four repositories,
+disables two, and asserts the preview equals `["leynos/alpha", "leynos/beta"]`
+in order with a count of two, while the two rows that were never disabled stay
+enabled. `test_sync_bounds_the_left_disabled_preview` seeds 101 disabled rows
+and four enabled ones, asserts the count is exactly 101, that the preview stops
+at 100, and that no previewed slug belongs to an enabled repository. Mutation
+check: reporting every `PRESERVE` decision instead of only disabled ones
+(`if decision.transition is IngestionTransition.PRESERVE:`) fails both tests,
+so neither can pass on a preview that echoes enabled rows. The mutation was
+applied, observed to fail, and reverted; `ghillie/registry/sync.py` is
+unchanged.
 
 Residual gaps: the per-estate lock is in-process, so concurrent requests across
 replicas are not serialized (single replica in MVP); adoption of an unowned row

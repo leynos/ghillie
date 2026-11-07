@@ -508,6 +508,10 @@ back:
 preview = await service.sync_from_catalogue("wildside", dry_run=True)
 ```
 
+Behaviour changes that need action when upgrading, including re-applying a
+disable that an earlier release reverted, are recorded in the
+[migration guide](migration-guide.md).
+
 ### Ad hoc repositories
 
 When the Silver transformer encounters events for repositories not in the

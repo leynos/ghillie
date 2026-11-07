@@ -265,6 +265,69 @@ async def test_sync_preserves_operator_disable(
     )
 
 
+def _catalogue_naming(names: tuple[str, ...]) -> str:
+    """Return a catalogue document with one project per repository name."""
+    lines = ["version: 1", "projects:"]
+    for index, name in enumerate(names):
+        lines.extend(
+            [
+                f"  - key: project-{index}",
+                f"    name: Project {index}",
+                "    components:",
+                f"      - key: component-{index}",
+                f"        name: Component {index}",
+                "        repository:",
+                "          owner: leynos",
+                f"          name: {name}",
+                "          default_branch: main",
+            ]
+        )
+    return "\n".join(lines) + "\n"
+
+
+@pytest.mark.asyncio
+async def test_sync_previews_only_disabled_linked_repositories(
+    session_factory: async_sessionmaker[AsyncSession],
+    registry_service: RepositoryRegistryService,
+    import_and_sync: typ.Callable[[Path, str], typ.Awaitable[SyncResult]],
+    tmp_path: Path,
+) -> None:
+    """The preview names exactly the linked rows sync left disabled.
+
+    Two of the four linked repositories are disabled, so an implementation that
+    previewed every linked row, or every row the decision preserved, would
+    report a different list. The whole preview is asserted rather than
+    membership alone, and the enabled rows are checked so a preview that also
+    echoed them cannot pass.
+    """
+    catalogue = tmp_path / "catalogue.yaml"
+    catalogue.write_text(
+        _catalogue_naming(("alpha", "beta", "gamma", "delta")),
+        encoding="utf-8",
+    )
+
+    await import_and_sync(catalogue, "preview-exact-1")
+    for name in ("alpha", "beta"):
+        assert await registry_service.disable_ingestion("leynos", name) is True, (
+            f"The operator disable of {name} should succeed"
+        )
+
+    result = await registry_service.sync_from_catalogue("test")
+
+    assert result.repositories_left_disabled == ["leynos/alpha", "leynos/beta"], (
+        "The preview must name only the linked rows left disabled, in order"
+    )
+    assert result.repositories_left_disabled_count == 2, (
+        "The count must agree with the preview when every row fits"
+    )
+    for name in ("gamma", "delta"):
+        enabled_repo = await fetch_silver_repo(session_factory, "leynos", name)
+        assert enabled_repo is not None, f"The {name} row should still exist"
+        assert enabled_repo.ingestion_enabled is True, (
+            f"{name} was never disabled and must stay enabled"
+        )
+
+
 @pytest.mark.asyncio
 async def test_sync_keeps_readded_repository_disabled(
     session_factory: async_sessionmaker[AsyncSession],

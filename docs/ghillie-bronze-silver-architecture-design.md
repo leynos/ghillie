@@ -1283,9 +1283,12 @@ when the decision differs from the stored value. The rules are recorded in
 
 A linked row of the estate is never moved from disabled to enabled by sync.
 `SyncResult.repositories_conflicted` names catalogue slugs that another estate
-owns, and `repositories_left_disabled` previews (first 100) the linked rows
-that stay disabled because an operator turned them off, with an exact count in
-`repositories_left_disabled_count`.
+owns, and `repositories_left_disabled` previews (first 100) the active
+catalogue repositories whose linked row is still disabled after the sync, with
+an exact count in `repositories_left_disabled_count`. The preview and count say
+that ingestion is off, not why: a row can have been disabled by an operator or
+by an earlier removal. Catalogue rows the sync no longer names are counted in
+`repositories_deactivated` instead.
 
 `sync_from_catalogue(estate_key, dry_run=True)` runs the same projection inside
 its transaction and rolls it back, returning the counts it would have produced.

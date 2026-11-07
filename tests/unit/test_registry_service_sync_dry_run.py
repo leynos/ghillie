@@ -189,9 +189,14 @@ async def test_sync_bounds_the_left_disabled_preview(
     assert LEFT_DISABLED_PREVIEW_LIMIT == 100, (
         "The disabled preview limit is a documented contract of 100 entries"
     )
-    total = 101
+    # 101 disabled linked rows exceed the preview, and the four enabled rows
+    # must never appear in it. Without them the test could not distinguish a
+    # preview of disabled rows from a preview of every linked row.
+    disabled_total = 101
+    repositories = [(f"repo-{index}", False) for index in range(disabled_total)]
+    repositories += [(f"enabled-{index}", True) for index in range(4)]
     lines = ["version: 1", "projects:"]
-    for index in range(total):
+    for index, (name, _is_enabled) in enumerate(repositories):
         lines.extend(
             [
                 f"  - key: project-{index}",
@@ -201,7 +206,7 @@ async def test_sync_bounds_the_left_disabled_preview(
                 f"        name: Component {index}",
                 "        repository:",
                 "          owner: leynos",
-                f"          name: repo-{index}",
+                f"          name: {name}",
                 "          default_branch: main",
             ]
         )
@@ -217,6 +222,7 @@ async def test_sync_bounds_the_left_disabled_preview(
         estate_id = await session.scalar(select(Estate.id).where(Estate.key == "test"))
         assert estate_id is not None, "The imported estate should exist"
         records = (await session.scalars(select(RepositoryRecord))).all()
+        expected_ingestion = dict(repositories)
         for record in records:
             session.add(
                 Repository(
@@ -225,14 +231,14 @@ async def test_sync_bounds_the_left_disabled_preview(
                     default_branch=record.default_branch,
                     estate_id=estate_id,
                     catalogue_repository_id=record.id,
-                    ingestion_enabled=False,
+                    ingestion_enabled=expected_ingestion[record.name],
                     documentation_paths=[],
                 )
             )
 
     result = await registry_service.sync_from_catalogue("test")
 
-    assert result.repositories_left_disabled_count == total, (
+    assert result.repositories_left_disabled_count == disabled_total, (
         "The count must cover every disabled repository, not just the preview"
     )
     assert len(result.repositories_left_disabled) == 100, (
@@ -240,4 +246,10 @@ async def test_sync_bounds_the_left_disabled_preview(
     )
     assert len(set(result.repositories_left_disabled)) == 100, (
         "The preview list must not contain duplicate slugs"
+    )
+    disabled_slugs = {
+        f"leynos/{name}" for name, is_enabled in repositories if not is_enabled
+    }
+    assert set(result.repositories_left_disabled) <= disabled_slugs, (
+        "The preview must never include a repository that is still enabled"
     )

@@ -44,8 +44,11 @@ class SyncResult:
 
     ``repositories_conflicted`` lists repositories that this estate's catalogue
     names but another estate owns; sync leaves them untouched. The
-    ``repositories_left_disabled`` preview and its exact count report linked
-    repositories that remain disabled because an operator turned them off.
+    ``repositories_left_disabled`` preview and its exact count report active
+    catalogue repositories whose linked Silver row is still disabled after the
+    sync. They say that ingestion is off, not why: a row may have been disabled
+    by an operator or by an earlier removal. Rows the catalogue no longer names
+    are not reported here; they appear in ``repositories_deactivated`` instead.
     """
 
     estate_key: str
