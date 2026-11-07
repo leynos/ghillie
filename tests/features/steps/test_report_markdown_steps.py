@@ -188,6 +188,7 @@ def _generate_report(markdown_context: MarkdownContext) -> None:
     """Run the reporting service and store the result in context."""
 
     async def _run() -> Report | None:
+        """Run the reporting service for the repository as of 14 July 2024."""
         service = markdown_context["service"]
         repo_id = markdown_context["repo_id"]
         now = dt.datetime(2024, 7, 14, tzinfo=dt.UTC)

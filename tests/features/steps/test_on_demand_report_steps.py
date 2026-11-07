@@ -108,6 +108,7 @@ def given_api_with_events(
     transformer = RawEventTransformer(session_factory)
 
     async def _setup() -> tuple[str, str]:
+        """Ingest a recent commit for acme/widgets and transform it."""
         owner, name = "acme", "widgets"
         # Use a recent timestamp so the event falls within the default
         # 7-day reporting window when run_for_repository uses utcnow().
@@ -140,6 +141,7 @@ def given_api_without_events(
     """Set up an API with a repository but no events."""
 
     async def _setup() -> tuple[str, str]:
+        """Persist an empty repository and return its owner and name."""
         async with session_factory() as session, session.begin():
             repo = Repository(
                 github_owner="empty",

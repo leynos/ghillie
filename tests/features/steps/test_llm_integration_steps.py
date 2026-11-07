@@ -118,9 +118,12 @@ def _create_timeout_transport() -> httpx.AsyncBaseTransport:
     """Create a mock transport that raises TimeoutException."""
 
     class TimeoutTransport(httpx.AsyncBaseTransport):
+        """Transport that times out on every request."""
+
         async def handle_async_request(
             self, request: httpx.Request
         ) -> httpx.Response:  # pragma: no cover
+            """Raise a timeout error for every request."""
             msg = "Mock timeout"
             raise httpx.TimeoutException(msg, request=request)
 
@@ -131,7 +134,10 @@ def _create_invalid_json_transport() -> httpx.AsyncBaseTransport:
     """Create a mock transport that returns invalid JSON."""
 
     class InvalidJSONTransport(httpx.AsyncBaseTransport):
+        """Transport that returns a chat completion with invalid JSON content."""
+
         async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            """Return a chat completion whose content is not valid JSON."""
             return httpx.Response(
                 status_code=HTTPStatus.OK,
                 json={
@@ -162,6 +168,7 @@ def when_request_status_report(
     from ghillie.status.openai_client import OpenAIStatusModel
 
     async def _request_report() -> None:
+        """Summarise the evidence and store the result or the error."""
         evidence = llm_context["evidence"]
 
         config = OpenAIStatusModelConfig(

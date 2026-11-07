@@ -60,6 +60,8 @@ class NoiseIngestionContext(typ.TypedDict, total=False):
 
 @typ.final
 class _CommitSpec(typ.TypedDict):
+    """Fields used to build a commit event for the noise filter tests."""
+
     sha: str
     occurred_at: dt.datetime
     author_name: str
@@ -67,6 +69,7 @@ class _CommitSpec(typ.TypedDict):
 
 
 def _commit_event(slug: str, spec: _CommitSpec) -> GitHubIngestedEvent:
+    """Build a GitHub commit ingestion event for the repository slug."""
     owner, name = parse_repo_slug(slug)
     sha = spec["sha"]
     occurred_at = spec["occurred_at"]
@@ -126,6 +129,7 @@ def ingestion_context(tmp_path: Path) -> typ.Iterator[NoiseIngestionContext]:
     )
 
     async def _init() -> None:
+        """Initialise the bronze, silver and catalogue storage schemas."""
         await init_bronze_storage(engine)
         await init_silver_storage(engine)
         await init_catalogue_storage(engine)
@@ -156,6 +160,7 @@ def managed_repository_with_noise_filter(
     )
 
     async def _create() -> None:
+        """Persist the catalogue and Silver rows for the managed repository."""
         async with ingestion_context["session_factory"]() as session, session.begin():
             estate = Estate(key="noise", name="Noise Estate")
             session.add(estate)
@@ -248,7 +253,10 @@ def github_api_returns_bot_and_human_commits(
 
 
 def _run_worker(ingestion_context: NoiseIngestionContext, slug: str) -> None:
+    """Run the GitHub ingestion worker once for the named repository."""
+
     async def _run() -> None:
+        """Look up the active repository by slug and ingest it."""
         service = ingestion_context["registry_service"]
         repos = await service.list_active_repositories()
         repo = next(repo for repo in repos if repo.slug == slug)
@@ -282,6 +290,7 @@ def only_human_commit_ingested(
     bot_sha = ingestion_context["bot_commit_id"]
 
     async def _assert() -> None:
+        """Check the human commit is stored and the bot commit is not."""
         source_ids = await _get_commit_source_ids(
             ingestion_context["session_factory"], slug
         )
@@ -297,6 +306,7 @@ def disable_bot_author_filter(ingestion_context: NoiseIngestionContext) -> None:
     project_id = ingestion_context["project_id"]
 
     async def _update() -> None:
+        """Set the project's ignore_authors toggle to false."""
         async with ingestion_context["session_factory"]() as session, session.begin():
             project = await session.get(ProjectRecord, project_id)
             assert project is not None
@@ -347,6 +357,7 @@ def new_bot_commit_ingested(
     sha = ingestion_context["new_bot_commit_id"]
 
     async def _assert() -> None:
+        """Check the newer bot commit is stored."""
         source_ids = await _get_commit_source_ids(
             ingestion_context["session_factory"], slug
         )
