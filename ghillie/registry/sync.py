@@ -28,7 +28,9 @@ from __future__ import annotations
 import dataclasses
 import typing as typ
 
-from sqlalchemy import select, tuple_, update
+from sqlalchemy import Insert, select, tuple_, update
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
@@ -248,6 +250,98 @@ def _silver_state(
     )
 
 
+async def _load_silver_repository(
+    session: AsyncSession,
+    slug: str,
+) -> Repository | None:
+    """Load one Silver row by slug.
+
+    The lookup runs in the sync's own transaction, so it observes whatever the
+    racing sync already committed.
+    """
+    owner, name = parse_repo_slug(slug)
+    return await session.scalar(
+        select(Repository).where(
+            Repository.github_owner == owner,
+            Repository.github_name == name,
+        )
+    )
+
+
+def _insert_ignoring_duplicates(
+    session: AsyncSession,
+    row: Repository,
+) -> Insert | None:
+    """Build an insert that leaves an existing owner/name row untouched.
+
+    Returns ``None`` for a dialect without an upsert construct, so the caller
+    can fall back to a plain insert. A savepoint would be the portable
+    alternative, but pysqlite's legacy transaction mode commits on
+    ``RELEASE SAVEPOINT``, which would make a dry run persist its rows.
+    """
+    values = {
+        "github_owner": row.github_owner,
+        "github_name": row.github_name,
+        "default_branch": row.default_branch,
+        "estate_id": row.estate_id,
+        "catalogue_repository_id": row.catalogue_repository_id,
+        "ingestion_enabled": row.ingestion_enabled,
+        "documentation_paths": row.documentation_paths,
+        "last_synced_at": row.last_synced_at,
+    }
+    if row.id is not None:
+        # An id assigned by the caller wins over the column default, so a
+        # collision on it is visible rather than silently replaced.
+        values["id"] = row.id
+    dialect_name = session.get_bind().dialect.name
+    if dialect_name == "postgresql":
+        return postgresql_insert(Repository).values(**values).on_conflict_do_nothing()
+    if dialect_name == "sqlite":
+        return sqlite_insert(Repository).values(**values).on_conflict_do_nothing()
+    return None
+
+
+async def _insert_or_reconcile(
+    context: _SilverSyncContext,
+    slug: str,
+    cat_repo: RepositoryRecord,
+    decision: IngestionDecision,
+) -> None:
+    """Insert a new Silver row, reporting a lost insert race as a conflict.
+
+    Two estates can name the same repository and sync at the same time. Both
+    then read no row and both try to insert; ``uq_repositories_owner_name``
+    lets only one succeed. Ignoring the duplicate lets the losing sync re-read
+    the winner and run the ordinary decision path again, so a row owned by
+    another estate is reported in ``repositories_conflicted`` instead of
+    aborting the whole sync.
+
+    A conflict that leaves no row behind is not an owner/name race, so the
+    plain insert runs and its ``IntegrityError`` reaches the caller for the
+    409 mapping.
+    """
+    row = _create_silver_repository(cat_repo, context, decision)
+    statement = _insert_ignoring_duplicates(context.session, row)
+    if statement is not None:
+        inserted_id = await context.session.scalar(statement.returning(Repository.id))
+        if inserted_id is not None:
+            context.result.repositories_created += 1
+            return
+
+        winner = await _load_silver_repository(context.session, slug)
+        if winner is not None:
+            context.silver_repos[slug] = winner
+            await _sync_one_repository(context, slug, cat_repo)
+            return
+
+    # Either the dialect has no upsert construct, or the conflict left no row
+    # behind. A plain insert then succeeds or raises the constraint failure
+    # that the caller maps to 409.
+    context.session.add(row)
+    await context.session.flush()
+    context.result.repositories_created += 1
+
+
 async def _claim_unowned_repository(
     session: AsyncSession,
     silver_repo: Repository,
@@ -300,8 +394,7 @@ async def _sync_one_repository(
         return
 
     if silver_repo is None:
-        context.session.add(_create_silver_repository(cat_repo, context, decision))
-        context.result.repositories_created += 1
+        await _insert_or_reconcile(context, slug, cat_repo, decision)
         return
 
     if not await _claim_unowned_repository(

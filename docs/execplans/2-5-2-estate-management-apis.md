@@ -306,6 +306,25 @@ per pull request.
       longer says every D28 test drives a sync:
       `test_claim_unowned_repository_is_atomic_under_a_stale_view` calls the
       claim primitive directly.
+- [x] (2026-11-07) The first formal review of `d6356b7` failed the pre-merge
+      checks on four rows. Two were actioned rather than reconciled a third
+      time. A sync that loses an owner/name insert race no longer aborts the
+      whole estate: `_insert_or_reconcile` inserts with `ON CONFLICT DO
+      NOTHING`, re-reads the survivor when the insert did not land, and runs
+      the ordinary decision path, so the slug lands in
+      `repositories_conflicted`. An integrity failure with no surviving row is
+      still re-raised with its cause for the D17 409 mapping. A savepoint
+      version was tried first and reverted: pysqlite commits on `RELEASE
+      SAVEPOINT`, so it broke dry-run rollback. Two overlapping-sync tests were
+      added, guarded on a
+      Postgres-bound session factory; both were executed against Postgres 17 in
+      a throwaway container and the insert test fails with `RegistrySyncError`
+      when the repair is reverted. D28 and the Verification section record the
+      repair and the pglite limitation that keeps the pair skipped in this
+      suite. The documentation and observability rows were reconciled with the
+      existing evidence: no 2.0.0 release exists to migrate from, and D21's one
+      structured line per mutation is already implemented in the estate service
+      that PR-B adds.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
@@ -580,11 +599,30 @@ expert-panel review.
   the race the owner/name constraint cannot see: two estates syncing
   concurrently can both read the same unowned row, and without the conditional
   update the later writer silently replaces the earlier claim. The claim runs
-  inside the sync transaction, so a dry run rolls it back. Concurrent inserts
-  of the same slug remain arbitrated by `uq_repositories_owner_name` and
-  surface as `IntegrityError`, which D17 maps to 409. D25 and D26 are
-  introduced by branches B and C and follow this entry once the stack is
-  applied.
+  inside the sync transaction, so a dry run rolls it back.
+
+  Concurrent inserts of the same slug are arbitrated by
+  `uq_repositories_owner_name`. The first revision of this decision let the
+  losing insert surface as `IntegrityError`, which D17 maps to 409. That failed
+  the whole estate sync for one repository another estate happened to own,
+  which is the outcome EP-M1 set out to remove. `_insert_or_reconcile` now
+  inserts through a dialect `ON CONFLICT DO NOTHING` statement (`RETURNING id`
+  reports whether it landed). When it did not, the slug is re-read and the
+  ordinary decision path runs again, so a row owned by another estate is
+  reported in `repositories_conflicted` and the rest of the sync completes. A
+  conflict that leaves no row behind is not an owner/name race, so a plain
+  insert runs and its `IntegrityError` reaches the caller with its cause for
+  the 409 mapping.
+
+  A savepoint was tried first and rejected: pysqlite's legacy transaction mode
+  commits on `RELEASE SAVEPOINT`, so a dry run persisted all six rows and
+  `test_sync_dry_run_leaves_registry_unchanged` failed.
+  `ON CONFLICT DO NOTHING` needs no nested transaction and behaves the same on
+  both supported dialects. A dialect without an upsert construct falls back to
+  the plain insert.
+
+  D25 and D26 are introduced by branches B and C and follow this entry once the
+  stack is applied.
 
 ## Outcomes & retrospective
 
@@ -885,24 +923,36 @@ Obligation O6, CLI import closure (`TDD-CLI-THIN`).
 - Non-vacuity: the test also asserts that `ghillie.cli.commands.estate` is in
   the loaded set, proving the estate commands were imported.
 
-Concurrency of adoption (D28): three tests in
-`tests/unit/test_registry_service_sync.py` cover the adoption boundary.
+Concurrency of adoption and insertion (D28): six tests in
+`tests/unit/test_registry_service_sync.py` cover the boundary.
 `test_claim_unowned_repository_is_atomic_under_a_stale_view` calls
 `_claim_unowned_repository` directly, first with the winner's session and then
 with a row loaded before that claim committed, and asserts the second call
 claims nothing. `test_sync_reports_conflict_when_adoption_loses_a_race` drives
 one sync whose claim matches no row and asserts the reported conflict.
-`test_concurrent_insert_surfaces_as_a_conflict_cause` drives one sync whose
-loaded view misses a row it then re-inserts, and asserts that the lost insert
-preserves the `IntegrityError` cause for the 409 mapping. None of the three
-exercises two overlapping transactions, so they are deterministic stale-view
-and missed-read regressions rather than a concurrency proof; what they
-establish is that a lost claim is reported instead of silently overwriting the
-winner.
+`test_lost_insert_reports_a_conflict_instead_of_aborting` drives one sync whose
+loaded view misses a row another estate owns, and asserts the sync completes
+with the slug in `repositories_conflicted` and the winner's row unchanged.
+`test_insert_failure_without_a_surviving_row_still_aborts` forces a primary-key
+collision that no racing insert explains and asserts the `IntegrityError` cause
+is preserved for the 409 mapping. Those four are deterministic stale-view and
+missed-read regressions.
+
+`test_overlapping_syncs_adopt_an_unowned_row_once` and
+`test_overlapping_syncs_insert_each_slug_once` do run two syncs at once: a
+barrier holds both Silver reads until each has finished, then both write. They
+assert that one estate keeps the row, that the loser reports the conflict, and
+that six slugs produce six rows and six conflicts rather than twelve inserts.
+They need a backend with MVCC, so they skip unless the session factory is bound
+to Postgres. The suite's default py-pglite path cannot supply one here: the
+pinned asyncpg rejects PGlite's TLS upgrade, and a connection that does succeed
+hangs in `engine.dispose()`. Both tests were executed against Postgres 17 in a
+throwaway container through a temporary local fixture override, and the insert
+test fails with `RegistrySyncError` when the repair is reverted.
 
 Residual gaps: the per-estate lock is in-process, so concurrent requests across
 replicas are not serialized (single replica in MVP); adoption of an unowned row
-and insertion of a new row are still arbitrated atomically at the persistence
+and insertion of a new row are arbitrated atomically at the persistence
 boundary (D28). OpenAPI conformance is structural only (paths, methods,
 operation IDs, schema names and required properties) until Task 2.6.c.
 
