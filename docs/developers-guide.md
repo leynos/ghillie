@@ -721,11 +721,14 @@ example to run the overlapping-transaction tests in
 
 ```bash
 GHILLIE_TEST_DB=postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/ghillie_test \
-    make test
+    uv run pytest -q tests/
 ```
 
 The fixture drops and recreates the `public` schema before each test, so use a
-disposable database and never a shared one.
+disposable database and never a shared one. Run serially, as above: `make test`
+uses `pytest -n auto`, and parallel workers would each reset the same schema
+while other workers were using it. The fixture raises rather than run under
+`pytest-xdist`.
 
 ### Helm chart tests only
 

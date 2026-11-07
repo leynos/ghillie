@@ -111,6 +111,44 @@ async def _catalogue_repository_ids(
         return {repo_slug(owner, name): repo_id for repo_id, owner, name in rows}
 
 
+async def _seed_estate_naming(
+    session_factory: async_sessionmaker[AsyncSession],
+    estate_id: str,
+    owner: str,
+    name: str,
+) -> str:
+    """Give one estate a catalogue that names a single repository.
+
+    Returns the catalogue repository id, so the caller can link an unowned
+    Silver row to it and put that row in the other estate's removal path.
+    """
+    async with session_factory() as session, session.begin():
+        project = ProjectRecord(
+            estate_id=estate_id,
+            key=f"{owner}-{name}",
+            name=f"{owner}/{name}",
+        )
+        repository = RepositoryRecord(
+            owner=owner,
+            name=name,
+            default_branch="main",
+        )
+        session.add_all([project, repository])
+        await session.flush()
+        session.add(
+            ComponentRecord(
+                project_id=project.id,
+                repository_id=repository.id,
+                key="component",
+                name="Component",
+                type="service",
+                lifecycle="active",
+            )
+        )
+        await session.flush()
+        return repository.id
+
+
 async def _run_two_syncs(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> list[SyncResult | BaseException]:
@@ -198,6 +236,57 @@ async def test_overlapping_syncs_adopt_an_unowned_row_once(
             )
         )
         assert len(rows.all()) == 1, "The race must leave exactly one Silver row"
+
+
+@pytest.mark.asyncio
+async def test_overlapping_syncs_across_both_phases_do_not_deadlock(
+    session_factory: async_sessionmaker[AsyncSession],
+    create_estates: tuple[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Claiming one row while removing the other cannot deadlock.
+
+    Each estate names one of two unowned, catalogue-linked rows, so each claims
+    its own row and removes the other's. Ordering only the catalogue phase
+    would leave the two estates taking those four locks in opposite orders, and
+    Postgres would abort one of them.
+    """
+    estate_a_id, estate_b_id = create_estates
+    _require_overlapping_transactions(session_factory)
+    alpha_id = await _seed_estate_naming(
+        session_factory, estate_a_id, "leynos", "alpha"
+    )
+    beta_id = await _seed_estate_naming(session_factory, estate_b_id, "leynos", "beta")
+    async with session_factory() as session, session.begin():
+        session.add_all(
+            [
+                Repository(
+                    github_owner="leynos",
+                    github_name="alpha",
+                    default_branch="main",
+                    catalogue_repository_id=alpha_id,
+                    ingestion_enabled=True,
+                ),
+                Repository(
+                    github_owner="leynos",
+                    github_name="beta",
+                    default_branch="main",
+                    catalogue_repository_id=beta_id,
+                    ingestion_enabled=True,
+                ),
+            ]
+        )
+    _synchronise_silver_load(monkeypatch)
+
+    completed = _completed(await _run_two_syncs(session_factory))
+
+    assert len(completed) == 2, "Both overlapping syncs must finish"
+    alpha = await fetch_silver_repo(session_factory, "leynos", "alpha")
+    beta = await fetch_silver_repo(session_factory, "leynos", "beta")
+    assert alpha is not None, "The alpha row must still exist"
+    assert beta is not None, "The beta row must still exist"
+    assert alpha.estate_id == estate_a_id, "Estate A must keep the row it names"
+    assert beta.estate_id == estate_b_id, "Estate B must keep the row it names"
 
 
 @pytest.mark.asyncio

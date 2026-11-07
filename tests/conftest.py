@@ -36,6 +36,23 @@ except ImportError:  # pragma: no cover - optional dependency
 logger = get_logger(__name__)
 
 
+class ExternalPostgresUnderXdistError(RuntimeError):
+    """Raised when parallel workers would share one external Postgres.
+
+    The fixture drops the ``public`` schema before every test, so workers would
+    destroy each other's state. Keeping the diagnostic here leaves the raise
+    site a single message object.
+    """
+
+    def __init__(self) -> None:
+        """Explain the unsafe configuration and the serial command to use."""
+        super().__init__(
+            "GHILLIE_TEST_DB names an external Postgres, and the fixture resets "
+            "its public schema per test, which is unsafe under pytest-xdist. "
+            "Run serially, for example: uv run pytest -q tests/"
+        )
+
+
 def _external_postgres_url() -> str | None:
     """Return an explicitly configured Postgres URL, if any.
 
@@ -135,6 +152,8 @@ async def _setup_external_postgres(url: str) -> AsyncEngine:
     reached when ``GHILLIE_TEST_DB`` names a URL, so the destructive reset is
     always an explicit opt-in.
     """
+    if os.getenv("PYTEST_XDIST_WORKER") is not None:
+        raise ExternalPostgresUnderXdistError
     engine = create_async_engine(url)
     try:
         async with engine.begin() as connection:

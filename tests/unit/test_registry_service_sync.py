@@ -365,22 +365,35 @@ async def test_sync_reports_cross_estate_conflict(
 
 @pytest.mark.asyncio
 async def test_sync_writes_slugs_in_sorted_order(
+    session_factory: async_sessionmaker[AsyncSession],
     wildside_catalogue_path: Path,
     import_and_sync: typ.Callable[[Path, str], typ.Awaitable[SyncResult]],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Slugs are written in one stable order, whatever the catalogue order.
+    """Both write phases take their row locks in one sorted order.
 
-    Two estates syncing the same repositories take row locks in the order this
-    loop visits them. Catalogue order is not guaranteed to agree between
-    estates, and disagreeing orders let each sync hold a row the other waits
-    for, which Postgres resolves by aborting one of them. Sorting makes every
-    sync take its locks in the same order.
+    Two estates syncing the same repositories take row locks in the order the
+    sync visits them. Catalogue order is not guaranteed to agree between
+    estates, and two separate phases would give claims and removals two
+    different orders, so either can hold a row the other waits for. One sorted
+    pass over the union, flushing each slug, keeps every sync in one order.
     """
+    async with session_factory() as session, session.begin():
+        # A row absent from the catalogue, so the removal phase is exercised
+        # alongside the catalogue phase in the same run.
+        session.add(
+            Repository(
+                github_owner="leynos",
+                github_name="removed",
+                default_branch="main",
+            )
+        )
+
     catalogue_order: list[str] = []
     written: list[str] = []
     original_map = sync_module._catalogue_repository_map
     original_sync = sync_module._sync_one_repository
+    original_remove = sync_module._deactivate_removed_repository
 
     def _reversed_map(
         projects: typ.Iterable[ProjectRecord],
@@ -398,8 +411,13 @@ async def test_sync_writes_slugs_in_sorted_order(
         written.append(slug)
         await original_sync(typ.cast("typ.Any", context), slug, cat_repo)
 
+    def _record_removal(context: object, slug: str) -> None:
+        written.append(slug)
+        original_remove(typ.cast("typ.Any", context), slug)
+
     monkeypatch.setattr(sync_module, "_catalogue_repository_map", _reversed_map)
     monkeypatch.setattr(sync_module, "_sync_one_repository", _record)
+    monkeypatch.setattr(sync_module, "_deactivate_removed_repository", _record_removal)
 
     await import_and_sync(wildside_catalogue_path, "sorted-order")
 
@@ -407,8 +425,9 @@ async def test_sync_writes_slugs_in_sorted_order(
     assert catalogue_order != sorted(catalogue_order), (
         "This test needs an unsorted catalogue order to be meaningful"
     )
-    assert written == sorted(catalogue_order), (
-        "Slugs must be written in sorted order, not catalogue order"
+    assert "leynos/removed" in written, "The removal phase must be exercised"
+    assert written == sorted(written), (
+        "Both phases must write in one sorted order, not catalogue then removal"
     )
 
 
