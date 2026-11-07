@@ -67,7 +67,10 @@ def _counts(
     """Return project/component/edge/repository counts from the database."""
 
     async def _inner() -> tuple[int, int, int, int]:
-        """Query the project, component, edge and repository row counts."""
+        """Count distinct project IDs and the component, edge and repository rows.
+
+        Project IDs are counted from the component rows.
+        """
         async with session_factory() as session:
             projects = (
                 await session.scalars(select(ComponentRecord.project_id).distinct())
@@ -123,7 +126,7 @@ def repository_present(import_context: ImportContext) -> None:
     """Ensure the repository row exists with the expected default branch."""
 
     async def _assert_repo() -> None:
-        """Assert the leynos/wildside repository exists on the main branch."""
+        """Assert the leynos/wildside repository exists and defaults to ``main``."""
         async with import_context["session_factory"]() as session:
             repo = await session.scalar(
                 select(RepositoryRecord).where(

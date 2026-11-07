@@ -152,8 +152,9 @@ class RawEventTransformer:
     ) -> EventFact:
         """Return the EventFact for a raw event, inserting it if none exists.
 
-        Raise ``RawEventTransformError`` if an existing fact's payload differs
-        from the raw event's payload.
+        Raise ``RawEventTransformError`` for a payload mismatch found by the
+        initial lookup. After an insert conflict, return an existing fact
+        without comparing payloads.
         """
         raw_event_id = raw_event.id
 

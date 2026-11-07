@@ -265,7 +265,10 @@ def raw_events_exist(ingestion_context: IngestionContext, slug: str) -> None:
     owner, name = parse_repo_slug(slug)
 
     async def _assert() -> None:
-        """Assert Bronze raw events exist with the expected types and payloads."""
+        """Assert the repository's event types and selected payload fields.
+
+        Check the payload fields of one event of each type.
+        """
         async with ingestion_context["session_factory"]() as session:
             events = (
                 await session.scalars(

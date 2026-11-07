@@ -400,7 +400,10 @@ def generate_reports_for_estate_job(
         session_factory: SessionFactory,
         as_of: dt.datetime | None,
     ) -> list[str | None]:
-        """Generate reports for the estate and return their IDs, or None."""
+        """Generate reports for the estate and return a list of report IDs.
+
+        Entries are ``None`` for repositories with no events.
+        """
         reports = await _generate_reports_for_estate_async(
             service=service,
             session_factory=session_factory,
