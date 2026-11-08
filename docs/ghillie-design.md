@@ -722,9 +722,11 @@ path are recorded in `docs/adr-003-adopt-hecate-for-architecture-checks.md`.
 
 Docstring coverage is enforced with Interrogate through `make interrogate`,
 which also runs as part of `make lint`. The target fails on any undocumented
-definition under `ghillie`, `scripts`, and `tests`, including a lone gap that a
-rounded coverage percentage would hide, so every new definition needs a
-docstring.
+definition that Interrogate scans under `ghillie`, `scripts`, and `tests`
+(Interrogate's default exclusions apply), including a lone gap that a rounded
+coverage percentage would hide, so every new definition in scope needs a
+docstring. The developers guide records the scope, the Python 3.14 requirement,
+and the failure criteria.
 
 **Design decisions:**
 

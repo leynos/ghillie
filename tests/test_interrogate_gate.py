@@ -29,7 +29,7 @@ _CLEAN_REPORT = (
     "| ghillie/app.py | COVERED |\nRESULT: PASSED (minimum: 100.0%, actual: 100.0%)\n"
 )
 _MISSED_REPORT = (
-    "| ghillie/app.py |  MISSED |\nRESULT: PASSED (minimum: 100.0%, actual: 99.6%)\n"
+    "| ghillie/app.py |  MISSED |\nRESULT: PASSED (minimum: 100.0%, actual: 100.0%)\n"
 )
 
 
@@ -45,15 +45,20 @@ def _stub(tmp_path: Path, report: str, exit_code: int) -> Path:
     return script
 
 
-def _run_gate(stub: Path) -> subprocess.CompletedProcess[str]:
-    """Run ``make interrogate`` with the Interrogate command replaced by *stub*."""
+def _run_make(stub: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
+    """Run make with the Interrogate command replaced by *stub*."""
     assert MAKE is not None  # narrowed by the module skip marker
     return subprocess.run(  # noqa: S603  # fixed arguments, no shell
-        [MAKE, "-s", "-C", str(REPO_ROOT), "interrogate", f"INTERROGATE={stub}"],
+        [MAKE, "-s", "-C", str(REPO_ROOT), *arguments, f"INTERROGATE={stub}"],
         capture_output=True,
         text=True,
         check=False,
     )
+
+
+def _run_gate(stub: Path) -> subprocess.CompletedProcess[str]:
+    """Run ``make interrogate`` with the Interrogate command replaced by *stub*."""
+    return _run_make(stub, "interrogate")
 
 
 @pytest.fixture
@@ -94,16 +99,31 @@ def test_tool_failure_status_propagates(
     assert "Error 3" in result.stderr
 
 
-def test_lint_runs_the_gate() -> None:
-    """A dry run of ``make lint`` reaches the interrogate recipe."""
-    assert MAKE is not None  # narrowed by the module skip marker
-    marker = "interrogate-gate-marker"
-    result = subprocess.run(  # noqa: S603  # fixed arguments, no shell
-        [MAKE, "-n", "-C", str(REPO_ROOT), "lint", f"INTERROGATE={marker}"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+def test_lint_fails_when_the_gate_fails(
+    stub_factory: cabc.Callable[[str, int], Path],
+) -> None:
+    """``make lint`` stops with a failure when the docstring gate fails.
+
+    The architecture check is marked up to date, so the run reaches the gate
+    without building the project; a gate failure then ends the run before any
+    other lint tool starts.
+    """
+    stub = stub_factory(_MISSED_REPORT, 0)
+
+    result = _run_make(stub, "-o", "check-architecture", "lint")
+
+    assert result.returncode != 0
+    assert "undocumented definitions remain" in result.stderr
+
+
+def test_lint_passes_the_gate_before_other_tools(
+    stub_factory: cabc.Callable[[str, int], Path],
+) -> None:
+    """A dry run of ``make lint`` shows the gate before the other lint tools."""
+    stub = stub_factory(_CLEAN_REPORT, 0)
+
+    result = _run_make(stub, "-n", "-o", "check-architecture", "lint")
 
     assert result.returncode == 0, result.stderr
-    assert marker in result.stdout
+    assert str(stub) in result.stdout
+    assert result.stdout.index(str(stub)) < result.stdout.index("ruff")
