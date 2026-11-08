@@ -358,6 +358,30 @@ per pull request.
       with D21 (one structured line per mutation, implemented in the estate
       service that PR-B adds) and D27 (metrics and tracing are a platform
       decision), per the plan's prohibition on new runtime dependencies.
+- [x] (2026-11-08) The D27 rebuttal above is kept as the historical record for
+      the estate-service line. The follow-up disposition is separate: direct
+      registry-sync observability — a terminal event, bounded-cardinality
+      reliability and transition metrics, catalogue and Silver tracing, and
+      tests for the success, conflict, dry-run, and database-failure paths — is
+      deferred to issue #219 and is not delivered by this PR. CodeRabbit
+      accepted that disposition in the review conversation on `fb6ef25`.
+- [x] (2026-11-08) The formal review of `fb6ef25` (5815901876) re-raised three
+      pre-merge rows and one inline request, all actioned. Testing (Overall):
+      `test_external_postgres_setup_raises_under_xdist_before_connecting`
+      proves the guard raises before an engine is built, and
+      `test_external_postgres_setup_works_serially` proves serial setup against
+      a disposable PostgreSQL 17 container (27 passed, 0 skipped with
+      `GHILLIE_TEST_DB`). Domain Architecture: a lost adoption claim now
+      re-reads the row and reapplies the policy, so a claim lost to this same
+      estate continues the sync while a claim lost to another estate is still
+      reported (`test_sync_continues_after_losing_a_claim_to_its_own_estate`).
+      The re-read passes `populate_existing=True`: a plain select returned the
+      cached pre-claim row, which both hid the conflict and let the losing
+      sync overwrite the winner.
+      `test_overlapping_syncs_adopt_an_unowned_row_once` caught that; its unit
+      counterpart now loads the row in the sync's own session, so it
+      reproduces the staleness without Postgres. Inline: the dated #219 entry
+      above. Observability remains deferred to #219.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
