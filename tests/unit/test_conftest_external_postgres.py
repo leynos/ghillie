@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 
 import pytest
 from sqlalchemy import text
@@ -39,11 +40,12 @@ def test_external_postgres_setup_raises_under_xdist_before_connecting(
     conftest._external_postgres_url() is None,
     reason="needs GHILLIE_TEST_DB pointing at a disposable Postgres",
 )
-def test_external_postgres_setup_works_serially(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+@pytest.mark.skipif(
+    os.getenv("PYTEST_XDIST_WORKER") is not None,
+    reason="the external Postgres fixture resets a shared schema; run serially",
+)
+def test_external_postgres_setup_works_serially() -> None:
     """A serial run resets the schema and initialises storage."""
-    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
     url = conftest._external_postgres_url()
     assert url is not None, "The skip guard guarantees a URL"
 

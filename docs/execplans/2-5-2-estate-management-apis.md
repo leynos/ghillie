@@ -398,6 +398,15 @@ per pull request.
       and `test_registry_service_sync_adoption.py` now annotate with
       `collections.abc` members instead of the deprecated `typing` aliases, as
       a path instruction requires. No behaviour changed.
+- [x] (2026-11-08) The queued formal review of `fde7289` raised two findings,
+      both actioned. The serial external-Postgres test deleted
+      `PYTEST_XDIST_WORKER`, which defeats the conftest guard and would reset a
+      shared schema from a worker; it now skips under xdist and no longer
+      clears the variable. The same-estate adoption test loaded its stale view
+      from a separate session, so it could not detect a lost
+      `populate_existing`. It now loads through the sync's session and has the
+      winner link the row; disabling `populate_existing` makes it fail on the
+      preserved ingestion flag, so the reload is now guarded directly.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.

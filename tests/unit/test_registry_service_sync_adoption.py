@@ -159,12 +159,20 @@ async def test_sync_continues_after_losing_a_claim_to_its_own_estate(
         estate_id: str | None,
         catalogue_slugs: cabc.Iterable[str],
     ) -> dict[str, Repository]:
-        """Return the pre-claim view after this estate has claimed the row."""
-        async with session_factory() as stale_session:
-            stale = await original(stale_session, estate_id, catalogue_slugs)
+        """Return the pre-claim view after this estate has claimed the row.
+
+        The stale view is loaded through the sync's own ``session`` so the
+        pre-claim row sits in the identity map. The winner also links the row,
+        so the stale unlinked view and the committed linked view disagree about
+        more than ownership: a reload that returns the cached copy adopts and
+        re-enables the row, while the committed copy preserves the operator's
+        disabled flag.
+        """
+        stale = await original(session, estate_id, catalogue_slugs)
         async with session_factory() as winner_session:
             winner = await original(winner_session, estate_a_id, catalogue_slugs)
             winner["leynos/wildside"].estate_id = estate_a_id
+            winner["leynos/wildside"].catalogue_repository_id = "winner-link"
             await winner_session.commit()
         return stale
 
@@ -182,4 +190,10 @@ async def test_sync_continues_after_losing_a_claim_to_its_own_estate(
     assert repo.estate_id == estate_a_id, "This estate's claim must stand"
     assert repo.catalogue_repository_id is not None, (
         "The sync must still link the row it adopted"
+    )
+    assert repo.ingestion_enabled is False, (
+        "The reload must see the winner's link and preserve the disabled flag"
+    )
+    assert "leynos/wildside" in result.repositories_left_disabled, (
+        "A linked row left disabled must appear in the preview"
     )
