@@ -28,6 +28,7 @@ from ghillie.silver.storage import Repository
 from tests.unit.registry_service_sync_helpers import fetch_silver_repo
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
     from pathlib import Path
 
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -83,7 +84,7 @@ def _synchronise_silver_load(monkeypatch: pytest.MonkeyPatch) -> None:
     async def _load_then_wait(
         session: AsyncSession,
         estate_id: str | None,
-        catalogue_slugs: typ.Iterable[str],
+        catalogue_slugs: cabc.Iterable[str],
     ) -> dict[str, Repository]:
         rows = await original(session, estate_id, catalogue_slugs)
         await both_loaded.wait()

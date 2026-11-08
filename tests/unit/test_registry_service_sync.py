@@ -24,6 +24,7 @@ from tests.unit.registry_service_sync_helpers import (
 )
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
     from pathlib import Path
 
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -36,7 +37,7 @@ if typ.TYPE_CHECKING:
 async def import_and_sync(
     session_factory: async_sessionmaker[AsyncSession],
     registry_service: RepositoryRegistryService,
-) -> typ.Callable[[Path, str], typ.Awaitable[SyncResult]]:
+) -> cabc.Callable[[Path, str], cabc.Awaitable[SyncResult]]:
     """Return a factory for importing catalogue and running sync."""
 
     async def _import_and_sync(
@@ -59,7 +60,7 @@ async def import_and_sync(
 async def test_sync_creates_silver_repository_from_catalogue(
     session_factory: async_sessionmaker[AsyncSession],
     registry_service: RepositoryRegistryService,
-    import_and_sync: typ.Callable[[Path, str], typ.Awaitable[SyncResult]],
+    import_and_sync: cabc.Callable[[Path, str], cabc.Awaitable[SyncResult]],
     wildside_catalogue_path: Path,
 ) -> None:
     """Catalogue repositories appear in Silver after sync."""
@@ -119,7 +120,7 @@ async def test_sync_updates_existing_silver_repository(
 async def test_sync_disables_ingestion_for_inactive_catalogue_repository(
     session_factory: async_sessionmaker[AsyncSession],
     registry_service: RepositoryRegistryService,
-    import_and_sync: typ.Callable[[Path, str], typ.Awaitable[SyncResult]],
+    import_and_sync: cabc.Callable[[Path, str], cabc.Awaitable[SyncResult]],
     wildside_catalogue_path: Path,
 ) -> None:
     """When a catalogue repository is inactive, Silver ingestion is disabled."""
@@ -148,7 +149,7 @@ async def test_sync_disables_ingestion_for_inactive_catalogue_repository(
 async def test_sync_deactivates_removed_catalogue_repository(
     session_factory: async_sessionmaker[AsyncSession],
     registry_service: RepositoryRegistryService,
-    import_and_sync: typ.Callable[[Path, str], typ.Awaitable[SyncResult]],
+    import_and_sync: cabc.Callable[[Path, str], cabc.Awaitable[SyncResult]],
     wildside_catalogue_path: Path,
 ) -> None:
     """Repositories removed from catalogue get ingestion disabled."""
@@ -176,7 +177,7 @@ async def test_sync_deactivates_removed_catalogue_repository(
 async def test_sync_does_not_count_already_disabled_removed_repository(
     session_factory: async_sessionmaker[AsyncSession],
     registry_service: RepositoryRegistryService,
-    import_and_sync: typ.Callable[[Path, str], typ.Awaitable[SyncResult]],
+    import_and_sync: cabc.Callable[[Path, str], cabc.Awaitable[SyncResult]],
     wildside_catalogue_path: Path,
 ) -> None:
     """A removed row that was already disabled is not a new deactivation.
@@ -253,7 +254,7 @@ async def test_sync_raises_for_nonexistent_estate(
 @pytest.mark.asyncio
 async def test_sync_copies_documentation_paths_from_catalogue(
     registry_service: RepositoryRegistryService,
-    import_and_sync: typ.Callable[[Path, str], typ.Awaitable[SyncResult]],
+    import_and_sync: cabc.Callable[[Path, str], cabc.Awaitable[SyncResult]],
     wildside_catalogue_path: Path,
 ) -> None:
     """Documentation paths are copied from catalogue to Silver."""
@@ -273,7 +274,7 @@ async def test_sync_copies_documentation_paths_from_catalogue(
 async def test_sync_preserves_operator_disable(
     session_factory: async_sessionmaker[AsyncSession],
     registry_service: RepositoryRegistryService,
-    import_and_sync: typ.Callable[[Path, str], typ.Awaitable[SyncResult]],
+    import_and_sync: cabc.Callable[[Path, str], cabc.Awaitable[SyncResult]],
     wildside_catalogue_path: Path,
 ) -> None:
     """A later import and sync must not re-enable an operator-disabled repo."""
@@ -324,7 +325,7 @@ def _catalogue_naming(names: tuple[str, ...]) -> str:
 async def test_sync_previews_only_disabled_linked_repositories(
     session_factory: async_sessionmaker[AsyncSession],
     registry_service: RepositoryRegistryService,
-    import_and_sync: typ.Callable[[Path, str], typ.Awaitable[SyncResult]],
+    import_and_sync: cabc.Callable[[Path, str], cabc.Awaitable[SyncResult]],
     tmp_path: Path,
 ) -> None:
     """The preview names exactly the linked rows sync left disabled.
@@ -367,7 +368,7 @@ async def test_sync_previews_only_disabled_linked_repositories(
 async def test_sync_keeps_readded_repository_disabled(
     session_factory: async_sessionmaker[AsyncSession],
     registry_service: RepositoryRegistryService,
-    import_and_sync: typ.Callable[[Path, str], typ.Awaitable[SyncResult]],
+    import_and_sync: cabc.Callable[[Path, str], cabc.Awaitable[SyncResult]],
     wildside_catalogue_path: Path,
 ) -> None:
     """A repository removed and re-added stays disabled until an operator acts."""
@@ -465,7 +466,7 @@ async def test_sync_reports_cross_estate_conflict(
 async def test_sync_writes_slugs_in_sorted_order(
     session_factory: async_sessionmaker[AsyncSession],
     wildside_catalogue_path: Path,
-    import_and_sync: typ.Callable[[Path, str], typ.Awaitable[SyncResult]],
+    import_and_sync: cabc.Callable[[Path, str], cabc.Awaitable[SyncResult]],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Both write phases take their row locks in one sorted order.
@@ -494,7 +495,7 @@ async def test_sync_writes_slugs_in_sorted_order(
     original_remove = sync_module._deactivate_removed_repository
 
     def _reversed_map(
-        projects: typ.Iterable[ProjectRecord],
+        projects: cabc.Iterable[ProjectRecord],
     ) -> dict[str, RepositoryRecord]:
         """Offer the catalogue in reverse order to prove the loop sorts."""
         mapped = dict(reversed(list(original_map(projects).items())))

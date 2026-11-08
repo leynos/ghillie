@@ -19,6 +19,7 @@ from tests.fixtures.specs import RepositoryCreateSpec
 from tests.unit.registry_service_sync_helpers import fetch_silver_repo
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
     from pathlib import Path
 
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -94,7 +95,7 @@ async def test_sync_reports_conflict_when_adoption_loses_a_race(
     async def _racing_load(
         session: AsyncSession,
         estate_id: str | None,
-        catalogue_slugs: typ.Iterable[str],
+        catalogue_slugs: cabc.Iterable[str],
     ) -> dict[str, Repository]:
         """Load in the sync's own session, then let another estate claim it.
 
@@ -156,7 +157,7 @@ async def test_sync_continues_after_losing_a_claim_to_its_own_estate(
     async def _racing_load(
         session: AsyncSession,
         estate_id: str | None,
-        catalogue_slugs: typ.Iterable[str],
+        catalogue_slugs: cabc.Iterable[str],
     ) -> dict[str, Repository]:
         """Return the pre-claim view after this estate has claimed the row."""
         async with session_factory() as stale_session:

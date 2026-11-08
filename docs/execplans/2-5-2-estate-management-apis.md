@@ -390,6 +390,14 @@ per pull request.
       `tests/unit/test_registry_service_sync_adoption.py`, and the lost-claim
       reconciliation moved into `_reconcile_lost_claim`. `cs check` now scores
       both files 10.00.
+- [x] (2026-11-08) Reconciled the three inline findings still open from the
+      2026-11-07 review round. The users' guide now states that an external
+      Postgres `GHILLIE_TEST_DB` must run serially and gives the
+      `uv run pytest -q tests/` command. The test helpers in
+      `test_registry_service_sync.py`, `test_registry_service_sync_concurrency.py`,
+      and `test_registry_service_sync_adoption.py` now annotate with
+      `collections.abc` members instead of the deprecated `typing` aliases, as
+      a path instruction requires. No behaviour changed.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.

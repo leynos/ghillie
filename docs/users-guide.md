@@ -594,8 +594,16 @@ back to SQLite to keep the suite runnable. To force SQLite explicitly, set
 `GHILLIE_TEST_DB=sqlite` before invoking `make test`. To run against an
 existing Postgres instead, set `GHILLIE_TEST_DB` to a
 `postgresql+asyncpg://user:password@host:port/database` URL; the fixtures reset
-that database's `public` schema per test, so point it at a disposable one. See
-`docs/testing-sqlalchemy-with-pytest-and-py-pglite.md` for full guidance.
+that database's `public` schema per test, so point it at a disposable one. Run
+that backend serially, because `make test` uses `pytest -n auto` and parallel
+workers would each reset the same schema:
+
+```bash
+GHILLIE_TEST_DB=postgresql+asyncpg://user:password@host:port/database \
+    uv run pytest -q tests/
+```
+
+See `docs/testing-sqlalchemy-with-pytest-and-py-pglite.md` for full guidance.
 
 ## GitHub ingestion observability (Phase 1.3.d)
 
