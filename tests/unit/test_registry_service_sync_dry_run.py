@@ -136,12 +136,15 @@ class _FlushFailingSession:
     """Session proxy whose flush reports a constraint violation."""
 
     def __init__(self, session: AsyncSession) -> None:
+        """Wrap the session the sync will drive."""
         self._session = session
 
     def __getattr__(self, name: str) -> object:
+        """Delegate every other attribute to the wrapped session."""
         return getattr(self._session, name)
 
     async def flush(self) -> None:
+        """Report a constraint violation the way a database would."""
         msg = "UNIQUE constraint failed: repositories.github_owner"
         raise IntegrityError(msg, {}, Exception(msg))
 
@@ -150,6 +153,7 @@ class _FlushFailingSession:
 async def _flush_failing_factory(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> typ.AsyncIterator[_FlushFailingSession]:
+    """Yield a session whose flush raises a constraint violation."""
     async with session_factory() as session:
         yield _FlushFailingSession(session)
 

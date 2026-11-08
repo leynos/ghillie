@@ -25,6 +25,7 @@ def test_external_postgres_setup_raises_under_xdist_before_connecting(
     created: list[tuple[object, ...]] = []
 
     def _record_engine(*args: object, **kwargs: object) -> object:
+        """Record any engine construction, which the guard must never reach."""
         created.append(args)
         return object()
 
@@ -50,6 +51,7 @@ def test_external_postgres_setup_works_serially() -> None:
     assert url is not None, "The skip guard guarantees a URL"
 
     async def _public_table_count() -> int:
+        """Set up the external database and count its public tables."""
         engine = await conftest._setup_external_postgres(url)
         try:
             async with engine.connect() as connection:

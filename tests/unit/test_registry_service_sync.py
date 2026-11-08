@@ -507,10 +507,12 @@ async def test_sync_writes_slugs_in_sorted_order(
         slug: str,
         cat_repo: RepositoryRecord,
     ) -> None:
+        """Record the slug before delegating to the real per-slug sync."""
         written.append(slug)
         await original_sync(typ.cast("typ.Any", context), slug, cat_repo)
 
     def _record_removal(context: object, slug: str) -> None:
+        """Record the slug before delegating to the real removal path."""
         written.append(slug)
         original_remove(typ.cast("typ.Any", context), slug)
 

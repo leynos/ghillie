@@ -86,6 +86,7 @@ def _synchronise_silver_load(monkeypatch: pytest.MonkeyPatch) -> None:
         estate_id: str | None,
         catalogue_slugs: cabc.Iterable[str],
     ) -> dict[str, Repository]:
+        """Load the rows, then wait for the other sync to have loaded too."""
         rows = await original(session, estate_id, catalogue_slugs)
         await both_loaded.wait()
         return rows
@@ -156,6 +157,7 @@ async def _run_two_syncs(
     """Sync estate-a and estate-b at the same time and collect both outcomes."""
 
     async def _sync(estate_key: str) -> SyncResult:
+        """Sync one estate through a real registry service."""
         service = RepositoryRegistryService(session_factory, session_factory)
         return await service.sync_from_catalogue(estate_key)
 

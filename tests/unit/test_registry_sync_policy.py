@@ -21,6 +21,7 @@ from ghillie.registry.policy import (
 
 
 def _state(*, linked: bool, owned: bool, enabled: bool) -> SilverIngestionState:
+    """Build the policy's input state from its three booleans."""
     return SilverIngestionState(
         is_linked=linked,
         is_owned_by_estate=owned,

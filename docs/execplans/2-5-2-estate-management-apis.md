@@ -407,6 +407,11 @@ per pull request.
       `populate_existing`. It now loads through the sync's session and has the
       winner link the row; disabling `populate_existing` makes it fail on the
       preserved ingestion flag, so the reload is now guarded directly.
+- [x] (2026-11-08) Replayed the branch onto `main` at `d5bf67b`, which added
+      the `interrogate` docstring gate to `make lint` (#226). CI evaluates the
+      merged tree, so the 27 undocumented helper definitions this branch adds
+      across six test modules are now documented. `make interrogate` reports
+      100.0%.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.

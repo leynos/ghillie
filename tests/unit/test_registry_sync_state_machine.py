@@ -143,20 +143,24 @@ class EstateSyncMachine(RuleBasedStateMachine):
     # -- database helpers -------------------------------------------------
 
     async def _create_engine(self) -> AsyncEngine:
+        """Create a fileless SQLite engine with both schemas present."""
         engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool)
         await init_catalogue_storage(engine)
         await init_silver_storage(engine)
         return engine
 
     def _next_commit(self) -> str:
+        """Mint a unique catalogue commit SHA for the next import."""
         self._commits += 1
         return f"commit-{self._commits}"
 
     async def _estate_id(self, key: str) -> str | None:
+        """Return the database id for an estate key, if the estate exists."""
         async with self._session_factory() as session:
             return await session.scalar(select(Estate.id).where(Estate.key == key))
 
     async def _silver_row(self, index: int) -> SilverRepository | None:
+        """Return the Silver row for a repository index, if one exists."""
         owner, name = _REPOSITORIES[index]
         async with self._session_factory() as session:
             return await session.scalar(
@@ -167,9 +171,11 @@ class EstateSyncMachine(RuleBasedStateMachine):
             )
 
     def _assert_matches_db(self) -> None:
+        """Run the model comparison on the machine's event loop."""
         self._runner.run(self._check_model())
 
     async def _check_model(self) -> None:
+        """Assert that every Silver row agrees with the replayed model."""
         this_id = await self._estate_id(_THIS_ESTATE)
         other_id = await self._estate_id(_OTHER_ESTATE)
         for index, slug in enumerate(_SLUGS):
@@ -331,22 +337,26 @@ class EstateSyncMachine(RuleBasedStateMachine):
     def _replay_conflict(
         self, index: int, expected: _ExpectedRepository, result: SyncResult
     ) -> None:
+        """Replay a conflict caused by another estate owning the row."""
         if not expected.in_catalogue:
             return
         assert _SLUGS[index] in result.repositories_conflicted, _SLUGS[index]
         self.transitions[IngestionTransition.CONFLICT] += 1
 
     def _replay_unlinked(self, index: int, expected: _ExpectedRepository) -> None:
+        """Replay adoption of an unlinked row, or its preservation."""
         if expected.in_catalogue:
             self._adopt(index)
         elif expected.owner == "this":
             self.transitions[IngestionTransition.PRESERVE] += 1
 
     def _replay_removed(self, expected: _ExpectedRepository) -> None:
+        """Replay disabling a repository removed from the catalogue."""
         expected.enabled = False
         self.transitions[IngestionTransition.DISABLE_REMOVED] += 1
 
     def _adopt(self, index: int) -> None:
+        """Replay adoption of an unowned row by this estate."""
         expected = self._model[index]
         expected.exists = True
         expected.owner = "this"
@@ -355,6 +365,7 @@ class EstateSyncMachine(RuleBasedStateMachine):
         self.transitions[IngestionTransition.ADOPT] += 1
 
     def _preserve_or_disable_inactive(self, index: int) -> None:
+        """Replay preservation, or deactivation of an inactive catalogue entry."""
         expected = self._model[index]
         if expected.active:
             self.transitions[IngestionTransition.PRESERVE] += 1
@@ -365,11 +376,13 @@ class EstateSyncMachine(RuleBasedStateMachine):
     # -- async rule bodies ------------------------------------------------
 
     async def _import_subset(self, subset: frozenset[int]) -> None:
+        """Import the given repository subset for this estate."""
         await self._importer.import_catalogue(
             _build_catalogue(subset), commit_sha=self._next_commit()
         )
 
     async def _sync_other_estate(self) -> None:
+        """Import and sync the other estate's catalogue."""
         await self._other_importer.import_catalogue(
             _build_catalogue(self._other_catalogue), commit_sha=self._next_commit()
         )
@@ -377,6 +390,7 @@ class EstateSyncMachine(RuleBasedStateMachine):
         assert result.repositories_conflicted == [], result.repositories_conflicted
 
     async def _mark_inactive(self, index: int) -> None:
+        """Mark a catalogue repository inactive between syncs."""
         owner, name = _REPOSITORIES[index]
         async with self._session_factory() as session, session.begin():
             record = await session.scalar(
@@ -389,6 +403,7 @@ class EstateSyncMachine(RuleBasedStateMachine):
             record.is_active = False
 
     async def _create_ad_hoc(self, index: int) -> None:
+        """Insert a Silver row that no import created."""
         owner, name = _REPOSITORIES[index]
         async with self._session_factory() as session, session.begin():
             session.add(
@@ -407,6 +422,7 @@ def test_sync_transitions_are_modelled() -> None:
     transitions: collections.Counter[IngestionTransition] = collections.Counter()
 
     def machine_factory() -> EstateSyncMachine:
+        """Build a machine bound to the shared transition counter."""
         return EstateSyncMachine(transitions)
 
     run_state_machine_as_test(
