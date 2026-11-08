@@ -96,6 +96,7 @@ def test_use_context_restores_context_on_exception() -> None:
         assert get_current_context() is outer_ctx
 
         def _raise_in_inner_context() -> None:
+            """Enter the inner context and raise, to exercise restoration."""
             with use_context(inner_ctx):
                 assert get_current_context() is inner_ctx
                 raise ValueError("boom")

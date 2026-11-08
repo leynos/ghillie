@@ -20,6 +20,7 @@ _PR_DATABASE_ID = 17
 
 
 def _repo() -> RepositoryInfo:
+    """Return a repository fixture with documentation paths configured."""
     return RepositoryInfo(
         id="repo-1",
         owner="octo",
@@ -34,9 +35,16 @@ def _repo() -> RepositoryInfo:
 def _make_client(
     payloads: list[tuple[int, dict[str, typ.Any]]],
 ) -> tuple[GitHubGraphQLClient, httpx.AsyncClient, list[dict[str, typ.Any]]]:
+    """Build a GraphQL client that replays canned HTTP responses.
+
+    Each request consumes the next ``(status, payload)`` pair from
+    ``payloads``. The decoded JSON body of every request is appended to
+    the returned ``calls`` list.
+    """
     calls: list[dict[str, typ.Any]] = []
 
     def _handler(request: httpx.Request) -> httpx.Response:
+        """Record the request body and return the next canned response."""
         body = json.loads(request.content.decode("utf-8"))
         calls.append(body)
         status, payload = payloads[len(calls) - 1]

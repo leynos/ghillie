@@ -50,6 +50,7 @@ async def import_and_sync(
         estate_key: str = "test",
         estate_name: str = "Test Estate",
     ) -> SyncResult:
+        """Import the catalogue at a path and return its sync result."""
         importer = CatalogueImporter(
             session_factory, estate_key=estate_key, estate_name=estate_name
         )

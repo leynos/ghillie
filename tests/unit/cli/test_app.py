@@ -11,6 +11,7 @@ from ghillie.cli.app import app
 
 
 def _command_names(command_app: App) -> set[str]:
+    """Return the non-flag command names registered on the app."""
     return {
         str(item)
         for item in command_app

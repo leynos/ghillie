@@ -30,6 +30,10 @@ async def _insert_event_fact(
     raw_event_id: int,
     payload: dict[str, JSONValue] | None = None,
 ) -> None:
+    """Insert an `EventFact` for a raw event.
+
+    The default payload is used when `payload` is `None` or empty.
+    """
     async with session_factory() as session, session.begin():
         fact = EventFact(
             raw_event_id=raw_event_id,
@@ -47,6 +51,7 @@ async def _verify_transformation_failure(
     raw_event: RawEvent,
     expected_error_keyword: str,
 ) -> None:
+    """Assert that transforming the raw event fails and records the error."""
     processed_ids = await transformer.process_raw_event_ids([raw_event.id])
     assert raw_event.id not in processed_ids
 
@@ -68,6 +73,7 @@ def test_transformer_is_idempotent(
     occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.UTC)
 
     async def _ingest_and_transform() -> RawEvent:
+        """Ingest a raw event and run both transform passes over it."""
         raw_event = await writer.ingest(
             RawEventEnvelope(
                 source_system="github",
@@ -85,6 +91,7 @@ def test_transformer_is_idempotent(
     raw_event = asyncio.run(_ingest_and_transform())
 
     async def _assert_state() -> None:
+        """Assert one fact is stored and the raw event is marked processed."""
         async with session_factory() as session:
             facts = (await session.scalars(select(EventFact))).all()
             assert len(facts) == 1
@@ -110,6 +117,7 @@ def test_transformer_handles_concurrent_insert(
     occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.UTC)
 
     async def _run() -> None:
+        """Insert a matching EventFact, then assert the transformer accepts it."""
         raw_event = await writer.ingest(
             RawEventEnvelope(
                 source_system="github",
@@ -150,6 +158,7 @@ def test_transformer_marks_failed_on_payload_mismatch(
     occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.UTC)
 
     async def _setup_conflict() -> RawEvent:
+        """Ingest a raw event and insert a fact with a conflicting payload."""
         raw_event = await writer.ingest(
             RawEventEnvelope(
                 source_system="github",
@@ -164,6 +173,7 @@ def test_transformer_marks_failed_on_payload_mismatch(
         return raw_event
 
     async def _run() -> None:
+        """Set up the payload conflict and assert the transform is marked failed."""
         raw_event = await _setup_conflict()
         await _verify_transformation_failure(
             session_factory, transformer, raw_event, "payload"
@@ -184,6 +194,7 @@ def test_transformer_treats_concurrent_insert_as_processed(
     occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.UTC)
 
     async def _setup() -> RawEvent:
+        """Ingest a raw event and insert its matching EventFact."""
         raw_event = await writer.ingest(
             RawEventEnvelope(
                 source_system="github",
@@ -200,6 +211,7 @@ def test_transformer_treats_concurrent_insert_as_processed(
     raw_event = asyncio.run(_setup())
 
     async def _raise_concurrent(*_: object, **__: object) -> EventFact:
+        """Raise the concurrent-insert error in place of the upsert."""
         raise RawEventTransformError.concurrent_insert()
 
     monkeypatch.setattr(
@@ -207,6 +219,7 @@ def test_transformer_treats_concurrent_insert_as_processed(
     )
 
     async def _run() -> None:
+        """Assert the race is treated as processed with one stored fact."""
         processed_ids = await transformer.process_raw_event_ids([raw_event.id])
         assert processed_ids == [raw_event.id]
 
@@ -235,6 +248,7 @@ def test_process_events_integrity_error_does_not_rollback_prior_events(
     occurred_at = dt.datetime(2024, 6, 1, tzinfo=dt.UTC)
 
     async def _ingest() -> list[RawEvent]:
+        """Ingest two raw events with distinct source event ids."""
         return [
             await writer.ingest(
                 RawEventEnvelope(
@@ -257,6 +271,7 @@ def test_process_events_integrity_error_does_not_rollback_prior_events(
     async def _flaky_flush(
         self: AsyncSession, objects: typ.Sequence[object] | None = None
     ) -> None:
+        """Flush normally, but raise IntegrityError on the second call."""
         flush_calls["count"] += 1
         if flush_calls["count"] == flush_calls["fail_at"]:
             raise IntegrityError(None, None, Exception("simulated duplicate"))
@@ -265,6 +280,7 @@ def test_process_events_integrity_error_does_not_rollback_prior_events(
     monkeypatch.setattr(AsyncSession, "flush", _flaky_flush, raising=True)
 
     async def _run() -> None:
+        """Process both events and assert only the first one succeeds."""
         async with session_factory() as session:
             events = (
                 await session.scalars(select(RawEvent).order_by(RawEvent.id))
@@ -297,6 +313,7 @@ def test_process_pending_respects_limit(
     transformer = RawEventTransformer(session_factory)
 
     async def _run() -> None:
+        """Ingest three events and drain them in limited and unlimited passes."""
         envelopes = [
             RawEventEnvelope(
                 source_system="github",
@@ -343,6 +360,7 @@ def test_process_raw_event_ids_empty_input_noop(
     transformer = RawEventTransformer(session_factory)
 
     async def _run() -> None:
+        """Ingest an event and assert an empty id list leaves it pending."""
         envelope = RawEventEnvelope(
             source_system="github",
             event_type="push",
@@ -374,6 +392,7 @@ def test_entity_transform_failure_rolls_back_silver_state(
     occurred_at = dt.datetime(2024, 7, 1, tzinfo=dt.UTC)
 
     async def _failing_transform(*_: object, **__: object) -> None:
+        """Raise a RawEventTransformError to simulate a failed transform."""
         raise RawEventTransformError("boom", reason="invalid_payload")
 
     monkeypatch.setattr(
@@ -382,6 +401,7 @@ def test_entity_transform_failure_rolls_back_silver_state(
     )
 
     async def _run() -> None:
+        """Ingest a failing event and assert no facts are stored."""
         raw_event = await writer.ingest(
             RawEventEnvelope(
                 source_system="github",

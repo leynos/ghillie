@@ -14,6 +14,7 @@ from ghillie.cli.config import GlobalOptions, resolve_cli_config
 
 
 def _write_profile(path: Path) -> None:
+    """Write a CLI profile TOML file with explicit global settings."""
     path.write_text(
         """
 [global]
@@ -31,6 +32,7 @@ dry_run = false
 
 
 def _write_state(path: Path) -> None:
+    """Write a JSON state file holding an API base URL and its source."""
     path.write_text(
         json.dumps(
             {

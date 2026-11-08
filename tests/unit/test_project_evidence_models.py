@@ -99,6 +99,7 @@ def test_frozen_immutability_for_all_models(
 
 
 def _check_project_metadata_roundtrip(decoded: EvidenceModel) -> None:
+    """Check selected field values of a decoded `ProjectMetadata`."""
     assert isinstance(decoded, ProjectMetadata), "Expected ProjectMetadata"
     assert decoded.key == "wildside", "key mismatch"
     assert decoded.name == "Wildside", "name mismatch"
@@ -108,6 +109,7 @@ def _check_project_metadata_roundtrip(decoded: EvidenceModel) -> None:
 
 
 def _check_component_repo_summary_roundtrip(decoded: EvidenceModel) -> None:
+    """Check selected field values of a decoded `ComponentRepositorySummary`."""
     assert isinstance(decoded, ComponentRepositorySummary), (
         "Expected ComponentRepositorySummary"
     )
@@ -117,6 +119,7 @@ def _check_component_repo_summary_roundtrip(decoded: EvidenceModel) -> None:
 
 
 def _check_component_evidence_roundtrip(decoded: EvidenceModel) -> None:
+    """Check selected values of a decoded `ComponentEvidence`."""
     assert isinstance(decoded, ComponentEvidence), "Expected ComponentEvidence"
     assert decoded.key == "wildside-core", "key mismatch"
     assert decoded.has_repository is True, "has_repository should be True"
@@ -124,6 +127,7 @@ def _check_component_evidence_roundtrip(decoded: EvidenceModel) -> None:
 
 
 def _check_dependency_evidence_roundtrip(decoded: EvidenceModel) -> None:
+    """Check selected field values of a decoded `ComponentDependencyEvidence`."""
     assert isinstance(decoded, ComponentDependencyEvidence), (
         "Expected ComponentDependencyEvidence"
     )
@@ -133,6 +137,12 @@ def _check_dependency_evidence_roundtrip(decoded: EvidenceModel) -> None:
 
 
 def _check_bundle_roundtrip(decoded: EvidenceModel) -> None:
+    """Check the project key, counts and component repository flags of a bundle.
+
+    The decoded value is a `ProjectEvidenceBundle`. The check covers the
+    project key, the component and dependency counts, and each component's
+    repository flag.
+    """
     assert isinstance(decoded, ProjectEvidenceBundle), "Expected ProjectEvidenceBundle"
     assert decoded.project.key == "wildside", "project key mismatch"
     assert decoded.component_count == 2, "expected 2 components"
