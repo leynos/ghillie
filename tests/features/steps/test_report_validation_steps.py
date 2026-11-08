@@ -54,6 +54,7 @@ class RepoSetupParams:
 
 
 def _valid_result() -> RepositoryStatusResult:
+    """Return a valid repository status result for the validation tests."""
     return RepositoryStatusResult(
         summary="acme/widgets is on track with 1 events.",
         status=ReportStatus.ON_TRACK,
@@ -62,6 +63,7 @@ def _valid_result() -> RepositoryStatusResult:
 
 
 def _invalid_result() -> RepositoryStatusResult:
+    """Return a status result with an empty summary, which is invalid."""
     return RepositoryStatusResult(
         summary="",
         status=ReportStatus.ON_TRACK,
@@ -75,6 +77,7 @@ def _build_reporting_service(
     *,
     max_attempts: int = 2,
 ) -> ReportingService:
+    """Build a reporting service with a seven-day window for the tests."""
     deps = ReportingServiceDependencies(
         session_factory=session_factory,
         evidence_service=EvidenceBundleService(session_factory),
@@ -118,6 +121,7 @@ def _setup_repo_with_status_model(
     transformer = RawEventTransformer(session_factory)
 
     async def _setup() -> str:
+        """Ingest a commit for acme/widgets, transform it and return the repo ID."""
         commit_time = dt.datetime.now(dt.UTC) - dt.timedelta(days=2)
         await writer.ingest(
             commit_envelope(
@@ -239,6 +243,7 @@ def when_run_service(validation_context: ValidationContext) -> None:
     """Run the reporting service expecting success."""
 
     async def _run() -> Report | None:
+        """Run the reporting service for the repository and return the report."""
         service = validation_context["service"]
         repo_id = validation_context["repo_id"]
         return await service.run_for_repository(repo_id)
@@ -254,6 +259,7 @@ def when_run_service_expecting_failure(
     """Run the reporting service expecting ReportValidationError."""
 
     async def _run() -> ReportValidationError | None:
+        """Run the reporting service and return any validation error raised."""
         service = validation_context["service"]
         repo_id = validation_context["repo_id"]
         try:
@@ -303,6 +309,7 @@ def then_review_marker_created(
     """Assert a ReportReview row exists for this repository."""
 
     async def _check() -> None:
+        """Check a pending ReportReview row exists for the repository."""
         sf = validation_context["session_factory"]
         repo_id = validation_context["repo_id"]
         async with sf() as session:
@@ -324,6 +331,7 @@ def then_no_report(validation_context: ValidationContext) -> None:
     """Assert no Report rows were created."""
 
     async def _check() -> None:
+        """Check no report rows exist for the repository."""
         sf = validation_context["session_factory"]
         repo_id = validation_context["repo_id"]
         async with sf() as session:

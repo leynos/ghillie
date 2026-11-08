@@ -103,6 +103,7 @@ def observability_context(tmp_path: Path) -> typ.Iterator[ObservabilityContext]:
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'observability.db'}")
 
     async def _init() -> None:
+        """Initialise the bronze and silver storage schemas."""
         await init_bronze_storage(engine)
         await init_silver_storage(engine)
 
@@ -123,6 +124,7 @@ def managed_repository_registered(
     observability_context["repo_slug"] = slug
 
     async def _create() -> None:
+        """Persist a Silver repository row with ingestion enabled."""
         async with (
             observability_context["session_factory"]() as session,
             session.begin(),
@@ -239,6 +241,7 @@ def repository_never_ingested(
     """Create an ingestion offset record with no watermarks."""
 
     async def _create() -> None:
+        """Persist an ingestion offset row for the repository with no watermarks."""
         async with (
             observability_context["session_factory"]() as session,
             session.begin(),
@@ -253,6 +256,7 @@ def _wait_for_ingestion_events(
     expected_events: typ.Sequence[IngestionEventType],
     timeout: float = 1.0,
 ) -> None:
+    """Wait until the expected ingestion events are logged or time out."""
     deadline = time.monotonic() + timeout
     remaining_events = list(expected_events)
     while remaining_events:
@@ -278,6 +282,7 @@ def _run_ingestion_worker(context: ObservabilityContext, slug: str) -> None:
     """Execute the ingestion worker for the specified repository."""
 
     async def _ingest() -> None:
+        """Ingest the named repository with the GitHub ingestion worker."""
         service = context["registry_service"]
         repos = await service.list_active_repositories()
         repo = next(repo for repo in repos if repo.slug == slug)
@@ -387,6 +392,7 @@ def lag_metrics_available(
     """Verify that lag metrics can be queried for the repository."""
 
     async def _check() -> None:
+        """Check lag metrics are returned with a last ingestion time."""
         service = IngestionHealthService(observability_context["session_factory"])
         metrics = await service.get_lag_for_repository(slug)
         assert metrics is not None
@@ -402,6 +408,7 @@ def repository_not_stalled(observability_context: ObservabilityContext) -> None:
     slug = observability_context["repo_slug"]
 
     async def _check() -> None:
+        """Check the repository lag metrics report it as not stalled."""
         service = IngestionHealthService(observability_context["session_factory"])
         metrics = await service.get_lag_for_repository(slug)
         assert metrics is not None
@@ -417,6 +424,7 @@ def repository_is_stalled(
     """Verify that the repository is marked as stalled."""
 
     async def _check() -> None:
+        """Check the repository is stalled under a one-second threshold."""
         # Use a very short threshold to ensure stalled detection
         config = IngestionHealthConfig(stalled_threshold=dt.timedelta(seconds=1))
         service = IngestionHealthService(

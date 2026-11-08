@@ -103,6 +103,7 @@ def when_create_repository_report(gold_context: GoldContext) -> None:
     occurred_at = dt.datetime(2024, 7, 6, 10, 5, tzinfo=dt.UTC)
 
     async def _run() -> None:
+        """Persist a repository report covering the ingested commit event."""
         writer = gold_context["writer"]
         transformer = gold_context["transformer"]
         repo_slug = gold_context["repo_slug"]
@@ -142,6 +143,7 @@ def when_create_project_report(gold_context: GoldContext) -> None:
     """Insert a project-scoped report with a machine summary payload."""
 
     async def _run() -> None:
+        """Persist a project-scoped report with its machine summary."""
         async with gold_context["session_factory"]() as session:
             project = ReportProject(key="wildside", name="Wildside")
             session.add(project)
@@ -169,6 +171,7 @@ def then_report_has_scope_and_window(gold_context: GoldContext) -> None:
     """Assert that repository scoped report persisted scope and window metadata."""
 
     async def _assert() -> None:
+        """Check the report stores its scope, window and summary."""
         async with gold_context["session_factory"]() as session:
             report = await session.get(Report, gold_context["report_id"])
             assert report is not None
@@ -186,6 +189,7 @@ def then_report_coverage_records_events(gold_context: GoldContext) -> None:
     """Verify coverage rows map the report to the transformed event facts."""
 
     async def _assert() -> None:
+        """Check the coverage row links the report to the event fact."""
         async with gold_context["session_factory"]() as session:
             coverage = await session.scalar(select(ReportCoverage))
             assert coverage is not None
@@ -203,6 +207,7 @@ def then_repository_links_report(gold_context: GoldContext) -> None:
     """Ensure repository relationship exposes associated reports."""
 
     async def _assert() -> None:
+        """Check the repository has exactly one report, the Gold report."""
         async with gold_context["session_factory"]() as session:
             repo = await session.scalar(select(Repository))
             assert repo is not None
@@ -223,6 +228,7 @@ def then_project_report_persists_scope_and_summary(gold_context: GoldContext) ->
     """Project-scoped reports retain machine summaries and linkage."""
 
     async def _assert() -> None:
+        """Check the project report stores its scope, summary and linkage."""
         async with gold_context["session_factory"]() as session:
             report = await session.get(Report, gold_context["report_id"])
             assert report is not None

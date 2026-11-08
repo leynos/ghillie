@@ -98,6 +98,7 @@ def given_repo_with_events(
 
     # Ingest some test events
     async def _setup() -> str:
+        """Ingest a commit for octo/reef, transform it and return the repo ID."""
         repo_slug = "octo/reef"
         commit_time = dt.datetime(2024, 7, 10, 10, 0, tzinfo=dt.UTC)
         await writer.ingest(
@@ -134,6 +135,7 @@ def given_repo_with_previous_report(
     }
 
     async def _setup() -> str:
+        """Persist a repository with a report ending on 7 July 2024."""
         # Create a repository
         async with session_factory() as session, session.begin():
             repo = Repository(
@@ -181,6 +183,7 @@ def given_repo_without_events(
     }
 
     async def _setup() -> str:
+        """Persist a repository with no events and return its ID."""
         async with session_factory() as session, session.begin():
             repo = Repository(
                 github_owner="empty",
@@ -202,6 +205,7 @@ def when_run_reporting_service(reporting_context: ReportingContext) -> None:
     """Run the reporting service for the repository."""
 
     async def _run() -> Report | None:
+        """Run the reporting service for the repository as of 14 July 2024."""
         service = reporting_context["service"]
         repo_id = reporting_context["repo_id"]
         now = dt.datetime(2024, 7, 14, tzinfo=dt.UTC)
@@ -216,6 +220,7 @@ def when_compute_window(reporting_context: ReportingContext) -> None:
     """Compute the next reporting window."""
 
     async def _run() -> ReportingWindow:
+        """Compute the next reporting window as of 14 July 2024."""
         service = reporting_context["service"]
         repo_id = reporting_context["repo_id"]
         as_of = dt.datetime(2024, 7, 14, tzinfo=dt.UTC)
@@ -243,6 +248,7 @@ def then_report_links_events(reporting_context: ReportingContext) -> None:
     """Assert that the report has coverage records."""
 
     async def _assert() -> None:
+        """Check the report has at least one coverage record."""
         from sqlalchemy import select
 
         session_factory = reporting_context["session_factory"]

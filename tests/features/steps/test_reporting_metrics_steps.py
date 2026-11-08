@@ -46,6 +46,7 @@ class _MetricsStatusModel:
     """Deterministic status model that emits non-zero token metrics."""
 
     def __init__(self) -> None:
+        """Create the model with no invocation metrics recorded yet."""
         self.last_invocation_metrics: ModelInvocationMetrics | None = None
 
     async def summarize_repository(
@@ -130,6 +131,7 @@ def given_repo_with_events(
     }
 
     async def _setup() -> str:
+        """Ingest a commit for octo/reef, transform it and return the repo ID."""
         repo_slug = "octo/reef"
         commit_time = dt.datetime(2024, 7, 10, 10, 0, tzinfo=dt.UTC)
         await writer.ingest(
@@ -167,6 +169,7 @@ def given_multiple_reports_in_period(
     }
 
     async def _setup() -> tuple[dt.datetime, dt.datetime]:
+        """Ingest two repositories' commits and return the report period bounds."""
         commit_time = dt.datetime(2024, 7, 10, 10, 0, tzinfo=dt.UTC)
         await writer.ingest(
             commit_envelope("octo/reef", "metrics-101", commit_time, "feat: one")
@@ -207,6 +210,7 @@ def when_generate_repository_report(
     """Run report generation once for the prepared repository."""
 
     async def _run() -> Report:
+        """Generate a repository report for the prepared repository."""
         service = reporting_metrics_context["service"]
         repo_id = reporting_metrics_context["repo_id"]
         as_of = dt.datetime(2024, 7, 14, tzinfo=dt.UTC)
@@ -224,6 +228,7 @@ def when_query_metrics_for_period(
     """Fetch aggregate reporting metrics for the fixed July period."""
 
     async def _run() -> ReportingMetricsSnapshot:
+        """Fetch the reporting metrics snapshot for the period."""
         service = reporting_metrics_context["metrics_service"]
         return await service.get_metrics_for_period(
             reporting_metrics_context["period_start"],
