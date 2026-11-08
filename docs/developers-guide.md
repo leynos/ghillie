@@ -121,22 +121,39 @@ This runs formatting checks, linting, type checking, and tests.
 
 The project enforces these quality gates before commits:
 
-| Target                    | Description                                     |
-| ------------------------- | ----------------------------------------------- |
-| `make fmt`                | Format Python and Markdown sources              |
-| `make check-architecture` | Run Hecate import-direction architecture checks |
-| `make lint`               | Run Hecate, Ruff, and Skylos dead-code checks   |
-| `make check-fmt`          | Verify formatting without changes               |
-| `make typecheck`          | Run the type checker                            |
-| `make test`               | Run pytest with parallel execution              |
-| `make helm-lint`          | Lint the Ghillie Helm chart                     |
-| `make helm-test`          | Run Helm chart tests                            |
+| Target                    | Description                                      |
+| ------------------------- | ------------------------------------------------ |
+| `make fmt`                | Format Python and Markdown sources               |
+| `make check-architecture` | Run Hecate import-direction architecture checks  |
+| `make interrogate`        | Fail on any undocumented Python definition       |
+| `make lint`               | Run Hecate, Interrogate, Ruff, and Skylos checks |
+| `make check-fmt`          | Verify formatting without changes                |
+| `make typecheck`          | Run the type checker                             |
+| `make test`               | Run pytest with parallel execution               |
+| `make helm-lint`          | Lint the Ghillie Helm chart                      |
+| `make helm-test`          | Run Helm chart tests                             |
 
 Run all gates before committing:
 
 ```bash
 make check-fmt && make lint && make typecheck && make test && make helm-lint
 ```
+
+### Docstring coverage
+
+`make interrogate` runs Interrogate `1.7.0` as an isolated `uv tool` on Python
+3.14, because Interrogate parses source with the interpreter that runs it and
+this code uses template strings. It scans `ghillie`, `scripts`, and `tests`
+recursively, with Interrogate's default exclusions, so check a new file against
+the verbose report. Add a new Python directory to `INTERROGATE_TARGETS` in the
+`Makefile`.
+
+The target fails when the tool exits non-zero, and also when the verbose report
+holds any `MISSED` row, because the percentage is rounded to one decimal place
+and would pass a lone gap. A failure prints the report, so the `MISSED` rows
+name the undocumented definitions. `make lint` runs the target after the
+architecture check and before Ruff and Skylos, so a missing docstring stops
+linting before either of those tools starts.
 
 ## Workflow pins and Dependabot
 

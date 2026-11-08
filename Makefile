@@ -36,7 +36,18 @@ CV005_CONTRACTS = $(UV_ENV) $(UV) tool run --python 3.13 \
 RUFF_VERSION ?= 0.15.21
 RUFF = $(UV_ENV) uv tool run ruff@$(RUFF_VERSION)
 
-.PHONY: help all clean build build-release check-architecture lint fmt check-fmt \
+# Interrogate scans each target recursively, subject to its default exclusions
+# (check a new file against the verbose report). Add a new Python directory to
+# the targets. Python 3.14 is required: interrogate parses the source with the
+# interpreter that runs it, and this code uses template strings.
+INTERROGATE_VERSION ?= 1.7.0
+INTERROGATE_TARGETS ?= ghillie scripts tests
+# Level 2 prints a MISSED row per undocumented definition, which the
+# `interrogate` target fails on: the rounded percentage alone passes a lone gap.
+INTERROGATE_FLAGS ?= -vv --no-color --ext pyi --fail-under 100
+INTERROGATE = $(UV_ENV) uv tool run --python 3.14 --from 'interrogate==$(INTERROGATE_VERSION)' interrogate
+
+.PHONY: help all clean build build-release check-architecture lint interrogate fmt check-fmt \
         markdownlint nixie test typecheck helm-lint helm-test \
         docker-build docker-run spelling spelling-helper-test \
         skylos-allow \
@@ -103,7 +114,19 @@ check-fmt: uv ## Verify formatting
 check-architecture: build ## Run hexagonal architecture import checks
 	$(UV_ENV) uv run scripts/check_architecture.py
 
-lint: check-architecture ## Run linters
+interrogate: ## Enforce complete Python docstring coverage
+	@report="$$($(INTERROGATE) $(INTERROGATE_FLAGS) $(INTERROGATE_TARGETS))"; \
+	  status=$$?; \
+	  printf '%s\n' "$$report"; \
+	  test "$$status" -eq 0 || exit "$$status"; \
+	  found=0; \
+	  printf '%s\n' "$$report" | grep '| *MISSED *|' >/dev/null || found=$$?; \
+	  if test "$$found" -ne 1; then \
+	    printf '%s\n' 'interrogate: undocumented definitions remain (or the MISSED check failed); see above' >&2; \
+	    exit 1; \
+	  fi
+
+lint: check-architecture interrogate ## Run linters
 	$(RUFF) check
 	$(SKYLOS) $(SKYLOS_PRODUCTION_TARGETS) --exclude $(SKYLOS_EXCLUDE_FOLDERS) \
 		--category dead_code --gate \
