@@ -382,6 +382,14 @@ per pull request.
       counterpart now loads the row in the sync's own session, so it
       reproduces the staleness without Postgres. Inline: the dated #219 entry
       above. Observability remains deferred to #219.
+- [x] (2026-11-08) CodeScene failed its delta gate on the new head with a
+      critical Low Cohesion finding in `test_registry_service_sync.py` and an
+      advisory Complex Method in `sync.py::_sync_one_repository`. Both came
+      from this review's changes and are fixed rather than suppressed: the
+      adoption-race tests moved to
+      `tests/unit/test_registry_service_sync_adoption.py`, and the lost-claim
+      reconciliation moved into `_reconcile_lost_claim`. `cs check` now scores
+      both files 10.00.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
