@@ -720,6 +720,12 @@ Hecate classifies modules into composition roots, domain ports, application
 modules, inbound adapters, and outbound adapters. The decision and rollback
 path are recorded in `docs/adr-003-adopt-hecate-for-architecture-checks.md`.
 
+Docstring coverage is enforced with Interrogate through `make interrogate`,
+which also runs as part of `make lint`. The target fails on any undocumented
+definition under `ghillie`, `scripts`, and `tests`, including a lone gap that a
+rounded coverage percentage would hide, so every new definition needs a
+docstring.
+
 **Design decisions:**
 
 - Health probe endpoints remain in a separate resource module from domain

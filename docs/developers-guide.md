@@ -121,16 +121,17 @@ This runs formatting checks, linting, type checking, and tests.
 
 The project enforces these quality gates before commits:
 
-| Target                    | Description                                     |
-| ------------------------- | ----------------------------------------------- |
-| `make fmt`                | Format Python and Markdown sources              |
-| `make check-architecture` | Run Hecate import-direction architecture checks |
-| `make lint`               | Run Hecate, Ruff, and Skylos dead-code checks   |
-| `make check-fmt`          | Verify formatting without changes               |
-| `make typecheck`          | Run the type checker                            |
-| `make test`               | Run pytest with parallel execution              |
-| `make helm-lint`          | Lint the Ghillie Helm chart                     |
-| `make helm-test`          | Run Helm chart tests                            |
+| Target                    | Description                                      |
+| ------------------------- | ------------------------------------------------ |
+| `make fmt`                | Format Python and Markdown sources               |
+| `make check-architecture` | Run Hecate import-direction architecture checks  |
+| `make interrogate`        | Fail on any undocumented Python definition       |
+| `make lint`               | Run Hecate, Interrogate, Ruff, and Skylos checks |
+| `make check-fmt`          | Verify formatting without changes                |
+| `make typecheck`          | Run the type checker                             |
+| `make test`               | Run pytest with parallel execution               |
+| `make helm-lint`          | Lint the Ghillie Helm chart                      |
+| `make helm-test`          | Run Helm chart tests                             |
 
 Run all gates before committing:
 
