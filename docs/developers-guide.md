@@ -151,8 +151,9 @@ the verbose report. Add a new Python directory to `INTERROGATE_TARGETS` in the
 The target fails when the tool exits non-zero, and also when the verbose report
 holds any `MISSED` row, because the percentage is rounded to one decimal place
 and would pass a lone gap. A failure prints the report, so the `MISSED` rows
-name the undocumented definitions. `make lint` runs the target first, so a
-missing docstring stops linting before any other tool starts.
+name the undocumented definitions. `make lint` runs the target after the
+architecture check and before Ruff and Skylos, so a missing docstring stops
+linting before either of those tools starts.
 
 ## Workflow pins and Dependabot
 
