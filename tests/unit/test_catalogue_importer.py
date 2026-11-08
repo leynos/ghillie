@@ -44,7 +44,10 @@ def session_factory(tmp_path: Path) -> typ.Iterator[async_sessionmaker[AsyncSess
 def _count_rows(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> tuple[int, int, int, int]:
+    """Return the row counts for projects, components, edges and repositories."""
+
     async def _inner() -> tuple[int, int, int, int]:
+        """Count the catalogue rows in a fresh session."""
         async with session_factory() as session:
             projects = (await session.scalars(select(ProjectRecord))).all()
             components = (await session.scalars(select(ComponentRecord))).all()
@@ -58,6 +61,7 @@ def _count_rows(
 def test_importer_populates_and_idempotent(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
+    """Check the first import populates rows and a repeat import is skipped."""
     importer = CatalogueImporter(
         session_factory, estate_key="demo", estate_name="Demo Estate"
     )
@@ -114,6 +118,7 @@ def test_importer_populates_and_idempotent(
 def test_importer_allows_same_commit_per_estate(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
+    """Check two estates can import the same commit SHA."""
     importer_a = CatalogueImporter(session_factory, estate_key="alpha")
     importer_b = CatalogueImporter(session_factory, estate_key="beta")
 
@@ -132,6 +137,7 @@ def test_importer_allows_same_commit_per_estate(
     assert second.skipped is False
 
     async def _count_imports() -> int:
+        """Count the catalogue import records."""
         async with session_factory() as session:
             count = await session.scalar(
                 select(func.count()).select_from(CatalogueImportRecord)
@@ -145,6 +151,7 @@ def test_importer_allows_same_commit_per_estate(
 def test_importer_rolls_back_on_invalid_catalogue(
     session_factory: async_sessionmaker[AsyncSession], tmp_path: Path
 ) -> None:
+    """Check an invalid catalogue leaves existing rows unchanged."""
     importer = CatalogueImporter(session_factory, estate_key="demo")
     asyncio.run(
         importer.import_path(
@@ -175,6 +182,7 @@ projects:
 def test_importer_updates_and_prunes(
     session_factory: async_sessionmaker[AsyncSession], tmp_path: Path
 ) -> None:
+    """Check an updated catalogue updates and prunes existing rows."""
     importer = CatalogueImporter(session_factory, estate_key="demo")
 
     initial = tmp_path / "catalogue-v1.yaml"
@@ -234,6 +242,7 @@ projects:
     assert final_counts == (1, 1, 0, 1)
 
     async def _check_branch() -> str:
+        """Return the default branch of the stored repository record."""
         async with session_factory() as session:
             repo = await session.scalar(select(RepositoryRecord))
             assert repo is not None
@@ -311,6 +320,7 @@ def test_importer_persists_noise_configuration(
     session_factory: async_sessionmaker[AsyncSession],
     tmp_path: Path,
 ) -> None:
+    """Check noise configuration is persisted and updated on re-import."""
     # Arrange
     importer = CatalogueImporter(session_factory, estate_key="noise-test")
     toggles_v1 = {
@@ -356,9 +366,11 @@ def test_importer_persists_noise_configuration(
 def test_ensure_repository_normalises_documentation_paths(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
+    """Check duplicate documentation paths are dropped in first-seen order."""
     importer = CatalogueImporter(session_factory)
 
     async def _create_repo(doc_paths: list[str]) -> RepositoryRecord:
+        """Ensure a repository is stored for the component with ``doc_paths``."""
         async with session_factory() as session, session.begin():
             repo_index: dict[str, RepositoryRecord] = {}
             component = Component(
@@ -390,11 +402,13 @@ def test_ensure_repository_normalises_documentation_paths(
 def test_ensure_repository_updates_documentation_paths(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
+    """Check ensuring an existing repository updates its documentation paths."""
     importer = CatalogueImporter(session_factory)
 
     async def _create_and_update_repo() -> tuple[
         CatalogueImportResult, CatalogueImportResult, list[str]
     ]:
+        """Ensure a repository, change its paths, then ensure it again."""
         async with session_factory() as session, session.begin():
             repo_index: dict[str, RepositoryRecord] = {}
             component = Component(
@@ -437,6 +451,7 @@ def test_ensure_repository_updates_documentation_paths(
 def test_prune_respects_other_estates(
     session_factory: async_sessionmaker[AsyncSession], tmp_path: Path
 ) -> None:
+    """Check pruning one estate keeps a repository used by another estate."""
     importer_a = CatalogueImporter(session_factory, estate_key="alpha")
     importer_b = CatalogueImporter(session_factory, estate_key="beta")
 
@@ -497,6 +512,7 @@ projects:
     asyncio.run(importer_a.import_path(catalogue_a_v2, commit_sha="a2"))
 
     async def _repo_usage() -> tuple[int, int]:
+        """Count repositories and components linked to a repository."""
         async with session_factory() as session:
             repos = (await session.scalars(select(RepositoryRecord))).all()
             components = (

@@ -23,6 +23,7 @@ def _run_cli(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
 
 
 def test_cli_valid_catalogue_outputs_schema_and_json(tmp_path: Path) -> None:
+    """Check a valid catalogue writes the schema and JSON outputs."""
     catalogue = tmp_path / "valid.yaml"
     catalogue.write_text(
         """
@@ -64,6 +65,7 @@ projects:
 
 
 def test_cli_reports_validation_errors(tmp_path: Path) -> None:
+    """Check an invalid catalogue is reported with exit status 1."""
     invalid = tmp_path / "invalid.yaml"
     invalid.write_text(
         """

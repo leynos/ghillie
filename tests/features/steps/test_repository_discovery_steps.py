@@ -88,6 +88,7 @@ def discovery_context(tmp_path: Path) -> typ.Iterator[DiscoveryContext]:
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'discovery.db'}")
 
     async def _init() -> None:
+        """Initialise the Bronze, Silver and catalogue storage."""
         await init_bronze_storage(engine)
         await init_silver_storage(engine)
         await init_catalogue_storage(engine)
@@ -122,6 +123,7 @@ def import_catalogue(discovery_context: DiscoveryContext, path: str) -> None:
     assert catalogue_path.exists(), f"Catalogue file not found: {path}"
 
     async def _import() -> None:
+        """Import the catalogue file under the ``bdd-test`` commit SHA."""
         importer = discovery_context["importer"]
         await importer.import_path(catalogue_path, commit_sha="bdd-test")
 
@@ -134,6 +136,7 @@ def sync_registry(discovery_context: DiscoveryContext) -> None:
     """Run the registry sync from catalogue."""
 
     async def _sync() -> SyncResult:
+        """Sync the registry from the ``bdd`` catalogue estate."""
         service = discovery_context["service"]
         return await service.sync_from_catalogue("bdd")
 
@@ -146,6 +149,7 @@ def remove_from_catalogue(discovery_context: DiscoveryContext, slug: str) -> Non
     owner, name = parse_repo_slug(slug)
 
     async def _remove() -> None:
+        """Delete the catalogue repository row matching the slug, if any."""
         async with discovery_context["session_factory"]() as session, session.begin():
             repo = await session.scalar(
                 select(RepositoryRecord).where(
@@ -166,6 +170,7 @@ def disable_ingestion(discovery_context: DiscoveryContext, slug: str) -> None:
     owner, name = parse_repo_slug(slug)
 
     async def _disable() -> None:
+        """Disable ingestion for the repository via the registry service."""
         service = discovery_context["service"]
         await service.disable_ingestion(owner, name)
 
@@ -178,6 +183,7 @@ def enable_ingestion(discovery_context: DiscoveryContext, slug: str) -> None:
     owner, name = parse_repo_slug(slug)
 
     async def _enable() -> None:
+        """Enable ingestion for the repository via the registry service."""
         service = discovery_context["service"]
         await service.enable_ingestion(owner, name)
 
@@ -189,6 +195,7 @@ def list_active_repos(discovery_context: DiscoveryContext) -> None:
     """List all active repositories."""
 
     async def _list() -> list[RepositoryInfo]:
+        """Return the active repositories from the registry service."""
         service = discovery_context["service"]
         return await service.list_active_repositories()
 

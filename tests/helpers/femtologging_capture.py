@@ -89,6 +89,7 @@ class _SyncLogger:
     """Synchronous logger used in forked test processes."""
 
     def __init__(self, name: str, handler: FemtoLogCapture) -> None:
+        """Store the logger name and the capture handler."""
         self._name = name
         self._handler = handler
 

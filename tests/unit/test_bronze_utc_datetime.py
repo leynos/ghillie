@@ -24,6 +24,7 @@ def test_utc_datetime_normalises_results(
     naive_str = "2024-06-01 12:00:00"
 
     async def _seed() -> None:
+        """Insert a raw event row with a naive ``occurred_at`` string."""
         async with session_factory() as session, session.begin():
             await session.execute(
                 sa.text(
@@ -41,6 +42,7 @@ def test_utc_datetime_normalises_results(
     asyncio.run(_seed())
 
     async def _load() -> RawEvent:
+        """Load the stored raw event."""
         async with session_factory() as session:
             return (await session.execute(select(RawEvent))).scalar_one()
 
@@ -55,6 +57,7 @@ def test_utc_datetime_bind_rejects_naive(
     """Binding naive datetimes raises a timezone-required error."""
 
     async def _run() -> None:
+        """Attempt to persist a raw event with a naive occurred_at."""
         async with session_factory() as session, session.begin():
             session.add(
                 RawEvent(
@@ -82,6 +85,7 @@ def test_utc_datetime_bind_normalises_non_utc(
     expected_utc = occurred_local.astimezone(dt.UTC)
 
     async def _run() -> RawEvent:
+        """Store a non-UTC raw event and reload it."""
         async with session_factory() as session, session.begin():
             raw_event = RawEvent(
                 source_system="github",

@@ -185,6 +185,7 @@ def ingest_entity_events(silver_context: SilverContext) -> None:
     occurred_at = dt.datetime(2024, 7, 6, 11, 30, tzinfo=dt.UTC)
 
     async def _run() -> None:
+        """Ingest the commit, pull request, issue and doc change envelopes."""
         envelopes = [
             _create_commit_event(repo_slug, commit_sha, occurred_at),
             _create_pull_request_event(repo_slug, occurred_at),
@@ -211,6 +212,7 @@ def rerun_transformer_on_same_events(silver_context: SilverContext) -> None:
     envelopes = silver_context.get("ingested_envelopes", [])
 
     async def _run() -> None:
+        """Snapshot the entities, re-ingest the envelopes and reprocess them."""
         async with silver_context["session_factory"]() as session:
             silver_context["counts_before_replay"] = await _snapshot_counts(session)
             silver_context["snapshots_before_replay"] = await _snapshot_entities(
@@ -228,6 +230,7 @@ def assert_repository_exists(silver_context: SilverContext) -> None:
     """Verify the repository record is present."""
 
     async def _assert() -> None:
+        """Assert the octo/reef repository exists with default branch main."""
         async with silver_context["session_factory"]() as session:
             repo = await session.scalar(
                 select(Repository).where(
@@ -246,6 +249,7 @@ def assert_commit_exists(silver_context: SilverContext) -> None:
     """Verify the commit is linked to the repository."""
 
     async def _assert() -> None:
+        """Assert the stored commit is linked to octo/reef with its message."""
         async with silver_context["session_factory"]() as session:
             repo = await session.scalar(
                 select(Repository).where(
@@ -284,6 +288,7 @@ def _assert_entity_with_state_and_labels(
     """Assert an entity exists with expected state and labels."""
 
     async def _assert() -> None:
+        """Load the entity and assert its repository, state and labels."""
         async with silver_context["session_factory"]() as session:
             entity = await session.get(expected.entity_type, expected.entity_id)
             assert entity is not None, (
@@ -411,6 +416,7 @@ def assert_entity_counts_stable(silver_context: SilverContext) -> None:
     """Ensure replay does not create extra rows."""
 
     async def _assert() -> None:
+        """Assert the entity counts match the snapshot taken before replay."""
         async with silver_context["session_factory"]() as session:
             counts_after = await _snapshot_counts(session)
         assert counts_after == silver_context["counts_before_replay"], (
@@ -425,6 +431,7 @@ def assert_entity_state_stable(silver_context: SilverContext) -> None:
     """Ensure replay leaves entity state unchanged."""
 
     async def _assert() -> None:
+        """Assert the entity snapshots match those taken before replay."""
         async with silver_context["session_factory"]() as session:
             snapshots_after = await _snapshot_entities(session)
         assert snapshots_after == silver_context["snapshots_before_replay"], (
@@ -442,6 +449,7 @@ def assert_documentation_change_exists(silver_context: SilverContext) -> None:
     """Verify documentation change is anchored to the commit and repository."""
 
     async def _assert() -> None:
+        """Assert the roadmap documentation change exists for the commit."""
         async with silver_context["session_factory"]() as session:
             doc_change = await session.scalar(
                 select(DocumentationChange).where(
