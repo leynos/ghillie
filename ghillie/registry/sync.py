@@ -380,18 +380,32 @@ async def _claim_unowned_repository(
     return True
 
 
-async def _reload_after_lost_claim(
-    session: AsyncSession,
+async def _reconcile_lost_claim(
+    context: _SilverSyncContext,
     slug: str,
-) -> Repository | None:
-    """Re-read a row whose conditional claim matched nothing.
+    cat_repo: RepositoryRecord,
+) -> IngestionDecision | None:
+    """Reapply the ownership policy after an adoption claim lost a race.
 
-    The caller's view predates the winning claim, so ownership must be judged
-    from the database rather than the identity map. ``populate_existing`` is
-    what makes that true: a plain select would return the cached pre-claim
-    instance, and the losing sync would then overwrite the winner's claim.
+    A lost claim does not prove another estate won the row: a concurrent sync
+    of this same estate can have adopted it. Ownership must be judged from the
+    committed row, so the reload defeats the identity map with
+    ``populate_existing``; a plain select would return the cached pre-claim
+    instance and the losing sync would overwrite the winner.
+
+    Returns ``None`` when the row is gone or another estate owns it, which the
+    caller reports as a conflict.
     """
-    return await _load_silver_repository(session, slug, populate_existing=True)
+    refreshed = await _load_silver_repository(
+        context.session, slug, populate_existing=True
+    )
+    if refreshed is None:
+        return None
+    context.silver_repos[slug] = refreshed
+    current = _silver_state(refreshed, context.estate_id)
+    if not current.is_owned_by_estate:
+        return None
+    return decide_for_catalogue_repository(current, catalogue_active=cat_repo.is_active)
 
 
 async def _sync_one_repository(
@@ -419,22 +433,11 @@ async def _sync_one_repository(
     if not await _claim_unowned_repository(
         context.session, silver_repo, context.estate_id
     ):
-        # The claim lost, but not necessarily to another estate: a concurrent
-        # sync of this same estate can have adopted the row. Judge ownership
-        # from the committed state, and continue the sync when the row is ours.
-        refreshed = await _reload_after_lost_claim(context.session, slug)
-        if refreshed is None:
+        decision = await _reconcile_lost_claim(context, slug, cat_repo)
+        if decision is None:
             context.result.repositories_conflicted.append(slug)
             return
-        silver_repo = refreshed
-        context.silver_repos[slug] = refreshed
-        current = _silver_state(refreshed, context.estate_id)
-        if not current.is_owned_by_estate:
-            context.result.repositories_conflicted.append(slug)
-            return
-        decision = decide_for_catalogue_repository(
-            current, catalogue_active=cat_repo.is_active
-        )
+        silver_repo = context.silver_repos[slug]
 
     changed = _update_silver_repository(context, silver_repo, cat_repo, decision)
     if changed:
