@@ -30,7 +30,10 @@ async def _insert_event_fact(
     raw_event_id: int,
     payload: dict[str, JSONValue] | None = None,
 ) -> None:
-    """Insert an EventFact for a raw event, defaulting the payload if absent."""
+    """Insert an `EventFact` for a raw event.
+
+    The default payload is used when `payload` is `None` or empty.
+    """
     async with session_factory() as session, session.begin():
         fact = EventFact(
             raw_event_id=raw_event_id,
