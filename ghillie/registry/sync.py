@@ -359,8 +359,10 @@ async def _claim_unowned_repository(
     arbitrates a race to *insert* the same repository; it cannot arbitrate a
     race to adopt an existing row, because changing `estate_id` leaves the
     owner/name pair unique. A conditional UPDATE makes the claim itself
-    atomic, so the loser updates nothing and must report a conflict instead of
-    overwriting the winner's claim.
+    atomic, so the loser updates nothing. It then re-reads the committed row
+    and re-applies the policy: a row another estate won is reported as a
+    conflict, while a row this same estate won a moment earlier is adopted and
+    the sync continues.
     """
     if estate_id is None or silver_repo.estate_id is not None:
         return True

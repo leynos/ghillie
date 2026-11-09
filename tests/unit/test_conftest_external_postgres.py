@@ -4,13 +4,55 @@ from __future__ import annotations
 
 import asyncio
 import os
+import typing as typ
 
 import pytest
 from sqlalchemy import text
 
 from tests import conftest
 
+if typ.TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncEngine
+
 _UNREACHABLE_URL = "postgresql+asyncpg://postgres:postgres@127.0.0.1:1/ghillie_test"
+
+# A table that no storage layer creates, so its absence after setup proves the
+# reset dropped pre-existing state rather than merely adding tables.
+_RESET_PROBE_TABLE = "reset_probe"
+
+
+async def _seed_reset_probe(url: str) -> None:
+    """Create the marker table the reset must remove."""
+    engine = conftest.create_async_engine(url)
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text(f"CREATE TABLE {_RESET_PROBE_TABLE} (id integer)")
+            )
+    finally:
+        await engine.dispose()
+
+
+async def _public_tables(engine: AsyncEngine) -> set[str]:
+    """Read the public table names without changing them."""
+    async with engine.connect() as connection:
+        rows = await connection.execute(
+            text(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema = 'public'"
+            )
+        )
+        return {str(row[0]) for row in rows}
+
+
+async def _exercise_serial_setup(url: str) -> set[str]:
+    """Seed a marker, run the fixture's setup, and return the tables it leaves."""
+    await _seed_reset_probe(url)
+    engine = await conftest._setup_external_postgres(url)
+    try:
+        return await _public_tables(engine)
+    finally:
+        await engine.dispose()
 
 
 def test_external_postgres_setup_raises_under_xdist_before_connecting(
@@ -46,25 +88,15 @@ def test_external_postgres_setup_raises_under_xdist_before_connecting(
     reason="the external Postgres fixture resets a shared schema; run serially",
 )
 def test_external_postgres_setup_works_serially() -> None:
-    """A serial run resets the schema and initialises storage."""
+    """A serial run drops seeded state and initialises both storages."""
     url = conftest._external_postgres_url()
     assert url is not None, "The skip guard guarantees a URL"
 
-    async def _public_table_count() -> int:
-        """Set up the external database and count its public tables."""
-        engine = await conftest._setup_external_postgres(url)
-        try:
-            async with engine.connect() as connection:
-                count = await connection.scalar(
-                    text(
-                        "SELECT count(*) FROM information_schema.tables "
-                        "WHERE table_schema = 'public'"
-                    )
-                )
-        finally:
-            await engine.dispose()
-        return int(count or 0)
+    tables = asyncio.run(_exercise_serial_setup(url))
 
-    assert asyncio.run(_public_table_count()) > 0, (
-        "Serial setup must leave the storage tables in place"
+    assert _RESET_PROBE_TABLE not in tables, (
+        "Setup must drop the schema, removing the seeded marker table"
+    )
+    assert {"estates", "repositories"} <= tables, (
+        "Setup must initialise the catalogue and Silver storage tables"
     )

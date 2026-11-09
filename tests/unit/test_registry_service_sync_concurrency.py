@@ -41,7 +41,7 @@ def _require_overlapping_transactions(
 ) -> None:
     """Skip unless the backend can run two write transactions at once.
 
-    SQLite serialises writers, so the interleaving these tests need surfaces as
+    SQLite serializes writers, so the interleaving these tests need surfaces as
     a lock error rather than the constraint violation a Postgres deployment
     sees. The suite prefers py-pglite Postgres and falls back to SQLite.
     """
@@ -71,7 +71,7 @@ async def _import_for_estate(
     await importer.import_path(catalogue_path, commit_sha=commit_sha)
 
 
-def _synchronise_silver_load(monkeypatch: pytest.MonkeyPatch) -> None:
+def _synchronize_silver_load(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make both syncs finish their Silver read before either writes.
 
     Real concurrent syncs interleave unpredictably. A barrier forces the one
@@ -203,7 +203,7 @@ async def test_overlapping_syncs_adopt_an_unowned_row_once(
     await _import_for_estate(
         session_factory, wildside_catalogue_path, "estate-b", "adopt-b"
     )
-    _synchronise_silver_load(monkeypatch)
+    _synchronize_silver_load(monkeypatch)
 
     catalogue_ids = {
         "estate-a": await _catalogue_repository_ids(session_factory, "estate-a"),
@@ -279,7 +279,7 @@ async def test_overlapping_syncs_across_both_phases_do_not_deadlock(
                 ),
             ]
         )
-    _synchronise_silver_load(monkeypatch)
+    _synchronize_silver_load(monkeypatch)
 
     completed = _completed(await _run_two_syncs(session_factory))
 
@@ -308,7 +308,7 @@ async def test_overlapping_syncs_insert_each_slug_once(
     await _import_for_estate(
         session_factory, wildside_catalogue_path, "estate-b", "race-b"
     )
-    _synchronise_silver_load(monkeypatch)
+    _synchronize_silver_load(monkeypatch)
 
     completed = _completed(await _run_two_syncs(session_factory))
 

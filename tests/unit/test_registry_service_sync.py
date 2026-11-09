@@ -19,6 +19,7 @@ from ghillie.registry import sync as sync_module
 from ghillie.silver.storage import Repository
 from tests.fixtures.specs import RepositoryCreateSpec
 from tests.unit.registry_service_sync_helpers import (
+    catalogue_naming,
     fetch_silver_repo,
     snapshot_silver_repo,
 )
@@ -301,26 +302,6 @@ async def test_sync_preserves_operator_disable(
     )
 
 
-def _catalogue_naming(names: tuple[str, ...]) -> str:
-    """Return a catalogue document with one project per repository name."""
-    lines = ["version: 1", "projects:"]
-    for index, name in enumerate(names):
-        lines.extend(
-            [
-                f"  - key: project-{index}",
-                f"    name: Project {index}",
-                "    components:",
-                f"      - key: component-{index}",
-                f"        name: Component {index}",
-                "        repository:",
-                "          owner: leynos",
-                f"          name: {name}",
-                "          default_branch: main",
-            ]
-        )
-    return "\n".join(lines) + "\n"
-
-
 @pytest.mark.asyncio
 async def test_sync_previews_only_disabled_linked_repositories(
     session_factory: async_sessionmaker[AsyncSession],
@@ -338,7 +319,7 @@ async def test_sync_previews_only_disabled_linked_repositories(
     """
     catalogue = tmp_path / "catalogue.yaml"
     catalogue.write_text(
-        _catalogue_naming(("alpha", "beta", "gamma", "delta")),
+        catalogue_naming(("alpha", "beta", "gamma", "delta")),
         encoding="utf-8",
     )
 

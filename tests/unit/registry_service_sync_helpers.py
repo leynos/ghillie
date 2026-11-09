@@ -67,6 +67,40 @@ async def snapshot_silver_repos(
         return [_repository_fields(repo) for repo in repositories]
 
 
+def catalogue_naming(names: tuple[str, ...]) -> str:
+    """Render a catalogue document naming one repository per project.
+
+    Parameters
+    ----------
+    names:
+        Repository names to spell out, in project order. The owner is always
+        ``leynos`` and the branch always ``main``.
+
+    Returns
+    -------
+    str
+        A complete catalogue YAML document with one project and one component
+        per name.
+
+    """
+    lines = ["version: 1", "projects:"]
+    for index, name in enumerate(names):
+        lines.extend(
+            [
+                f"  - key: project-{index}",
+                f"    name: Project {index}",
+                "    components:",
+                f"      - key: component-{index}",
+                f"        name: Component {index}",
+                "        repository:",
+                "          owner: leynos",
+                f"          name: {name}",
+                "          default_branch: main",
+            ]
+        )
+    return "\n".join(lines) + "\n"
+
+
 async def snapshot_silver_repo(
     session_factory: async_sessionmaker[AsyncSession],
     owner: str,

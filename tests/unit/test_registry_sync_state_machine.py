@@ -48,6 +48,8 @@ from ghillie.silver import init_silver_storage
 from ghillie.silver.storage import Repository as SilverRepository
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
     from sqlalchemy.ext.asyncio import AsyncEngine
 
 _THIS_ESTATE = "this-estate"
@@ -72,7 +74,7 @@ _WITNESS_PRESENT = frozenset({0, 1, 2})
 _WITNESS_REMAINING = frozenset({0})
 
 
-def _build_catalogue(indexes: typ.Iterable[int]) -> Catalogue:
+def _build_catalogue(indexes: cabc.Iterable[int]) -> Catalogue:
     """Build a one-project catalogue containing the selected repositories."""
     components = [
         Component(
@@ -185,14 +187,22 @@ class EstateSyncMachine(RuleBasedStateMachine):
                 assert row is None, f"unexpected Silver row for {slug}"
                 continue
             assert row is not None, f"missing Silver row for {slug}"
-            assert row.ingestion_enabled is expected.enabled, slug
-            assert (row.catalogue_repository_id is not None) is expected.linked, slug
+            assert row.ingestion_enabled is expected.enabled, (
+                f"{slug}: ingestion_enabled should be {expected.enabled}"
+            )
+            assert (row.catalogue_repository_id is not None) is expected.linked, (
+                f"{slug}: catalogue link presence should be {expected.linked}"
+            )
             if expected.owner == "other":
-                assert row.estate_id == other_id, slug
+                assert row.estate_id == other_id, (
+                    f"{slug}: estate should be the other estate"
+                )
             elif expected.linked:
-                assert row.estate_id == this_id, slug
+                assert row.estate_id == this_id, f"{slug}: estate should be this estate"
             else:
-                assert row.estate_id is None, slug
+                assert row.estate_id is None, (
+                    f"{slug}: an unlinked row should have no estate"
+                )
 
     # -- rules ------------------------------------------------------------
 
@@ -399,7 +409,7 @@ class EstateSyncMachine(RuleBasedStateMachine):
                     RepositoryRecord.name == name,
                 )
             )
-            assert record is not None
+            assert record is not None, f"catalogue record for {owner}/{name} missing"
             record.is_active = False
 
     async def _create_ad_hoc(self, index: int) -> None:

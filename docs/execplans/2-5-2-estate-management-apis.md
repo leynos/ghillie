@@ -412,6 +412,16 @@ per pull request.
       merged tree, so the 27 undocumented helper definitions this branch adds
       across six test modules are now documented. `make interrogate` reports
       100.0%.
+- [x] (2026-11-09) Actioned the eight findings from the formal review of
+      `91c1875`. The D28 record now explains that a lost claim is a conflict
+      only when another estate owns the row, and the concurrency inventory
+      names the three adoption tests and five concurrency tests by module. The
+      concurrency helper is renamed to `_synchronize_silver_load`, the dry-run
+      and state-machine modules import ABCs from `collections.abc`, the
+      catalogue builder moved to the shared test helpers, and the
+      state-machine assertions name the field they check. The flush-failure
+      test now counts a real run's flushes and fails on the dry run's next
+      one: removing the dry-run flush makes it fail with `DID NOT RAISE`.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
@@ -676,9 +686,10 @@ expert-panel review.
      409. It cannot arbitrate two estates adopting the same unowned row,
      because changing `estate_id` leaves the owner/name pair unique. The
      second review round made that distinction explicit, so the adoption claim
-     is now a conditional `UPDATE ... WHERE estate_id IS NULL` (D28) and the
-     losing sync reports a conflict. The earlier wording overstated the
-     constraint's reach and is corrected here.
+     is now a conditional `UPDATE ... WHERE estate_id IS NULL` (D28) and a
+     losing sync re-reads the committed row: another estate's claim is a
+     conflict, while this estate's own claim continues the sync. The earlier
+     wording overstated the constraint's reach and is corrected here.
   3. The repository has no metrics or tracing stack, and the plan forbids new
      runtime dependencies and persisted-schema changes. D21 specifies exactly
      one structured line per mutation at the estate-service boundary; adding a
@@ -686,11 +697,15 @@ expert-panel review.
      tracing are a cross-cutting platform decision, not an EP-M1 deliverable.
 - D28, atomic adoption of an unowned Silver row. `_claim_unowned_repository`
   issues a conditional update of `estate_id` that matches only rows where
-  `estate_id` is null, and treats a zero row count as a conflict. This closes
-  the race the owner/name constraint cannot see: two estates syncing
-  concurrently can both read the same unowned row, and without the conditional
-  update the later writer silently replaces the earlier claim. The claim runs
-  inside the sync transaction, so a dry run rolls it back.
+  `estate_id` is null. A zero row count means the claim lost, and losing it is
+  not by itself a conflict: `_reconcile_lost_claim` reloads the committed row
+  with `populate_existing` and re-applies the policy. A row another estate owns
+  is reported in `repositories_conflicted`; a row this same estate claimed a
+  moment earlier is adopted and the sync continues. This closes the race the
+  owner/name constraint cannot see: two estates syncing concurrently can both
+  read the same unowned row, and without the conditional update the later
+  writer silently replaces the earlier claim. The claim runs inside the sync
+  transaction, so a dry run rolls it back.
 
   Concurrent inserts of the same slug are arbitrated by
   `uq_repositories_owner_name`. The first revision of this decision let the
@@ -1030,34 +1045,38 @@ Obligation O6, CLI import closure (`TDD-CLI-THIN`).
 - Non-vacuity: the test also asserts that `ghillie.cli.commands.estate` is in
   the loaded set, proving the estate commands were imported.
 
-Concurrency of adoption and insertion (D28): six tests cover the boundary. Four
-live in `tests/unit/test_registry_service_sync.py`.
+Concurrency of adoption and insertion (D28): eight tests cover the boundary.
+Three live in `tests/unit/test_registry_service_sync_adoption.py`.
 `test_claim_unowned_repository_is_atomic_under_a_stale_view` calls
 `_claim_unowned_repository` directly, first with the winner's session and then
 with a row loaded before that claim committed, and asserts the second call
 claims nothing. `test_sync_reports_conflict_when_adoption_loses_a_race` drives
 one sync whose claim matches no row and asserts the reported conflict.
+`test_sync_continues_after_losing_a_claim_to_its_own_estate` has the winner
+adopt and link the row, so the loser's reload must defeat the identity map: it
+asserts the sync carries on without a conflict, keeps the operator's disabled
+flag, and reports the row as left disabled.
+
+The other five live in `tests/unit/test_registry_service_sync_concurrency.py`,
+a module split out of the first because the concurrency harness gave the
+combined file low cohesion under CodeScene's critical-rule gate.
 `test_lost_insert_reports_a_conflict_instead_of_aborting` drives one sync whose
 loaded view misses a row another estate owns, and asserts the sync completes
 with the slug in `repositories_conflicted` and the winner's row unchanged.
 `test_insert_failure_without_a_surviving_row_still_aborts` forces a primary-key
 collision that no racing insert explains and asserts the `IntegrityError` cause
-is preserved for the 409 mapping. Those four are deterministic stale-view and
-missed-read regressions.
-
-The remaining two live in
-`tests/unit/test_registry_service_sync_concurrency.py`, a module split out of
-the first because the concurrency harness gave the combined file low cohesion
-under CodeScene's critical-rule gate.
-`test_overlapping_syncs_adopt_an_unowned_row_once` and
+is preserved for the 409 mapping. Those two are deterministic stale-view and
+missed-read regressions. `test_overlapping_syncs_adopt_an_unowned_row_once` and
 `test_overlapping_syncs_insert_each_slug_once` do run two syncs at once: a
 barrier holds both Silver reads until each has finished, then both write. They
 assert that one estate keeps the row, that the loser reports the conflict, and
 that six slugs produce six rows and six conflicts rather than twelve inserts.
-They need a backend with MVCC, so they skip unless the session factory is bound
-to Postgres. The suite's default py-pglite path cannot supply one on this host:
-the pinned asyncpg rejects PGlite's TLS upgrade, and a connection that does
-succeed hangs in `engine.dispose()`. `GHILLIE_TEST_DB` therefore also accepts a
+The fifth, `test_overlapping_syncs_across_both_phases_do_not_deadlock`, is
+recorded with the sorted-write-order decision above. These three need a backend
+with MVCC, so they skip unless the session factory is bound to Postgres. The
+suite's default py-pglite path cannot supply one on this host: the pinned
+asyncpg rejects PGlite's TLS upgrade, and a connection that does succeed hangs
+in `engine.dispose()`. `GHILLIE_TEST_DB` therefore also accepts a
 `postgresql+asyncpg://` URL, which `tests/conftest.py` uses to reset the
 database's `public` schema per test and initialize storage there. That reset
 needs a serial run, so the fixture raises under `pytest-xdist` and the guides
