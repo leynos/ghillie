@@ -131,6 +131,65 @@ async def test_removal_path_leaves_a_row_another_estate_claimed(
 
 
 @pytest.mark.asyncio
+async def test_removal_path_does_not_count_a_row_an_operator_disabled(
+    session_factory: async_sessionmaker[AsyncSession],
+    create_estates: tuple[str, str],
+    create_repo: CreateRepoFn,
+) -> None:
+    """The removal path must not count or restamp a row someone else disabled.
+
+    The removal decision reads the loaded view, which saw the row enabled. An
+    operator can disable it before the removal write lands. The deactivation
+    count and ``last_synced_at`` describe what this sync changed, so both are
+    decided at the write boundary rather than from the loaded view.
+    """
+    estate_a_id, _estate_b_id = create_estates
+    await create_repo(
+        "leynos",
+        "retired",
+        spec=RepositoryCreateSpec(catalogue_repository_id="cat-orphan"),
+    )
+
+    async with session_factory() as stale_session:
+        stale_rows = await sync_module._load_silver_repositories(
+            stale_session, estate_a_id, []
+        )
+        # End the read transaction but keep the pre-disable view.
+        await stale_session.commit()
+    assert stale_rows["leynos/retired"].ingestion_enabled is True, (
+        "The stale view must have seen the row enabled"
+    )
+
+    async with session_factory() as operator_session, operator_session.begin():
+        operator_rows = await sync_module._load_silver_repositories(
+            operator_session, estate_a_id, []
+        )
+        operator_rows["leynos/retired"].ingestion_enabled = False
+
+    async with session_factory() as loser_session:
+        result = SyncResult(estate_key="estate-a")
+        context = sync_module._SilverSyncContext(
+            session=loser_session,
+            silver_repos=stale_rows,
+            estate_id=estate_a_id,
+            now=sync_module.utcnow(),
+            result=result,
+        )
+        await sync_module._deactivate_removed_repository(context, "leynos/retired")
+        await loser_session.commit()
+
+    assert result.repositories_deactivated == 0, (
+        "A row another writer disabled is not a change this sync made"
+    )
+    repo = await fetch_silver_repo(session_factory, "leynos", "retired")
+    assert repo is not None, "The disabled row should still exist"
+    assert repo.ingestion_enabled is False, "The operator's flag must stand"
+    assert repo.last_synced_at is None, (
+        "A row this sync did not change must not be restamped"
+    )
+
+
+@pytest.mark.asyncio
 async def test_sync_reports_conflict_when_adoption_loses_a_race(
     session_factory: async_sessionmaker[AsyncSession],
     create_estates: tuple[str, str],

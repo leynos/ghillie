@@ -516,6 +516,11 @@ async def _deactivate_removed_repository(
     the load leaves no row to match. Judging ownership from the loaded view
     alone cannot close that gap.
 
+    The enabled condition travels with the UPDATE for the same reason. The
+    count and ``last_synced_at`` describe what *this* sync changed, so a row an
+    operator (or an earlier sync) disabled after the load must not be counted
+    again or restamped.
+
     The statement synchronizes the session by fetch, so the loaded instance
     adopts the committed values without an assignment that would queue an
     unconditional UPDATE on the next flush and defeat the guard.
@@ -535,13 +540,15 @@ async def _deactivate_removed_repository(
             Repository.id == silver_repo.id,
             Repository.estate_id.is_(None)
             | (Repository.estate_id == context.estate_id),
+            Repository.ingestion_enabled.is_(True),
         )
         .values(ingestion_enabled=False, last_synced_at=context.now)
         .returning(Repository.id)
         .execution_options(synchronize_session="fetch")
     )
     if deactivated_id is None:
-        # Another estate claimed the row after this sync loaded its view.
+        # Another writer claimed the row, or disabled it, after this sync
+        # loaded its view. Neither is a change this sync made.
         return
     context.result.repositories_deactivated += 1
 

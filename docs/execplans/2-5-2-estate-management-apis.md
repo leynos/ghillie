@@ -430,6 +430,12 @@ per pull request.
       it reports a deactivation and leaves the winner's row disabled — and
       green with it. The sorted-order test's removal recorder became async to
       match the awaited removal path.
+- [x] (2026-11-09) Actioned the three remaining findings from the pre-merge
+      reconciliation of `3743ce1`. The users' guide now counts an
+      inactive-row disable as an update, the removal write requires
+      `ingestion_enabled IS TRUE`, and a PostgreSQL same-estate overlap test
+      covers the reload path CodeRabbit asked for. Both repairs have a red
+      case: the count test reports one deactivation without the predicate.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
@@ -505,6 +511,11 @@ per pull request.
     row another estate claimed after the load matches no row and is left
     untouched (D28). The stale view still decides *whether* a removal is
     attempted; it no longer decides what may be written.
+  - ~~The removal count judges the enabled flag from the loaded view.~~
+    **Closed 2026-11-09.** The same statement also requires
+    `ingestion_enabled IS TRUE`, so a row another writer disabled after the
+    load is neither counted in `repositories_deactivated` nor restamped
+    (D28).
 
 ## Decision log
 
@@ -745,8 +756,19 @@ expert-panel review.
   `test_removal_path_leaves_a_row_another_estate_claimed` drives the
   direct-primitive case: an unowned but linked row, which is the only state in
   which the removal path reaches a write and another estate can also claim it.
-  Removing the ownership condition makes it report a deactivation and leave the
-  winner's row disabled.
+
+  The same statement also carries `ingestion_enabled IS TRUE`. The count and
+  `last_synced_at` describe what this sync changed, so a row an operator (or an
+  earlier sync) disabled after the load must not be counted again or restamped.
+  `test_removal_path_does_not_count_a_row_an_operator_disabled` holds the stale
+  enabled view, disables the row from another transaction, and asserts a zero
+  count with `last_synced_at` still null; removing the enabled predicate makes
+  the count 1. `test_overlapping_syncs_of_one_estate_share_an_unowned_row`
+  covers the PostgreSQL case CodeRabbit asked for: two overlapping syncs of one
+  estate contend for an unowned, linked, disabled row, neither reports a
+  self-conflict, and the committed row keeps the estate's ownership, the
+  catalogue link and the operator's disabled flag. Removing the ownership
+  condition makes it report a deactivation and leave the winner's row disabled.
 
   The sync makes one sorted pass over the union of catalogue and Silver slugs,
   flushing each slug before the next. Catalogue order is not guaranteed to
@@ -1066,8 +1088,8 @@ Obligation O6, CLI import closure (`TDD-CLI-THIN`).
 - Non-vacuity: the test also asserts that `ghillie.cli.commands.estate` is in
   the loaded set, proving the estate commands were imported.
 
-Concurrency of adoption, removal, and insertion (D28): nine tests cover the
-boundary. Four live in `tests/unit/test_registry_service_sync_adoption.py`.
+Concurrency of adoption, removal, and insertion (D28): eleven tests cover the
+boundary. Five live in `tests/unit/test_registry_service_sync_adoption.py`.
 `test_claim_unowned_repository_is_atomic_under_a_stale_view` calls
 `_claim_unowned_repository` directly, first with the winner's session and then
 with a row loaded before that claim committed, and asserts the second call
@@ -1075,6 +1097,9 @@ claims nothing. `test_removal_path_leaves_a_row_another_estate_claimed` calls
 `_deactivate_removed_repository` with a stale view of an unowned but linked
 row, after another estate has claimed it, and asserts the row keeps its owner
 and enabled flag and is not counted as deactivated.
+`test_removal_path_does_not_count_a_row_an_operator_disabled` holds a stale
+enabled view, disables the row from another transaction, and asserts the
+removal write counts nothing and leaves `last_synced_at` alone.
 `test_sync_reports_conflict_when_adoption_loses_a_race` drives one sync whose
 claim matches no row and asserts the reported conflict.
 `test_sync_continues_after_losing_a_claim_to_its_own_estate` has the winner
@@ -1082,9 +1107,9 @@ adopt and link the row, so the loser's reload must defeat the identity map: it
 asserts the sync carries on without a conflict, keeps the operator's disabled
 flag, and reports the row as left disabled.
 
-The other five live in `tests/unit/test_registry_service_sync_concurrency.py`,
-a module split out of the first because the concurrency harness gave the
-combined file low cohesion under CodeScene's critical-rule gate.
+The other six live in `tests/unit/test_registry_service_sync_concurrency.py`, a
+module split out of the first because the concurrency harness gave the combined
+file low cohesion under CodeScene's critical-rule gate.
 `test_lost_insert_reports_a_conflict_instead_of_aborting` drives one sync whose
 loaded view misses a row another estate owns, and asserts the sync completes
 with the slug in `repositories_conflicted` and the winner's row unchanged.
@@ -1097,18 +1122,23 @@ barrier holds both Silver reads until each has finished, then both write. They
 assert that one estate keeps the row, that the loser reports the conflict, and
 that six slugs produce six rows and six conflicts rather than twelve inserts.
 The fifth, `test_overlapping_syncs_across_both_phases_do_not_deadlock`, is
-recorded with the sorted-write-order decision above. These three need a backend
-with MVCC, so they skip unless the session factory is bound to Postgres. The
-suite's default py-pglite path cannot supply one on this host: the pinned
-asyncpg rejects PGlite's TLS upgrade, and a connection that does succeed hangs
-in `engine.dispose()`. `GHILLIE_TEST_DB` therefore also accepts a
+recorded with the sorted-write-order decision above.
+`test_overlapping_syncs_of_one_estate_share_an_unowned_row` races one estate
+against itself: both syncs load the unowned, linked, disabled row, one claim
+wins, and the loser must reload the committed link and ownership rather than
+report a self-conflict or re-enable the row. These four need a backend with
+MVCC, so they skip unless the session factory is bound to Postgres. The suite's
+default py-pglite path cannot supply one on this host: the pinned asyncpg
+rejects PGlite's TLS upgrade, and a connection that does succeed hangs in
+`engine.dispose()`. `GHILLIE_TEST_DB` therefore also accepts a
 `postgresql+asyncpg://` URL, which `tests/conftest.py` uses to reset the
 database's `public` schema per test and initialize storage there. That reset
 needs a serial run, so the fixture raises under `pytest-xdist` and the guides
 point at `uv run pytest` rather than `make test`. Against Postgres 17 in a
-throwaway container, all 22 tests in the three sync modules passed with no
-skips, and the insert test fails with `RegistrySyncError` when the repair is
-reverted.
+throwaway container, all 24 tests in the three sync modules passed with no
+skips. The insert test fails with `RegistrySyncError` when its repair is
+reverted, and the removal-count test reports one deactivation when the enabled
+predicate is removed.
 
 The disabled preview is asserted exactly, not by membership.
 `test_sync_previews_only_disabled_linked_repositories` links four repositories,

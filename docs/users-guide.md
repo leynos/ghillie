@@ -491,12 +491,14 @@ print(result.repositories_left_disabled)  # first 100 slugs
 
 `repositories_left_disabled_count` is the exact number of active catalogue
 repositories whose linked Silver row is still disabled when the sync finishes,
-including rows an operator disabled. Rows the sync itself disables because
-their catalogue entry became inactive or left the catalogue are counted in
-`repositories_deactivated` instead, and a repository another estate owns is
-reported in `repositories_conflicted`. `repositories_left_disabled` is a
-bounded preview of that same set: it holds at most 100 slugs, in sorted order,
-so a large estate cannot produce an unbounded result body.
+including rows an operator disabled. A row the sync itself turns off because it
+left the catalogue is counted in `repositories_deactivated` instead, not in the
+left-disabled set; a row it turns off because its catalogue entry became
+inactive is an ordinary update and is counted in `repositories_updated`. A
+repository another estate owns is reported in `repositories_conflicted`.
+`repositories_left_disabled` is a bounded preview of the left-disabled set: it
+holds at most 100 slugs, in sorted order, so a large estate cannot produce an
+unbounded result body.
 
 If another estate already owns a repository that this estate's catalogue names,
 sync leaves that row untouched and reports the slug in

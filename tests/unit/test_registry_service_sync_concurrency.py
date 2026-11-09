@@ -153,8 +153,13 @@ async def _seed_estate_naming(
 
 async def _run_two_syncs(
     session_factory: async_sessionmaker[AsyncSession],
+    estate_keys: tuple[str, str] = ("estate-a", "estate-b"),
 ) -> list[SyncResult | BaseException]:
-    """Sync estate-a and estate-b at the same time and collect both outcomes."""
+    """Run two syncs at the same time and collect both outcomes.
+
+    The estates default to a cross-estate race; pass the same key twice to
+    race one estate against itself.
+    """
 
     async def _sync(estate_key: str) -> SyncResult:
         """Sync one estate through a real registry service."""
@@ -163,8 +168,8 @@ async def _run_two_syncs(
 
     gathered = await asyncio.wait_for(
         asyncio.gather(
-            _sync("estate-a"),
-            _sync("estate-b"),
+            _sync(estate_keys[0]),
+            _sync(estate_keys[1]),
             return_exceptions=True,
         ),
         timeout=60,
@@ -239,6 +244,63 @@ async def test_overlapping_syncs_adopt_an_unowned_row_once(
             )
         )
         assert len(rows.all()) == 1, "The race must leave exactly one Silver row"
+
+
+@pytest.mark.asyncio
+async def test_overlapping_syncs_of_one_estate_share_an_unowned_row(
+    session_factory: async_sessionmaker[AsyncSession],
+    create_estates: tuple[str, str],
+    wildside_catalogue_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two syncs of one estate must not report each other as a conflict.
+
+    Both loads finish before either sync writes, so both decide to claim the
+    unowned row. The loser's claim matches no row once the winner commits, and
+    the reload that follows must recognise the row as this estate's own. The
+    row starts linked and disabled: the policy preserves an operator's flag,
+    so a reload that returned the pre-claim copy would look unlinked and
+    re-enable it.
+    """
+    estate_a_id, _estate_b_id = create_estates
+    _require_overlapping_transactions(session_factory)
+    await _import_for_estate(
+        session_factory, wildside_catalogue_path, "estate-a", "same-estate-race"
+    )
+    catalogue_ids = await _catalogue_repository_ids(session_factory, "estate-a")
+    async with session_factory() as session, session.begin():
+        session.add(
+            Repository(
+                github_owner="leynos",
+                github_name="wildside",
+                default_branch="main",
+                catalogue_repository_id=catalogue_ids["leynos/wildside"],
+                ingestion_enabled=False,
+            )
+        )
+    _synchronize_silver_load(monkeypatch)
+
+    completed = _completed(
+        await _run_two_syncs(session_factory, ("estate-a", "estate-a"))
+    )
+
+    assert len(completed) == 2, "Both overlapping syncs must finish"
+    for result in completed:
+        assert "leynos/wildside" not in result.repositories_conflicted, (
+            "A sync must not report its own estate's claim as a conflict"
+        )
+        assert "leynos/wildside" in result.repositories_left_disabled, (
+            "Both syncs must leave the operator's disabled flag in place"
+        )
+    repo = await fetch_silver_repo(session_factory, "leynos", "wildside")
+    assert repo is not None, "The shared row should still exist"
+    assert repo.estate_id == estate_a_id, "The estate's own claim must stand"
+    assert repo.catalogue_repository_id == catalogue_ids["leynos/wildside"], (
+        "The catalogue link must survive both syncs"
+    )
+    assert repo.ingestion_enabled is False, (
+        "A reload that missed the winner's link would re-enable the row"
+    )
 
 
 @pytest.mark.asyncio
