@@ -12,7 +12,7 @@ import typing as typ
 import pytest
 
 from ghillie.catalogue import CatalogueImporter
-from ghillie.registry import RepositoryRegistryService
+from ghillie.registry import RepositoryRegistryService, SyncResult
 from ghillie.registry import sync as sync_module
 from ghillie.silver.storage import Repository
 from tests.fixtures.specs import RepositoryCreateSpec
@@ -66,6 +66,68 @@ async def test_claim_unowned_repository_is_atomic_under_a_stale_view(
     repo = await fetch_silver_repo(session_factory, "leynos", "adoptme")
     assert repo is not None, "The adopted row should still exist"
     assert repo.estate_id == estate_b_id, "The winning estate must keep the row"
+
+
+@pytest.mark.asyncio
+async def test_removal_path_leaves_a_row_another_estate_claimed(
+    session_factory: async_sessionmaker[AsyncSession],
+    create_estates: tuple[str, str],
+    create_repo: CreateRepoFn,
+) -> None:
+    """The removal path must not disable a row another estate now owns.
+
+    The row must be linked for the removal path to consider disabling it, and
+    unowned for another estate to be able to claim it. That is the narrow
+    state in which a stale ownership view reaches the removal write. The claim
+    lands before that write; the ownership condition on the UPDATE is the only
+    thing that stops this sync from mutating a repository the policy forbids
+    it to touch.
+    """
+    estate_a_id, estate_b_id = create_estates
+    await create_repo(
+        "leynos",
+        "retired",
+        spec=RepositoryCreateSpec(catalogue_repository_id="cat-orphan"),
+    )
+
+    async with session_factory() as stale_session:
+        stale_rows = await sync_module._load_silver_repositories(
+            stale_session, estate_a_id, []
+        )
+        # End the read transaction but keep the pre-claim view.
+        await stale_session.commit()
+
+    async with session_factory() as winner_session:
+        winner_rows = await sync_module._load_silver_repositories(
+            winner_session, estate_b_id, []
+        )
+        claimed = await sync_module._claim_unowned_repository(
+            winner_session, winner_rows["leynos/retired"], estate_b_id
+        )
+        assert claimed, "The first claim of the unowned row should succeed"
+        await winner_session.commit()
+
+    async with session_factory() as loser_session:
+        result = SyncResult(estate_key="estate-a")
+        context = sync_module._SilverSyncContext(
+            session=loser_session,
+            silver_repos=stale_rows,
+            estate_id=estate_a_id,
+            now=sync_module.utcnow(),
+            result=result,
+        )
+        await sync_module._deactivate_removed_repository(context, "leynos/retired")
+        await loser_session.commit()
+
+    assert result.repositories_deactivated == 0, (
+        "The removal path must not count a row it could not deactivate"
+    )
+    repo = await fetch_silver_repo(session_factory, "leynos", "retired")
+    assert repo is not None, "The claimed row should still exist"
+    assert repo.estate_id == estate_b_id, "The winner's claim must stand"
+    assert repo.ingestion_enabled is True, (
+        "The removal path must not disable another estate's repository"
+    )
 
 
 @pytest.mark.asyncio

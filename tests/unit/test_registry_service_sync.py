@@ -492,10 +492,10 @@ async def test_sync_writes_slugs_in_sorted_order(
         written.append(slug)
         await original_sync(typ.cast("typ.Any", context), slug, cat_repo)
 
-    def _record_removal(context: object, slug: str) -> None:
+    async def _record_removal(context: object, slug: str) -> None:
         """Record the slug before delegating to the real removal path."""
         written.append(slug)
-        original_remove(typ.cast("typ.Any", context), slug)
+        await original_remove(typ.cast("typ.Any", context), slug)
 
     monkeypatch.setattr(sync_module, "_catalogue_repository_map", _reversed_map)
     monkeypatch.setattr(sync_module, "_sync_one_repository", _record)

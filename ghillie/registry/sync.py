@@ -481,7 +481,7 @@ async def _sync_repositories(
         if slug in plan.catalogue_repos:
             await _sync_one_repository(context, slug, plan.catalogue_repos[slug])
         else:
-            _deactivate_removed_repository(context, slug)
+            await _deactivate_removed_repository(context, slug)
         await session.flush()
 
 
@@ -503,11 +503,23 @@ def _create_silver_repository(
     )
 
 
-def _deactivate_removed_repository(
+async def _deactivate_removed_repository(
     context: _SilverSyncContext,
     slug: str,
 ) -> None:
-    """Deactivate one repository that is no longer in this estate's catalogue."""
+    """Deactivate one repository that is no longer in this estate's catalogue.
+
+    The loaded view can be stale. A row this sync read as unowned may have been
+    claimed by another estate before this write, and the removal path would
+    then disable a repository the policy forbids it to touch. The ownership
+    condition therefore travels with the UPDATE, so a claim that landed after
+    the load leaves no row to match. Judging ownership from the loaded view
+    alone cannot close that gap.
+
+    The statement synchronizes the session by fetch, so the loaded instance
+    adopts the committed values without an assignment that would queue an
+    unconditional UPDATE on the next flush and defeat the guard.
+    """
     silver_repo = context.silver_repos[slug]
     decision = decide_for_removed_repository(
         _silver_state(silver_repo, context.estate_id)
@@ -516,8 +528,21 @@ def _deactivate_removed_repository(
         return
     if not silver_repo.ingestion_enabled:
         return
-    silver_repo.ingestion_enabled = False
-    silver_repo.last_synced_at = context.now
+
+    deactivated_id = await context.session.scalar(
+        update(Repository)
+        .where(
+            Repository.id == silver_repo.id,
+            Repository.estate_id.is_(None)
+            | (Repository.estate_id == context.estate_id),
+        )
+        .values(ingestion_enabled=False, last_synced_at=context.now)
+        .returning(Repository.id)
+        .execution_options(synchronize_session="fetch")
+    )
+    if deactivated_id is None:
+        # Another estate claimed the row after this sync loaded its view.
+        return
     context.result.repositories_deactivated += 1
 
 

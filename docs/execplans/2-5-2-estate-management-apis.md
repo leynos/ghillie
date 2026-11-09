@@ -422,6 +422,14 @@ per pull request.
       state-machine assertions name the field they check. The flush-failure
       test now counts a real run's flushes and fails on the dry run's next
       one: removing the dry-run flush makes it fail with `DID NOT RAISE`.
+- [x] (2026-11-09) Closed the Domain Architecture pre-merge row instead of
+      rebutting it again. The removal write now carries the ownership
+      condition, so a stale view cannot disable a row another estate claimed
+      after the load (D28). The Surprises entry records the limit as closed.
+      The new direct-primitive test is red when the condition is removed —
+      it reports a deactivation and leaves the winner's row disabled — and
+      green with it. The sorted-order test's removal recorder became async to
+      match the awaited removal path.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
@@ -483,9 +491,8 @@ per pull request.
   `estate_id` as adoptable, and therefore as owned for its purposes, such a row
   falls through to the removal and update paths like an owned one. No normal
   production path that creates that state was identified: adoption applies only
-  to unlinked rows, and creation always sets `estate_id`. Two narrow limits
-  follow. EP-M1 records both rather than adding special cases, and they do not
-  share an origin.
+  to unlinked rows, and creation always sets `estate_id`. One narrow limit
+  follows. EP-M1 records it rather than adding a special case.
   - An ownership-only claim does not register as an update. D28 introduced this
     limit. `_claim_unowned_repository` mirrors the new `estate_id` onto the
     loaded row, so `_update_silver_repository` afterwards finds every field
@@ -493,12 +500,11 @@ per pull request.
     increment and `last_synced_at` does not advance for that row. At the PR
     base the claim was unconditional and `_update_silver_repository` applied
     `estate_id` itself, so the same change was counted.
-  - The removal path judges ownership from the loaded view. This limit predates
-    D28 and is unchanged by it. If the slug is absent from this estate's
-    catalogue and is enabled, the removal path disables it — including when
-    another estate claimed the row after this sync loaded its view. Closing
-    that would need the same conditional ownership check in the removal path
-    that D28 added to the claim.
+  - ~~The removal path judges ownership from the loaded view.~~ **Closed
+    2026-11-09.** The removal write now carries the ownership condition, so a
+    row another estate claimed after the load matches no row and is left
+    untouched (D28). The stale view still decides *whether* a removal is
+    attempted; it no longer decides what may be written.
 
 ## Decision log
 
@@ -726,6 +732,21 @@ expert-panel review.
   `ON CONFLICT DO NOTHING` needs no nested transaction and behaves the same on
   both supported dialects. A dialect without an upsert construct falls back to
   the plain insert.
+
+  The removal write carries the same ownership condition.
+  `_deactivate_removed_repository` now issues
+  `UPDATE ... WHERE id = :id AND (estate_id IS NULL OR estate_id = :estate)`
+  rather than mutating the loaded instance. The stale view may still decide
+  that a removal is attempted — the policy is applied to it — but it no longer
+  decides what may be written: a row another estate claimed after the load
+  matches no row and keeps its owner and ingestion flag. Mutating the instance
+  instead would queue an unconditional UPDATE on the next flush and overwrite
+  the winner, so the statement synchronizes the session by fetch.
+  `test_removal_path_leaves_a_row_another_estate_claimed` drives the
+  direct-primitive case: an unowned but linked row, which is the only state in
+  which the removal path reaches a write and another estate can also claim it.
+  Removing the ownership condition makes it report a deactivation and leave the
+  winner's row disabled.
 
   The sync makes one sorted pass over the union of catalogue and Silver slugs,
   flushing each slug before the next. Catalogue order is not guaranteed to
@@ -1045,13 +1066,17 @@ Obligation O6, CLI import closure (`TDD-CLI-THIN`).
 - Non-vacuity: the test also asserts that `ghillie.cli.commands.estate` is in
   the loaded set, proving the estate commands were imported.
 
-Concurrency of adoption and insertion (D28): eight tests cover the boundary.
-Three live in `tests/unit/test_registry_service_sync_adoption.py`.
+Concurrency of adoption, removal, and insertion (D28): nine tests cover the
+boundary. Four live in `tests/unit/test_registry_service_sync_adoption.py`.
 `test_claim_unowned_repository_is_atomic_under_a_stale_view` calls
 `_claim_unowned_repository` directly, first with the winner's session and then
 with a row loaded before that claim committed, and asserts the second call
-claims nothing. `test_sync_reports_conflict_when_adoption_loses_a_race` drives
-one sync whose claim matches no row and asserts the reported conflict.
+claims nothing. `test_removal_path_leaves_a_row_another_estate_claimed` calls
+`_deactivate_removed_repository` with a stale view of an unowned but linked
+row, after another estate has claimed it, and asserts the row keeps its owner
+and enabled flag and is not counted as deactivated.
+`test_sync_reports_conflict_when_adoption_loses_a_race` drives one sync whose
+claim matches no row and asserts the reported conflict.
 `test_sync_continues_after_losing_a_claim_to_its_own_estate` has the winner
 adopt and link the row, so the loser's reload must defeat the identity map: it
 asserts the sync carries on without a conflict, keeps the operator's disabled
