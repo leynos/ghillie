@@ -44,14 +44,17 @@ field, CLI verb, or persisted schema changes:
 
 - `repositories_conflicted` lists catalogue slugs another estate owns.
 - `repositories_left_disabled` previews, in slug order, the first 100 active
-  catalogue repositories whose linked row is still disabled after the sync.
-- `repositories_left_disabled_count` carries the exact total beyond the
-  preview.
+  catalogue repositories whose linked row was disabled in the view the sync
+  loaded and that the sync left disabled.
+- `repositories_left_disabled_count` carries the total across the estate.
 
-The preview and count say that ingestion is off, not why: a row can have been
-disabled by an operator or by an earlier removal. `repositories_deactivated`
-counts only removed rows that this sync turned from enabled to disabled, so a
-removed row an operator had already disabled is not counted again.
+The preview and count observe that view plus the sync's own writes rather than
+re-reading committed state, so a toggle another writer commits after the load
+is not seen and is not overwritten. They say that ingestion is off, not why: a
+row can have been disabled by an operator or by an earlier removal.
+`repositories_deactivated` counts only removed rows that this sync turned from
+enabled to disabled, so a removed row an operator had already disabled is not
+counted again.
 
 ### Dry runs
 

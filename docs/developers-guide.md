@@ -290,10 +290,13 @@ Either way the call returns a `SyncResult`. `repositories_created`,
 `repositories_updated`, and `repositories_deactivated` count the changes.
 `repositories_conflicted` lists this estate's catalogue slugs that another
 estate owns; sync leaves those rows untouched. `repositories_left_disabled`
-previews the active catalogue repositories whose linked Silver row is still
-disabled after the sync, and `repositories_left_disabled_count` carries the
-exact total beyond the preview limit. The pair says that ingestion is off, not
-why: a row can have been disabled by an operator or by an earlier removal.
+previews the active catalogue repositories whose linked Silver row was disabled
+in the view the sync loaded and that the sync left disabled, and
+`repositories_left_disabled_count` carries the total across the estate. The
+pair observes that view plus the sync's own writes rather than re-reading
+committed state, so a toggle another writer commits after the load is not seen
+and is not overwritten. They say that ingestion is off, not why: a row can have
+been disabled by an operator or by an earlier removal.
 `repositories_deactivated` counts only removed rows that this sync turned from
 enabled to disabled, so a removed row an operator had already disabled is not
 counted again.

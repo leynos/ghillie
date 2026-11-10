@@ -464,6 +464,15 @@ per pull request.
       `test_a_concurrent_enable_is_not_reflected_in_the_left_disabled_report`
       pins it on PostgreSQL. Re-reading committed state before reporting makes
       that test fail with an empty left-disabled list.
+- [x] (2026-11-10) Finished the D29 wording sweep. The follow-up reply named
+      three passages that still promised a completion-state result:
+      `docs/developers-guide.md`, `docs/migration-guide.md`, and
+      `docs/ghillie-bronze-silver-architecture-design.md`. Each now says the
+      preview and count describe the view the sync loaded plus its own writes,
+      that a toggle another writer commits after the load is not seen or
+      overwritten, and that the count is the estate total rather than a
+      remainder beyond the preview. No runtime, test, or `SyncResult` text
+      changed.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
