@@ -258,9 +258,11 @@ async def test_overlapping_syncs_of_one_estate_share_an_unowned_row(
     Both loads finish before either sync writes, so both decide to claim the
     unowned row. The loser's claim matches no row once the winner commits, and
     the reload that follows must recognise the row as this estate's own. The
-    row starts linked and disabled: the policy preserves an operator's flag,
-    so a reload that returned the pre-claim copy would look unlinked and
-    re-enable it.
+    row is seeded linked, disabled, and with the catalogue's documentation
+    paths, so every field the update compares already matches. Neither sync
+    then reports an update: the loser's reload saw the committed claim, while
+    the pre-claim copy in its identity map still read as unowned and would
+    have rewritten ``estate_id``.
     """
     estate_a_id, _estate_b_id = create_estates
     _require_overlapping_transactions(session_factory)
@@ -276,6 +278,9 @@ async def test_overlapping_syncs_of_one_estate_share_an_unowned_row(
                 default_branch="main",
                 catalogue_repository_id=catalogue_ids["leynos/wildside"],
                 ingestion_enabled=False,
+                # The catalogue supplies these, so seeding them leaves the
+                # update nothing to change beyond a missed claim.
+                documentation_paths=["docs/roadmap.md", "docs/adr/"],
             )
         )
     _synchronize_silver_load(monkeypatch)
@@ -292,6 +297,9 @@ async def test_overlapping_syncs_of_one_estate_share_an_unowned_row(
         assert "leynos/wildside" in result.repositories_left_disabled, (
             "Both syncs must leave the operator's disabled flag in place"
         )
+        assert result.repositories_updated == 0, (
+            "A sync working from a cached pre-claim copy would rewrite the row"
+        )
     repo = await fetch_silver_repo(session_factory, "leynos", "wildside")
     assert repo is not None, "The shared row should still exist"
     assert repo.estate_id == estate_a_id, "The estate's own claim must stand"
@@ -299,7 +307,10 @@ async def test_overlapping_syncs_of_one_estate_share_an_unowned_row(
         "The catalogue link must survive both syncs"
     )
     assert repo.ingestion_enabled is False, (
-        "A reload that missed the winner's link would re-enable the row"
+        "The operator's disabled flag must survive both syncs"
+    )
+    assert repo.last_synced_at is None, (
+        "A rewrite from the cached copy would have restamped the row"
     )
 
 

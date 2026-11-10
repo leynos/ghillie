@@ -436,6 +436,13 @@ per pull request.
       `ingestion_enabled IS TRUE`, and a PostgreSQL same-estate overlap test
       covers the reload path CodeRabbit asked for. Both repairs have a red
       case: the count test reports one deactivation without the predicate.
+- [x] (2026-11-10) Actioned the two follow-ups from CodeRabbit's confirmation
+      of `eb1be5f`. The inactive-catalogue test now asserts the update count,
+      a zero deactivation count and the left-disabled preview. The same-estate
+      overlap test is corrected and strengthened: its cached-copy claim was
+      wrong for a linked row, and it now seeds the catalogue's documentation
+      paths so a cached pre-claim copy is observable as one reported update.
+      Passing `populate_existing=False` makes it fail with `assert 1 == 0`.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
@@ -767,8 +774,14 @@ expert-panel review.
   covers the PostgreSQL case CodeRabbit asked for: two overlapping syncs of one
   estate contend for an unowned, linked, disabled row, neither reports a
   self-conflict, and the committed row keeps the estate's ownership, the
-  catalogue link and the operator's disabled flag. Removing the ownership
-  condition makes it report a deactivation and leave the winner's row disabled.
+  catalogue link and the operator's disabled flag. The row is seeded with the
+  catalogue's documentation paths, so a session that reloaded the committed
+  claim finds every compared field equal and reports no update. The losing
+  sync's cached pre-claim copy still reads as unowned, so it would rewrite
+  `estate_id` and report one update; passing `populate_existing=False` in
+  `_reconcile_lost_claim` makes the test fail with `assert 1 == 0`. Removing
+  the ownership condition makes it report a deactivation and leave the winner's
+  row disabled.
 
   The sync makes one sorted pass over the union of catalogue and Silver slugs,
   flushing each slug before the next. Catalogue order is not guaranteed to
@@ -1124,21 +1137,22 @@ that six slugs produce six rows and six conflicts rather than twelve inserts.
 The fifth, `test_overlapping_syncs_across_both_phases_do_not_deadlock`, is
 recorded with the sorted-write-order decision above.
 `test_overlapping_syncs_of_one_estate_share_an_unowned_row` races one estate
-against itself: both syncs load the unowned, linked, disabled row, one claim
-wins, and the loser must reload the committed link and ownership rather than
-report a self-conflict or re-enable the row. These four need a backend with
-MVCC, so they skip unless the session factory is bound to Postgres. The suite's
-default py-pglite path cannot supply one on this host: the pinned asyncpg
-rejects PGlite's TLS upgrade, and a connection that does succeed hangs in
-`engine.dispose()`. `GHILLIE_TEST_DB` therefore also accepts a
-`postgresql+asyncpg://` URL, which `tests/conftest.py` uses to reset the
-database's `public` schema per test and initialize storage there. That reset
-needs a serial run, so the fixture raises under `pytest-xdist` and the guides
-point at `uv run pytest` rather than `make test`. Against Postgres 17 in a
-throwaway container, all 24 tests in the three sync modules passed with no
-skips. The insert test fails with `RegistrySyncError` when its repair is
-reverted, and the removal-count test reports one deactivation when the enabled
-predicate is removed.
+against itself over an unowned, linked, disabled row: one claim wins, neither
+sync reports a self-conflict, and neither reports an update, because the
+loser's reload of the committed claim finds every compared field equal. A
+reload that returned the cached pre-claim copy would rewrite `estate_id` and
+report one update. These four need a backend with MVCC, so they skip unless the
+session factory is bound to Postgres. The suite's default py-pglite path cannot
+supply one on this host: the pinned asyncpg rejects PGlite's TLS upgrade, and a
+connection that does succeed hangs in `engine.dispose()`. `GHILLIE_TEST_DB`
+therefore also accepts a `postgresql+asyncpg://` URL, which `tests/conftest.py`
+uses to reset the database's `public` schema per test and initialize storage
+there. That reset needs a serial run, so the fixture raises under
+`pytest-xdist` and the guides point at `uv run pytest` rather than `make test`.
+Against Postgres 17 in a throwaway container, all 24 tests in the three sync
+modules passed with no skips. The insert test fails with `RegistrySyncError`
+when its repair is reverted, and the removal-count test reports one
+deactivation when the enabled predicate is removed.
 
 The disabled preview is asserted exactly, not by membership.
 `test_sync_previews_only_disabled_linked_repositories` links four repositories,
@@ -1169,9 +1183,12 @@ gating every commit.
 ### EP-M1 (PR-A): sync preserves operator toggles and reports conflicts
 
 Tests first. Add the named examples to
-`tests/unit/test_registry_service_sync.py`; keep the two existing behaviour
-tests (`test_sync_updates_existing_silver_repository` for ad hoc adoption and
-`test_sync_disables_ingestion_for_inactive_catalogue_repository`) unchanged. Add
+`tests/unit/test_registry_service_sync.py`; keep
+`test_sync_updates_existing_silver_repository` (ad hoc adoption) unchanged.
+`test_sync_disables_ingestion_for_inactive_catalogue_repository` keeps its
+behaviour assertion and now also asserts that the inactive-row disable is
+counted once in `repositories_updated`, never in `repositories_deactivated`,
+and that the slug stays out of the left-disabled preview. Add
 `tests/unit/test_registry_sync_policy.py` and
 `tests/unit/test_registry_sync_state_machine.py` (O1).
 

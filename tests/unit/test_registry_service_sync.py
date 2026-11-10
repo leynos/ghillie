@@ -137,12 +137,21 @@ async def test_sync_disables_ingestion_for_inactive_catalogue_repository(
         assert cat_repo is not None, "The imported catalogue record should exist"
         cat_repo.is_active = False
 
-    await registry_service.sync_from_catalogue("test")
+    result = await registry_service.sync_from_catalogue("test")
 
     repo = await fetch_silver_repo(session_factory, "leynos", "wildside")
     assert repo is not None, "The Silver row should still exist"
     assert repo.ingestion_enabled is False, (
         "An inactive catalogue repository should have ingestion disabled"
+    )
+    assert result.repositories_updated == 1, (
+        "An inactive-row disable is an update, counted once"
+    )
+    assert result.repositories_deactivated == 0, (
+        "An inactive row is still in the catalogue, so it is not a removal"
+    )
+    assert "leynos/wildside" not in result.repositories_left_disabled, (
+        "An inactive catalogue row is not part of the left-disabled preview"
     )
 
 
