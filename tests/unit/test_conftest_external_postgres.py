@@ -88,7 +88,7 @@ def test_external_postgres_setup_raises_under_xdist_before_connecting(
     reason="the external Postgres fixture resets a shared schema; run serially",
 )
 def test_external_postgres_setup_works_serially() -> None:
-    """A serial run drops seeded state and initialises both storages."""
+    """A serial run drops seeded state and initializes both storages."""
     url = conftest._external_postgres_url()
     assert url is not None, "The skip guard guarantees a URL"
 
@@ -98,5 +98,5 @@ def test_external_postgres_setup_works_serially() -> None:
         "Setup must drop the schema, removing the seeded marker table"
     )
     assert {"estates", "repositories"} <= tables, (
-        "Setup must initialise the catalogue and Silver storage tables"
+        "Setup must initialize the catalogue and Silver storage tables"
     )

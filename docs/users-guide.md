@@ -489,10 +489,15 @@ print(result.repositories_left_disabled_count)
 print(result.repositories_left_disabled)  # first 100 slugs
 ```
 
-`repositories_left_disabled_count` is the exact number of active catalogue
-repositories whose linked Silver row is still disabled when the sync finishes,
-including rows an operator disabled. A row the sync itself turns off because it
-left the catalogue is counted in `repositories_deactivated` instead, not in the
+`repositories_left_disabled_count` is the number of active catalogue
+repositories whose linked Silver row was disabled in the view the sync loaded
+and that the sync left disabled, including rows an operator disabled. It is an
+observation of that view plus the sync's own writes, not a fresh read of
+committed state: a toggle another writer commits after the load is not seen, so
+under concurrent edits the count can differ from a query issued afterwards. The
+sync does not overwrite such a toggle, because preserving a disabled row leaves
+`ingestion_enabled` untouched. A row the sync itself turns off because it left
+the catalogue is counted in `repositories_deactivated` instead, not in the
 left-disabled set; a row it turns off because its catalogue entry became
 inactive is an ordinary update and is counted in `repositories_updated`. A
 repository another estate owns is reported in `repositories_conflicted`.

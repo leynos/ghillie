@@ -44,12 +44,16 @@ class SyncResult:
 
     ``repositories_conflicted`` lists repositories that this estate's catalogue
     names but another estate owns; sync leaves them untouched. The
-    ``repositories_left_disabled`` preview and its exact count report active
-    catalogue repositories whose linked Silver row is still disabled after the
-    sync. They say that ingestion is off, not why: a row may have been disabled
-    by an operator or by an earlier removal. ``repositories_deactivated`` counts
-    only removed rows that this sync turned from enabled to disabled, so a
-    removed row an operator had already disabled is not counted again.
+    ``repositories_left_disabled`` preview and its count report active
+    catalogue repositories whose linked Silver row was disabled in the view
+    this sync loaded and that the sync left disabled. They are an observation
+    of that view plus this sync's own writes, not a re-read of committed
+    state: a toggle another writer commits after the load is not seen, and the
+    sync does not overwrite it. They say that ingestion is off, not why: a row
+    may have been disabled by an operator or by an earlier removal.
+    ``repositories_deactivated`` counts only removed rows that this sync turned
+    from enabled to disabled, so a removed row an operator had already
+    disabled is not counted again.
     """
 
     estate_key: str

@@ -11,7 +11,7 @@ import asyncio
 import typing as typ
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
 from ghillie.catalogue import (
@@ -257,7 +257,7 @@ async def test_overlapping_syncs_of_one_estate_share_an_unowned_row(
 
     Both loads finish before either sync writes, so both decide to claim the
     unowned row. The loser's claim matches no row once the winner commits, and
-    the reload that follows must recognise the row as this estate's own. The
+    the reload that follows must recognize the row as this estate's own. The
     row is seeded linked, disabled, and with the catalogue's documentation
     paths, so every field the update compares already matches. Neither sync
     then reports an update: the loser's reload saw the committed claim, while
@@ -312,6 +312,82 @@ async def test_overlapping_syncs_of_one_estate_share_an_unowned_row(
     assert repo.last_synced_at is None, (
         "A rewrite from the cached copy would have restamped the row"
     )
+
+
+@pytest.mark.asyncio
+async def test_a_concurrent_enable_is_not_reflected_in_the_left_disabled_report(
+    session_factory: async_sessionmaker[AsyncSession],
+    create_estates: tuple[str, str],
+    wildside_catalogue_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The left-disabled report describes the view the sync loaded.
+
+    The count and preview are observations of that view plus the sync's own
+    writes, not a census of committed state (D29). A writer that enables the
+    row after the load is not seen, and the sync must not overwrite the toggle
+    it never looked at: the preserve branch leaves ``ingestion_enabled`` alone.
+    """
+    estate_a_id, _estate_b_id = create_estates
+    _require_overlapping_transactions(session_factory)
+    await _import_for_estate(
+        session_factory, wildside_catalogue_path, "estate-a", "concurrent-enable"
+    )
+    catalogue_ids = await _catalogue_repository_ids(session_factory, "estate-a")
+    async with session_factory() as session, session.begin():
+        session.add(
+            Repository(
+                github_owner="leynos",
+                github_name="wildside",
+                default_branch="main",
+                estate_id=estate_a_id,
+                catalogue_repository_id=catalogue_ids["leynos/wildside"],
+                ingestion_enabled=False,
+                documentation_paths=["docs/roadmap.md", "docs/adr/"],
+            )
+        )
+
+    original_load = sync_module._load_silver_repositories
+
+    async def _load_then_enable(
+        session: AsyncSession,
+        estate_id: str | None,
+        catalogue_slugs: cabc.Iterable[str],
+    ) -> dict[str, Repository]:
+        """Load the stale view, then let another writer enable the row."""
+        rows = await original_load(session, estate_id, catalogue_slugs)
+        async with session_factory() as other, other.begin():
+            await other.execute(
+                update(Repository)
+                .where(
+                    Repository.github_owner == "leynos",
+                    Repository.github_name == "wildside",
+                )
+                .values(ingestion_enabled=True)
+            )
+        return rows
+
+    monkeypatch.setattr(sync_module, "_load_silver_repositories", _load_then_enable)
+
+    result = await RepositoryRegistryService(
+        session_factory, session_factory
+    ).sync_from_catalogue("estate-a")
+
+    assert "leynos/wildside" in result.repositories_left_disabled, (
+        "The report must describe the view the sync loaded"
+    )
+    assert result.repositories_left_disabled_count == 1, (
+        "The count must agree with the preview for a single disabled row"
+    )
+    assert result.repositories_updated == 0, (
+        "A preserved row whose other fields match is not an update"
+    )
+    repo = await fetch_silver_repo(session_factory, "leynos", "wildside")
+    assert repo is not None, "The shared row should still exist"
+    assert repo.ingestion_enabled is True, (
+        "The sync must not overwrite a toggle it never looked at"
+    )
+    assert repo.last_synced_at is None, "A preserved row must not be restamped"
 
 
 @pytest.mark.asyncio

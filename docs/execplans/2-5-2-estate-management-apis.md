@@ -451,6 +451,19 @@ per pull request.
       leaving six pending inserts in the failed dry run's transaction; a dry
       run that committed on the failure path fails the snapshot assertion with
       six rows.
+- [x] (2026-11-10) Actioned the review of `d31dee3`. Two docstring spellings
+      now use the project's `-ize` forms, and the D28 record attributes the
+      ownership-condition mutation result to
+      `test_removal_path_leaves_a_row_another_estate_claimed` rather than the
+      same-estate overlap test. The Domain Architecture row asked for a
+      consistent state boundary or an explicit observation contract for the
+      left-disabled count and preview; D29 records the second choice, because
+      a locked re-read would undo the sorted single-pass order and still race
+      a later commit. The users' guide and `SyncResult` now say the report
+      describes the loaded view, and
+      `test_a_concurrent_enable_is_not_reflected_in_the_left_disabled_report`
+      pins it on PostgreSQL. Re-reading committed state before reporting makes
+      that test fail with an empty left-disabled list.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
@@ -531,6 +544,13 @@ per pull request.
     `ingestion_enabled IS TRUE`, so a row another writer disabled after the
     load is neither counted in `repositories_deactivated` nor restamped
     (D28).
+  - The left-disabled count and preview describe the loaded view.
+    **Documented and pinned 2026-11-10.** They are observations of that view
+    plus the sync's own writes, not a re-read of committed state: a locked
+    re-read would undo the sorted single-pass order and still race a commit
+    landing afterwards (D29).
+    `test_a_concurrent_enable_is_not_reflected_in_the_left_disabled_report`
+    holds the contract on PostgreSQL.
 
 ## Decision log
 
@@ -771,6 +791,8 @@ expert-panel review.
   `test_removal_path_leaves_a_row_another_estate_claimed` drives the
   direct-primitive case: an unowned but linked row, which is the only state in
   which the removal path reaches a write and another estate can also claim it.
+  Removing the ownership condition makes that test report a deactivation and
+  leave the winner's row disabled.
 
   The same statement also carries `ingestion_enabled IS TRUE`. The count and
   `last_synced_at` describe what this sync changed, so a row an operator (or an
@@ -787,9 +809,7 @@ expert-panel review.
   claim finds every compared field equal and reports no update. The losing
   sync's cached pre-claim copy still reads as unowned, so it would rewrite
   `estate_id` and report one update; passing `populate_existing=False` in
-  `_reconcile_lost_claim` makes the test fail with `assert 1 == 0`. Removing
-  the ownership condition makes it report a deactivation and leave the winner's
-  row disabled.
+  `_reconcile_lost_claim` makes the test fail with `assert 1 == 0`.
 
   The sync makes one sorted pass over the union of catalogue and Silver slugs,
   flushing each slug before the next. Catalogue order is not guaranteed to
@@ -808,6 +828,22 @@ expert-panel review.
 
   D25 and D26 are introduced by branches B and C and follow this entry once the
   stack is applied.
+
+- D29, the left-disabled report describes the loaded view. The count and
+  preview are built as the sync walks the rows it loaded, so they are an
+  observation of that view plus this sync's own writes, not a re-read of
+  committed state. A toggle another writer commits after the load is not
+  observed, and the sync must not overwrite it: the preserve branch leaves
+  `ingestion_enabled` untouched, so the concurrent toggle survives. Making the
+  report an exact completion-state census would need a locked re-read of every
+  row, which would undo the sorted single-pass lock order D28 relies on, and
+  would still race a commit landing after that read. The users' guide and
+  `SyncResult` therefore document the observation contract instead of promising
+  exactness under concurrent edits.
+  `test_a_concurrent_enable_is_not_reflected_in_the_left_disabled_report` pins
+  it on PostgreSQL: a writer enables the row between the load and the sync's
+  completion, the result still reports the slug as left disabled, and the
+  committed row stays enabled.
 
 ## Outcomes & retrospective
 
@@ -1109,7 +1145,7 @@ Obligation O6, CLI import closure (`TDD-CLI-THIN`).
 - Non-vacuity: the test also asserts that `ghillie.cli.commands.estate` is in
   the loaded set, proving the estate commands were imported.
 
-Concurrency of adoption, removal, and insertion (D28): eleven tests cover the
+Concurrency of adoption, removal, and insertion (D28): twelve tests cover the
 boundary. Five live in `tests/unit/test_registry_service_sync_adoption.py`.
 `test_claim_unowned_repository_is_atomic_under_a_stale_view` calls
 `_claim_unowned_repository` directly, first with the winner's session and then
@@ -1128,9 +1164,9 @@ adopt and link the row, so the loser's reload must defeat the identity map: it
 asserts the sync carries on without a conflict, keeps the operator's disabled
 flag, and reports the row as left disabled.
 
-The other six live in `tests/unit/test_registry_service_sync_concurrency.py`, a
-module split out of the first because the concurrency harness gave the combined
-file low cohesion under CodeScene's critical-rule gate.
+The other seven live in `tests/unit/test_registry_service_sync_concurrency.py`,
+a module split out of the first because the concurrency harness gave the
+combined file low cohesion under CodeScene's critical-rule gate.
 `test_lost_insert_reports_a_conflict_instead_of_aborting` drives one sync whose
 loaded view misses a row another estate owns, and asserts the sync completes
 with the slug in `repositories_conflicted` and the winner's row unchanged.
@@ -1149,18 +1185,22 @@ against itself over an unowned, linked, disabled row: one claim wins, neither
 sync reports a self-conflict, and neither reports an update, because the
 loser's reload of the committed claim finds every compared field equal. A
 reload that returned the cached pre-claim copy would rewrite `estate_id` and
-report one update. These four need a backend with MVCC, so they skip unless the
-session factory is bound to Postgres. The suite's default py-pglite path cannot
-supply one on this host: the pinned asyncpg rejects PGlite's TLS upgrade, and a
-connection that does succeed hangs in `engine.dispose()`. `GHILLIE_TEST_DB`
-therefore also accepts a `postgresql+asyncpg://` URL, which `tests/conftest.py`
-uses to reset the database's `public` schema per test and initialize storage
-there. That reset needs a serial run, so the fixture raises under
-`pytest-xdist` and the guides point at `uv run pytest` rather than `make test`.
-Against Postgres 17 in a throwaway container, all 24 tests in the three sync
-modules passed with no skips. The insert test fails with `RegistrySyncError`
-when its repair is reverted, and the removal-count test reports one
-deactivation when the enabled predicate is removed.
+report one update.
+`test_a_concurrent_enable_is_not_reflected_in_the_left_disabled_report` pins
+the D29 observation contract: a writer enables the row between the load and
+completion, the result still reports it as left disabled, and the committed
+toggle survives unchanged. These five need a backend with MVCC, so they skip
+unless the session factory is bound to Postgres. The suite's default py-pglite
+path cannot supply one on this host: the pinned asyncpg rejects PGlite's TLS
+upgrade, and a connection that does succeed hangs in `engine.dispose()`.
+`GHILLIE_TEST_DB` therefore also accepts a `postgresql+asyncpg://` URL, which
+`tests/conftest.py` uses to reset the database's `public` schema per test and
+initialize storage there. That reset needs a serial run, so the fixture raises
+under `pytest-xdist` and the guides point at `uv run pytest` rather than
+`make test`. Against Postgres 17 in a throwaway container, all 24 tests in the
+three sync modules passed with no skips. The insert test fails with
+`RegistrySyncError` when its repair is reverted, and the removal-count test
+reports one deactivation when the enabled predicate is removed.
 
 The disabled preview is asserted exactly, not by membership.
 `test_sync_previews_only_disabled_linked_repositories` links four repositories,
