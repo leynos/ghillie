@@ -443,6 +443,14 @@ per pull request.
       wrong for a linked row, and it now seeds the catalogue's documentation
       paths so a cached pre-claim copy is observable as one reported update.
       Passing `populate_existing=False` makes it fail with `assert 1 == 0`.
+- [x] (2026-11-10) Closed CodeRabbit's remaining verification gap in the
+      dry-run failure test. It used to run the failing dry run against the
+      rows the baseline had just committed, which already matched the
+      catalogue, so its snapshot could not tell a rollback from having nothing
+      to undo. The test now clears those rows after measuring the flush count,
+      leaving six pending inserts in the failed dry run's transaction; a dry
+      run that committed on the failure path fails the snapshot assertion with
+      six rows.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.

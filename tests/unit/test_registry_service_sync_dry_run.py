@@ -7,7 +7,7 @@ import dataclasses
 import typing as typ
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 
 from ghillie.catalogue import CatalogueImporter, Estate, RepositoryRecord
@@ -189,7 +189,7 @@ async def test_sync_dry_run_reports_a_flush_time_constraint_failure(
     session_factory: async_sessionmaker[AsyncSession],
     wildside_catalogue_path: Path,
 ) -> None:
-    """A constraint failure in the dry run's final flush surfaces as an error."""
+    """A flush-time constraint failure surfaces as an error and persists nothing."""
     importer = CatalogueImporter(
         session_factory, estate_key="test", estate_name="Test Estate"
     )
@@ -204,7 +204,17 @@ async def test_sync_dry_run_reports_a_flush_time_constraint_failure(
     )
     await baseline_service.sync_from_catalogue("test")
     assert baseline.count > 1, "The sync should flush once per slug"
+
+    # The baseline committed six rows. Clear them so the dry run has real
+    # pending writes to lose: against rows that already match the catalogue its
+    # flushes would carry nothing, and a snapshot taken afterwards could not
+    # tell whether a failure rolled back or simply had nothing to undo. With
+    # the table empty, the six inserts sit uncommitted in the dry run's
+    # transaction and any commit on the failure path would surface below.
+    async with session_factory() as session, session.begin():
+        await session.execute(delete(Repository))
     persisted_before = await snapshot_silver_repos(session_factory)
+    assert persisted_before == [], "The baseline rows should be cleared"
 
     failing = _FlushState(fail_on=baseline.count + 1)
     service = RepositoryRegistryService(
