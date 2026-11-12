@@ -283,15 +283,13 @@ async def test_sync_bounds_the_left_disabled_preview(
     assert result.repositories_left_disabled_count == disabled_total, (
         "The count must cover every disabled repository, not just the preview"
     )
-    assert len(result.repositories_left_disabled) == 100, (
-        "The preview list must stop at exactly 100 entries"
-    )
-    assert len(set(result.repositories_left_disabled)) == 100, (
-        "The preview list must not contain duplicate slugs"
-    )
-    disabled_slugs = {
+    # The preview is documented as the first 100 slugs in sorted order, so
+    # compare the whole sequence rather than its size and membership alone: a
+    # preview that returned the right number of arbitrary slugs, or the right
+    # set in the wrong order, would satisfy the weaker assertions.
+    disabled_slugs = sorted(
         f"leynos/{name}" for name, is_enabled in repositories if not is_enabled
-    }
-    assert set(result.repositories_left_disabled) <= disabled_slugs, (
-        "The preview must never include a repository that is still enabled"
+    )
+    assert result.repositories_left_disabled == disabled_slugs[:100], (
+        "The preview must be the first 100 disabled slugs in sorted order"
     )

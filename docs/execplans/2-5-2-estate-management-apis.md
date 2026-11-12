@@ -473,6 +473,15 @@ per pull request.
       overwritten, and that the count is the estate total rather than a
       remainder beyond the preview. No runtime, test, or `SyncResult` text
       changed.
+- [x] (2026-11-12) Qualified the D29 contract for the one path that does
+      re-read committed state, as the review of `14f375e` asked.
+      `_reconcile_lost_claim` reloads an adoption claim that lost a race in
+      order to judge ownership (D28), so a toggle committed before that reload
+      can be observed, and a row it makes enabled is not reported as left
+      disabled. D29 and `SyncResult` now name that exception, and the users',
+      developers' and migration guides and the architecture design carry the
+      same sentence. Every other row is still reported from the loaded view,
+      and the preserve branch still never rewrites the toggle.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
@@ -843,12 +852,17 @@ expert-panel review.
   observation of that view plus this sync's own writes, not a re-read of
   committed state. A toggle another writer commits after the load is not
   observed, and the sync must not overwrite it: the preserve branch leaves
-  `ingestion_enabled` untouched, so the concurrent toggle survives. Making the
-  report an exact completion-state census would need a locked re-read of every
-  row, which would undo the sorted single-pass lock order D28 relies on, and
-  would still race a commit landing after that read. The users' guide and
-  `SyncResult` therefore document the observation contract instead of promising
-  exactness under concurrent edits.
+  `ingestion_enabled` untouched, so the concurrent toggle survives. The one
+  exception is a lost adoption claim: `_reconcile_lost_claim` re-reads that
+  single committed row to judge ownership (D28), so a toggle committed before
+  that re-read can be observed, and a row it makes enabled is not reported as
+  left disabled. That reload does not make the report a census, because every
+  other row is still reported from the loaded view. Making the report an exact
+  completion-state census would need a locked re-read of every row, which would
+  undo the sorted single-pass lock order D28 relies on, and would still race a
+  commit landing after that read. The users' guide and `SyncResult` therefore
+  document the observation contract instead of promising exactness under
+  concurrent edits.
   `test_a_concurrent_enable_is_not_reflected_in_the_left_disabled_report` pins
   it on PostgreSQL: a writer enables the row between the load and the sync's
   completion, the result still reports the slug as left disabled, and the

@@ -49,8 +49,11 @@ class SyncResult:
     this sync loaded and that the sync left disabled. They are an observation
     of that view plus this sync's own writes, not a re-read of committed
     state: a toggle another writer commits after the load is not seen, and the
-    sync does not overwrite it. They say that ingestion is off, not why: a row
-    may have been disabled by an operator or by an earlier removal.
+    sync does not overwrite it. The exception is a lost adoption claim, which
+    reloads that one row to judge ownership: a toggle committed before the
+    reload can be seen, and a row it makes enabled is not reported as left
+    disabled. They say that ingestion is off, not why: a row may have been
+    disabled by an operator or by an earlier removal.
     ``repositories_deactivated`` counts only removed rows that this sync turned
     from enabled to disabled, so a removed row an operator had already
     disabled is not counted again.
