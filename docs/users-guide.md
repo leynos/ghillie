@@ -494,19 +494,21 @@ repositories whose linked Silver row was disabled in the view the sync loaded
 and that the sync left disabled, including rows an operator disabled. It is an
 observation of that view plus the sync's own writes, not a fresh read of
 committed state: a toggle another writer commits after the load is not seen, so
-under concurrent edits the count can differ from a query issued afterwards. The
-one exception is an adoption claim that loses to a concurrent sync of the same
-estate: that single row is reloaded to judge ownership, so a toggle committed
-before the reload can be seen, and a row it makes enabled is not reported as
-left disabled. The sync does not overwrite such a toggle, because preserving a
-disabled row leaves `ingestion_enabled` untouched. A row the sync itself turns
-off because it left the catalogue is counted in `repositories_deactivated`
-instead, not in the left-disabled set; a row it turns off because its catalogue
-entry became inactive is an ordinary update and is counted in
-`repositories_updated`. A repository another estate owns is reported in
-`repositories_conflicted`. `repositories_left_disabled` is a bounded preview of
-the left-disabled set: it holds at most 100 slugs, in sorted order, so a large
-estate cannot produce an unbounded result body.
+under concurrent edits the count can differ from a query issued afterwards. Two
+paths reload a single row from committed state to judge ownership: an adoption
+claim that loses to a concurrent sync of the same estate, and an owner/name
+insert race that loses to a concurrent sync. A row reloaded that way is
+reported from the reloaded state, so a toggle committed before the reload can
+be seen, and a row it makes enabled is not reported as left disabled. The sync
+does not overwrite such a toggle, because preserving a disabled row leaves
+`ingestion_enabled` untouched. A row the sync itself turns off because it left
+the catalogue is counted in `repositories_deactivated` instead, not in the
+left-disabled set; a row it turns off because its catalogue entry became
+inactive is an ordinary update and is counted in `repositories_updated`. A
+repository another estate owns is reported in `repositories_conflicted`.
+`repositories_left_disabled` is a bounded preview of the left-disabled set: it
+holds at most 100 slugs, in sorted order, so a large estate cannot produce an
+unbounded result body.
 
 If another estate already owns a repository that this estate's catalogue names,
 sync leaves that row untouched and reports the slug in

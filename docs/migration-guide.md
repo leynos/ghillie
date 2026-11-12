@@ -50,13 +50,15 @@ field, CLI verb, or persisted schema changes:
 
 The preview and count observe that view plus the sync's own writes rather than
 re-reading committed state, so a toggle another writer commits after the load
-is not seen and is not overwritten. The exception is a lost adoption claim,
-which reloads that one row to judge ownership: a toggle committed before the
-reload can be seen, and a row it makes enabled is not reported as left
-disabled. They say that ingestion is off, not why: a row can have been disabled
-by an operator or by an earlier removal. `repositories_deactivated` counts only
-removed rows that this sync turned from enabled to disabled, so a removed row
-an operator had already disabled is not counted again.
+is not seen and is not overwritten. Two paths reload a single row from
+committed state to judge ownership: a lost adoption claim and a lost owner/name
+insert race. A row reloaded that way is reported from the reloaded state, so a
+toggle committed before the reload can be seen, and a row it makes enabled is
+not reported as left disabled. They say that ingestion is off, not why: a row
+can have been disabled by an operator or by an earlier removal.
+`repositories_deactivated` counts only removed rows that this sync turned from
+enabled to disabled, so a removed row an operator had already disabled is not
+counted again.
 
 ### Dry runs
 
