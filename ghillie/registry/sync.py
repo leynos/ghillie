@@ -28,9 +28,7 @@ from __future__ import annotations
 import dataclasses
 import typing as typ
 
-from sqlalchemy import Insert, select, tuple_, update
-from sqlalchemy.dialects.postgresql import insert as postgresql_insert
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy import select, tuple_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
@@ -51,6 +49,15 @@ from ghillie.registry.policy import (
     decide_for_catalogue_repository,
     decide_for_removed_repository,
 )
+from ghillie.registry.storage import (
+    DialectUpsertStrategy,
+    InsertOutcome,
+    UpsertStrategy,
+    claim_unowned_repository,
+    deactivate_if_still_enabled,
+    insert_ignoring_duplicates,
+    insert_plainly,
+)
 from ghillie.silver.storage import Repository
 
 if typ.TYPE_CHECKING:
@@ -62,12 +69,25 @@ if typ.TYPE_CHECKING:
     type SessionFactory = async_sessionmaker[AsyncSession]
 
 
-async def sync_from_catalogue(
+_DEFAULT_UPSERT_STRATEGY: UpsertStrategy = DialectUpsertStrategy()
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class _SyncOptions:
+    """The persistence choices a sync run makes, resolved once per run."""
+
+    now: cabc.Callable[[], dt.datetime]
+    upsert_strategy: UpsertStrategy
+
+
+async def sync_from_catalogue(  # noqa: PLR0913 - public edge takes its knobs explicitly
     catalogue_session_factory: SessionFactory,
     silver_session_factory: SessionFactory,
     estate_key: str,
     *,
     dry_run: bool = False,
+    now: cabc.Callable[[], dt.datetime] = utcnow,
+    upsert_strategy: UpsertStrategy | None = None,
 ) -> SyncResult:
     """Synchronize catalogue repositories to Silver for an estate.
 
@@ -82,6 +102,13 @@ async def sync_from_catalogue(
     dry_run:
         When true, run the sync inside its transaction and roll it back,
         returning the counts it would have produced.
+    now:
+        Clock the sync stamps ``last_synced_at`` from. One reading is taken per
+        sync, so every row a single run touches carries the same timestamp.
+    upsert_strategy:
+        Builds the insert that ignores an owner/name conflict. The default
+        resolves the strategy from the session's dialect; callers may supply
+        another so the choice is explicit at the composition edge.
 
     Raises
     ------
@@ -102,6 +129,10 @@ async def sync_from_catalogue(
         silver_session_factory,
         plan,
         dry_run=dry_run,
+        options=_SyncOptions(
+            now=now,
+            upsert_strategy=upsert_strategy or _DEFAULT_UPSERT_STRATEGY,
+        ),
     )
 
 
@@ -126,6 +157,7 @@ async def _sync_catalogue_repositories_or_raise(
     plan: _SyncPlan,
     *,
     dry_run: bool,
+    options: _SyncOptions,
 ) -> SyncResult:
     """Sync catalogue repositories into Silver, raising RegistrySyncError.
 
@@ -136,7 +168,7 @@ async def _sync_catalogue_repositories_or_raise(
     try:
         async with session_factory() as session:
             transaction = await session.begin()
-            await _sync_repositories(session, plan, result)
+            await _sync_repositories(session, plan, result, options=options)
             if dry_run:
                 # Flush first so constraints (for example the unique
                 # owner/name pair) are evaluated before the rollback. Without
@@ -233,6 +265,7 @@ class _SilverSyncContext:
     silver_repos: dict[str, Repository]
     estate_id: str | None
     now: dt.datetime
+    upsert_strategy: UpsertStrategy
     result: SyncResult
 
 
@@ -273,39 +306,6 @@ async def _load_silver_repository(
     return await session.scalar(statement)
 
 
-def _insert_ignoring_duplicates(
-    session: AsyncSession,
-    row: Repository,
-) -> Insert | None:
-    """Build an insert that leaves an existing owner/name row untouched.
-
-    Returns ``None`` for a dialect without an upsert construct, so the caller
-    can fall back to a plain insert. A savepoint would be the portable
-    alternative, but pysqlite's legacy transaction mode commits on
-    ``RELEASE SAVEPOINT``, which would make a dry run persist its rows.
-    """
-    values = {
-        "github_owner": row.github_owner,
-        "github_name": row.github_name,
-        "default_branch": row.default_branch,
-        "estate_id": row.estate_id,
-        "catalogue_repository_id": row.catalogue_repository_id,
-        "ingestion_enabled": row.ingestion_enabled,
-        "documentation_paths": row.documentation_paths,
-        "last_synced_at": row.last_synced_at,
-    }
-    if row.id is not None:
-        # An id assigned by the caller wins over the column default, so a
-        # collision on it is visible rather than silently replaced.
-        values["id"] = row.id
-    dialect_name = session.get_bind().dialect.name
-    if dialect_name == "postgresql":
-        return postgresql_insert(Repository).values(**values).on_conflict_do_nothing()
-    if dialect_name == "sqlite":
-        return sqlite_insert(Repository).values(**values).on_conflict_do_nothing()
-    return None
-
-
 async def _insert_or_reconcile(
     context: _SilverSyncContext,
     slug: str,
@@ -323,63 +323,24 @@ async def _insert_or_reconcile(
 
     A conflict that leaves no row behind is not an owner/name race, so the
     plain insert runs and its ``IntegrityError`` reaches the caller for the
-    409 mapping.
+    409 mapping. A strategy that declines the upsert takes the same path.
     """
     row = _create_silver_repository(cat_repo, context, decision)
-    statement = _insert_ignoring_duplicates(context.session, row)
-    if statement is not None:
-        inserted_id = await context.session.scalar(statement.returning(Repository.id))
-        if inserted_id is not None:
-            context.result.repositories_created += 1
-            return
-
+    outcome = await insert_ignoring_duplicates(
+        context.session, row, context.upsert_strategy
+    )
+    if outcome is InsertOutcome.INSERTED:
+        context.result.repositories_created += 1
+        return
+    if outcome is InsertOutcome.CONFLICT:
         winner = await _load_silver_repository(context.session, slug)
         if winner is not None:
             context.silver_repos[slug] = winner
             await _sync_one_repository(context, slug, cat_repo)
             return
 
-    # Either the dialect has no upsert construct, or the conflict left no row
-    # behind. A plain insert then succeeds or raises the constraint failure
-    # that the caller maps to 409.
-    context.session.add(row)
-    await context.session.flush()
+    await insert_plainly(context.session, row)
     context.result.repositories_created += 1
-
-
-async def _claim_unowned_repository(
-    session: AsyncSession,
-    silver_repo: Repository,
-    estate_id: str | None,
-) -> bool:
-    """Claim an unowned Silver row for this estate, returning False if lost.
-
-    An unowned row is adoptable by any estate, so two syncs for different
-    estates can both decide to claim it. The owner/name uniqueness constraint
-    arbitrates a race to *insert* the same repository; it cannot arbitrate a
-    race to adopt an existing row, because changing `estate_id` leaves the
-    owner/name pair unique. A conditional UPDATE makes the claim itself
-    atomic, so the loser updates nothing. It then re-reads the committed row
-    and re-applies the policy: a row another estate won is reported as a
-    conflict, while a row this same estate won a moment earlier is adopted and
-    the sync continues.
-    """
-    if estate_id is None or silver_repo.estate_id is not None:
-        return True
-
-    claimed_id = await session.scalar(
-        update(Repository)
-        .where(Repository.id == silver_repo.id, Repository.estate_id.is_(None))
-        .values(estate_id=estate_id)
-        .returning(Repository.id)
-        .execution_options(synchronize_session=False)
-    )
-    if claimed_id is None:
-        return False
-
-    # The statement bypassed the identity map, so mirror the claim locally.
-    silver_repo.estate_id = estate_id
-    return True
 
 
 async def _reconcile_lost_claim(
@@ -432,7 +393,8 @@ async def _sync_one_repository(
         await _insert_or_reconcile(context, slug, cat_repo, decision)
         return
 
-    if not await _claim_unowned_repository(
+    was_unowned = silver_repo.estate_id is None
+    if not await claim_unowned_repository(
         context.session, silver_repo, context.estate_id
     ):
         decision = await _reconcile_lost_claim(context, slug, cat_repo)
@@ -440,6 +402,10 @@ async def _sync_one_repository(
             context.result.repositories_conflicted.append(slug)
             return
         silver_repo = context.silver_repos[slug]
+    elif was_unowned and context.estate_id is not None:
+        # The claim statement bypassed the identity map, so mirror it before
+        # the metadata update flushes the row.
+        silver_repo.estate_id = context.estate_id
 
     changed = _update_silver_repository(context, silver_repo, cat_repo, decision)
     if changed:
@@ -456,6 +422,8 @@ async def _sync_repositories(
     session: AsyncSession,
     plan: _SyncPlan,
     result: SyncResult,
+    *,
+    options: _SyncOptions,
 ) -> None:
     """Project catalogue repositories into Silver, updating or creating."""
     silver_repos = await _load_silver_repositories(
@@ -466,7 +434,8 @@ async def _sync_repositories(
         session=session,
         silver_repos=silver_repos,
         estate_id=plan.estate_id,
-        now=utcnow(),
+        now=options.now(),
+        upsert_strategy=options.upsert_strategy,
         result=result,
     )
 
@@ -509,21 +478,11 @@ async def _deactivate_removed_repository(
 ) -> None:
     """Deactivate one repository that is no longer in this estate's catalogue.
 
-    The loaded view can be stale. A row this sync read as unowned may have been
-    claimed by another estate before this write, and the removal path would
-    then disable a repository the policy forbids it to touch. The ownership
-    condition therefore travels with the UPDATE, so a claim that landed after
-    the load leaves no row to match. Judging ownership from the loaded view
-    alone cannot close that gap.
-
-    The enabled condition travels with the UPDATE for the same reason. The
-    count and ``last_synced_at`` describe what *this* sync changed, so a row an
-    operator (or an earlier sync) disabled after the load must not be counted
-    again or restamped.
-
-    The statement synchronizes the session by fetch, so the loaded instance
-    adopts the committed values without an assignment that would queue an
-    unconditional UPDATE on the next flush and defeat the guard.
+    The policy decision is made from the loaded view; the write is conditional
+    in the database, so a claim or a disable that landed after the load leaves
+    nothing to change. See
+    :func:`ghillie.registry.storage.deactivate_if_still_enabled` for why those
+    conditions travel with the UPDATE rather than being judged here.
     """
     silver_repo = context.silver_repos[slug]
     decision = decide_for_removed_repository(
@@ -534,19 +493,9 @@ async def _deactivate_removed_repository(
     if not silver_repo.ingestion_enabled:
         return
 
-    deactivated_id = await context.session.scalar(
-        update(Repository)
-        .where(
-            Repository.id == silver_repo.id,
-            Repository.estate_id.is_(None)
-            | (Repository.estate_id == context.estate_id),
-            Repository.ingestion_enabled.is_(True),
-        )
-        .values(ingestion_enabled=False, last_synced_at=context.now)
-        .returning(Repository.id)
-        .execution_options(synchronize_session="fetch")
-    )
-    if deactivated_id is None:
+    if not await deactivate_if_still_enabled(
+        context.session, silver_repo, context.estate_id, context.now
+    ):
         # Another writer claimed the row, or disabled it, after this sync
         # loaded its view. Neither is a change this sync made.
         return

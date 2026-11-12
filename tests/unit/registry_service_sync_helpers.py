@@ -1,4 +1,18 @@
-"""Shared lookups for the registry service sync tests."""
+"""Shared Silver lookups, snapshots and catalogue rendering for sync tests.
+
+The registry sync tests in `test_registry_service_sync.py`,
+`test_registry_service_sync_adoption.py`,
+`test_registry_service_sync_concurrency.py` and
+`test_registry_service_sync_dry_run.py` all read Silver rows through the same
+small surface, so the comparisons stay consistent across modules.
+
+- `SilverSnapshot` is the row-tuple list the snapshot helpers return.
+- `fetch_silver_repo` loads one row by owner and name.
+- `snapshot_silver_repos` captures every row in a stable order.
+- `snapshot_silver_repo` captures one row, returning ``None`` when absent.
+- `catalogue_naming` renders a catalogue YAML document for the named
+  repositories.
+"""
 
 from __future__ import annotations
 

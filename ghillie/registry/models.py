@@ -49,11 +49,13 @@ class SyncResult:
     this sync loaded and that the sync left disabled. They are an observation
     of that view plus this sync's own writes, not a re-read of committed
     state: a toggle another writer commits after the load is not seen, and the
-    sync does not overwrite it. The exception is a lost adoption claim, which
-    reloads that one row to judge ownership: a toggle committed before the
-    reload can be seen, and a row it makes enabled is not reported as left
-    disabled. They say that ingestion is off, not why: a row may have been
-    disabled by an operator or by an earlier removal.
+    sync does not overwrite it. Two paths reload a single row from committed
+    state to judge ownership: a lost adoption claim and a lost owner/name
+    insert race. A row reloaded that way is reported from the reloaded state,
+    so a toggle committed before the reload can be seen, and a row it makes
+    enabled is not reported as left disabled. They say that ingestion is off,
+    not why: a row may have been disabled by an operator or by an earlier
+    removal.
     ``repositories_deactivated`` counts only removed rows that this sync turned
     from enabled to disabled, so a removed row an operator had already
     disabled is not counted again.
@@ -68,7 +70,14 @@ class SyncResult:
     repositories_left_disabled_count: int = 0
 
     def note_left_disabled(self, slug: str) -> None:
-        """Record a repository that sync left disabled, bounding the preview."""
+        """Record a repository that sync left disabled, bounding the preview.
+
+        The preview and its count are one reported value, so the policy that
+        keeps them consistent lives with the fields it protects rather than in
+        the sync loop. A caller cannot add a slug without incrementing the
+        count, and the API response is a projection of this object, so the
+        bound is applied once for every consumer instead of at each edge.
+        """
         self.repositories_left_disabled_count += 1
         if len(self.repositories_left_disabled) < LEFT_DISABLED_PREVIEW_LIMIT:
             self.repositories_left_disabled.append(slug)

@@ -14,6 +14,7 @@ import pytest
 from ghillie.catalogue import CatalogueImporter
 from ghillie.registry import RepositoryRegistryService, SyncResult
 from ghillie.registry import sync as sync_module
+from ghillie.registry.storage import DialectUpsertStrategy, claim_unowned_repository
 from ghillie.silver.storage import Repository
 from tests.fixtures.specs import RepositoryCreateSpec
 from tests.unit.registry_service_sync_helpers import fetch_silver_repo
@@ -50,16 +51,14 @@ async def test_claim_unowned_repository_is_atomic_under_a_stale_view(
         winner_rows = await sync_module._load_silver_repositories(
             winner_session, estate_b_id, ["leynos/adoptme"]
         )
-        claimed = await sync_module._claim_unowned_repository(
+        claimed = await claim_unowned_repository(
             winner_session, winner_rows["leynos/adoptme"], estate_b_id
         )
         assert claimed, "The first claim of an unowned row should succeed"
         await winner_session.commit()
 
     async with session_factory() as loser_session:
-        claimed = await sync_module._claim_unowned_repository(
-            loser_session, stale_row, estate_a_id
-        )
+        claimed = await claim_unowned_repository(loser_session, stale_row, estate_a_id)
         assert not claimed, "A stale view must not overwrite the winning claim"
         await loser_session.rollback()
 
@@ -101,7 +100,7 @@ async def test_removal_path_leaves_a_row_another_estate_claimed(
         winner_rows = await sync_module._load_silver_repositories(
             winner_session, estate_b_id, []
         )
-        claimed = await sync_module._claim_unowned_repository(
+        claimed = await claim_unowned_repository(
             winner_session, winner_rows["leynos/retired"], estate_b_id
         )
         assert claimed, "The first claim of the unowned row should succeed"
@@ -114,6 +113,7 @@ async def test_removal_path_leaves_a_row_another_estate_claimed(
             silver_repos=stale_rows,
             estate_id=estate_a_id,
             now=sync_module.utcnow(),
+            upsert_strategy=DialectUpsertStrategy(),
             result=result,
         )
         await sync_module._deactivate_removed_repository(context, "leynos/retired")
@@ -173,6 +173,7 @@ async def test_removal_path_does_not_count_a_row_an_operator_disabled(
             silver_repos=stale_rows,
             estate_id=estate_a_id,
             now=sync_module.utcnow(),
+            upsert_strategy=DialectUpsertStrategy(),
             result=result,
         )
         await sync_module._deactivate_removed_repository(context, "leynos/retired")

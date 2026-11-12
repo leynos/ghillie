@@ -17,6 +17,7 @@ from ghillie.registry.sync import sync_from_catalogue
 
 if typ.TYPE_CHECKING:
     from ghillie.registry.models import RepositoryInfo, SyncResult
+    from ghillie.registry.storage import UpsertStrategy
 
 type SessionFactory = async_sessionmaker[AsyncSession]
 
@@ -34,6 +35,11 @@ class RepositoryRegistryService:
         Async session factory for the catalogue database.
     silver_session_factory:
         Async session factory for the Silver database.
+    upsert_strategy:
+        Optional override for the insert that ignores an owner/name conflict.
+        The sync resolves the dialect's strategy when this is omitted; the
+        parameter exists so a deployment or test can be explicit about the
+        persistence choice at the composition edge.
 
     """
 
@@ -41,10 +47,13 @@ class RepositoryRegistryService:
         self,
         catalogue_session_factory: SessionFactory,
         silver_session_factory: SessionFactory,
+        *,
+        upsert_strategy: UpsertStrategy | None = None,
     ) -> None:
         """Configure the service with session factories for both databases."""
         self._catalogue_sf = catalogue_session_factory
         self._silver_sf = silver_session_factory
+        self._upsert_strategy = upsert_strategy
 
     async def sync_from_catalogue(
         self, estate_key: str, *, dry_run: bool = False
@@ -76,7 +85,11 @@ class RepositoryRegistryService:
 
         """
         return await sync_from_catalogue(
-            self._catalogue_sf, self._silver_sf, estate_key, dry_run=dry_run
+            self._catalogue_sf,
+            self._silver_sf,
+            estate_key,
+            dry_run=dry_run,
+            upsert_strategy=self._upsert_strategy,
         )
 
     async def list_active_repositories(

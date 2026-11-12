@@ -480,8 +480,17 @@ per pull request.
       can be observed, and a row it makes enabled is not reported as left
       disabled. D29 and `SyncResult` now name that exception, and the users',
       developers' and migration guides and the architecture design carry the
-      same sentence. Every other row is still reported from the loaded view,
-      and the preserve branch still never rewrites the toggle.
+      same sentence, and the preserve branch still never rewrites the toggle.
+- [x] (2026-11-12) The review of `f85af72` found a second reload path and
+      asked for both to be named. When an owner/name insert loses a race,
+      `_insert_or_reconcile` loads the winning row and reapplies the decision
+      path, so a linked, active, disabled row of this estate can enter the
+      left-disabled report even though it was absent from the loaded view.
+      D29 now names both the lost adoption claim and the lost insert race,
+      states that each reloads one row from committed state, and no longer
+      claims that every other row is reported from the loaded view.
+      `SyncResult` and the four guides carry the same sentence, and D30
+      records the refactor boundary.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
@@ -766,15 +775,16 @@ expert-panel review.
      second line in the registry module would contradict that. Metrics and
      tracing are a cross-cutting platform decision, not an EP-M1 deliverable.
 - D28, atomic adoption of an unowned Silver row. `_claim_unowned_repository`
-  issues a conditional update of `estate_id` that matches only rows where
-  `estate_id` is null. A zero row count means the claim lost, and losing it is
-  not by itself a conflict: `_reconcile_lost_claim` reloads the committed row
-  with `populate_existing` and re-applies the policy. A row another estate owns
-  is reported in `repositories_conflicted`; a row this same estate claimed a
-  moment earlier is adopted and the sync continues. This closes the race the
-  owner/name constraint cannot see: two estates syncing concurrently can both
-  read the same unowned row, and without the conditional update the later
-  writer silently replaces the earlier claim. The claim runs inside the sync
+  (moved to `ghillie.registry.storage` by D30) issues a conditional update of
+  `estate_id` that matches only rows where `estate_id` is null. A zero row
+  count means the claim lost, and losing it is not by itself a conflict:
+  `_reconcile_lost_claim` reloads the committed row with `populate_existing`
+  and re-applies the policy. A row another estate owns is reported in
+  `repositories_conflicted`; a row this same estate claimed a moment earlier is
+  adopted and the sync continues. This closes the race the owner/name
+  constraint cannot see: two estates syncing concurrently can both read the
+  same unowned row, and without the conditional update the later writer
+  silently replaces the earlier claim. The claim runs inside the sync
   transaction, so a dry run rolls it back.
 
   Concurrent inserts of the same slug are arbitrated by
@@ -852,21 +862,52 @@ expert-panel review.
   observation of that view plus this sync's own writes, not a re-read of
   committed state. A toggle another writer commits after the load is not
   observed, and the sync must not overwrite it: the preserve branch leaves
-  `ingestion_enabled` untouched, so the concurrent toggle survives. The one
-  exception is a lost adoption claim: `_reconcile_lost_claim` re-reads that
-  single committed row to judge ownership (D28), so a toggle committed before
-  that re-read can be observed, and a row it makes enabled is not reported as
-  left disabled. That reload does not make the report a census, because every
-  other row is still reported from the loaded view. Making the report an exact
-  completion-state census would need a locked re-read of every row, which would
-  undo the sorted single-pass lock order D28 relies on, and would still race a
-  commit landing after that read. The users' guide and `SyncResult` therefore
-  document the observation contract instead of promising exactness under
-  concurrent edits.
+  `ingestion_enabled` untouched, so the concurrent toggle survives. Two paths
+  reload a single row from committed state to judge ownership: a lost adoption
+  claim, which `_reconcile_lost_claim` re-reads with ``populate_existing``
+  (D28), and a lost owner/name insert race, where `_insert_or_reconcile` loads
+  the winning row and reapplies the decision path. A row reloaded that way is
+  reported from the reloaded state, so a toggle committed before the reload can
+  be observed, a reloaded disabled row of this estate can enter the report even
+  though it was absent from the loaded view, and a row the reload shows as
+  enabled is not reported as left disabled. Those single-row reloads do not
+  make the report a census: every other row is still reported from the loaded
+  view. Making the report an exact completion-state census would need a locked
+  re-read of every row, which would undo the sorted single-pass lock order D28
+  relies on, and would still race a commit landing after that read. The users'
+  guide and `SyncResult` therefore document the observation contract instead of
+  promising exactness under concurrent edits.
   `test_a_concurrent_enable_is_not_reflected_in_the_left_disabled_report` pins
   it on PostgreSQL: a writer enables the row between the load and the sync's
   completion, the result still reports the slug as left disabled, and the
   committed row stays enabled.
+
+- D30, the Silver persistence seam. The statements a sync uses to write Silver
+  live in `ghillie/registry/storage.py`, not in `sync.py`: the claim of an
+  unowned row (D28), the guarded removal, and the insert that ignores an
+  owner/name conflict (D29). Each returns an explicit value — a `bool` for the
+  two conditional `UPDATE`s and an `InsertOutcome` (`INSERTED`, `CONFLICT`,
+  `DECLINED`) for the insert — so `sync.py` tells "this sync made the change"
+  from "another writer got there first" without inspecting row counts or
+  catching constraint errors. `sync.py` keeps loading, calling `decide_for_*`,
+  and applying the decisions. The dialect branch that used to sit inside a
+  statement builder is now an injected `UpsertStrategy`:
+  `DialectUpsertStrategy` resolves the dialect's strategy and is the default
+  the service installs, `PostgresUpsertStrategy` and `SqliteUpsertStrategy`
+  express the upsert, and an unsupported dialect uses the named
+  `PlainInsertStrategy` fallback, which declines so the caller inserts plainly
+  and the uniqueness constraint arbitrates. The fallback is a named, tested
+  strategy rather than an error because a new backend should degrade to the
+  portable insert, not fail every sync. `RepositoryRegistryService.__init__`
+  accepts the strategy so the choice is explicit at the composition edge, and
+  `sync_from_catalogue(..., now=...)` takes the clock, defaulting to `utcnow`,
+  so tests no longer patch time and one reading stamps a whole run. The
+  bounded-preview policy stays on `SyncResult.note_left_disabled`: the preview
+  and its count are one reported value, and keeping the invariant with the
+  fields means no caller can add a slug without incrementing the count. Tests:
+  `tests/unit/test_registry_storage.py` covers the dialect mapping, the
+  declining fallback, the compiled upsert, the explicit outcomes, a substituted
+  strategy at the sync edge, and the injected clock.
 
 ## Outcomes & retrospective
 
