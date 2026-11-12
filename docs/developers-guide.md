@@ -281,6 +281,14 @@ runs the whole projection inside one Silver transaction:
 - with `dry_run=True`, the same work runs and the transaction is rolled back, so
   the call returns the counts it would have produced and persists nothing.
 
+The service resolves the insert strategy once in its constructor and hands it,
+with the dry-run flag, to `ghillie.registry.sync.sync_from_catalogue` as a
+`SyncOptions` record. That record is the syncing function's only keyword
+argument, so a further persistence choice joins it rather than widening a
+signature that already names the estate it projects. Its clock defaults to
+`utcnow` and is read once per run, so every row a single run touches carries
+the same `last_synced_at`.
+
 Adoption of an unowned row is atomic. The sync claims it with a conditional
 update and reports a conflict if another estate claimed it first, so concurrent
 syncs cannot silently replace each other's claim. A race to insert the same

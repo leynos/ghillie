@@ -73,21 +73,29 @@ _DEFAULT_UPSERT_STRATEGY: UpsertStrategy = DialectUpsertStrategy()
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class _SyncOptions:
-    """The persistence choices a sync run makes, resolved once per run."""
+class SyncOptions:
+    """The choices one sync run makes about how it persists its work.
 
-    now: cabc.Callable[[], dt.datetime]
-    upsert_strategy: UpsertStrategy
+    They travel as one record rather than as separate keyword arguments: the
+    sync then names the estate it projects and this record, and a further
+    persistence choice widens the record instead of an interface every caller
+    must read.
+
+    """
+
+    dry_run: bool = False
+    now: cabc.Callable[[], dt.datetime] = utcnow
+    upsert_strategy: UpsertStrategy = dataclasses.field(
+        default_factory=lambda: _DEFAULT_UPSERT_STRATEGY
+    )
 
 
-async def sync_from_catalogue(  # noqa: PLR0913 - public edge takes its knobs explicitly
+async def sync_from_catalogue(
     catalogue_session_factory: SessionFactory,
     silver_session_factory: SessionFactory,
     estate_key: str,
     *,
-    dry_run: bool = False,
-    now: cabc.Callable[[], dt.datetime] = utcnow,
-    upsert_strategy: UpsertStrategy | None = None,
+    options: SyncOptions | None = None,
 ) -> SyncResult:
     """Synchronize catalogue repositories to Silver for an estate.
 
@@ -99,16 +107,12 @@ async def sync_from_catalogue(  # noqa: PLR0913 - public edge takes its knobs ex
         Async session factory for the Silver database.
     estate_key:
         The estate whose repositories should be synchronized.
-    dry_run:
-        When true, run the sync inside its transaction and roll it back,
-        returning the counts it would have produced.
-    now:
-        Clock the sync stamps ``last_synced_at`` from. One reading is taken per
-        sync, so every row a single run touches carries the same timestamp.
-    upsert_strategy:
-        Builds the insert that ignores an owner/name conflict. The default
-        resolves the strategy from the session's dialect; callers may supply
-        another so the choice is explicit at the composition edge.
+    options:
+        How the run persists its work: whether it rolls back after doing it
+        (``dry_run``), the clock it stamps ``last_synced_at`` from, and the
+        strategy that builds the insert ignoring an owner/name conflict.
+        Omitted, a run persists, stamps one reading of ``utcnow``, and lets
+        the session's dialect choose the upsert.
 
     Raises
     ------
@@ -128,11 +132,7 @@ async def sync_from_catalogue(  # noqa: PLR0913 - public edge takes its knobs ex
     return await _sync_catalogue_repositories_or_raise(
         silver_session_factory,
         plan,
-        dry_run=dry_run,
-        options=_SyncOptions(
-            now=now,
-            upsert_strategy=upsert_strategy or _DEFAULT_UPSERT_STRATEGY,
-        ),
+        options=SyncOptions() if options is None else options,
     )
 
 
@@ -156,8 +156,7 @@ async def _sync_catalogue_repositories_or_raise(
     session_factory: SessionFactory,
     plan: _SyncPlan,
     *,
-    dry_run: bool,
-    options: _SyncOptions,
+    options: SyncOptions,
 ) -> SyncResult:
     """Sync catalogue repositories into Silver, raising RegistrySyncError.
 
@@ -169,7 +168,7 @@ async def _sync_catalogue_repositories_or_raise(
         async with session_factory() as session:
             transaction = await session.begin()
             await _sync_repositories(session, plan, result, options=options)
-            if dry_run:
+            if options.dry_run:
                 # Flush first so constraints (for example the unique
                 # owner/name pair) are evaluated before the rollback. Without
                 # it a dry run could report counts for a sync that would fail.
@@ -423,7 +422,7 @@ async def _sync_repositories(
     plan: _SyncPlan,
     result: SyncResult,
     *,
-    options: _SyncOptions,
+    options: SyncOptions,
 ) -> None:
     """Project catalogue repositories into Silver, updating or creating."""
     silver_repos = await _load_silver_repositories(

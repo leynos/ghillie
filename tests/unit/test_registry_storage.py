@@ -190,7 +190,7 @@ async def test_sync_uses_the_injected_upsert_strategy(
         session_factory,
         session_factory,
         "test",
-        upsert_strategy=recorder,
+        options=sync_module.SyncOptions(upsert_strategy=recorder),
     )
 
     assert result.repositories_created == 1, "The sync should create one row"
@@ -237,7 +237,7 @@ async def test_a_declining_strategy_falls_back_to_the_plain_insert(
         session_factory,
         session_factory,
         "test",
-        upsert_strategy=_DecliningStrategy(),
+        options=sync_module.SyncOptions(upsert_strategy=_DecliningStrategy()),
     )
 
     assert result.repositories_created == 1, "The plain insert should still create"
@@ -261,7 +261,7 @@ async def test_sync_uses_the_injected_clock(
         session_factory,
         session_factory,
         "test",
-        now=lambda: fixed,
+        options=sync_module.SyncOptions(now=lambda: fixed),
     )
 
     repo = await fetch_silver_repo(session_factory, "leynos", "wildside")

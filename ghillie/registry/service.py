@@ -13,7 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ghillie.registry.ingestion import get_repository_by_slug, set_ingestion_enabled
 from ghillie.registry.listing import RepositoryListOptions, list_repositories
-from ghillie.registry.sync import sync_from_catalogue
+from ghillie.registry.storage import DialectUpsertStrategy
+from ghillie.registry.sync import SyncOptions, sync_from_catalogue
 
 if typ.TYPE_CHECKING:
     from ghillie.registry.models import RepositoryInfo, SyncResult
@@ -53,7 +54,11 @@ class RepositoryRegistryService:
         """Configure the service with session factories for both databases."""
         self._catalogue_sf = catalogue_session_factory
         self._silver_sf = silver_session_factory
-        self._upsert_strategy = upsert_strategy
+        # Resolve the default once here, so every sync the service runs uses
+        # the same strategy object rather than rebuilding it per call.
+        self._upsert_strategy: UpsertStrategy = upsert_strategy or (
+            DialectUpsertStrategy()
+        )
 
     async def sync_from_catalogue(
         self, estate_key: str, *, dry_run: bool = False
@@ -88,8 +93,10 @@ class RepositoryRegistryService:
             self._catalogue_sf,
             self._silver_sf,
             estate_key,
-            dry_run=dry_run,
-            upsert_strategy=self._upsert_strategy,
+            options=SyncOptions(
+                dry_run=dry_run,
+                upsert_strategy=self._upsert_strategy,
+            ),
         )
 
     async def list_active_repositories(

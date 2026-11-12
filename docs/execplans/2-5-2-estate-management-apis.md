@@ -491,6 +491,19 @@ per pull request.
       claims that every other row is reported from the loaded view.
       `SyncResult` and the four guides carry the same sentence, and D30
       records the refactor boundary.
+- [x] (2026-11-12) Cleared the CodeScene failure the hosted check raised on
+      `f6396f3`. Its delta analysis reported Excess Number of Function
+      Arguments on `sync_from_catalogue`, which D30 had grown to six
+      parameters; `function_max_arguments` is 4. The run's choices now travel
+      as one frozen `SyncOptions` record (dry run, clock, upsert strategy), so
+      the function takes the estate and its options. The service resolves the
+      dialect default strategy once in its constructor. `cs delta d5bf67b
+      f6396f3` reproduced the hosted finding before the change and the working
+      tree's `cs check` scores `ghillie/registry/sync.py` at 10.00 after it;
+      the pre-existing duplication warnings in `ghillie/registry/service.py`
+      are unchanged from `main` (9.38). No behaviour changed: the dry-run,
+      adoption, concurrency, and storage suites pass unchanged apart from the
+      new call shape.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
@@ -899,12 +912,19 @@ expert-panel review.
   and the uniqueness constraint arbitrates. The fallback is a named, tested
   strategy rather than an error because a new backend should degrade to the
   portable insert, not fail every sync. `RepositoryRegistryService.__init__`
-  accepts the strategy so the choice is explicit at the composition edge, and
-  `sync_from_catalogue(..., now=...)` takes the clock, defaulting to `utcnow`,
-  so tests no longer patch time and one reading stamps a whole run. The
-  bounded-preview policy stays on `SyncResult.note_left_disabled`: the preview
-  and its count are one reported value, and keeping the invariant with the
-  fields means no caller can add a slug without incrementing the count. Tests:
+  accepts the strategy so the choice is explicit at the composition edge and
+  resolves the dialect default once, so every sync the service runs uses the
+  same object. `sync_from_catalogue` takes a `SyncOptions` record — dry run,
+  clock (defaulting to `utcnow`, so tests no longer patch time and one reading
+  stamps a whole run), and upsert strategy — rather than one keyword per
+  choice: the two added keyword-only parameters took the function to six
+  arguments, which CodeScene's `function_max_arguments` (4) reports as Excess
+  Number of Function Arguments. The record keeps the sync's public signature at
+  the estate plus its options, and a further persistence choice widens the
+  record instead of an interface every caller must read. The bounded-preview
+  policy stays on `SyncResult.note_left_disabled`: the preview and its count
+  are one reported value, and keeping the invariant with the fields means no
+  caller can add a slug without incrementing the count. Tests:
   `tests/unit/test_registry_storage.py` covers the dialect mapping, the
   declining fallback, the compiled upsert, the explicit outcomes, a substituted
   strategy at the sync edge, and the injected clock.
