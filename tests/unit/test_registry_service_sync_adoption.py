@@ -111,6 +111,7 @@ async def test_removal_path_leaves_a_row_another_estate_claimed(
         context = sync_module._SilverSyncContext(
             session=loser_session,
             silver_repos=stale_rows,
+            estate_key="estate-a",
             estate_id=estate_a_id,
             now=sync_module.utcnow(),
             upsert_strategy=DialectUpsertStrategy(),
@@ -171,6 +172,7 @@ async def test_removal_path_does_not_count_a_row_an_operator_disabled(
         context = sync_module._SilverSyncContext(
             session=loser_session,
             silver_repos=stale_rows,
+            estate_key="estate-a",
             estate_id=estate_a_id,
             now=sync_module.utcnow(),
             upsert_strategy=DialectUpsertStrategy(),

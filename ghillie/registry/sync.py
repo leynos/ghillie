@@ -26,6 +26,7 @@ Sync an estate and inspect the result::
 from __future__ import annotations
 
 import dataclasses
+import time
 import typing as typ
 
 from sqlalchemy import select, tuple_
@@ -42,6 +43,12 @@ from ghillie.common.slug import parse_repo_slug
 from ghillie.common.time import utcnow
 from ghillie.registry.errors import RegistrySyncError
 from ghillie.registry.models import SyncResult
+from ghillie.registry.observability import (
+    log_ingestion_transition,
+    log_sync_completed,
+    log_sync_conflict,
+    log_sync_failed,
+)
 from ghillie.registry.policy import (
     IngestionDecision,
     IngestionTransition,
@@ -120,20 +127,39 @@ async def sync_from_catalogue(
         If the estate cannot be found or sync fails.
 
     """
-    catalogue_repos, estate_id = await _load_catalogue_repositories_or_raise(
-        catalogue_session_factory,
-        estate_key,
+    resolved = SyncOptions() if options is None else options
+    started = time.perf_counter()
+    try:
+        catalogue_repos, estate_id = await _load_catalogue_repositories_or_raise(
+            catalogue_session_factory,
+            estate_key,
+        )
+        plan = _SyncPlan(
+            estate_key=estate_key,
+            estate_id=estate_id,
+            catalogue_repos=catalogue_repos,
+        )
+        result = await _sync_catalogue_repositories_or_raise(
+            silver_session_factory,
+            plan,
+            options=resolved,
+        )
+    except RegistrySyncError as exc:
+        # One failure event per run: both raise sites in the helpers above
+        # reach this caller, and the reason they carry is already sanitised.
+        log_sync_failed(
+            estate_key,
+            dry_run=resolved.dry_run,
+            duration_seconds=time.perf_counter() - started,
+            reason=exc.reason,
+        )
+        raise
+    log_sync_completed(
+        result,
+        dry_run=resolved.dry_run,
+        duration_seconds=time.perf_counter() - started,
     )
-    plan = _SyncPlan(
-        estate_key=estate_key,
-        estate_id=estate_id,
-        catalogue_repos=catalogue_repos,
-    )
-    return await _sync_catalogue_repositories_or_raise(
-        silver_session_factory,
-        plan,
-        options=SyncOptions() if options is None else options,
-    )
+    return result
 
 
 async def _load_catalogue_repositories_or_raise(
@@ -262,6 +288,7 @@ class _SilverSyncContext:
 
     session: AsyncSession
     silver_repos: dict[str, Repository]
+    estate_key: str
     estate_id: str | None
     now: dt.datetime
     upsert_strategy: UpsertStrategy
@@ -386,6 +413,7 @@ async def _sync_one_repository(
 
     if decision.transition is IngestionTransition.CONFLICT:
         context.result.repositories_conflicted.append(slug)
+        log_sync_conflict(context.estate_key, slug)
         return
 
     if silver_repo is None:
@@ -406,9 +434,17 @@ async def _sync_one_repository(
         # the metadata update flushes the row.
         silver_repo.estate_id = context.estate_id
 
+    was_enabled = silver_repo.ingestion_enabled
     changed = _update_silver_repository(context, silver_repo, cat_repo, decision)
     if changed:
         context.result.repositories_updated += 1
+    if silver_repo.ingestion_enabled != was_enabled:
+        log_ingestion_transition(
+            context.estate_key,
+            slug,
+            transition=decision.transition,
+            enabled=silver_repo.ingestion_enabled,
+        )
 
     if (
         decision.transition is IngestionTransition.PRESERVE
@@ -432,6 +468,7 @@ async def _sync_repositories(
     context = _SilverSyncContext(
         session=session,
         silver_repos=silver_repos,
+        estate_key=plan.estate_key,
         estate_id=plan.estate_id,
         now=options.now(),
         upsert_strategy=options.upsert_strategy,
@@ -499,6 +536,12 @@ async def _deactivate_removed_repository(
         # loaded its view. Neither is a change this sync made.
         return
     context.result.repositories_deactivated += 1
+    log_ingestion_transition(
+        context.estate_key,
+        slug,
+        transition=decision.transition,
+        enabled=False,
+    )
 
 
 def _update_silver_repository(
