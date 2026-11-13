@@ -384,8 +384,9 @@ per pull request.
       `test_overlapping_syncs_adopt_an_unowned_row_once` caught that; its unit
       counterpart now loads the row in the sync's own session, so it
       reproduces the staleness without Postgres. Inline: the dated #219 entry
-      above. Observability remained deferred to #219 at that point; it is
-      delivered as of 2026-11-13 (D31).
+      above. Observability remained deferred to #219 at that point; its
+      structured events are delivered as of 2026-11-13 (D31), and its metrics
+      and spans remain outstanding there.
 - [x] (2026-11-08) CodeScene failed its delta gate on the new head with a
       critical Low Cohesion finding in `test_registry_service_sync.py` and an
       advisory Complex Method in `sync.py::_sync_one_repository`. Both came
