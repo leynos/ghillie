@@ -163,7 +163,7 @@ making changes.
   precedence, context handling, and control-plane client behaviour. No tests
   were removed because none solely duplicated Hecate import-boundary checks.
 - [x] (2026-06-01T21:44:55Z) Added
-  `docs/adr-003-adopt-hecate-for-architecture-checks.md` for the Hecate
+  `docs/adrs/adr-0003-adopt-hecate-for-architecture-checks.md` for the Hecate
   adoption decision.
 - [x] (2026-06-01T21:44:55Z) Updated `docs/ghillie-design.md`,
   `docs/ghillie-bronze-silver-architecture-design.md`,
@@ -467,8 +467,8 @@ the Make/CI architecture gate or narrower behaviour tests.
 
 ### Stage D: documentation and decision records
 
-Create `docs/adr-003-adopt-hecate-for-architecture-checks.md` using the style
-of the existing ADR files. Record the decision to use Hecate, the pinned
+Create `docs/adrs/adr-0003-adopt-hecate-for-architecture-checks.md` using the
+style of the existing ADR files. Record the decision to use Hecate, the pinned
 commit, the alternatives considered, the consequences, and the rollback path.
 
 Update `docs/ghillie-design.md` near section 8.4 to describe Hecate as the

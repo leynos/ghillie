@@ -116,10 +116,10 @@ If any constraint cannot be met, stop and escalate.
 ## Context and Orientation
 
 Ghillie currently uses stdlib `logging` in a small number of places. The ADR
-`docs/adr-001-adoption-of-femtologging-library.md` lists these call sites and
-notes that adoption was blocked by missing exception support. That limitation
-is now resolved in the femtologging snapshot, so the ADR must be updated to
-reflect the new status and the snapshot dependency.
+`docs/adrs/adr-0001-adoption-of-femtologging-library.md` lists these call sites
+and notes that adoption was blocked by missing exception support. That
+limitation is now resolved in the femtologging snapshot, so the ADR must be
+updated to reflect the new status and the snapshot dependency.
 
 The femtologging API and caveats are documented in
 `docs/femtologging-users-guide.md`. Validate the guide against the snapshot API
@@ -180,7 +180,7 @@ and that warning logs remain unchanged. Update unit and BDD tests to pass.
 
 Stage D: Documentation, cleanup, and validation.
 
-Update `docs/adr-001-adoption-of-femtologging-library.md` to note that
+Update `docs/adrs/adr-0001-adoption-of-femtologging-library.md` to note that
 exception support is now available and that adoption uses the snapshot commit.
 Update the design documentation (start with the observability section in
 `docs/ghillie-design.md` or

@@ -718,7 +718,8 @@ lives in `[tool.hecate]` in `pyproject.toml` and is exposed through
 `make check-architecture`, which runs before Ruff as part of `make lint`.
 Hecate classifies modules into composition roots, domain ports, application
 modules, inbound adapters, and outbound adapters. The decision and rollback
-path are recorded in `docs/adr-003-adopt-hecate-for-architecture-checks.md`.
+path are recorded in
+`docs/adrs/adr-0003-adopt-hecate-for-architecture-checks.md`.
 
 Docstring coverage is enforced with Interrogate through `make interrogate`,
 which also runs as part of `make lint`. The target fails on any undocumented

@@ -106,7 +106,8 @@ The HTTP client pattern is established:
 - `ghillie/status/protocol.py` - StatusModel Protocol
 - `ghillie/status/mock.py` - Reference StatusModel implementation
 - `ghillie/status/models.py` - RepositoryStatusResult struct
-- `docs/adr-002-vidaimock-integration-testing.md` - VidaiMock fixture design
+- `docs/adrs/adr-0002-vidaimock-integration-testing.md` - VidaiMock fixture
+  design
 - `docs/ghillie-design.md` (Section 10) - LLM testing strategy
 - `tests/unit/status/conftest.py` - Evidence bundle fixtures
 
@@ -352,7 +353,7 @@ providers:
 
 14. Update `docs/ghillie-design.md` Section 9.5 with OpenAI integration design.
 
-15. Update `docs/adr-002-vidaimock-integration-testing.md`:
+15. Update `docs/adrs/adr-0002-vidaimock-integration-testing.md`:
     - Change status from "Proposed" to "Accepted"
     - Add implementation notes
 
@@ -476,21 +477,21 @@ If tests fail:
 
 ## Critical files
 
-| File                                                 | Action | Purpose                           |
-| ---------------------------------------------------- | ------ | --------------------------------- |
-| `ghillie/status/errors.py`                           | Create | Custom exception classes          |
-| `ghillie/status/config.py`                           | Create | OpenAIStatusModelConfig dataclass |
-| `ghillie/status/prompts.py`                          | Create | System and user prompt templates  |
-| `ghillie/status/openai_client.py`                    | Create | OpenAIStatusModel implementation  |
-| `ghillie/status/__init__.py`                         | Modify | Add new exports                   |
-| `tests/unit/status/test_openai_config.py`            | Create | Config unit tests                 |
-| `tests/unit/status/test_openai_prompts.py`           | Create | Prompt unit tests                 |
-| `tests/unit/status/test_openai_parsing.py`           | Create | Parsing unit tests                |
-| `tests/unit/status/test_openai_errors.py`            | Create | Error unit tests                  |
-| `tests/integration/conftest.py`                      | Create | VidaiMock pytest fixture          |
-| `tests/integration/test_openai_vidaimock.py`         | Create | Integration tests                 |
-| `tests/features/llm_integration.feature`             | Create | BDD scenarios                     |
-| `tests/features/steps/test_llm_integration_steps.py` | Create | BDD steps                         |
-| `docs/ghillie-design.md`                             | Modify | Add Section 9.5                   |
-| `docs/adr-002-vidaimock-integration-testing.md`      | Modify | Update status                     |
-| `docs/roadmap.md`                                    | Modify | Mark Task 2.2.b done              |
+| File                                                  | Action | Purpose                           |
+| ----------------------------------------------------- | ------ | --------------------------------- |
+| `ghillie/status/errors.py`                            | Create | Custom exception classes          |
+| `ghillie/status/config.py`                            | Create | OpenAIStatusModelConfig dataclass |
+| `ghillie/status/prompts.py`                           | Create | System and user prompt templates  |
+| `ghillie/status/openai_client.py`                     | Create | OpenAIStatusModel implementation  |
+| `ghillie/status/__init__.py`                          | Modify | Add new exports                   |
+| `tests/unit/status/test_openai_config.py`             | Create | Config unit tests                 |
+| `tests/unit/status/test_openai_prompts.py`            | Create | Prompt unit tests                 |
+| `tests/unit/status/test_openai_parsing.py`            | Create | Parsing unit tests                |
+| `tests/unit/status/test_openai_errors.py`             | Create | Error unit tests                  |
+| `tests/integration/conftest.py`                       | Create | VidaiMock pytest fixture          |
+| `tests/integration/test_openai_vidaimock.py`          | Create | Integration tests                 |
+| `tests/features/llm_integration.feature`              | Create | BDD scenarios                     |
+| `tests/features/steps/test_llm_integration_steps.py`  | Create | BDD steps                         |
+| `docs/ghillie-design.md`                              | Modify | Add Section 9.5                   |
+| `docs/adrs/adr-0002-vidaimock-integration-testing.md` | Modify | Update status                     |
+| `docs/roadmap.md`                                     | Modify | Mark Task 2.2.b done              |
