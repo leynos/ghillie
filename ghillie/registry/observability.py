@@ -1,11 +1,16 @@
 """Structured events for registry synchronization.
 
-A sync emits one line per outcome-changing fact: how the run ended, each
-cross-estate conflict it reported, and each ingestion toggle it changed. The
-lines carry counts and identifiers rather than repository lists, so an estate
-with many repositories cannot flood the log, and they never include SQL or
-driver detail: a failure reports the same sanitised reason the raised
-``RegistrySyncError`` carries.
+A sync emits one terminal line per run, one line per cross-estate conflict it
+reported, and one line per ingestion toggle it changed. The terminal lines
+carry counts rather than repository lists, so they stay one line whatever the
+estate's size; the per-slug lines scale with the conflicts and changes the run
+actually made, not with the estate. No line includes SQL or driver detail: a
+failure reports the same sanitized reason the raised ``RegistrySyncError``
+carries.
+
+The per-slug lines are recorded while the run's transaction is still open and
+published only once it settles, so a line never describes a change that was
+rolled back. A dry run publishes after its rollback with ``dry_run=true``.
 
 Example:
 -------
@@ -18,6 +23,7 @@ Follow one estate's syncs in the log::
 
 from __future__ import annotations
 
+import dataclasses
 import enum
 import typing as typ
 
@@ -114,7 +120,7 @@ def log_sync_failed(
     )
 
 
-def log_sync_conflict(estate_key: str, slug: str) -> None:
+def log_sync_conflict(estate_key: str, slug: str, *, dry_run: bool) -> None:
     """Log that this estate's catalogue names a repository another estate owns.
 
     Parameters
@@ -123,23 +129,34 @@ def log_sync_conflict(estate_key: str, slug: str) -> None:
         The estate whose sync reported the conflict.
     slug:
         The ``owner/name`` slug the catalogue names.
+    dry_run:
+        Whether the reporting run rolls its work back instead of committing it.
 
     """
     log_info(
         logger,
-        "[%s] estate_key=%s slug=%s",
+        "[%s] estate_key=%s dry_run=%s slug=%s",
         SyncEventType.SYNC_CONFLICTED,
         estate_key,
+        _flag(value=dry_run),
         slug,
     )
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class PendingTransition:
+    """One recorded ingestion-flag change, awaiting its transaction's fate."""
+
+    slug: str
+    transition: IngestionTransition
+    enabled: bool
+
+
 def log_ingestion_transition(
     estate_key: str,
-    slug: str,
+    pending: PendingTransition,
     *,
-    transition: IngestionTransition,
-    enabled: bool,
+    dry_run: bool,
 ) -> None:
     """Log that a sync changed a repository's ingestion flag.
 
@@ -147,20 +164,70 @@ def log_ingestion_transition(
     ----------
     estate_key:
         The estate whose sync made the change.
-    slug:
-        The ``owner/name`` slug of the changed row.
-    transition:
-        The policy transition that produced the change.
-    enabled:
-        The ingestion flag the row now carries.
+    pending:
+        The recorded change: the ``owner/name`` slug, the policy transition
+        that produced it, and the ingestion flag the row now carries.
+    dry_run:
+        Whether the change is one the run rolled back. A committed change
+        carries ``false``; a preview's projected change carries ``true``.
 
     """
     log_info(
         logger,
-        "[%s] estate_key=%s slug=%s transition=%s enabled=%s",
+        "[%s] estate_key=%s dry_run=%s slug=%s transition=%s enabled=%s",
         SyncEventType.INGESTION_TRANSITION,
         estate_key,
-        slug,
-        transition.value,
-        _flag(value=enabled),
+        _flag(value=dry_run),
+        pending.slug,
+        pending.transition.value,
+        _flag(value=pending.enabled),
     )
+
+
+@dataclasses.dataclass(slots=True)
+class SyncEventBuffer:
+    """The per-slug events a run has recorded but not yet published.
+
+    A sync writes many rows in one transaction, so publishing a change as it
+    happens would report work a later failure rolls back. The run records its
+    conflicts and transitions here and publishes them only after the
+    transaction settles: after a commit, or after a dry run's rollback with
+    ``dry_run=True``. A failed run publishes nothing, because its failure
+    event already says the work did not happen.
+    """
+
+    _conflicts: list[str] = dataclasses.field(default_factory=list)
+    _transitions: list[PendingTransition] = dataclasses.field(default_factory=list)
+
+    @property
+    def conflicts(self) -> tuple[str, ...]:
+        """The slugs recorded as conflicts, in the order they were seen."""
+        return tuple(self._conflicts)
+
+    @property
+    def transitions(self) -> tuple[PendingTransition, ...]:
+        """The ingestion changes recorded, in the order they were made."""
+        return tuple(self._transitions)
+
+    def record_conflict(self, slug: str) -> None:
+        """Record that another estate owns this slug."""
+        self._conflicts.append(slug)
+
+    def record_transition(
+        self,
+        slug: str,
+        *,
+        transition: IngestionTransition,
+        enabled: bool,
+    ) -> None:
+        """Record that the run changed this repository's ingestion flag."""
+        self._transitions.append(
+            PendingTransition(slug=slug, transition=transition, enabled=enabled)
+        )
+
+    def publish(self, estate_key: str, *, dry_run: bool) -> None:
+        """Log every recorded event once the run's transaction has settled."""
+        for slug in self._conflicts:
+            log_sync_conflict(estate_key, slug, dry_run=dry_run)
+        for pending in self._transitions:
+            log_ingestion_transition(estate_key, pending, dry_run=dry_run)

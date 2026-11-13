@@ -44,9 +44,8 @@ from ghillie.common.time import utcnow
 from ghillie.registry.errors import RegistrySyncError
 from ghillie.registry.models import SyncResult
 from ghillie.registry.observability import (
-    log_ingestion_transition,
+    SyncEventBuffer,
     log_sync_completed,
-    log_sync_conflict,
     log_sync_failed,
 )
 from ghillie.registry.policy import (
@@ -193,7 +192,7 @@ async def _sync_catalogue_repositories_or_raise(
     try:
         async with session_factory() as session:
             transaction = await session.begin()
-            await _sync_repositories(session, plan, result, options=options)
+            events = await _sync_repositories(session, plan, result, options=options)
             if options.dry_run:
                 # Flush first so constraints (for example the unique
                 # owner/name pair) are evaluated before the rollback. Without
@@ -203,7 +202,10 @@ async def _sync_catalogue_repositories_or_raise(
             else:
                 await transaction.commit()
     except SQLAlchemyError as exc:
+        # The recorded events describe work this transaction rolled back, so
+        # they stay unpublished; the failure event is the whole record.
         raise RegistrySyncError(plan.estate_key, "Database error during sync") from exc
+    events.publish(plan.estate_key, dry_run=options.dry_run)
     return result
 
 
@@ -293,6 +295,7 @@ class _SilverSyncContext:
     now: dt.datetime
     upsert_strategy: UpsertStrategy
     result: SyncResult
+    events: SyncEventBuffer
 
 
 def _silver_state(
@@ -413,7 +416,7 @@ async def _sync_one_repository(
 
     if decision.transition is IngestionTransition.CONFLICT:
         context.result.repositories_conflicted.append(slug)
-        log_sync_conflict(context.estate_key, slug)
+        context.events.record_conflict(slug)
         return
 
     if silver_repo is None:
@@ -426,7 +429,10 @@ async def _sync_one_repository(
     ):
         decision = await _reconcile_lost_claim(context, slug, cat_repo)
         if decision is None:
+            # The claim lost to another estate, which is a conflict just as
+            # much as a row this sync loaded under that estate's ownership.
             context.result.repositories_conflicted.append(slug)
+            context.events.record_conflict(slug)
             return
         silver_repo = context.silver_repos[slug]
     elif was_unowned and context.estate_id is not None:
@@ -439,8 +445,7 @@ async def _sync_one_repository(
     if changed:
         context.result.repositories_updated += 1
     if silver_repo.ingestion_enabled != was_enabled:
-        log_ingestion_transition(
-            context.estate_key,
+        context.events.record_transition(
             slug,
             transition=decision.transition,
             enabled=silver_repo.ingestion_enabled,
@@ -459,8 +464,13 @@ async def _sync_repositories(
     result: SyncResult,
     *,
     options: SyncOptions,
-) -> None:
-    """Project catalogue repositories into Silver, updating or creating."""
+) -> SyncEventBuffer:
+    """Project catalogue repositories into Silver, updating or creating.
+
+    Returns the events recorded along the way. The caller publishes them only
+    once the transaction settles, so a rolled-back change is never reported as
+    one that happened.
+    """
     silver_repos = await _load_silver_repositories(
         session, plan.estate_id, plan.catalogue_repos
     )
@@ -473,6 +483,7 @@ async def _sync_repositories(
         now=options.now(),
         upsert_strategy=options.upsert_strategy,
         result=result,
+        events=SyncEventBuffer(),
     )
 
     # One sorted pass over both phases, flushing each slug before the next.
@@ -488,6 +499,8 @@ async def _sync_repositories(
         else:
             await _deactivate_removed_repository(context, slug)
         await session.flush()
+
+    return context.events
 
 
 def _create_silver_repository(
@@ -536,8 +549,7 @@ async def _deactivate_removed_repository(
         # loaded its view. Neither is a change this sync made.
         return
     context.result.repositories_deactivated += 1
-    log_ingestion_transition(
-        context.estate_key,
+    context.events.record_transition(
         slug,
         transition=decision.transition,
         enabled=False,

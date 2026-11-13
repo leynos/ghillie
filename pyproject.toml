@@ -231,6 +231,14 @@ full_name = [
 ]
 reason = "UpsertStrategy.build keeps one signature for every strategy; a strategy that needs neither the session nor the row still accepts them."
 
+[[tool.skylos.dead_code.entrypoints]]
+type = "method"
+full_name = [
+    "ghillie.registry.observability.SyncEventBuffer.record_conflict",
+    "ghillie.registry.observability.SyncEventBuffer.record_transition",
+]
+reason = "Registry sync records events through `_SilverSyncContext.events`, a dataclass field, so the calls reach these methods through an attribute the dead-code analyser does not follow; `SyncEventBuffer.publish` is called on the returned buffer by name."
+
 [tool.hecate]
 root_packages = ["ghillie"]
 

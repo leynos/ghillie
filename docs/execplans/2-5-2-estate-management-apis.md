@@ -524,6 +524,28 @@ per pull request.
       guide describes the four events an operator will see, and the
       architecture design gained the ownership paragraph describing the
       storage seam.
+- [x] (2026-11-13) CodeRabbit's follow-up review of `e62f6ad` found two real
+      defects in the new events, both fixed tests-first. A slug whose adoption
+      claim lost to another estate was appended to `repositories_conflicted`
+      but recorded no conflict event, so the count and the per-slug lines
+      disagreed; it now records one like any other conflict. And the per-slug
+      events were logged at the point of writing, inside a transaction that
+      could still roll back, so a dry run reported changes the database never
+      kept and a failure reported changes it undid. They are now recorded in a
+      `SyncEventBuffer` and published by
+      `_sync_catalogue_repositories_or_raise` only once the transaction
+      settles — after the commit, or after a dry run's rollback with
+      `dry_run=true` — and a failed run publishes only `SYNC_FAILED`. New tests
+      pin a dry run's transition label, a failure after a recorded transition,
+      and a lost-claim conflict, and the existing conflict test still covers
+      the ordinary path. The
+      event-volume claim in the developers' guide and D31 was overstated and is
+      corrected: terminal lines are one per run, per-slug lines scale with what
+      the run changed. Skylos cannot follow a call through the
+      `_SilverSyncContext.events` dataclass field, so the two buffer recorders
+      needed a precise entry-point rule, pinned with the rest in
+      `tests/unit/test_skylos_lint_contract.py`. Metrics and spans stay with
+      #219.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
@@ -961,20 +983,28 @@ expert-panel review.
     failures both report exactly once. The reason it logs is the error's own
     sanitized `reason`, never SQL or driver text.
   - `SYNC_CONFLICTED` (INFO) per slug the run reports as owned by another
-    estate.
+    estate, including a slug whose adoption claim this run lost to a
+    concurrent sync.
   - `INGESTION_TRANSITION` (INFO) per repository whose ingestion flag the run
     changed, naming the policy transition and the new state.
 
-  The events carry counts and identifiers, never repository lists, so a large
-  estate cannot flood the log. `tests/unit/test_registry_observability.py` pins
-  each one through the house femtologging capture, including that a successful
-  run logs exactly one completion line and a failed run exactly one failure
-  line, so a future change cannot start logging per repository or per retry.
-  Metrics, spans and catalogue/Silver tracing remain out of scope for this PR:
-  the repository has no metrics or tracing infrastructure to attach them to,
-  and adding one is the platform decision D27 records. Issue #219 keeps that
-  remainder; the terminal event and the transition record it also named are now
-  delivered here.
+  Every line carries `estate_key` and `dry_run`. The terminal events carry
+  counts rather than repository lists, so they stay one line whatever the
+  estate's size; the per-slug events scale with the conflicts and changes the
+  run made, not with the estate. The per-slug events are recorded in a
+  `SyncEventBuffer` while the transaction is open and published only once it
+  settles: after a commit, or after a dry run's rollback labelled
+  `dry_run=true`. A failed run publishes nothing but `SYNC_FAILED`, because the
+  changes it had recorded were rolled back — logging them at the point of
+  writing would report work that never happened.
+  `tests/unit/test_registry_observability.py` pins each event through the house
+  femtologging capture: the exactly-one-line property for success and failure,
+  the dry-run label on a rolled-back change, a failed run logging only its
+  failure, and a lost claim still recording a conflict. Metrics, spans and
+  catalogue/Silver tracing remain out of scope for this PR: the repository has
+  no metrics or tracing infrastructure to attach them to, and adding one is the
+  platform decision D27 records. Issue #219 keeps that remainder; the terminal
+  event and the transition record it also named are now delivered here.
 
 ## Outcomes & retrospective
 

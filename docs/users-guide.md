@@ -535,9 +535,12 @@ follow an estate without reading the result object. A run that finishes logs
 and the counts; a run that fails logs `SYNC_FAILED` with the sanitized reason
 and re-raises. Each slug another estate owns logs `SYNC_CONFLICTED`, and each
 repository whose ingestion flag the sync changed logs `INGESTION_TRANSITION`
-with the transition and the new state. A `dry_run=true` completion line
-describes work that was rolled back. The events carry counts and slugs, never
-repository lists, and the developers' guide lists the fields each one carries.
+with the transition and the new state. A `dry_run=true` line, whether it is the
+completion or a slug event, describes work that was rolled back. The per-slug
+lines appear only once the run's transaction has finished, so a run that fails
+logs `SYNC_FAILED` alone and none of the changes it had started to make. The
+completion event carries counts, never repository lists, and the developers'
+guide lists the fields each event carries.
 
 Behaviour changes that need action when upgrading, including re-applying a
 disable that an earlier release reverted, are recorded in the

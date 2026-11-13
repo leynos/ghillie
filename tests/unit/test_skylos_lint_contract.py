@@ -126,6 +126,8 @@ _RUNTIME_ENTRY_POINTS: typ.Final = {
             "ghillie.bronze.storage.UTCDateTime.process_bind_param",
             "ghillie.bronze.storage.UTCDateTime.process_result_value",
             "ghillie.evidence.event_targets.EventTargetExtractor.extract",
+            "ghillie.registry.observability.SyncEventBuffer.record_conflict",
+            "ghillie.registry.observability.SyncEventBuffer.record_transition",
             "ghillie.registry.storage.DialectUpsertStrategy.build",
             "ghillie.registry.storage.PlainInsertStrategy.build",
             "ghillie.registry.storage.PostgresUpsertStrategy.build",

@@ -379,11 +379,15 @@ remove an allow-list entry when its dynamic boundary no longer exists.
 
 The registry sync dispatches its persistence helpers through the
 `UpsertStrategy` protocol and the named dialect selector, which Skylos cannot
-follow. `pyproject.toml` therefore declares
-`[[tool.skylos.dead_code.entrypoints]]` rules for the registry strategy methods,
-`dialect_upsert_strategy`, and `_insert_values`, and
-`tests/unit/test_skylos_lint_contract.py` pins the same names so the contract
-cannot drift unnoticed.
+follow. It also records its events through `_SilverSyncContext.events`, a
+dataclass field, so `SyncEventBuffer.record_conflict` and
+`SyncEventBuffer.record_transition` are reached through an attribute chain that
+Skylos does not traverse; `SyncEventBuffer.publish` is called by name on the
+returned buffer and needs no rule. `pyproject.toml` therefore declares
+`[[tool.skylos.dead_code.entrypoints]]` rules for the registry strategy
+methods, the two buffer recorders, `dialect_upsert_strategy`, and
+`_insert_values`, and `tests/unit/test_skylos_lint_contract.py` pins the same
+names so the contract cannot drift unnoticed.
 
 The Skylos Makefile contract is parsed with pinned Makeutil in
 `tests/unit/test_skylos_lint_contract.py`; `make test` requires that parser.
@@ -463,10 +467,10 @@ the femtologging integration entirely.
 
 ### Registry sync events
 
-`ghillie.registry.observability` owns the lines a registry sync emits, and
-`sync_from_catalogue` is the only place that calls them. Each line starts with
-a bracketed event name, then `key=value` fields on the same record, so a log
-query can select one event type without parsing prose.
+`ghillie.registry.observability` owns the lines a registry sync emits, and it
+is the only module that renders them. Each line starts with a bracketed event
+name, then `key=value` fields on the same record, so a log query can select one
+event type without parsing prose.
 
 | Event                  | Level | Emitted                                                 |
 | ---------------------- | ----- | ------------------------------------------------------- |
@@ -479,10 +483,28 @@ The completion and failure events are emitted at the public edge, so a failure
 in loading the catalogue and a failure while writing Silver both produce
 exactly one event, and neither path logs twice. `SYNC_FAILED` carries the
 `RegistrySyncError` reason, which is already sanitized; do not extend it with
-SQL, driver text, or exception detail. The events carry counts and slugs rather
-than repository lists, so a large estate cannot turn one sync into thousands of
-lines. Metrics and tracing are not part of this module: the repository has no
-metrics or tracing infrastructure, and issue #219 tracks that remainder.
+SQL, driver text, or exception detail.
+
+Every line carries `estate_key` and `dry_run`. The terminal events carry counts
+and duration rather than repository lists, so they stay one line whatever the
+estate's size. The per-slug events scale with the conflicts and changes the run
+actually made, not with the estate: a sync of a thousand unchanged repositories
+emits one completion line, while a run that changes a hundred flags emits a
+hundred transition lines. That volume is the point — it names each change — but
+it is worth knowing when sizing log retention.
+
+The per-slug events are recorded in a `SyncEventBuffer` while the run's
+transaction is still open and published by
+`_sync_catalogue_repositories_or_raise` only once it settles. A committed run
+publishes with `dry_run=false`; a dry run publishes after its rollback with
+`dry_run=true`, because its lines describe projected work the database does not
+hold. A run that fails publishes nothing but `SYNC_FAILED`: the work it
+recorded was rolled back, and the failure event is the whole record. Never log
+a change at the point the row is written; it could be undone before the
+transaction ends.
+
+Metrics and tracing are not part of this module: the repository has no metrics
+or tracing infrastructure, and issue #219 tracks that remainder.
 
 ## Helm chart for local and GitOps (Git-driven operations) previews
 

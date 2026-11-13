@@ -14,6 +14,7 @@ import pytest
 from ghillie.catalogue import CatalogueImporter
 from ghillie.registry import RepositoryRegistryService, SyncResult
 from ghillie.registry import sync as sync_module
+from ghillie.registry.observability import SyncEventBuffer
 from ghillie.registry.storage import DialectUpsertStrategy, claim_unowned_repository
 from ghillie.silver.storage import Repository
 from tests.fixtures.specs import RepositoryCreateSpec
@@ -116,6 +117,7 @@ async def test_removal_path_leaves_a_row_another_estate_claimed(
             now=sync_module.utcnow(),
             upsert_strategy=DialectUpsertStrategy(),
             result=result,
+            events=SyncEventBuffer(),
         )
         await sync_module._deactivate_removed_repository(context, "leynos/retired")
         await loser_session.commit()
@@ -177,6 +179,7 @@ async def test_removal_path_does_not_count_a_row_an_operator_disabled(
             now=sync_module.utcnow(),
             upsert_strategy=DialectUpsertStrategy(),
             result=result,
+            events=SyncEventBuffer(),
         )
         await sync_module._deactivate_removed_repository(context, "leynos/retired")
         await loser_session.commit()
