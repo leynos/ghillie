@@ -529,6 +529,16 @@ back:
 preview = await service.sync_from_catalogue("wildside", dry_run=True)
 ```
 
+Each sync also writes one line per outcome-changing fact, so an operator can
+follow an estate without reading the result object. A run that finishes logs
+`SYNC_COMPLETED` with the estate key, whether it was a dry run, the duration
+and the counts; a run that fails logs `SYNC_FAILED` with the sanitized reason
+and re-raises. Each slug another estate owns logs `SYNC_CONFLICTED`, and each
+repository whose ingestion flag the sync changed logs `INGESTION_TRANSITION`
+with the transition and the new state. A `dry_run=true` completion line
+describes work that was rolled back. The events carry counts and slugs, never
+repository lists, and the developers' guide lists the fields each one carries.
+
 Behaviour changes that need action when upgrading, including re-applying a
 disable that an earlier release reverted, are recorded in the
 [migration guide](migration-guide.md).

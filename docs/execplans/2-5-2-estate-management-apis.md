@@ -365,6 +365,9 @@ per pull request.
       tests for the success, conflict, dry-run, and database-failure paths — is
       deferred to issue #219 and is not delivered by this PR. CodeRabbit
       accepted that disposition in the review conversation on `fb6ef25`.
+      (Superseded 2026-11-13: the terminal event, the conflict and transition
+      records, and the success/dry-run/failure-path tests are now delivered;
+      see D31 and the progress entry for that date.)
 - [x] (2026-11-08) The formal review of `fb6ef25` (5815901876) re-raised three
       pre-merge rows and one inline request, all actioned. Testing (Overall):
       `test_external_postgres_setup_raises_under_xdist_before_connecting`
@@ -381,7 +384,8 @@ per pull request.
       `test_overlapping_syncs_adopt_an_unowned_row_once` caught that; its unit
       counterpart now loads the row in the sync's own session, so it
       reproduces the staleness without Postgres. Inline: the dated #219 entry
-      above. Observability remains deferred to #219.
+      above. Observability remained deferred to #219 at that point; it is
+      delivered as of 2026-11-13 (D31).
 - [x] (2026-11-08) CodeScene failed its delta gate on the new head with a
       critical Low Cohesion finding in `test_registry_service_sync.py` and an
       advisory Complex Method in `sync.py::_sync_one_repository`. Both came
@@ -504,6 +508,22 @@ per pull request.
       are unchanged from `main` (9.38). No behaviour changed: the dry-run,
       adoption, concurrency, and storage suites pass unchanged apart from the
       new call shape.
+- [x] (2026-11-13) Delivered registry-sync observability (D31), closing the
+      Observability pre-merge warning CodeRabbit re-raised on `2724139`. The
+      new `ghillie/registry/observability.py` emits a completion event, a
+      failure event from the one `except` at the public edge, a per-slug
+      conflict event and a per-toggle transition event; `sync.py` gained the
+      estate key on `_SilverSyncContext` so each event can name it. Five new
+      tests in `tests/unit/test_registry_observability.py` assert the text an
+      operator reads through the femtologging capture, including the
+      exactly-one-event property for the success and failure paths. Metrics,
+      spans and catalogue/Silver tracing stay with #219 as D27 records. The
+      same round closed the Developer Documentation warning: the developers'
+      guide gained a persistence-and-upsert-strategy section, a
+      registry-sync-events table and a dead-code-detection note, the users'
+      guide describes the four events an operator will see, and the
+      architecture design gained the ownership paragraph describing the
+      storage seam.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
@@ -744,7 +764,8 @@ expert-panel review.
   importing the wrong file into a live estate.
 - D21, observability. Each mutation logs one structured line through
   `ghillie.logging`: operation, estate key, commit, dry run, counts, duration,
-  and outcome. Toggles also log the old and new state.
+  and outcome. Toggles also log the old and new state. For a registry sync, D31
+  names the events and where they are emitted.
 - D24, PR-A scope-tolerance exception. The hosted ExecPlan assessment measured
   PR-A against `main` at `2ffdb4d` as 13 files, 2748 additions, and 91
   deletions: 2657 net new lines, 157 above the 2500-line tolerance. The overage
@@ -928,6 +949,32 @@ expert-panel review.
   `tests/unit/test_registry_storage.py` covers the dialect mapping, the
   declining fallback, the compiled upsert, the explicit outcomes, a substituted
   strategy at the sync edge, and the injected clock.
+
+- D31, registry-sync observability. D21's one-line-per-mutation contract now
+  has a home: `ghillie/registry/observability.py` names the events and renders
+  them through `ghillie.logging`, and `sync.py` emits four of them.
+
+  - `SYNC_COMPLETED` (INFO) once per run that returns, carrying the estate key,
+    the dry-run flag, the duration, the outcome and every `SyncResult` count.
+  - `SYNC_FAILED` (ERROR) once per run that raises `RegistrySyncError`, from
+    the one `except` at the public edge, so the catalogue-load and Silver-write
+    failures both report exactly once. The reason it logs is the error's own
+    sanitized `reason`, never SQL or driver text.
+  - `SYNC_CONFLICTED` (INFO) per slug the run reports as owned by another
+    estate.
+  - `INGESTION_TRANSITION` (INFO) per repository whose ingestion flag the run
+    changed, naming the policy transition and the new state.
+
+  The events carry counts and identifiers, never repository lists, so a large
+  estate cannot flood the log. `tests/unit/test_registry_observability.py` pins
+  each one through the house femtologging capture, including that a successful
+  run logs exactly one completion line and a failed run exactly one failure
+  line, so a future change cannot start logging per repository or per retry.
+  Metrics, spans and catalogue/Silver tracing remain out of scope for this PR:
+  the repository has no metrics or tracing infrastructure to attach them to,
+  and adding one is the platform decision D27 records. Issue #219 keeps that
+  remainder; the terminal event and the transition record it also named are now
+  delivered here.
 
 ## Outcomes & retrospective
 

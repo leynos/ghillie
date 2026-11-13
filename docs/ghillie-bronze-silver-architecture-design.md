@@ -1301,6 +1301,12 @@ already disabled is not counted again.
 `sync_from_catalogue(estate_key, dry_run=True)` runs the same projection inside
 its transaction and rolls it back, returning the counts it would have produced.
 
+Sync decides each repository's ingestion flag through the policy and refreshes
+other metadata; `ghillie.registry.storage` performs the Silver writes at that
+seam. The adoption claim, the guarded removal, and the insert that ignores an
+owner/name conflict each return an explicit outcome, so sync can tell its own
+change from another writer's and avoid counting a change it did not make.
+
 **Usage:**
 
 ```python

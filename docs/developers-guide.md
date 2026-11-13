@@ -318,6 +318,35 @@ upgrade actions in the [migration guide](migration-guide.md), and the
 surrounding catalogue and Silver design is in
 [the Bronze/Silver architecture design](ghillie-bronze-silver-architecture-design.md#92-repository-discovery-and-registration-phase-13a).
 
+### Persistence and upsert strategies
+
+`ghillie.registry.storage` owns the Silver persistence SQL for registry sync;
+`ghillie.registry.sync` holds the decisions and the orchestration, and calls
+into storage for the statements themselves.
+
+The insert is an `UpsertStrategy`, a protocol whose `build(session, row)`
+method returns a SQLAlchemy `Insert` or `None`. Returning `None` declines the
+upsert, and the caller then inserts plainly so the uniqueness constraint
+decides the outcome. `DialectUpsertStrategy` is the default; it resolves the
+session's dialect and delegates to the named strategy for it.
+`PostgresUpsertStrategy` and `SqliteUpsertStrategy` both emit
+`ON CONFLICT DO NOTHING`, and `PlainInsertStrategy` is the named fallback for a
+dialect without an upsert construct.
+
+To choose a strategy explicitly, pass `upsert_strategy=` to
+`RepositoryRegistryService(...)`. The service resolves its default once in the
+constructor and passes the chosen strategy to the sync inside `SyncOptions`, as
+described above.
+
+Storage also reports outcomes and guarded changes:
+
+- `InsertOutcome` is `INSERTED`, `CONFLICT`, or `DECLINED`; sync uses it to
+  distinguish its own insert from a competing writer's row and from a declined
+  upsert.
+- `claim_unowned_repository` and `deactivate_if_still_enabled` return a
+  `bool` meaning "this sync made the change", so a claim or disable that lost a
+  race is not counted.
+
 ## Dead-code detection
 
 `make lint` runs Skylos `4.33.2` as an isolated `uv tool` with Python 3.14
@@ -347,6 +376,14 @@ repository-local `.skylos-whitelist.lock` file; set `SKYLOS_WHITELIST_LOCK` to
 an alternate path only for isolated tests. Do not add broad or unexplained
 exceptions; retain the verified caller rationale in the reviewing change and
 remove an allow-list entry when its dynamic boundary no longer exists.
+
+The registry sync dispatches its persistence helpers through the
+`UpsertStrategy` protocol and the named dialect selector, which Skylos cannot
+follow. `pyproject.toml` therefore declares
+`[[tool.skylos.dead_code.entrypoints]]` rules for the registry strategy methods,
+`dialect_upsert_strategy`, and `_insert_values`, and
+`tests/unit/test_skylos_lint_contract.py` pins the same names so the contract
+cannot drift unnoticed.
 
 The Skylos Makefile contract is parsed with pinned Makeutil in
 `tests/unit/test_skylos_lint_contract.py`; `make test` requires that parser.
@@ -423,6 +460,29 @@ Tests that need to inspect emitted logs should use the
 `tests.helpers.femtologging_capture`. It captures the records emitted by the
 named logger without routing through `logging.getLogger`, which would bypass
 the femtologging integration entirely.
+
+### Registry sync events
+
+`ghillie.registry.observability` owns the lines a registry sync emits, and
+`sync_from_catalogue` is the only place that calls them. Each line starts with
+a bracketed event name, then `key=value` fields on the same record, so a log
+query can select one event type without parsing prose.
+
+| Event                  | Level | Emitted                                                 |
+| ---------------------- | ----- | ------------------------------------------------------- |
+| `SYNC_COMPLETED`       | INFO  | once per run that returns, with the counts and duration |
+| `SYNC_FAILED`          | ERROR | once per run that raises `RegistrySyncError`            |
+| `SYNC_CONFLICTED`      | INFO  | per slug another estate owns                            |
+| `INGESTION_TRANSITION` | INFO  | per repository whose ingestion flag the run changed     |
+
+The completion and failure events are emitted at the public edge, so a failure
+in loading the catalogue and a failure while writing Silver both produce
+exactly one event, and neither path logs twice. `SYNC_FAILED` carries the
+`RegistrySyncError` reason, which is already sanitized; do not extend it with
+SQL, driver text, or exception detail. The events carry counts and slugs rather
+than repository lists, so a large estate cannot turn one sync into thousands of
+lines. Metrics and tracing are not part of this module: the repository has no
+metrics or tracing infrastructure, and issue #219 tracks that remainder.
 
 ## Helm chart for local and GitOps (Git-driven operations) previews
 
