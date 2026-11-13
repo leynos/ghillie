@@ -2,46 +2,43 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import typing as typ
 
 import pytest
 import pytest_asyncio
 from sqlalchemy import delete, select
 
-from ghillie.catalogue import CatalogueImporter, RepositoryRecord
-from ghillie.registry import RegistrySyncError
+from ghillie.catalogue import (
+    CatalogueImporter,
+    ProjectRecord,
+    RepositoryRecord,
+)
+from ghillie.registry import RegistrySyncError, RepositoryRegistryService
+from ghillie.registry import sync as sync_module
 from ghillie.silver.storage import Repository
 from tests.fixtures.specs import RepositoryCreateSpec
+from tests.unit.registry_service_sync_helpers import (
+    catalogue_naming,
+    fetch_silver_repo,
+    snapshot_silver_repo,
+)
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
     from pathlib import Path
 
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-    from ghillie.registry import RepositoryRegistryService, SyncResult
+    from ghillie.registry import SyncResult
     from tests.fixtures.specs import CreateRepoFn, FetchRepoFn
-
-
-async def fetch_silver_repo(
-    session_factory: async_sessionmaker[AsyncSession],
-    owner: str,
-    name: str,
-) -> Repository | None:
-    """Fetch a repository from Silver by owner/name."""
-    async with session_factory() as session:
-        return await session.scalar(
-            select(Repository).where(
-                Repository.github_owner == owner,
-                Repository.github_name == name,
-            )
-        )
 
 
 @pytest_asyncio.fixture
 async def import_and_sync(
     session_factory: async_sessionmaker[AsyncSession],
     registry_service: RepositoryRegistryService,
-) -> typ.Callable[[Path, str], typ.Awaitable[SyncResult]]:
+) -> cabc.Callable[[Path, str], cabc.Awaitable[SyncResult]]:
     """Return a factory for importing catalogue and running sync."""
 
     async def _import_and_sync(
@@ -64,20 +61,22 @@ async def import_and_sync(
 async def test_sync_creates_silver_repository_from_catalogue(
     session_factory: async_sessionmaker[AsyncSession],
     registry_service: RepositoryRegistryService,
-    import_and_sync: typ.Callable[[Path, str], typ.Awaitable[SyncResult]],
+    import_and_sync: cabc.Callable[[Path, str], cabc.Awaitable[SyncResult]],
     wildside_catalogue_path: Path,
 ) -> None:
     """Catalogue repositories appear in Silver after sync."""
     result = await import_and_sync(wildside_catalogue_path, "test-sync-1")
 
-    assert result.repositories_created >= 1
-    assert result.estate_key == "test"
+    assert result.repositories_created >= 1, "The sync should report a creation"
+    assert result.estate_key == "test", "The result should name the synced estate"
 
     repo = await fetch_silver_repo(session_factory, "leynos", "wildside")
-    assert repo is not None
-    assert repo.ingestion_enabled is True
-    assert repo.catalogue_repository_id is not None
-    assert repo.last_synced_at is not None
+    assert repo is not None, "The catalogue repository should appear in Silver"
+    assert repo.ingestion_enabled is True, "A new repository should ingest by default"
+    assert repo.catalogue_repository_id is not None, (
+        "The Silver row should link to its catalogue record"
+    )
+    assert repo.last_synced_at is not None, "The sync should stamp the sync time"
 
 
 @pytest.mark.asyncio
@@ -100,7 +99,7 @@ async def test_sync_updates_existing_silver_repository(
     await importer.import_path(wildside_catalogue_path, commit_sha="test-sync-2")
 
     result = await registry_service.sync_from_catalogue("test")
-    assert result.repositories_updated >= 1
+    assert result.repositories_updated >= 1, "The sync should report an update"
 
     async with session_factory() as session:
         repo = await session.scalar(
@@ -109,16 +108,20 @@ async def test_sync_updates_existing_silver_repository(
                 Repository.github_name == "wildside",
             )
         )
-        assert repo is not None
-        assert repo.default_branch == "main"
-        assert repo.ingestion_enabled is True
+        assert repo is not None, "The existing Silver row should still exist"
+        assert repo.default_branch == "main", (
+            "The catalogue branch should overwrite the operator value"
+        )
+        assert repo.ingestion_enabled is True, (
+            "A catalogue repository should be re-enabled by sync"
+        )
 
 
 @pytest.mark.asyncio
 async def test_sync_disables_ingestion_for_inactive_catalogue_repository(
     session_factory: async_sessionmaker[AsyncSession],
     registry_service: RepositoryRegistryService,
-    import_and_sync: typ.Callable[[Path, str], typ.Awaitable[SyncResult]],
+    import_and_sync: cabc.Callable[[Path, str], cabc.Awaitable[SyncResult]],
     wildside_catalogue_path: Path,
 ) -> None:
     """When a catalogue repository is inactive, Silver ingestion is disabled."""
@@ -131,21 +134,32 @@ async def test_sync_disables_ingestion_for_inactive_catalogue_repository(
                 RepositoryRecord.name == "wildside",
             )
         )
-        assert cat_repo is not None
+        assert cat_repo is not None, "The imported catalogue record should exist"
         cat_repo.is_active = False
 
-    await registry_service.sync_from_catalogue("test")
+    result = await registry_service.sync_from_catalogue("test")
 
     repo = await fetch_silver_repo(session_factory, "leynos", "wildside")
-    assert repo is not None
-    assert repo.ingestion_enabled is False
+    assert repo is not None, "The Silver row should still exist"
+    assert repo.ingestion_enabled is False, (
+        "An inactive catalogue repository should have ingestion disabled"
+    )
+    assert result.repositories_updated == 1, (
+        "An inactive-row disable is an update, counted once"
+    )
+    assert result.repositories_deactivated == 0, (
+        "An inactive row is still in the catalogue, so it is not a removal"
+    )
+    assert "leynos/wildside" not in result.repositories_left_disabled, (
+        "An inactive catalogue row is not part of the left-disabled preview"
+    )
 
 
 @pytest.mark.asyncio
 async def test_sync_deactivates_removed_catalogue_repository(
     session_factory: async_sessionmaker[AsyncSession],
     registry_service: RepositoryRegistryService,
-    import_and_sync: typ.Callable[[Path, str], typ.Awaitable[SyncResult]],
+    import_and_sync: cabc.Callable[[Path, str], cabc.Awaitable[SyncResult]],
     wildside_catalogue_path: Path,
 ) -> None:
     """Repositories removed from catalogue get ingestion disabled."""
@@ -160,11 +174,48 @@ async def test_sync_deactivates_removed_catalogue_repository(
         )
 
     result = await registry_service.sync_from_catalogue("test")
-    assert result.repositories_deactivated >= 1
+    assert result.repositories_deactivated >= 1, (
+        "The removed catalogue repository should be reported as deactivated"
+    )
 
     repo = await fetch_silver_repo(session_factory, "leynos", "wildside-engine")
     assert repo is not None, "Repository should still exist in Silver"
     assert repo.ingestion_enabled is False, "Ingestion should be disabled"
+
+
+@pytest.mark.asyncio
+async def test_sync_does_not_count_already_disabled_removed_repository(
+    session_factory: async_sessionmaker[AsyncSession],
+    registry_service: RepositoryRegistryService,
+    import_and_sync: cabc.Callable[[Path, str], cabc.Awaitable[SyncResult]],
+    wildside_catalogue_path: Path,
+) -> None:
+    """A removed row that was already disabled is not a new deactivation.
+
+    ``repositories_deactivated`` counts removed rows this sync turned off. An
+    operator's earlier disable is not a new transition, so the count stays zero
+    even though the row leaves the catalogue.
+    """
+    await import_and_sync(wildside_catalogue_path, "test-already-off-1")
+    disabled = await registry_service.disable_ingestion("leynos", "wildside-engine")
+    assert disabled is True, "The operator disable should succeed"
+
+    async with session_factory() as session, session.begin():
+        await session.execute(
+            delete(RepositoryRecord).where(
+                RepositoryRecord.owner == "leynos",
+                RepositoryRecord.name == "wildside-engine",
+            )
+        )
+
+    result = await registry_service.sync_from_catalogue("test")
+
+    assert result.repositories_deactivated == 0, (
+        "A removed row that was already disabled is not a new deactivation"
+    )
+    repo = await fetch_silver_repo(session_factory, "leynos", "wildside-engine")
+    assert repo is not None, "The Silver row should still exist"
+    assert repo.ingestion_enabled is False, "The row must stay disabled"
 
 
 @pytest.mark.asyncio
@@ -188,12 +239,14 @@ async def test_sync_does_not_deactivate_other_estate_repositories(
     )
 
     result = await registry_service.sync_from_catalogue("estate-a")
-    assert result.repositories_deactivated == 0
+    assert result.repositories_deactivated == 0, (
+        "Syncing one estate must not deactivate another estate's repositories"
+    )
 
     repo = await fetch_repo("other-org", "other-repo")
-    assert repo is not None
+    assert repo is not None, "Estate B's repository should still exist"
     assert repo.ingestion_enabled is True, "Estate B repo should remain enabled"
-    assert repo.estate_id == estate_b_id
+    assert repo.estate_id == estate_b_id, "Estate B's row must stay with estate B"
 
 
 @pytest.mark.asyncio
@@ -211,13 +264,259 @@ async def test_sync_raises_for_nonexistent_estate(
 @pytest.mark.asyncio
 async def test_sync_copies_documentation_paths_from_catalogue(
     registry_service: RepositoryRegistryService,
-    import_and_sync: typ.Callable[[Path, str], typ.Awaitable[SyncResult]],
+    import_and_sync: cabc.Callable[[Path, str], cabc.Awaitable[SyncResult]],
     wildside_catalogue_path: Path,
 ) -> None:
     """Documentation paths are copied from catalogue to Silver."""
     await import_and_sync(wildside_catalogue_path, "test-docs")
 
     repo = await registry_service.get_repository_by_slug("leynos/wildside")
-    assert repo is not None
-    assert "docs/roadmap.md" in repo.documentation_paths
-    assert "docs/adr/" in repo.documentation_paths
+    assert repo is not None, "The synced repository should be readable by slug"
+    assert "docs/roadmap.md" in repo.documentation_paths, (
+        "A catalogue documentation path should reach Silver"
+    )
+    assert "docs/adr/" in repo.documentation_paths, (
+        "A catalogue documentation directory should reach Silver"
+    )
+
+
+@pytest.mark.asyncio
+async def test_sync_preserves_operator_disable(
+    session_factory: async_sessionmaker[AsyncSession],
+    registry_service: RepositoryRegistryService,
+    import_and_sync: cabc.Callable[[Path, str], cabc.Awaitable[SyncResult]],
+    wildside_catalogue_path: Path,
+) -> None:
+    """A later import and sync must not re-enable an operator-disabled repo."""
+    await import_and_sync(wildside_catalogue_path, "test-preserve-1")
+    assert await registry_service.disable_ingestion("leynos", "wildside") is True, (
+        "The operator disable should succeed"
+    )
+
+    importer = CatalogueImporter(
+        session_factory, estate_key="test", estate_name="Test Estate"
+    )
+    await importer.import_path(wildside_catalogue_path, commit_sha="test-preserve-2")
+
+    result = await registry_service.sync_from_catalogue("test")
+
+    repo = await fetch_silver_repo(session_factory, "leynos", "wildside")
+    assert repo is not None, "The repository should still exist after the sync"
+    assert repo.ingestion_enabled is False, "Operator disable must survive a sync"
+    assert "leynos/wildside" in result.repositories_left_disabled, (
+        "The preserved disable should be reported"
+    )
+    assert result.repositories_left_disabled_count == 1, (
+        "Exactly one repository should be reported as left disabled"
+    )
+
+
+@pytest.mark.asyncio
+async def test_sync_previews_only_disabled_linked_repositories(
+    session_factory: async_sessionmaker[AsyncSession],
+    registry_service: RepositoryRegistryService,
+    import_and_sync: cabc.Callable[[Path, str], cabc.Awaitable[SyncResult]],
+    tmp_path: Path,
+) -> None:
+    """The preview names exactly the linked rows sync left disabled.
+
+    Two of the four linked repositories are disabled, so an implementation that
+    previewed every linked row, or every row the decision preserved, would
+    report a different list. The whole preview is asserted rather than
+    membership alone, and the enabled rows are checked so a preview that also
+    echoed them cannot pass.
+    """
+    catalogue = tmp_path / "catalogue.yaml"
+    catalogue.write_text(
+        catalogue_naming(("alpha", "beta", "gamma", "delta")),
+        encoding="utf-8",
+    )
+
+    await import_and_sync(catalogue, "preview-exact-1")
+    for name in ("alpha", "beta"):
+        assert await registry_service.disable_ingestion("leynos", name) is True, (
+            f"The operator disable of {name} should succeed"
+        )
+
+    result = await registry_service.sync_from_catalogue("test")
+
+    assert result.repositories_left_disabled == ["leynos/alpha", "leynos/beta"], (
+        "The preview must name only the linked rows left disabled, in order"
+    )
+    assert result.repositories_left_disabled_count == 2, (
+        "The count must agree with the preview when every row fits"
+    )
+    for name in ("gamma", "delta"):
+        enabled_repo = await fetch_silver_repo(session_factory, "leynos", name)
+        assert enabled_repo is not None, f"The {name} row should still exist"
+        assert enabled_repo.ingestion_enabled is True, (
+            f"{name} was never disabled and must stay enabled"
+        )
+
+
+@pytest.mark.asyncio
+async def test_sync_keeps_readded_repository_disabled(
+    session_factory: async_sessionmaker[AsyncSession],
+    registry_service: RepositoryRegistryService,
+    import_and_sync: cabc.Callable[[Path, str], cabc.Awaitable[SyncResult]],
+    wildside_catalogue_path: Path,
+) -> None:
+    """A repository removed and re-added stays disabled until an operator acts."""
+    await import_and_sync(wildside_catalogue_path, "test-readd-1")
+
+    # Simulate removal: deleting the catalogue record makes the next sync treat
+    # the linked Silver row as removed. Re-importing then recreates the record
+    # with a fresh id, so the Silver row's link is stale but still non-null.
+    async with session_factory() as session, session.begin():
+        await session.execute(
+            delete(RepositoryRecord).where(
+                RepositoryRecord.owner == "leynos",
+                RepositoryRecord.name == "wildside-engine",
+            )
+        )
+    removed = await registry_service.sync_from_catalogue("test")
+    assert removed.repositories_deactivated >= 1, (
+        "The removal sync should report the deactivation"
+    )
+
+    importer = CatalogueImporter(
+        session_factory, estate_key="test", estate_name="Test Estate"
+    )
+    await importer.import_path(wildside_catalogue_path, commit_sha="test-readd-2")
+
+    readded = await registry_service.sync_from_catalogue("test")
+
+    repo = await fetch_silver_repo(session_factory, "leynos", "wildside-engine")
+    assert repo is not None, "The re-added repository should still exist"
+    assert repo.ingestion_enabled is False, (
+        "A re-added repository must stay disabled until an operator acts"
+    )
+    assert "leynos/wildside-engine" in readded.repositories_left_disabled, (
+        "The re-added repository should be reported as left disabled"
+    )
+
+
+@pytest.mark.asyncio
+async def test_sync_reports_cross_estate_conflict(
+    session_factory: async_sessionmaker[AsyncSession],
+    create_estates: tuple[str, str],
+    create_repo: CreateRepoFn,
+    wildside_catalogue_path: Path,
+) -> None:
+    """A repository owned by another estate is reported, not stolen or failed."""
+    registry_service = RepositoryRegistryService(session_factory, session_factory)
+    _estate_a_id, estate_b_id = create_estates
+    foreign_synced_at = dt.datetime(2026, 1, 2, 3, 4, 5, tzinfo=dt.UTC)
+    await create_repo(
+        "leynos",
+        "wildside",
+        spec=RepositoryCreateSpec(
+            ingestion_enabled=True,
+            default_branch="release",
+            estate_id=estate_b_id,
+            catalogue_repository_id="cat-repo-b",
+            documentation_paths=("docs/other-estate.md",),
+            last_synced_at=foreign_synced_at,
+        ),
+    )
+    before = await snapshot_silver_repo(session_factory, "leynos", "wildside")
+
+    importer = CatalogueImporter(
+        session_factory, estate_key="estate-a", estate_name="Estate A"
+    )
+    await importer.import_path(wildside_catalogue_path, commit_sha="test-conflict-1")
+
+    result = await registry_service.sync_from_catalogue("estate-a")
+
+    assert "leynos/wildside" in result.repositories_conflicted, (
+        "A repository owned by another estate should be reported as a conflict"
+    )
+    repo = await fetch_silver_repo(session_factory, "leynos", "wildside")
+    assert repo is not None, "The conflicting repository should still exist"
+    assert repo.estate_id == estate_b_id, "The row must stay with its owning estate"
+    assert repo.ingestion_enabled is True, "A conflict must not disable the row"
+    assert repo.catalogue_repository_id == "cat-repo-b", (
+        "A conflict must not re-point the row at this estate's catalogue entry"
+    )
+    assert repo.default_branch == "release", (
+        "A conflict must not overwrite the owning estate's branch metadata"
+    )
+    assert tuple(repo.documentation_paths) == ("docs/other-estate.md",), (
+        "A conflict must not overwrite the owning estate's documentation paths"
+    )
+    assert repo.last_synced_at == foreign_synced_at, (
+        "A conflict must not restamp the owning estate's last sync time"
+    )
+    assert (
+        await snapshot_silver_repo(session_factory, "leynos", "wildside") == before
+    ), "A conflict must leave every field of the foreign row untouched"
+
+
+@pytest.mark.asyncio
+async def test_sync_writes_slugs_in_sorted_order(
+    session_factory: async_sessionmaker[AsyncSession],
+    wildside_catalogue_path: Path,
+    import_and_sync: cabc.Callable[[Path, str], cabc.Awaitable[SyncResult]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both write phases take their row locks in one sorted order.
+
+    Two estates syncing the same repositories take row locks in the order the
+    sync visits them. Catalogue order is not guaranteed to agree between
+    estates, and two separate phases would give claims and removals two
+    different orders, so either can hold a row the other waits for. One sorted
+    pass over the union, flushing each slug, keeps every sync in one order.
+    """
+    async with session_factory() as session, session.begin():
+        # A row absent from the catalogue, so the removal phase is exercised
+        # alongside the catalogue phase in the same run.
+        session.add(
+            Repository(
+                github_owner="leynos",
+                github_name="removed",
+                default_branch="main",
+            )
+        )
+
+    catalogue_order: list[str] = []
+    written: list[str] = []
+    original_map = sync_module._catalogue_repository_map
+    original_sync = sync_module._sync_one_repository
+    original_remove = sync_module._deactivate_removed_repository
+
+    def _reversed_map(
+        projects: cabc.Iterable[ProjectRecord],
+    ) -> dict[str, RepositoryRecord]:
+        """Offer the catalogue in reverse order to prove the loop sorts."""
+        mapped = dict(reversed(list(original_map(projects).items())))
+        catalogue_order.extend(mapped)
+        return mapped
+
+    async def _record(
+        context: object,
+        slug: str,
+        cat_repo: RepositoryRecord,
+    ) -> None:
+        """Record the slug before delegating to the real per-slug sync."""
+        written.append(slug)
+        await original_sync(typ.cast("typ.Any", context), slug, cat_repo)
+
+    async def _record_removal(context: object, slug: str) -> None:
+        """Record the slug before delegating to the real removal path."""
+        written.append(slug)
+        await original_remove(typ.cast("typ.Any", context), slug)
+
+    monkeypatch.setattr(sync_module, "_catalogue_repository_map", _reversed_map)
+    monkeypatch.setattr(sync_module, "_sync_one_repository", _record)
+    monkeypatch.setattr(sync_module, "_deactivate_removed_repository", _record_removal)
+
+    await import_and_sync(wildside_catalogue_path, "sorted-order")
+
+    assert len(catalogue_order) > 1, "The fixture must name more than one slug"
+    assert catalogue_order != sorted(catalogue_order), (
+        "This test needs an unsorted catalogue order to be meaningful"
+    )
+    assert "leynos/removed" in written, "The removal phase must be exercised"
+    assert written == sorted(written), (
+        "Both phases must write in one sorted order, not catalogue then removal"
+    )

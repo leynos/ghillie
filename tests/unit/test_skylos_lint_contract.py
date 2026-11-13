@@ -126,12 +126,28 @@ _RUNTIME_ENTRY_POINTS: typ.Final = {
             "ghillie.bronze.storage.UTCDateTime.process_bind_param",
             "ghillie.bronze.storage.UTCDateTime.process_result_value",
             "ghillie.evidence.event_targets.EventTargetExtractor.extract",
+            "ghillie.registry.observability.SyncEventBuffer.record_conflict",
+            "ghillie.registry.observability.SyncEventBuffer.record_transition",
+            "ghillie.registry.storage.DialectUpsertStrategy.build",
+            "ghillie.registry.storage.PlainInsertStrategy.build",
+            "ghillie.registry.storage.PostgresUpsertStrategy.build",
+            "ghillie.registry.storage.SqliteUpsertStrategy.build",
+        }
+    ),
+    "function": frozenset(
+        {
+            "ghillie.registry.storage._insert_values",
+            "ghillie.registry.storage.dialect_upsert_strategy",
         }
     ),
     "parameter": frozenset(
         {
             "ghillie.bronze.storage.UTCDateTime.process_bind_param.dialect",
             "ghillie.bronze.storage.UTCDateTime.process_result_value.dialect",
+            "ghillie.registry.storage.PlainInsertStrategy.build.row",
+            "ghillie.registry.storage.PlainInsertStrategy.build.session",
+            "ghillie.registry.storage.PostgresUpsertStrategy.build.session",
+            "ghillie.registry.storage.SqliteUpsertStrategy.build.session",
         }
     ),
     "variable": frozenset(

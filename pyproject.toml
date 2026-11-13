@@ -203,6 +203,42 @@ full_name = [
 ]
 reason = "SQLAlchemy reads TypeDecorator configuration, and msgspec serializes ComponentEvidence fields for report consumers."
 
+[[tool.skylos.dead_code.entrypoints]]
+type = "method"
+full_name = [
+    "ghillie.registry.storage.DialectUpsertStrategy.build",
+    "ghillie.registry.storage.PostgresUpsertStrategy.build",
+    "ghillie.registry.storage.SqliteUpsertStrategy.build",
+    "ghillie.registry.storage.PlainInsertStrategy.build",
+]
+reason = "Registry sync calls a strategy through the UpsertStrategy protocol and the named dialect selector, so the concrete methods are dispatched indirectly."
+
+[[tool.skylos.dead_code.entrypoints]]
+type = "function"
+full_name = [
+    "ghillie.registry.storage.dialect_upsert_strategy",
+    "ghillie.registry.storage._insert_values",
+]
+reason = "The dialect selector and the shared insert values are reached from UpsertStrategy implementations resolved at run time."
+
+[[tool.skylos.dead_code.entrypoints]]
+type = "parameter"
+full_name = [
+    "ghillie.registry.storage.PostgresUpsertStrategy.build.session",
+    "ghillie.registry.storage.SqliteUpsertStrategy.build.session",
+    "ghillie.registry.storage.PlainInsertStrategy.build.session",
+    "ghillie.registry.storage.PlainInsertStrategy.build.row",
+]
+reason = "UpsertStrategy.build keeps one signature for every strategy; a strategy that needs neither the session nor the row still accepts them."
+
+[[tool.skylos.dead_code.entrypoints]]
+type = "method"
+full_name = [
+    "ghillie.registry.observability.SyncEventBuffer.record_conflict",
+    "ghillie.registry.observability.SyncEventBuffer.record_transition",
+]
+reason = "Registry sync records events through `_SilverSyncContext.events`, a dataclass field, so the calls reach these methods through an attribute the dead-code analyser does not follow; `SyncEventBuffer.publish` is called on the returned buffer by name."
+
 [tool.hecate]
 root_packages = ["ghillie"]
 
@@ -232,6 +268,7 @@ prefixes = [
     "ghillie.catalogue.models",
     "ghillie.evidence.models",
     "ghillie.registry.models",
+    "ghillie.registry.policy",
     "ghillie.reporting.sink",
     "ghillie.status.metrics",
     "ghillie.status.models",

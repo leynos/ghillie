@@ -476,6 +476,76 @@ for repo in active_repos:
 page = await service.list_active_repositories(limit=100, offset=0)
 ```
 
+For an active linked repository, sync preserves the operator's ingestion flag.
+Sync creates rows, adopts unlinked rows, and disables rows whose catalogue
+entry becomes inactive or leaves the catalogue; it never re-enables a linked
+row of the estate. A repository that is removed from the catalogue and later
+re-added therefore stays disabled until an operator enables it again. The sync
+result names those repositories:
+
+```python
+result = await service.sync_from_catalogue("wildside")
+print(result.repositories_left_disabled_count)
+print(result.repositories_left_disabled)  # first 100 slugs
+```
+
+`repositories_left_disabled_count` is the number of active catalogue
+repositories whose linked Silver row was disabled in the view the sync loaded
+and that the sync left disabled, including rows an operator disabled. It is an
+observation of that view plus the sync's own writes, not a fresh read of
+committed state: a toggle another writer commits after the load is not seen, so
+under concurrent edits the count can differ from a query issued afterwards. Two
+paths reload a single row from committed state to judge ownership: an adoption
+claim that loses to a concurrent sync of the same estate, and an owner/name
+insert race that loses to a concurrent sync. A row reloaded that way is
+reported from the reloaded state, so a toggle committed before the reload can
+be seen, and a row it makes enabled is not reported as left disabled. The sync
+does not overwrite such a toggle, because preserving a disabled row leaves
+`ingestion_enabled` untouched. A row the sync itself turns off because it left
+the catalogue is counted in `repositories_deactivated` instead, not in the
+left-disabled set; a row it turns off because its catalogue entry became
+inactive is an ordinary update and is counted in `repositories_updated`. A
+repository another estate owns is reported in `repositories_conflicted`.
+`repositories_left_disabled` is a bounded preview of the left-disabled set: it
+holds at most 100 slugs, in sorted order, so a large estate cannot produce an
+unbounded result body.
+
+If another estate already owns a repository that this estate's catalogue names,
+sync leaves that row untouched and reports the slug in
+`result.repositories_conflicted`. Remove the repository from this estate's
+catalogue to clear the report. Sync never moves a row between estates, so the
+row stays with the owning estate; removing the slug from the owning estate's
+catalogue only disables that estate's own row and leaves this estate's report
+in place.
+
+A toggle applied to an ad hoc row lasts only until the row is adopted by a
+catalogue entry, at which point the catalogue's active flag takes over.
+
+To preview a sync without changing anything, pass `dry_run=True`. The result
+reports the counts the sync would have produced, and the transaction is rolled
+back:
+
+```python
+preview = await service.sync_from_catalogue("wildside", dry_run=True)
+```
+
+Each sync also writes one line per outcome-changing fact, so an operator can
+follow an estate without reading the result object. A run that finishes logs
+`SYNC_COMPLETED` with the estate key, whether it was a dry run, the duration
+and the counts; a run that fails logs `SYNC_FAILED` with the sanitized reason
+and re-raises. Each slug another estate owns logs `SYNC_CONFLICTED`, and each
+repository whose ingestion flag the sync changed logs `INGESTION_TRANSITION`
+with the transition and the new state. A `dry_run=true` line, whether it is the
+completion or a slug event, describes work that was rolled back. The per-slug
+lines appear only once the run's transaction has finished, so a run that fails
+logs `SYNC_FAILED` alone and none of the changes it had started to make. The
+completion event carries counts, never repository lists, and the developers'
+guide lists the fields each event carries.
+
+Behaviour changes that need action when upgrading, including re-applying a
+disable that an earlier release reverted, are recorded in the
+[migration guide](migration-guide.md).
+
 ### Ad hoc repositories
 
 When the Silver transformer encounters events for repositories not in the
@@ -555,8 +625,19 @@ The test fixtures now attempt to start a py-pglite Postgres instance by default
 so behavioural and unit tests exercise real Postgres semantics. If py-pglite
 cannot start (for example, Node.js is missing), the fixtures automatically fall
 back to SQLite to keep the suite runnable. To force SQLite explicitly, set
-`GHILLIE_TEST_DB=sqlite` before invoking `make test`. See
-`docs/testing-sqlalchemy-with-pytest-and-py-pglite.md` for full guidance.
+`GHILLIE_TEST_DB=sqlite` before invoking `make test`. To run against an
+existing Postgres instead, set `GHILLIE_TEST_DB` to a
+`postgresql+asyncpg://user:password@host:port/database` URL; the fixtures reset
+that database's `public` schema per test, so point it at a disposable one. Run
+that backend serially, because `make test` uses `pytest -n auto` and parallel
+workers would each reset the same schema:
+
+```bash
+GHILLIE_TEST_DB=postgresql+asyncpg://user:password@host:port/database \
+    uv run pytest -q tests/
+```
+
+See `docs/testing-sqlalchemy-with-pytest-and-py-pglite.md` for full guidance.
 
 ## GitHub ingestion observability (Phase 1.3.d)
 
