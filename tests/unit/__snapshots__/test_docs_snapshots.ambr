@@ -256,8 +256,8 @@
     compatible; only small type-checking cleanups were needed elsewhere to pass
     repository gates.
   - [x] (2026-04-08 UTC) Updated current docs (`docs/femtologging-users-guide.md`,
-    `docs/adrs/adr-0001-adoption-of-femtologging-library.md`, and `docs/roadmap.md`) so
-    they describe the new API and dependency reality.
+    `docs/adrs/adr-0001-adoption-of-femtologging-library.md`, and
+    `docs/roadmap.md`) so they describe the new API and dependency reality.
   - [x] (2026-04-08 UTC) Ran the full sequential quality gates and captured
     passing evidence for `make fmt`, `make markdownlint`, `make nixie`,
     `make check-fmt`, `make lint`, `make typecheck`, and `make test`.
@@ -420,7 +420,8 @@
   
      Update the current docs so they reflect the new dependency and API reality:
   
-     - `docs/adrs/adr-0001-adoption-of-femtologging-library.md` should replace the old
+     - `docs/adrs/adr-0001-adoption-of-femtologging-library.md` should replace
+       the old
        snapshot pin, stop claiming convenience methods are absent, and describe
        the upgrade as the new current state.
      - `docs/roadmap.md` should stop pointing at the old snapshot commit in the
