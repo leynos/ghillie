@@ -58,7 +58,8 @@ the publisher, the lanes, the environment placement and the lanes' selection
 parity to the rules above. A fix to a rule reaches this repository as a pin
 bump. The target needs `uv`, which fetches the Python 3.13 the library runs
 under; `.github/cv005.toml` holds the repository's parameters. The decision is
-recorded in [ADR-004](adr-004-adopt-the-shared-cv005-contract-library.md).
+recorded in
+[ADR-004](adrs/adr-0004-adopt-the-shared-cv005-contract-library.md).
 `tests/workflow_contracts/test_cv005_wiring.py` fails if the pin is not a full
 commit, the target stops running the pinned checker, the repository parameter
 is wrong, `make all` drops the target or CI stops running it.
@@ -248,7 +249,8 @@ or moving modules:
 
 The current policy groups modules as composition roots, domain ports,
 application modules, inbound adapters, and outbound adapters. The adoption
-rationale is recorded in `docs/adr-003-adopt-hecate-for-architecture-checks.md`.
+rationale is recorded in
+`docs/adrs/adr-0003-adopt-hecate-for-architecture-checks.md`.
 
 ## Dead-code detection
 

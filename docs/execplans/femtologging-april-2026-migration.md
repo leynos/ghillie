@@ -111,8 +111,8 @@ If any constraint cannot be met, stop and escalate.
   compatible; only small type-checking cleanups were needed elsewhere to pass
   repository gates.
 - [x] (2026-04-08 UTC) Updated current docs (`docs/femtologging-users-guide.md`,
-  `docs/adr-001-adoption-of-femtologging-library.md`, and `docs/roadmap.md`) so
-  they describe the new API and dependency reality.
+  `docs/adrs/adr-0001-adoption-of-femtologging-library.md`, and
+  `docs/roadmap.md`) so they describe the new API and dependency reality.
 - [x] (2026-04-08 UTC) Ran the full sequential quality gates and captured
   passing evidence for `make fmt`, `make markdownlint`, `make nixie`,
   `make check-fmt`, `make lint`, `make typecheck`, and `make test`.
@@ -134,7 +134,7 @@ If any constraint cannot be met, stop and escalate.
 - Discovery: `docs/femtologging-users-guide.md` still says convenience methods
   are not implemented and still documents `.with_flush_timeout_ms(...)`, which
   is inconsistent with the target SHA's upstream users guide.
-- Discovery: `docs/adr-001-adoption-of-femtologging-library.md` and
+- Discovery: `docs/adrs/adr-0001-adoption-of-femtologging-library.md` and
   `docs/roadmap.md` still pin the old snapshot commit and describe the old API
   limitations as current facts.
 - Discovery: the femtologging upgrade itself did not require runtime wrapper or
@@ -218,7 +218,7 @@ does not strictly need to adopt immediately:
 
 The local repository docs that are known to require attention are:
 
-- `docs/adr-001-adoption-of-femtologging-library.md`
+- `docs/adrs/adr-0001-adoption-of-femtologging-library.md`
 - `docs/roadmap.md`
 - `docs/femtologging-users-guide.md`
 - Any user-facing guidance that still treats the old snapshot as current
@@ -275,7 +275,8 @@ The local repository docs that are known to require attention are:
 
    Update the current docs so they reflect the new dependency and API reality:
 
-   - `docs/adr-001-adoption-of-femtologging-library.md` should replace the old
+   - `docs/adrs/adr-0001-adoption-of-femtologging-library.md` should replace
+     the old
      snapshot pin, stop claiming convenience methods are absent, and describe
      the upgrade as the new current state.
    - `docs/roadmap.md` should stop pointing at the old snapshot commit in the
@@ -335,7 +336,7 @@ PATTERN="$PATTERN|Convenience methods .*not implemented yet"
 rg -n "$PATTERN" \
   pyproject.toml \
   uv.lock \
-  docs/adr-001-adoption-of-femtologging-library.md \
+  docs/adrs/adr-0001-adoption-of-femtologging-library.md \
   docs/roadmap.md \
   docs/femtologging-users-guide.md
 ```
@@ -353,7 +354,7 @@ The migration is complete only when all of the following are true:
    `691a73962df8f99308a82348d99c4f707c245e63`.
 3. Existing observability tests still pass without changing event names,
    message structure, or the `WARN` expectation.
-4. `docs/adr-001-adoption-of-femtologging-library.md`,
+4. `docs/adrs/adr-0001-adoption-of-femtologging-library.md`,
    `docs/roadmap.md`, and `docs/femtologging-users-guide.md` no longer describe
    the old snapshot as current.
 5. Full sequential repository gates pass:

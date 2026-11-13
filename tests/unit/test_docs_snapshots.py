@@ -10,7 +10,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 def test_adr_001_snapshot(snapshot: object) -> None:
     """Keep ADR 001 content stable unless intentionally updated."""
     content = (
-        _REPO_ROOT / "docs" / "adr-001-adoption-of-femtologging-library.md"
+        _REPO_ROOT / "docs" / "adrs" / "adr-0001-adoption-of-femtologging-library.md"
     ).read_text(encoding="utf-8")
     assert content == snapshot
 
