@@ -551,6 +551,15 @@ per pull request.
       needed a precise entry-point rule, pinned with the rest in
       `tests/unit/test_skylos_lint_contract.py`. Metrics and spans stay with
       #219.
+- [x] (2026-11-13) The formal review of `9a2d2d9` raised one outside-diff
+      finding and the standing Observability check. The finding was accurate:
+      the 2026-11-08 progress entry still implied observability was delivered
+      as a whole. Both progress entries now name the structured events as what
+      shipped and say metrics and spans remain outstanding on #219. For the
+      check, the reviewer recorded an explicit accepted exception (quoted in
+      D31) after the evidence that the repository has no metrics or tracing
+      stack to extend and that a dependency needs the D27 platform decision.
+      The exception covers metrics and spans only.
 - [ ] PR-B, EP-M2: estate port, service, and catalogue query.
 - [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
@@ -1010,6 +1019,20 @@ expert-panel review.
   no metrics or tracing infrastructure to attach them to, and adding one is the
   platform decision D27 records. Issue #219 keeps that remainder; the terminal
   event and the transition record it also named are now delivered here.
+
+  The Observability pre-merge check asks for that remainder in this PR. It is
+  not deliverable here without a telemetry dependency the maintainer has not
+  approved, so the reviewer recorded an explicit exception on PR #200. Its
+  wording is reproduced here so the disposition is the reviewer's, not ours:
+
+  > For PR `#200`, I accept an exception to delivering registry-sync metrics
+  > and catalogue/Silver tracing in this PR. The structured events are
+  > delivered; they are not metrics or spans. Issue `#219` tracks the missing
+  > bounded-cardinality metrics, spans, platform infrastructure and tests. D27
+  > reserves the platform decision for follow-up.
+
+  The exception covers the metrics and spans only. It waives no other finding
+  and no required check, and #219 stays open until the platform work lands.
 
 ## Outcomes & retrospective
 
