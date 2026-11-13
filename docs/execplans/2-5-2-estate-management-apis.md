@@ -508,14 +508,18 @@ per pull request.
       are unchanged from `main` (9.38). No behaviour changed: the dry-run,
       adoption, concurrency, and storage suites pass unchanged apart from the
       new call shape.
-- [x] (2026-11-13) Delivered registry-sync observability (D31), closing the
-      Observability pre-merge warning CodeRabbit re-raised on `2724139`. The
-      new `ghillie/registry/observability.py` emits a completion event, a
-      failure event from the one `except` at the public edge, a per-slug
-      conflict event and a per-toggle transition event; `sync.py` gained the
-      estate key on `_SilverSyncContext` so each event can name it. Five new
-      tests in `tests/unit/test_registry_observability.py` assert the text an
-      operator reads through the femtologging capture, including the
+- [x] (2026-11-13) Delivered the structured-event half of registry-sync
+      observability (D31), answering most of the Observability pre-merge
+      warning CodeRabbit re-raised on `2724139`. That warning is **not** fully
+      closed: its metrics and spans remain outstanding on #219, which is the
+      prerequisite for that row, and D27 keeps the runtime dependency that
+      work would need out of this PR. The new
+      `ghillie/registry/observability.py` emits a completion event, a failure
+      event from the one `except` at the public edge, a per-slug conflict
+      event and a per-toggle transition event; `sync.py` gained the estate key
+      on `_SilverSyncContext` so each event can name it. Five tests added in
+      that round in `tests/unit/test_registry_observability.py` assert the
+      text an operator reads through the femtologging capture, including the
       exactly-one-event property for the success and failure paths. Metrics,
       spans and catalogue/Silver tracing stay with #219 as D27 records. The
       same round closed the Developer Documentation warning: the developers'
