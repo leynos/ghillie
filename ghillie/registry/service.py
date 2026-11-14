@@ -13,10 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ghillie.registry.ingestion import get_repository_by_slug, set_ingestion_enabled
 from ghillie.registry.listing import RepositoryListOptions, list_repositories
-from ghillie.registry.sync import sync_from_catalogue
+from ghillie.registry.storage import DialectUpsertStrategy
+from ghillie.registry.sync import SyncOptions, sync_from_catalogue
 
 if typ.TYPE_CHECKING:
     from ghillie.registry.models import RepositoryInfo, SyncResult
+    from ghillie.registry.storage import UpsertStrategy
 
 type SessionFactory = async_sessionmaker[AsyncSession]
 
@@ -34,6 +36,11 @@ class RepositoryRegistryService:
         Async session factory for the catalogue database.
     silver_session_factory:
         Async session factory for the Silver database.
+    upsert_strategy:
+        Optional override for the insert that ignores an owner/name conflict.
+        The sync resolves the dialect's strategy when this is omitted; the
+        parameter exists so a deployment or test can be explicit about the
+        persistence choice at the composition edge.
 
     """
 
@@ -41,12 +48,21 @@ class RepositoryRegistryService:
         self,
         catalogue_session_factory: SessionFactory,
         silver_session_factory: SessionFactory,
+        *,
+        upsert_strategy: UpsertStrategy | None = None,
     ) -> None:
         """Configure the service with session factories for both databases."""
         self._catalogue_sf = catalogue_session_factory
         self._silver_sf = silver_session_factory
+        # Resolve the default once here, so every sync the service runs uses
+        # the same strategy object rather than rebuilding it per call.
+        self._upsert_strategy: UpsertStrategy = upsert_strategy or (
+            DialectUpsertStrategy()
+        )
 
-    async def sync_from_catalogue(self, estate_key: str) -> SyncResult:
+    async def sync_from_catalogue(
+        self, estate_key: str, *, dry_run: bool = False
+    ) -> SyncResult:
         """Synchronize all catalogue repositories to Silver for an estate.
 
         Reads repositories from the catalogue database (via component
@@ -58,6 +74,9 @@ class RepositoryRegistryService:
         ----------
         estate_key:
             The estate whose repositories should be synchronized.
+        dry_run:
+            When true, run the sync inside its transaction and roll it back,
+            returning the counts it would have produced.
 
         Returns
         -------
@@ -71,7 +90,13 @@ class RepositoryRegistryService:
 
         """
         return await sync_from_catalogue(
-            self._catalogue_sf, self._silver_sf, estate_key
+            self._catalogue_sf,
+            self._silver_sf,
+            estate_key,
+            options=SyncOptions(
+                dry_run=dry_run,
+                upsert_strategy=self._upsert_strategy,
+            ),
         )
 
     async def list_active_repositories(
@@ -167,7 +192,7 @@ class RepositoryRegistryService:
         Returns
         -------
         bool
-            True if the repository was found and updated.
+            True if the flag changed, False if it was already enabled.
 
         Raises
         ------
@@ -190,7 +215,7 @@ class RepositoryRegistryService:
         Returns
         -------
         bool
-            True if the repository was found and updated.
+            True if the flag changed, False if it was already disabled.
 
         Raises
         ------

@@ -252,6 +252,103 @@ application modules, inbound adapters, and outbound adapters. The adoption
 rationale is recorded in
 `docs/adrs/adr-0003-adopt-hecate-for-architecture-checks.md`.
 
+## Registry synchronization
+
+Catalogue synchronization projects an estate's catalogue components into the
+Silver `Repository` table. The policy that decides each repository's
+`ingestion_enabled` flag is separate from the persistence work, so the rules
+can be read and tested without a database.
+
+`ghillie.registry.policy` holds that decision as a pure function. The module
+imports only the standard library, which is why Hecate groups it under
+`domain_ports`; keep it that way when changing the module. The transitions it
+produces are:
+
+| Row state               | Catalogue state   | Transition            |
+| ----------------------- | ----------------- | --------------------- |
+| absent                  | present, active   | `ADOPT` (enabled)     |
+| absent                  | present, inactive | `ADOPT` (disabled)    |
+| unlinked, this estate   | present           | `ADOPT`               |
+| linked, this estate     | present, active   | `PRESERVE`            |
+| linked, this estate     | present, inactive | `DISABLE_INACTIVE`    |
+| linked, this estate     | absent            | `DISABLE_REMOVED`     |
+| unlinked, this estate   | absent            | `PRESERVE`            |
+| owned by another estate | present           | `CONFLICT` (reported) |
+| owned by another estate | absent            | `CONFLICT` (silent)   |
+
+`RepositoryRegistryService.sync_from_catalogue(estate_key, *, dry_run=False)`
+runs the whole projection inside one Silver transaction:
+
+- with `dry_run=False`, the rows it created, updated, or disabled are committed;
+- with `dry_run=True`, the same work runs and the transaction is rolled back, so
+  the call returns the counts it would have produced and persists nothing.
+
+The service resolves the insert strategy once in its constructor and hands it,
+with the dry-run flag, to `ghillie.registry.sync.sync_from_catalogue` as a
+`SyncOptions` record. That record is the syncing function's only keyword
+argument, so a further persistence choice joins it rather than widening a
+signature that already names the estate it projects. Its clock defaults to
+`utcnow` and is read once per run, so every row a single run touches carries
+the same `last_synced_at`.
+
+Adoption of an unowned row is atomic. The sync claims it with a conditional
+update and reports a conflict if another estate claimed it first, so concurrent
+syncs cannot silently replace each other's claim. A race to insert the same
+repository is arbitrated by the owner/name uniqueness constraint.
+
+Either way the call returns a `SyncResult`. `repositories_created`,
+`repositories_updated`, and `repositories_deactivated` count the changes.
+`repositories_conflicted` lists this estate's catalogue slugs that another
+estate owns; sync leaves those rows untouched. `repositories_left_disabled`
+previews the active catalogue repositories whose linked Silver row was disabled
+in the view the sync loaded and that the sync left disabled, and
+`repositories_left_disabled_count` carries the total across the estate. The
+pair observes that view plus the sync's own writes rather than re-reading
+committed state, so a toggle another writer commits after the load is not seen
+and is not overwritten. Two paths reload a single row from committed state to
+judge ownership: a lost adoption claim and a lost owner/name insert race. A row
+reloaded that way is reported from the reloaded state, so a toggle committed
+before the reload can be seen, and a row it makes enabled is not reported as
+left disabled. They say that ingestion is off, not why: a row can have been
+disabled by an operator or by an earlier removal. `repositories_deactivated`
+counts only removed rows that this sync turned from enabled to disabled, so a
+removed row an operator had already disabled is not counted again.
+
+The rules and their rationale are recorded in
+[ADR-005](adr-005-registry-sync-preserves-operator-ingestion-toggles.md), the
+upgrade actions in the [migration guide](migration-guide.md), and the
+surrounding catalogue and Silver design is in
+[the Bronze/Silver architecture design](ghillie-bronze-silver-architecture-design.md#92-repository-discovery-and-registration-phase-13a).
+
+### Persistence and upsert strategies
+
+`ghillie.registry.storage` owns the Silver persistence SQL for registry sync;
+`ghillie.registry.sync` holds the decisions and the orchestration, and calls
+into storage for the statements themselves.
+
+The insert is an `UpsertStrategy`, a protocol whose `build(session, row)`
+method returns a SQLAlchemy `Insert` or `None`. Returning `None` declines the
+upsert, and the caller then inserts plainly so the uniqueness constraint
+decides the outcome. `DialectUpsertStrategy` is the default; it resolves the
+session's dialect and delegates to the named strategy for it.
+`PostgresUpsertStrategy` and `SqliteUpsertStrategy` both emit
+`ON CONFLICT DO NOTHING`, and `PlainInsertStrategy` is the named fallback for a
+dialect without an upsert construct.
+
+To choose a strategy explicitly, pass `upsert_strategy=` to
+`RepositoryRegistryService(...)`. The service resolves its default once in the
+constructor and passes the chosen strategy to the sync inside `SyncOptions`, as
+described above.
+
+Storage also reports outcomes and guarded changes:
+
+- `InsertOutcome` is `INSERTED`, `CONFLICT`, or `DECLINED`; sync uses it to
+  distinguish its own insert from a competing writer's row and from a declined
+  upsert.
+- `claim_unowned_repository` and `deactivate_if_still_enabled` return a
+  `bool` meaning "this sync made the change", so a claim or disable that lost a
+  race is not counted.
+
 ## Dead-code detection
 
 `make lint` runs Skylos `4.33.2` as an isolated `uv tool` with Python 3.14
@@ -281,6 +378,18 @@ repository-local `.skylos-whitelist.lock` file; set `SKYLOS_WHITELIST_LOCK` to
 an alternate path only for isolated tests. Do not add broad or unexplained
 exceptions; retain the verified caller rationale in the reviewing change and
 remove an allow-list entry when its dynamic boundary no longer exists.
+
+The registry sync dispatches its persistence helpers through the
+`UpsertStrategy` protocol and the named dialect selector, which Skylos cannot
+follow. It also records its events through `_SilverSyncContext.events`, a
+dataclass field, so `SyncEventBuffer.record_conflict` and
+`SyncEventBuffer.record_transition` are reached through an attribute chain that
+Skylos does not traverse; `SyncEventBuffer.publish` is called by name on the
+returned buffer and needs no rule. `pyproject.toml` therefore declares
+`[[tool.skylos.dead_code.entrypoints]]` rules for the registry strategy
+methods, the two buffer recorders, `dialect_upsert_strategy`, and
+`_insert_values`, and `tests/unit/test_skylos_lint_contract.py` pins the same
+names so the contract cannot drift unnoticed.
 
 The Skylos Makefile contract is parsed with pinned Makeutil in
 `tests/unit/test_skylos_lint_contract.py`; `make test` requires that parser.
@@ -357,6 +466,47 @@ Tests that need to inspect emitted logs should use the
 `tests.helpers.femtologging_capture`. It captures the records emitted by the
 named logger without routing through `logging.getLogger`, which would bypass
 the femtologging integration entirely.
+
+### Registry sync events
+
+`ghillie.registry.observability` owns the lines a registry sync emits, and it
+is the only module that renders them. Each line starts with a bracketed event
+name, then `key=value` fields on the same record, so a log query can select one
+event type without parsing prose.
+
+| Event                  | Level | Emitted                                                 |
+| ---------------------- | ----- | ------------------------------------------------------- |
+| `SYNC_COMPLETED`       | INFO  | once per run that returns, with the counts and duration |
+| `SYNC_FAILED`          | ERROR | once per run that raises `RegistrySyncError`            |
+| `SYNC_CONFLICTED`      | INFO  | per slug another estate owns                            |
+| `INGESTION_TRANSITION` | INFO  | per repository whose ingestion flag the run changed     |
+
+The completion and failure events are emitted at the public edge, so a failure
+in loading the catalogue and a failure while writing Silver both produce
+exactly one event, and neither path logs twice. `SYNC_FAILED` carries the
+`RegistrySyncError` reason, which is already sanitized; do not extend it with
+SQL, driver text, or exception detail.
+
+Every line carries `estate_key` and `dry_run`. The terminal events carry counts
+and duration rather than repository lists, so they stay one line whatever the
+estate's size. The per-slug events scale with the conflicts and changes the run
+actually made, not with the estate: a sync of a thousand unchanged repositories
+emits one completion line, while a run that changes a hundred flags emits a
+hundred transition lines. That volume is the point — it names each change — but
+it is worth knowing when sizing log retention.
+
+The per-slug events are recorded in a `SyncEventBuffer` while the run's
+transaction is still open and published by
+`_sync_catalogue_repositories_or_raise` only once it settles. A committed run
+publishes with `dry_run=false`; a dry run publishes after its rollback with
+`dry_run=true`, because its lines describe projected work the database does not
+hold. A run that fails publishes nothing but `SYNC_FAILED`: the work it
+recorded was rolled back, and the failure event is the whole record. Never log
+a change at the point the row is written; it could be undone before the
+transaction ends.
+
+Metrics and tracing are not part of this module: the repository has no metrics
+or tracing infrastructure, and issue #219 tracks that remainder.
 
 ## Helm chart for local and GitOps (Git-driven operations) previews
 
@@ -667,6 +817,21 @@ Force SQLite for faster local iteration:
 ```bash
 GHILLIE_TEST_DB=sqlite make test
 ```
+
+Point the suite at an existing Postgres when py-pglite cannot start, for
+example to run the overlapping-transaction tests in
+`tests/unit/test_registry_service_sync_concurrency.py`:
+
+```bash
+GHILLIE_TEST_DB=postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/ghillie_test \
+    uv run pytest -q tests/
+```
+
+The fixture drops and recreates the `public` schema before each test, so use a
+disposable database and never a shared one. Run serially, as above: `make test`
+uses `pytest -n auto`, and parallel workers would each reset the same schema
+while other workers were using it. The fixture raises rather than run under
+`pytest-xdist`.
 
 ### Helm chart tests only
 

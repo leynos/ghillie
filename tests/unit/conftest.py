@@ -110,6 +110,7 @@ def create_repo(session_factory: async_sessionmaker[AsyncSession]) -> CreateRepo
                 estate_id=create_spec.estate_id,
                 catalogue_repository_id=create_spec.catalogue_repository_id,
                 documentation_paths=list(create_spec.documentation_paths or ()),
+                last_synced_at=create_spec.last_synced_at,
             )
             session.add(repo)
 
