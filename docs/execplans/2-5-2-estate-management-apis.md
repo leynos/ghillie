@@ -957,6 +957,29 @@ per pull request.
       D31) after the evidence that the repository has no metrics or tracing
       stack to extend and that a dependency needs the D27 platform decision.
       The exception covers metrics and spans only.
+- [x] (2026-11-14) Replayed PR-B onto the landed PR-A squash `54e4436`.
+      PR-A advanced past this branch's base `d6356b7` while this branch
+      waited: it moved the persistence statements into
+      `ghillie/registry/storage.py`, added `observability.py`, the migration
+      guide and the Interrogate gate, and main took #227–#230 on top. A merge
+      of the old branch into main would have deleted those files, so the 32
+      PR-B commits were replayed with `git rebase --onto 54e4436 d6356b7`.
+      The one conflict was this document. The replay kept this branch's text
+      so the later plan edits applied cleanly, and PR-A's entries were merged
+      back afterwards with `git merge-file` against the shared base. The
+      Progress section keeps this branch's entries and then PR-A's
+      2026-11-07..13 entries; PR-A's two unchecked PR-B placeholders are
+      dropped because the checked milestone blocks replace them. The decision
+      log keeps the landed D21 wording before D22 and D23. PR-A's landed D29
+      is the left-disabled report contract, so this branch's D29 (worker
+      logging) is renumbered D32; no source, test or other document names it.
+      The gates then found three replay artefacts, all fixed: two
+      `list_repositories` imports in `ghillie/registry/service.py`, two
+      `function` keys in the Skylos contract's `_RUNTIME_ENTRY_POINTS`, and 22
+      nested test helpers the Interrogate gate wants documented, which landed
+      after this branch's base. All eight gates are green at `b9fd298`:
+      `test` 1480 passed, 17 skipped, interrogate 100.0%, and the Skylos
+      dead-code gate ran and was clean.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
