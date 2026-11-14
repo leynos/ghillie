@@ -996,6 +996,20 @@ per pull request.
       test fails, and the spec was restored. All eight gates are green on the
       committed tree `b0a8bbc`: `test` 1484 passed, 17 skipped, interrogate
       100.0%, and the Skylos dead-code gate ran and was clean.
+- [x] (2026-11-14) Cleared the CodeScene gate on the repaired head. The
+      database review flagged `EstateManagementService.set_ingestion` as a
+      Complex Method (file health 9.69) once the cancellation clause landed,
+      because each `except` clause adds to the method's cyclomatic complexity.
+      The two translations moved into `_toggle_failure`, which logs the D21
+      record and returns the error to raise, or `None` to re-raise unchanged;
+      the method keeps two clauses. Behaviour is unchanged and the four
+      pre-existing failure tests plus the cancellation test pass unmodified.
+      The helper joins the module's existing Skylos function entrypoint rule in
+      `pyproject.toml`, which already records that Skylos cannot resolve these
+      private helpers from the async methods that call them, and the contract
+      test that pins that table gains the name. `make lint` is green
+      (interrogate 3506/3506, Ruff clean, Skylos clean) and `cs check
+      ghillie/estate/service.py` reports code health 10.00.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
