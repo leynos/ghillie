@@ -703,6 +703,260 @@ per pull request.
         `9333bc3`: `check-fmt`, `check-architecture`, `typecheck`, `lint`,
         `test` (1442 passed, 11 skipped, 0 failed), `markdownlint`, `nixie`,
         and `spelling`. Logs are under `/tmp/gate-B-9333bc3-*.out`.
+- [x] (2026-11-07) The first formal review of `d6356b7` failed the pre-merge
+      checks on four rows. Two were actioned rather than reconciled a third
+      time. A sync that loses an owner/name insert race no longer aborts the
+      whole estate: `_insert_or_reconcile` inserts with `ON CONFLICT DO
+      NOTHING`, re-reads the survivor when the insert did not land, and runs
+      the ordinary decision path, so the slug lands in
+      `repositories_conflicted`. An integrity failure with no surviving row is
+      still re-raised with its cause for the D17 409 mapping. A savepoint
+      version was tried first and reverted: pysqlite commits on `RELEASE
+      SAVEPOINT`, so it broke dry-run rollback. Two overlapping-sync tests were
+      added, guarded on a
+      Postgres-bound session factory; both were executed against Postgres 17 in
+      a throwaway container and the insert test fails with `RegistrySyncError`
+      when the repair is reverted. D28 and the Verification section record the
+      repair and the pglite limitation that keeps the pair skipped in this
+      suite. The documentation and observability rows were reconciled with the
+      existing evidence: no 2.0.0 release exists to migrate from, and D21's one
+      structured line per mutation is already implemented in the estate service
+      that PR-B adds.
+- [x] (2026-11-07) The repair's repair commit `57ca6e1` failed the hosted
+      CodeScene critical-rule gate: `test_registry_service_sync.py` scored
+      8.82 for Low Cohesion, because the concurrency harness and the four race
+      witnesses gave the file a second cluster of shared data. The four
+      concurrency tests and their five helpers moved to
+      `tests/unit/test_registry_service_sync_concurrency.py`; both modules now
+      score 10.00 and `cs check` reports neither finding. No test body changed,
+      and the focused run is unchanged at 18 passed, 2 skipped.
+- [x] (2026-11-07) The R15 assessment reply accepted the lost-insert repair but
+      raised a further concurrency defect: the sync loop followed catalogue
+      order, so two estates with different orders could deadlock and lose one
+      estate's conflict reports. The sync now makes one sorted pass over the
+      catalogue and Silver slugs, flushing each, and
+      `test_sync_writes_slugs_in_sorted_order` proves it with a reversed
+      catalogue and a row outside it. A follow-up reply noted that two separate
+      phases would still take their locks in two orders;
+      `test_overlapping_syncs_across_both_phases_do_not_deadlock` fails with
+      `RegistrySyncError` on the two-phase order and passes on the one-pass
+      order. The same reply asked for the Postgres run to be reproducible from
+      committed configuration, so `tests/conftest.py` now accepts a
+      `postgresql+asyncpg://` URL in `GHILLIE_TEST_DB` and resets that
+      database's `public` schema per test; it raises under `pytest-xdist`,
+      which shares one schema. All 22 tests in the three sync modules pass
+      against Postgres 17 with no skips.
+- [x] (2026-11-07) The review of `0693e93` returned four pre-merge rows. Three
+      are actioned: the disabled preview is now asserted exactly (two tests,
+      both mutation-checked); `docs/migration-guide.md` records the 2.0.0
+      upgrade actions and is linked from the users' and developers' guides; and
+      the `SyncResult` docstring plus both design documents now say the preview
+      reports that ingestion is off, not why. The observability row is rebutted
+      with D21 (one structured line per mutation, implemented in the estate
+      service that PR-B adds) and D27 (metrics and tracing are a platform
+      decision), per the plan's prohibition on new runtime dependencies.
+- [x] (2026-11-08) The D27 rebuttal above is kept as the historical record for
+      the estate-service line. The follow-up disposition is separate: direct
+      registry-sync observability — a terminal event, bounded-cardinality
+      reliability and transition metrics, catalogue and Silver tracing, and
+      tests for the success, conflict, dry-run, and database-failure paths — is
+      deferred to issue #219 and is not delivered by this PR. CodeRabbit
+      accepted that disposition in the review conversation on `fb6ef25`.
+      (Superseded 2026-11-13: the terminal event, the conflict and transition
+      records, and the success/dry-run/failure-path tests are now delivered;
+      see D31 and the progress entry for that date.)
+- [x] (2026-11-08) The formal review of `fb6ef25` (5815901876) re-raised three
+      pre-merge rows and one inline request, all actioned. Testing (Overall):
+      `test_external_postgres_setup_raises_under_xdist_before_connecting`
+      proves the guard raises before an engine is built, and
+      `test_external_postgres_setup_works_serially` proves serial setup against
+      a disposable PostgreSQL 17 container (27 passed, 0 skipped with
+      `GHILLIE_TEST_DB`). Domain Architecture: a lost adoption claim now
+      re-reads the row and reapplies the policy, so a claim lost to this same
+      estate continues the sync while a claim lost to another estate is still
+      reported (`test_sync_continues_after_losing_a_claim_to_its_own_estate`).
+      The re-read passes `populate_existing=True`: a plain select returned the
+      cached pre-claim row, which both hid the conflict and let the losing
+      sync overwrite the winner.
+      `test_overlapping_syncs_adopt_an_unowned_row_once` caught that; its unit
+      counterpart now loads the row in the sync's own session, so it
+      reproduces the staleness without Postgres. Inline: the dated #219 entry
+      above. Observability remained deferred to #219 at that point; its
+      structured events are delivered as of 2026-11-13 (D31), and its metrics
+      and spans remain outstanding there.
+- [x] (2026-11-08) CodeScene failed its delta gate on the new head with a
+      critical Low Cohesion finding in `test_registry_service_sync.py` and an
+      advisory Complex Method in `sync.py::_sync_one_repository`. Both came
+      from this review's changes and are fixed rather than suppressed: the
+      adoption-race tests moved to
+      `tests/unit/test_registry_service_sync_adoption.py`, and the lost-claim
+      reconciliation moved into `_reconcile_lost_claim`. `cs check` now scores
+      both files 10.00.
+- [x] (2026-11-08) Reconciled the three inline findings still open from the
+      2026-11-07 review round. The users' guide now states that an external
+      Postgres `GHILLIE_TEST_DB` must run serially and gives the
+      `uv run pytest -q tests/` command. The test helpers in
+      `test_registry_service_sync.py`, `test_registry_service_sync_concurrency.py`,
+      and `test_registry_service_sync_adoption.py` now annotate with
+      `collections.abc` members instead of the deprecated `typing` aliases, as
+      a path instruction requires. No behaviour changed.
+- [x] (2026-11-08) The queued formal review of `fde7289` raised two findings,
+      both actioned. The serial external-Postgres test deleted
+      `PYTEST_XDIST_WORKER`, which defeats the conftest guard and would reset a
+      shared schema from a worker; it now skips under xdist and no longer
+      clears the variable. The same-estate adoption test loaded its stale view
+      from a separate session, so it could not detect a lost
+      `populate_existing`. It now loads through the sync's session and has the
+      winner link the row; disabling `populate_existing` makes it fail on the
+      preserved ingestion flag, so the reload is now guarded directly.
+- [x] (2026-11-08) Replayed the branch onto `main` at `d5bf67b`, which added
+      the `interrogate` docstring gate to `make lint` (#226). CI evaluates the
+      merged tree, so the 27 undocumented helper definitions this branch adds
+      across six test modules are now documented. `make interrogate` reports
+      100.0%.
+- [x] (2026-11-09) Actioned the eight findings from the formal review of
+      `91c1875`. The D28 record now explains that a lost claim is a conflict
+      only when another estate owns the row, and the concurrency inventory
+      names the three adoption tests and five concurrency tests by module. The
+      concurrency helper is renamed to `_synchronize_silver_load`, the dry-run
+      and state-machine modules import ABCs from `collections.abc`, the
+      catalogue builder moved to the shared test helpers, and the
+      state-machine assertions name the field they check. The flush-failure
+      test now counts a real run's flushes and fails on the dry run's next
+      one: removing the dry-run flush makes it fail with `DID NOT RAISE`.
+- [x] (2026-11-09) Closed the Domain Architecture pre-merge row instead of
+      rebutting it again. The removal write now carries the ownership
+      condition, so a stale view cannot disable a row another estate claimed
+      after the load (D28). The Surprises entry records the limit as closed.
+      The new direct-primitive test is red when the condition is removed —
+      it reports a deactivation and leaves the winner's row disabled — and
+      green with it. The sorted-order test's removal recorder became async to
+      match the awaited removal path.
+- [x] (2026-11-09) Actioned the three remaining findings from the pre-merge
+      reconciliation of `3743ce1`. The users' guide now counts an
+      inactive-row disable as an update, the removal write requires
+      `ingestion_enabled IS TRUE`, and a PostgreSQL same-estate overlap test
+      covers the reload path CodeRabbit asked for. Both repairs have a red
+      case: the count test reports one deactivation without the predicate.
+- [x] (2026-11-10) Actioned the two follow-ups from CodeRabbit's confirmation
+      of `eb1be5f`. The inactive-catalogue test now asserts the update count,
+      a zero deactivation count and the left-disabled preview. The same-estate
+      overlap test is corrected and strengthened: its cached-copy claim was
+      wrong for a linked row, and it now seeds the catalogue's documentation
+      paths so a cached pre-claim copy is observable as one reported update.
+      Passing `populate_existing=False` makes it fail with `assert 1 == 0`.
+- [x] (2026-11-10) Closed CodeRabbit's remaining verification gap in the
+      dry-run failure test. It used to run the failing dry run against the
+      rows the baseline had just committed, which already matched the
+      catalogue, so its snapshot could not tell a rollback from having nothing
+      to undo. The test now clears those rows after measuring the flush count,
+      leaving six pending inserts in the failed dry run's transaction; a dry
+      run that committed on the failure path fails the snapshot assertion with
+      six rows.
+- [x] (2026-11-10) Actioned the review of `d31dee3`. Two docstring spellings
+      now use the project's `-ize` forms, and the D28 record attributes the
+      ownership-condition mutation result to
+      `test_removal_path_leaves_a_row_another_estate_claimed` rather than the
+      same-estate overlap test. The Domain Architecture row asked for a
+      consistent state boundary or an explicit observation contract for the
+      left-disabled count and preview; D29 records the second choice, because
+      a locked re-read would undo the sorted single-pass order and still race
+      a later commit. The users' guide and `SyncResult` now say the report
+      describes the loaded view, and
+      `test_a_concurrent_enable_is_not_reflected_in_the_left_disabled_report`
+      pins it on PostgreSQL. Re-reading committed state before reporting makes
+      that test fail with an empty left-disabled list.
+- [x] (2026-11-10) Finished the D29 wording sweep. The follow-up reply named
+      three passages that still promised a completion-state result:
+      `docs/developers-guide.md`, `docs/migration-guide.md`, and
+      `docs/ghillie-bronze-silver-architecture-design.md`. Each now says the
+      preview and count describe the view the sync loaded plus its own writes,
+      that a toggle another writer commits after the load is not seen or
+      overwritten, and that the count is the estate total rather than a
+      remainder beyond the preview. No runtime, test, or `SyncResult` text
+      changed.
+- [x] (2026-11-12) Qualified the D29 contract for the one path that does
+      re-read committed state, as the review of `14f375e` asked.
+      `_reconcile_lost_claim` reloads an adoption claim that lost a race in
+      order to judge ownership (D28), so a toggle committed before that reload
+      can be observed, and a row it makes enabled is not reported as left
+      disabled. D29 and `SyncResult` now name that exception, and the users',
+      developers' and migration guides and the architecture design carry the
+      same sentence, and the preserve branch still never rewrites the toggle.
+- [x] (2026-11-12) The review of `f85af72` found a second reload path and
+      asked for both to be named. When an owner/name insert loses a race,
+      `_insert_or_reconcile` loads the winning row and reapplies the decision
+      path, so a linked, active, disabled row of this estate can enter the
+      left-disabled report even though it was absent from the loaded view.
+      D29 now names both the lost adoption claim and the lost insert race,
+      states that each reloads one row from committed state, and no longer
+      claims that every other row is reported from the loaded view.
+      `SyncResult` and the four guides carry the same sentence, and D30
+      records the refactor boundary.
+- [x] (2026-11-12) Cleared the CodeScene failure the hosted check raised on
+      `f6396f3`. Its delta analysis reported Excess Number of Function
+      Arguments on `sync_from_catalogue`, which D30 had grown to six
+      parameters; `function_max_arguments` is 4. The run's choices now travel
+      as one frozen `SyncOptions` record (dry run, clock, upsert strategy), so
+      the function takes the estate and its options. The service resolves the
+      dialect default strategy once in its constructor. `cs delta d5bf67b
+      f6396f3` reproduced the hosted finding before the change and the working
+      tree's `cs check` scores `ghillie/registry/sync.py` at 10.00 after it;
+      the pre-existing duplication warnings in `ghillie/registry/service.py`
+      are unchanged from `main` (9.38). No behaviour changed: the dry-run,
+      adoption, concurrency, and storage suites pass unchanged apart from the
+      new call shape.
+- [x] (2026-11-13) Delivered the structured-event half of registry-sync
+      observability (D31), answering most of the Observability pre-merge
+      warning CodeRabbit re-raised on `2724139`. That warning is **not** fully
+      closed: its metrics and spans remain outstanding on #219, which is the
+      prerequisite for that row, and D27 keeps the runtime dependency that
+      work would need out of this PR. The new
+      `ghillie/registry/observability.py` emits a completion event, a failure
+      event from the one `except` at the public edge, a per-slug conflict
+      event and a per-toggle transition event; `sync.py` gained the estate key
+      on `_SilverSyncContext` so each event can name it. Five tests added in
+      that round in `tests/unit/test_registry_observability.py` assert the
+      text an operator reads through the femtologging capture, including the
+      exactly-one-event property for the success and failure paths. Metrics,
+      spans and catalogue/Silver tracing stay with #219 as D27 records. The
+      same round closed the Developer Documentation warning: the developers'
+      guide gained a persistence-and-upsert-strategy section, a
+      registry-sync-events table and a dead-code-detection note, the users'
+      guide describes the four events an operator will see, and the
+      architecture design gained the ownership paragraph describing the
+      storage seam.
+- [x] (2026-11-13) CodeRabbit's follow-up review of `e62f6ad` found two real
+      defects in the new events, both fixed tests-first. A slug whose adoption
+      claim lost to another estate was appended to `repositories_conflicted`
+      but recorded no conflict event, so the count and the per-slug lines
+      disagreed; it now records one like any other conflict. And the per-slug
+      events were logged at the point of writing, inside a transaction that
+      could still roll back, so a dry run reported changes the database never
+      kept and a failure reported changes it undid. They are now recorded in a
+      `SyncEventBuffer` and published by
+      `_sync_catalogue_repositories_or_raise` only once the transaction
+      settles — after the commit, or after a dry run's rollback with
+      `dry_run=true` — and a failed run publishes only `SYNC_FAILED`. New tests
+      pin a dry run's transition label, a failure after a recorded transition,
+      and a lost-claim conflict, and the existing conflict test still covers
+      the ordinary path. The
+      event-volume claim in the developers' guide and D31 was overstated and is
+      corrected: terminal lines are one per run, per-slug lines scale with what
+      the run changed. Skylos cannot follow a call through the
+      `_SilverSyncContext.events` dataclass field, so the two buffer recorders
+      needed a precise entry-point rule, pinned with the rest in
+      `tests/unit/test_skylos_lint_contract.py`. Metrics and spans stay with
+      #219.
+- [x] (2026-11-13) The formal review of `9a2d2d9` raised one outside-diff
+      finding and the standing Observability check. The finding was accurate:
+      the 2026-11-08 progress entry still implied observability was delivered
+      as a whole. Both progress entries now name the structured events as what
+      shipped and say metrics and spans remain outstanding on #219. For the
+      check, the reviewer recorded an explicit accepted exception (quoted in
+      D31) after the evidence that the repository has no metrics or tracing
+      stack to extend and that a dependency needs the D27 platform decision.
+      The exception covers metrics and spans only.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
@@ -800,9 +1054,8 @@ per pull request.
   `estate_id` as adoptable, and therefore as owned for its purposes, such a row
   falls through to the removal and update paths like an owned one. No normal
   production path that creates that state was identified: adoption applies only
-  to unlinked rows, and creation always sets `estate_id`. Two narrow limits
-  follow. EP-M1 records both rather than adding special cases, and they do not
-  share an origin.
+  to unlinked rows, and creation always sets `estate_id`. One narrow limit
+  follows. EP-M1 records it rather than adding a special case.
   - An ownership-only claim does not register as an update. D28 introduced this
     limit. `_claim_unowned_repository` mirrors the new `estate_id` onto the
     loaded row, so `_update_silver_repository` afterwards finds every field
@@ -810,12 +1063,23 @@ per pull request.
     increment and `last_synced_at` does not advance for that row. At the PR
     base the claim was unconditional and `_update_silver_repository` applied
     `estate_id` itself, so the same change was counted.
-  - The removal path judges ownership from the loaded view. This limit predates
-    D28 and is unchanged by it. If the slug is absent from this estate's
-    catalogue and is enabled, the removal path disables it — including when
-    another estate claimed the row after this sync loaded its view. Closing
-    that would need the same conditional ownership check in the removal path
-    that D28 added to the claim.
+  - ~~The removal path judges ownership from the loaded view.~~ **Closed
+    2026-11-09.** The removal write now carries the ownership condition, so a
+    row another estate claimed after the load matches no row and is left
+    untouched (D28). The stale view still decides *whether* a removal is
+    attempted; it no longer decides what may be written.
+  - ~~The removal count judges the enabled flag from the loaded view.~~
+    **Closed 2026-11-09.** The same statement also requires
+    `ingestion_enabled IS TRUE`, so a row another writer disabled after the
+    load is neither counted in `repositories_deactivated` nor restamped
+    (D28).
+  - The left-disabled count and preview describe the loaded view.
+    **Documented and pinned 2026-11-10.** They are observations of that view
+    plus the sync's own writes, not a re-read of committed state: a locked
+    re-read would undo the sorted single-pass order and still race a commit
+    landing afterwards (D29).
+    `test_a_concurrent_enable_is_not_reflected_in_the_left_disabled_report`
+    holds the contract on PostgreSQL.
 
 ## Decision log
 
@@ -967,12 +1231,10 @@ expert-panel review.
   `RepositoryRegistryService.sync_from_catalogue` gain keyword-only
   `dry_run: bool = False`. Rationale: the pre-mortem's most likely incident is
   importing the wrong file into a live estate.
-- D21, observability. Each mutation attempt logs exactly one terminal
-  structured line through `ghillie.logging`: operation, estate key, commit, dry
-  run, counts, duration, and outcome. Import records include edge counts. A
-  failed attempt records the error class and message instead of the counts, so
-  a rejected document, a conflict, and a storage outage are distinguishable
-  without a second log line. Toggles also log the old and new state.
+- D21, observability. Each mutation logs one structured line through
+  `ghillie.logging`: operation, estate key, commit, dry run, counts, duration,
+  and outcome. Toggles also log the old and new state. For a registry sync, D31
+  names the events and where they are emitted.
 - D22, catalogue-import request value. The port method is
   `import_catalogue(estate_key, request: CatalogueImportRequest)` rather than a
   five-argument signature. Rationale: the four request fields travel together
@@ -1015,35 +1277,220 @@ expert-panel review.
   foreign row a distinct branch, catalogue link, documentation paths, and sync
   time, then proves a full field snapshot is unchanged; and the dry run asserts
   the exact six-repository creation count. Three are dispositions:
-  1. A "2.0.0 migration document" has no basis here: `pyproject.toml` declares
+  1. ~~A "2.0.0 migration document" has no basis here: `pyproject.toml` declares
      version 1.0.0, and no release or migration process exists. The users' guide
      already signposts toggle ownership, conflict reporting, the result fields,
-     and `dry_run`.
+     and `dry_run`.~~ **Superseded 2026-11-07.** Later review rounds raised this
+     row again, and the cost of satisfying it is one page, so
+     `docs/migration-guide.md` now records the upgrade actions. It is framed as
+     the next major release: `pyproject.toml` still declares 1.0.0, so the guide
+     says explicitly that 2.0.0 is unpublished and the changes ship there.
   2. Ownership of an existing row is not arbitrated by
      `uq_repositories_owner_name`: that constraint guards concurrent *inserts*
      of the same owner/name, and D17 maps the resulting `IntegrityError` to
      409. It cannot arbitrate two estates adopting the same unowned row,
      because changing `estate_id` leaves the owner/name pair unique. The
      second review round made that distinction explicit, so the adoption claim
-     is now a conditional `UPDATE ... WHERE estate_id IS NULL` (D28) and the
-     losing sync reports a conflict. The earlier wording overstated the
-     constraint's reach and is corrected here.
+     is now a conditional `UPDATE ... WHERE estate_id IS NULL` (D28) and a
+     losing sync re-reads the committed row: another estate's claim is a
+     conflict, while this estate's own claim continues the sync. The earlier
+     wording overstated the constraint's reach and is corrected here.
   3. The repository has no metrics or tracing stack, and the plan forbids new
      runtime dependencies and persisted-schema changes. D21 specifies exactly
      one structured line per mutation at the estate-service boundary; adding a
      second line in the registry module would contradict that. Metrics and
      tracing are a cross-cutting platform decision, not an EP-M1 deliverable.
 - D28, atomic adoption of an unowned Silver row. `_claim_unowned_repository`
-  issues a conditional update of `estate_id` that matches only rows where
-  `estate_id` is null, and treats a zero row count as a conflict. This closes
-  the race the owner/name constraint cannot see: two estates syncing
-  concurrently can both read the same unowned row, and without the conditional
-  update the later writer silently replaces the earlier claim. The claim runs
-  inside the sync transaction, so a dry run rolls it back. Concurrent inserts
-  of the same slug remain arbitrated by `uq_repositories_owner_name` and
-  surface as `IntegrityError`, which D17 maps to 409. D25 and D26 are
-  introduced by branch C and follow this entry once the stack is applied.
-- D29, worker logging configuration. `create_app` applies `GHILLIE_LOG_LEVEL`
+  (moved to `ghillie.registry.storage` by D30) issues a conditional update of
+  `estate_id` that matches only rows where `estate_id` is null. A zero row
+  count means the claim lost, and losing it is not by itself a conflict:
+  `_reconcile_lost_claim` reloads the committed row with `populate_existing`
+  and re-applies the policy. A row another estate owns is reported in
+  `repositories_conflicted`; a row this same estate claimed a moment earlier is
+  adopted and the sync continues. This closes the race the owner/name
+  constraint cannot see: two estates syncing concurrently can both read the
+  same unowned row, and without the conditional update the later writer
+  silently replaces the earlier claim. The claim runs inside the sync
+  transaction, so a dry run rolls it back.
+
+  Concurrent inserts of the same slug are arbitrated by
+  `uq_repositories_owner_name`. The first revision of this decision let the
+  losing insert surface as `IntegrityError`, which D17 maps to 409. That failed
+  the whole estate sync for one repository another estate happened to own,
+  which is the outcome EP-M1 set out to remove. `_insert_or_reconcile` now
+  inserts through a dialect `ON CONFLICT DO NOTHING` statement (`RETURNING id`
+  reports whether it landed). When it did not, the slug is re-read and the
+  ordinary decision path runs again, so a row owned by another estate is
+  reported in `repositories_conflicted` and the rest of the sync completes. A
+  conflict that leaves no row behind is not an owner/name race, so a plain
+  insert runs and its `IntegrityError` reaches the caller with its cause for
+  the 409 mapping.
+
+  A savepoint was tried first and rejected: pysqlite's legacy transaction mode
+  commits on `RELEASE SAVEPOINT`, so a dry run persisted all six rows and
+  `test_sync_dry_run_leaves_registry_unchanged` failed.
+  `ON CONFLICT DO NOTHING` needs no nested transaction and behaves the same on
+  both supported dialects. A dialect without an upsert construct falls back to
+  the plain insert.
+
+  The removal write carries the same ownership condition.
+  `_deactivate_removed_repository` now issues
+  `UPDATE ... WHERE id = :id AND (estate_id IS NULL OR estate_id = :estate)`
+  rather than mutating the loaded instance. The stale view may still decide
+  that a removal is attempted — the policy is applied to it — but it no longer
+  decides what may be written: a row another estate claimed after the load
+  matches no row and keeps its owner and ingestion flag. Mutating the instance
+  instead would queue an unconditional UPDATE on the next flush and overwrite
+  the winner, so the statement synchronizes the session by fetch.
+  `test_removal_path_leaves_a_row_another_estate_claimed` drives the
+  direct-primitive case: an unowned but linked row, which is the only state in
+  which the removal path reaches a write and another estate can also claim it.
+  Removing the ownership condition makes that test report a deactivation and
+  leave the winner's row disabled.
+
+  The same statement also carries `ingestion_enabled IS TRUE`. The count and
+  `last_synced_at` describe what this sync changed, so a row an operator (or an
+  earlier sync) disabled after the load must not be counted again or restamped.
+  `test_removal_path_does_not_count_a_row_an_operator_disabled` holds the stale
+  enabled view, disables the row from another transaction, and asserts a zero
+  count with `last_synced_at` still null; removing the enabled predicate makes
+  the count 1. `test_overlapping_syncs_of_one_estate_share_an_unowned_row`
+  covers the PostgreSQL case CodeRabbit asked for: two overlapping syncs of one
+  estate contend for an unowned, linked, disabled row, neither reports a
+  self-conflict, and the committed row keeps the estate's ownership, the
+  catalogue link and the operator's disabled flag. The row is seeded with the
+  catalogue's documentation paths, so a session that reloaded the committed
+  claim finds every compared field equal and reports no update. The losing
+  sync's cached pre-claim copy still reads as unowned, so it would rewrite
+  `estate_id` and report one update; passing `populate_existing=False` in
+  `_reconcile_lost_claim` makes the test fail with `assert 1 == 0`.
+
+  The sync makes one sorted pass over the union of catalogue and Silver slugs,
+  flushing each slug before the next. Catalogue order is not guaranteed to
+  agree between two estates, and separate claim and removal passes would give
+  the two phases different orders, so either sync could hold a row the other
+  waits for; Postgres resolves that by aborting one transaction and losing that
+  estate's remaining conflict reports. One sorted, flushed pass gives every
+  sync the same lock order, which is the deadlock-avoidance rule PostgreSQL
+  documents for explicit locking. `test_sync_writes_slugs_in_sorted_order`
+  drives the pass with a reversed catalogue and a row outside it, and asserts
+  both phases write in one sorted order.
+  `test_overlapping_syncs_across_both_phases_do_not_deadlock` runs two syncs
+  where each estate claims one unowned row and removes the other's; against
+  Postgres 17 it passes on the one-pass order and aborts with
+  `RegistrySyncError` on the two-phase order.
+
+  D25 and D26 are introduced by branches B and C and follow this entry once the
+  stack is applied.
+
+- D29, the left-disabled report describes the loaded view. The count and
+  preview are built as the sync walks the rows it loaded, so they are an
+  observation of that view plus this sync's own writes, not a re-read of
+  committed state. A toggle another writer commits after the load is not
+  observed, and the sync must not overwrite it: the preserve branch leaves
+  `ingestion_enabled` untouched, so the concurrent toggle survives. Two paths
+  reload a single row from committed state to judge ownership: a lost adoption
+  claim, which `_reconcile_lost_claim` re-reads with ``populate_existing``
+  (D28), and a lost owner/name insert race, where `_insert_or_reconcile` loads
+  the winning row and reapplies the decision path. A row reloaded that way is
+  reported from the reloaded state, so a toggle committed before the reload can
+  be observed, a reloaded disabled row of this estate can enter the report even
+  though it was absent from the loaded view, and a row the reload shows as
+  enabled is not reported as left disabled. Those single-row reloads do not
+  make the report a census: every other row is still reported from the loaded
+  view. Making the report an exact completion-state census would need a locked
+  re-read of every row, which would undo the sorted single-pass lock order D28
+  relies on, and would still race a commit landing after that read. The users'
+  guide and `SyncResult` therefore document the observation contract instead of
+  promising exactness under concurrent edits.
+  `test_a_concurrent_enable_is_not_reflected_in_the_left_disabled_report` pins
+  it on PostgreSQL: a writer enables the row between the load and the sync's
+  completion, the result still reports the slug as left disabled, and the
+  committed row stays enabled.
+
+- D30, the Silver persistence seam. The statements a sync uses to write Silver
+  live in `ghillie/registry/storage.py`, not in `sync.py`: the claim of an
+  unowned row (D28), the guarded removal, and the insert that ignores an
+  owner/name conflict (D29). Each returns an explicit value — a `bool` for the
+  two conditional `UPDATE`s and an `InsertOutcome` (`INSERTED`, `CONFLICT`,
+  `DECLINED`) for the insert — so `sync.py` tells "this sync made the change"
+  from "another writer got there first" without inspecting row counts or
+  catching constraint errors. `sync.py` keeps loading, calling `decide_for_*`,
+  and applying the decisions. The dialect branch that used to sit inside a
+  statement builder is now an injected `UpsertStrategy`:
+  `DialectUpsertStrategy` resolves the dialect's strategy and is the default
+  the service installs, `PostgresUpsertStrategy` and `SqliteUpsertStrategy`
+  express the upsert, and an unsupported dialect uses the named
+  `PlainInsertStrategy` fallback, which declines so the caller inserts plainly
+  and the uniqueness constraint arbitrates. The fallback is a named, tested
+  strategy rather than an error because a new backend should degrade to the
+  portable insert, not fail every sync. `RepositoryRegistryService.__init__`
+  accepts the strategy so the choice is explicit at the composition edge and
+  resolves the dialect default once, so every sync the service runs uses the
+  same object. `sync_from_catalogue` takes a `SyncOptions` record — dry run,
+  clock (defaulting to `utcnow`, so tests no longer patch time and one reading
+  stamps a whole run), and upsert strategy — rather than one keyword per
+  choice: the two added keyword-only parameters took the function to six
+  arguments, which CodeScene's `function_max_arguments` (4) reports as Excess
+  Number of Function Arguments. The record keeps the sync's public signature at
+  the estate plus its options, and a further persistence choice widens the
+  record instead of an interface every caller must read. The bounded-preview
+  policy stays on `SyncResult.note_left_disabled`: the preview and its count
+  are one reported value, and keeping the invariant with the fields means no
+  caller can add a slug without incrementing the count. Tests:
+  `tests/unit/test_registry_storage.py` covers the dialect mapping, the
+  declining fallback, the compiled upsert, the explicit outcomes, a substituted
+  strategy at the sync edge, and the injected clock.
+
+- D31, registry-sync observability. D21's one-line-per-mutation contract now
+  has a home: `ghillie/registry/observability.py` names the events and renders
+  them through `ghillie.logging`, and `sync.py` emits four of them.
+
+  - `SYNC_COMPLETED` (INFO) once per run that returns, carrying the estate key,
+    the dry-run flag, the duration, the outcome and every `SyncResult` count.
+  - `SYNC_FAILED` (ERROR) once per run that raises `RegistrySyncError`, from
+    the one `except` at the public edge, so the catalogue-load and Silver-write
+    failures both report exactly once. The reason it logs is the error's own
+    sanitized `reason`, never SQL or driver text.
+  - `SYNC_CONFLICTED` (INFO) per slug the run reports as owned by another
+    estate, including a slug whose adoption claim this run lost to a
+    concurrent sync.
+  - `INGESTION_TRANSITION` (INFO) per repository whose ingestion flag the run
+    changed, naming the policy transition and the new state.
+
+  Every line carries `estate_key` and `dry_run`. The terminal events carry
+  counts rather than repository lists, so they stay one line whatever the
+  estate's size; the per-slug events scale with the conflicts and changes the
+  run made, not with the estate. The per-slug events are recorded in a
+  `SyncEventBuffer` while the transaction is open and published only once it
+  settles: after a commit, or after a dry run's rollback labelled
+  `dry_run=true`. A failed run publishes nothing but `SYNC_FAILED`, because the
+  changes it had recorded were rolled back — logging them at the point of
+  writing would report work that never happened.
+  `tests/unit/test_registry_observability.py` pins each event through the house
+  femtologging capture: the exactly-one-line property for success and failure,
+  the dry-run label on a rolled-back change, a failed run logging only its
+  failure, and a lost claim still recording a conflict. Metrics, spans and
+  catalogue/Silver tracing remain out of scope for this PR: the repository has
+  no metrics or tracing infrastructure to attach them to, and adding one is the
+  platform decision D27 records. Issue #219 keeps that remainder; the terminal
+  event and the transition record it also named are now delivered here.
+
+  The Observability pre-merge check asks for that remainder in this PR. It is
+  not deliverable here without a telemetry dependency the maintainer has not
+  approved, so the reviewer recorded an explicit exception on PR #200. Its
+  wording is reproduced here so the disposition is the reviewer's, not ours:
+
+  > For PR `#200`, I accept an exception to delivering registry-sync metrics
+  > and catalogue/Silver tracing in this PR. The structured events are
+  > delivered; they are not metrics or spans. Issue `#219` tracks the missing
+  > bounded-cardinality metrics, spans, platform infrastructure and tests. D27
+  > reserves the platform decision for follow-up.
+
+  The exception covers the metrics and spans only. It waives no other finding
+  and no required check, and #219 stays open until the platform work lands.
+
+- D32, worker logging configuration. `create_app` applies `GHILLIE_LOG_LEVEL`
   through `configure_logging` before building the app. Granian calls the
   factory in a worker process, so the configuration `main` performs in the
   parent never reaches it; without this call the worker's application logs,
@@ -1192,7 +1639,8 @@ base URL, timeout, and bearer token. `ghillie/cli/output.py`
 as callers).
 
 Test infrastructure: `tests/conftest.py` `session_factory` (py-pglite
-PostgreSQL, SQLite when `GHILLIE_TEST_DB=sqlite`); `tests/unit/conftest.py`
+PostgreSQL, SQLite when `GHILLIE_TEST_DB=sqlite`, an external Postgres when
+`GHILLIE_TEST_DB` is a `postgresql+asyncpg://` URL); `tests/unit/conftest.py`
 (`registry_service`, `create_repo`, `fetch_repo`, `wildside_catalogue_path`);
 BDD features in `tests/features/*.feature` with steps in
 `tests/features/steps/` (pattern: `test_on_demand_report_steps.py`); API unit
@@ -1401,24 +1849,79 @@ Obligation O6, CLI import closure (`TDD-CLI-THIN`).
 - Non-vacuity: the test also asserts that `ghillie.cli.commands.estate` is in
   the loaded set, proving the estate commands were imported.
 
-Concurrency of adoption (D28): three tests in
-`tests/unit/test_registry_service_sync.py` cover the adoption boundary.
+Concurrency of adoption, removal, and insertion (D28): twelve tests cover the
+boundary. Five live in `tests/unit/test_registry_service_sync_adoption.py`.
 `test_claim_unowned_repository_is_atomic_under_a_stale_view` calls
 `_claim_unowned_repository` directly, first with the winner's session and then
 with a row loaded before that claim committed, and asserts the second call
-claims nothing. `test_sync_reports_conflict_when_adoption_loses_a_race` drives
-one sync whose claim matches no row and asserts the reported conflict.
-`test_concurrent_insert_surfaces_as_a_conflict_cause` drives one sync whose
-loaded view misses a row it then re-inserts, and asserts that the lost insert
-preserves the `IntegrityError` cause for the 409 mapping. None of the three
-exercises two overlapping transactions, so they are deterministic stale-view
-and missed-read regressions rather than a concurrency proof; what they
-establish is that a lost claim is reported instead of silently overwriting the
-winner.
+claims nothing. `test_removal_path_leaves_a_row_another_estate_claimed` calls
+`_deactivate_removed_repository` with a stale view of an unowned but linked
+row, after another estate has claimed it, and asserts the row keeps its owner
+and enabled flag and is not counted as deactivated.
+`test_removal_path_does_not_count_a_row_an_operator_disabled` holds a stale
+enabled view, disables the row from another transaction, and asserts the
+removal write counts nothing and leaves `last_synced_at` alone.
+`test_sync_reports_conflict_when_adoption_loses_a_race` drives one sync whose
+claim matches no row and asserts the reported conflict.
+`test_sync_continues_after_losing_a_claim_to_its_own_estate` has the winner
+adopt and link the row, so the loser's reload must defeat the identity map: it
+asserts the sync carries on without a conflict, keeps the operator's disabled
+flag, and reports the row as left disabled.
+
+The other seven live in `tests/unit/test_registry_service_sync_concurrency.py`,
+a module split out of the first because the concurrency harness gave the
+combined file low cohesion under CodeScene's critical-rule gate.
+`test_lost_insert_reports_a_conflict_instead_of_aborting` drives one sync whose
+loaded view misses a row another estate owns, and asserts the sync completes
+with the slug in `repositories_conflicted` and the winner's row unchanged.
+`test_insert_failure_without_a_surviving_row_still_aborts` forces a primary-key
+collision that no racing insert explains and asserts the `IntegrityError` cause
+is preserved for the 409 mapping. Those two are deterministic stale-view and
+missed-read regressions. `test_overlapping_syncs_adopt_an_unowned_row_once` and
+`test_overlapping_syncs_insert_each_slug_once` do run two syncs at once: a
+barrier holds both Silver reads until each has finished, then both write. They
+assert that one estate keeps the row, that the loser reports the conflict, and
+that six slugs produce six rows and six conflicts rather than twelve inserts.
+The fifth, `test_overlapping_syncs_across_both_phases_do_not_deadlock`, is
+recorded with the sorted-write-order decision above.
+`test_overlapping_syncs_of_one_estate_share_an_unowned_row` races one estate
+against itself over an unowned, linked, disabled row: one claim wins, neither
+sync reports a self-conflict, and neither reports an update, because the
+loser's reload of the committed claim finds every compared field equal. A
+reload that returned the cached pre-claim copy would rewrite `estate_id` and
+report one update.
+`test_a_concurrent_enable_is_not_reflected_in_the_left_disabled_report` pins
+the D29 observation contract: a writer enables the row between the load and
+completion, the result still reports it as left disabled, and the committed
+toggle survives unchanged. These five need a backend with MVCC, so they skip
+unless the session factory is bound to Postgres. The suite's default py-pglite
+path cannot supply one on this host: the pinned asyncpg rejects PGlite's TLS
+upgrade, and a connection that does succeed hangs in `engine.dispose()`.
+`GHILLIE_TEST_DB` therefore also accepts a `postgresql+asyncpg://` URL, which
+`tests/conftest.py` uses to reset the database's `public` schema per test and
+initialize storage there. That reset needs a serial run, so the fixture raises
+under `pytest-xdist` and the guides point at `uv run pytest` rather than
+`make test`. Against Postgres 17 in a throwaway container, all 24 tests in the
+three sync modules passed with no skips. The insert test fails with
+`RegistrySyncError` when its repair is reverted, and the removal-count test
+reports one deactivation when the enabled predicate is removed.
+
+The disabled preview is asserted exactly, not by membership.
+`test_sync_previews_only_disabled_linked_repositories` links four repositories,
+disables two, and asserts the preview equals `["leynos/alpha", "leynos/beta"]`
+in order with a count of two, while the two rows that were never disabled stay
+enabled. `test_sync_bounds_the_left_disabled_preview` seeds 101 disabled rows
+and four enabled ones, asserts the count is exactly 101, that the preview stops
+at 100, and that no previewed slug belongs to an enabled repository. Mutation
+check: reporting every `PRESERVE` decision instead of only disabled ones
+(`if decision.transition is IngestionTransition.PRESERVE:`) fails both tests,
+so neither can pass on a preview that echoes enabled rows. The mutation was
+applied, observed to fail, and reverted; `ghillie/registry/sync.py` is
+unchanged.
 
 Residual gaps: the per-estate lock is in-process, so concurrent requests across
 replicas are not serialized (single replica in MVP); adoption of an unowned row
-and insertion of a new row are still arbitrated atomically at the persistence
+and insertion of a new row are arbitrated atomically at the persistence
 boundary (D28). OpenAPI conformance is structural only (paths, methods,
 operation IDs, schema names and required properties) until Task 2.6.c.
 
@@ -1432,9 +1935,12 @@ gating every commit.
 ### EP-M1 (PR-A): sync preserves operator toggles and reports conflicts
 
 Tests first. Add the named examples to
-`tests/unit/test_registry_service_sync.py`; keep the two existing behaviour
-tests (`test_sync_updates_existing_silver_repository` for ad hoc adoption and
-`test_sync_disables_ingestion_for_inactive_catalogue_repository`) unchanged. Add
+`tests/unit/test_registry_service_sync.py`; keep
+`test_sync_updates_existing_silver_repository` (ad hoc adoption) unchanged.
+`test_sync_disables_ingestion_for_inactive_catalogue_repository` keeps its
+behaviour assertion and now also asserts that the inactive-row disable is
+counted once in `repositories_updated`, never in `repositories_deactivated`,
+and that the slug stays out of the left-disabled preview. Add
 `tests/unit/test_registry_sync_policy.py` and
 `tests/unit/test_registry_sync_state_machine.py` (O1).
 
