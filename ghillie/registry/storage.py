@@ -74,58 +74,65 @@ def _insert_values(row: Repository) -> dict[str, object]:
     return values
 
 
-class PostgresUpsertStrategy:
+class _ConflictIgnoringInsert(typ.Protocol):
+    """The slice of a dialect insert the conflict-ignoring strategies use.
+
+    SQLAlchemy types the dialect constructors as the generic ``Insert``, which
+    has no conflict clause, so the shared strategy states the two calls it
+    actually makes.
+    """
+
+    def values(self, **values: object) -> _ConflictIgnoringInsert:
+        """Bind the column values of the row being inserted."""
+        ...
+
+    def on_conflict_do_nothing(self) -> Insert:
+        """Return the statement with a clause that ignores a conflict."""
+        ...
+
+
+class _OnConflictDoNothingStrategy:
+    """Insert through a dialect's own construct, ignoring any conflict.
+
+    PostgreSQL and SQLite both spell the clause ``ON CONFLICT DO NOTHING``, so
+    only the insert constructor differs. Keeping the statement in one place
+    means the dialects cannot drift apart, and a further dialect of the same
+    shape needs only its constructor.
+    """
+
+    _insert: typ.ClassVar[typ.Callable[[type[Repository]], _ConflictIgnoringInsert]]
+
+    def build(self, session: AsyncSession, row: Repository) -> Insert:
+        """Return the dialect's insert, doing nothing on a conflict.
+
+        Parameters
+        ----------
+        session
+            Session the statement will run on; the construct is fixed by the
+            subclass, so only its dialect compatibility is implied.
+        row
+            Silver repository row to insert.
+
+        Returns
+        -------
+        Insert
+            ``INSERT ... ON CONFLICT DO NOTHING`` for the row.
+
+        """
+        statement = self._insert(Repository).values(**_insert_values(row))
+        return statement.on_conflict_do_nothing()
+
+
+class PostgresUpsertStrategy(_OnConflictDoNothingStrategy):
     """Insert on PostgreSQL, ignoring an owner/name conflict."""
 
-    def build(self, session: AsyncSession, row: Repository) -> Insert:
-        """Return a PostgreSQL insert that does nothing on a conflict.
-
-        Parameters
-        ----------
-        session
-            Session the statement will run on; the construct is fixed, so only
-            its dialect compatibility is implied.
-        row
-            Silver repository row to insert.
-
-        Returns
-        -------
-        Insert
-            ``INSERT ... ON CONFLICT DO NOTHING`` for the row.
-
-        """
-        return (
-            postgresql_insert(Repository)
-            .values(**_insert_values(row))
-            .on_conflict_do_nothing()
-        )
+    _insert = staticmethod(postgresql_insert)
 
 
-class SqliteUpsertStrategy:
+class SqliteUpsertStrategy(_OnConflictDoNothingStrategy):
     """Insert on SQLite, ignoring an owner/name conflict."""
 
-    def build(self, session: AsyncSession, row: Repository) -> Insert:
-        """Return a SQLite insert that does nothing on a conflict.
-
-        Parameters
-        ----------
-        session
-            Session the statement will run on; the construct is fixed, so only
-            its dialect compatibility is implied.
-        row
-            Silver repository row to insert.
-
-        Returns
-        -------
-        Insert
-            ``INSERT ... ON CONFLICT DO NOTHING`` for the row.
-
-        """
-        return (
-            sqlite_insert(Repository)
-            .values(**_insert_values(row))
-            .on_conflict_do_nothing()
-        )
+    _insert = staticmethod(sqlite_insert)
 
 
 class PlainInsertStrategy:

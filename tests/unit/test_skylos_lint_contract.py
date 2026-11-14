@@ -132,6 +132,7 @@ _RUNTIME_ENTRY_POINTS: typ.Final = {
             "ghillie.registry.storage.PlainInsertStrategy.build",
             "ghillie.registry.storage.PostgresUpsertStrategy.build",
             "ghillie.registry.storage.SqliteUpsertStrategy.build",
+            "ghillie.registry.storage._OnConflictDoNothingStrategy.build",
         }
     ),
     "function": frozenset(
@@ -148,6 +149,7 @@ _RUNTIME_ENTRY_POINTS: typ.Final = {
             "ghillie.registry.storage.PlainInsertStrategy.build.session",
             "ghillie.registry.storage.PostgresUpsertStrategy.build.session",
             "ghillie.registry.storage.SqliteUpsertStrategy.build.session",
+            "ghillie.registry.storage._OnConflictDoNothingStrategy.build.session",
         }
     ),
     "variable": frozenset(

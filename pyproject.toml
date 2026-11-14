@@ -210,8 +210,9 @@ full_name = [
     "ghillie.registry.storage.PostgresUpsertStrategy.build",
     "ghillie.registry.storage.SqliteUpsertStrategy.build",
     "ghillie.registry.storage.PlainInsertStrategy.build",
+    "ghillie.registry.storage._OnConflictDoNothingStrategy.build",
 ]
-reason = "Registry sync calls a strategy through the UpsertStrategy protocol and the named dialect selector, so the concrete methods are dispatched indirectly."
+reason = "Registry sync calls a strategy through the UpsertStrategy protocol and the named dialect selector, so the concrete methods are dispatched indirectly. The shared `_OnConflictDoNothingStrategy.build` is reached only through its two dialect subclasses, which the analyser does not follow."
 
 [[tool.skylos.dead_code.entrypoints]]
 type = "function"
@@ -228,6 +229,7 @@ full_name = [
     "ghillie.registry.storage.SqliteUpsertStrategy.build.session",
     "ghillie.registry.storage.PlainInsertStrategy.build.session",
     "ghillie.registry.storage.PlainInsertStrategy.build.row",
+    "ghillie.registry.storage._OnConflictDoNothingStrategy.build.session",
 ]
 reason = "UpsertStrategy.build keeps one signature for every strategy; a strategy that needs neither the session nor the row still accepts them."
 
