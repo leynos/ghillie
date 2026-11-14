@@ -82,6 +82,18 @@ def test_parse_catalogue_text_rejects_duplicate_keys() -> None:
         parse_catalogue_text("version: 1\nversion: 2\nprojects: []\n")
 
 
+def test_parse_catalogue_text_rejects_an_impossible_yaml_timestamp() -> None:
+    """A scalar the resolver cannot build is a validation failure.
+
+    YAML 1.2 resolves ``2026-13-01`` as a timestamp and the constructor then
+    raises ``ValueError`` for the impossible month. That is a property of the
+    untrusted text, like malformed YAML, so it must take the same validation
+    path instead of escaping as an unhandled error.
+    """
+    with pytest.raises(CatalogueValidationError, match="failed to parse YAML"):
+        parse_catalogue_text("version: 2026-13-01\nprojects: []\n")
+
+
 @pytest.mark.parametrize(
     "document",
     [

@@ -186,6 +186,12 @@ class EstateManagementService:
             catalogue = await _parse_catalogue(request.catalogue_yaml)
             async with self._lock_for(estate_key):
                 result = await self._run_import(estate_key, catalogue, request)
+        except asyncio.CancelledError as exc:
+            # D21: cancellation derives from ``BaseException``, so the clause
+            # below cannot see it. It is still a terminal outcome, and it must
+            # keep propagating so the caller's task unwinds.
+            _log_mutation(mutation, outcome="cancelled", details=_failure_details(exc))
+            raise
         except Exception as exc:
             # D21: a rejected or failed attempt is still a mutation attempt, and
             # an operator needs its outcome and duration to tell a client error
@@ -281,6 +287,11 @@ class EstateManagementService:
             validate_estate_key_reference(estate_key)
             async with self._lock_for(estate_key):
                 result = await self._run_sync(estate_key, dry_run=dry_run)
+        except asyncio.CancelledError as exc:
+            # D21: as for the import, cancellation is a terminal outcome the
+            # ``except Exception`` clause below would miss.
+            _log_mutation(mutation, outcome="cancelled", details=_failure_details(exc))
+            raise
         except Exception as exc:
             _log_mutation(mutation, outcome="failed", details=_failure_details(exc))
             raise
@@ -396,6 +407,11 @@ class EstateManagementService:
         toggle = _ToggleLog(owner=owner, name=name, enabled=enabled, started=started)
         try:
             changed = await self._toggle(owner, name, enabled=enabled)
+        except asyncio.CancelledError as exc:
+            # D21: as for the import, cancellation is a terminal outcome the
+            # ``except Exception`` clause below would miss.
+            _log_toggle(toggle, outcome="cancelled", details=_failure_details(exc))
+            raise
         except RegistryRepositoryNotFoundError as exc:
             error = RepositoryNotFoundError(owner, name)
             _log_toggle(toggle, outcome="failed", details=_failure_details(error))

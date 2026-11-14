@@ -5,6 +5,7 @@ failure, lives in ``test_estate_service.py``. These tests cover the read paths
 and the registry-backed mutations that share the same error vocabulary.
 """
 
+import asyncio
 import typing as typ
 
 import pytest
@@ -267,6 +268,42 @@ async def test_sync_registry_logs_one_terminal_record_when_it_fails(
 
 
 @pytest.mark.asyncio
+async def test_sync_registry_logs_a_cancelled_attempt_once(
+    service: EstateManagementService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D21: a cancelled sync leaves one terminal record, then unwinds.
+
+    Cancellation is raised as ``BaseException``, so only an explicit clause
+    records it. Without one the attempt would leave no terminal record and an
+    operator could not tell a cancellation from a crash.
+    """
+    await import_catalogue(service)
+
+    async def _cancel(
+        _self: RepositoryRegistryService,
+        _estate_key: str,
+        *,
+        dry_run: bool = False,
+    ) -> typ.Never:
+        """Cancel the sync as a shutdown or client disconnect would."""
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(RepositoryRegistryService, "sync_from_catalogue", _cancel)
+
+    with capture_femto_logs("ghillie.estate.service") as logs:
+        with pytest.raises(asyncio.CancelledError):
+            await service.sync_registry(_ESTATE_KEY, dry_run=False)
+        logs.wait_for_timeout()
+
+    lines = _mutation_lines(logs, "estate.registry-sync")
+    assert len(lines) == 1, "a cancelled sync should log exactly one record"
+    assert "outcome=cancelled" in lines[0], (
+        "the record should name the cancellation rather than a failure"
+    )
+
+
+@pytest.mark.asyncio
 async def test_sync_registry_logs_a_missing_estate_as_a_failed_attempt(
     service: EstateManagementService,
 ) -> None:
@@ -486,6 +523,33 @@ async def test_set_ingestion_logs_one_terminal_record_for_an_unexpected_error(
     assert len(lines) == 1, "an unexpected failure should log exactly one record"
     assert "outcome=failed" in lines[0], "the record should name the failure"
     assert "error=RuntimeError" in lines[0], "the record should name the error"
+
+
+@pytest.mark.asyncio
+async def test_set_ingestion_logs_a_cancelled_toggle_once(
+    service: EstateManagementService,
+    registry: RepositoryRegistryService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D21: a cancelled toggle leaves one terminal record, then unwinds."""
+    await import_catalogue(service)
+
+    async def _cancel(_owner: str, _name: str) -> bool:
+        """Cancel the toggle as a shutdown or client disconnect would."""
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(registry, "enable_ingestion", _cancel)
+
+    with capture_femto_logs("ghillie.estate.service") as logs:
+        with pytest.raises(asyncio.CancelledError):
+            await service.set_ingestion(_OWNER, _REPO_NAME, enabled=True)
+        logs.wait_for_timeout()
+
+    lines = _mutation_lines(logs, "estate.set-ingestion")
+    assert len(lines) == 1, "a cancelled toggle should log exactly one record"
+    assert "outcome=cancelled" in lines[0], (
+        "the record should name the cancellation rather than a failure"
+    )
 
 
 @pytest.mark.asyncio

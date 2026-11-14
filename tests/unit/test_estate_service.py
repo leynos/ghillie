@@ -209,6 +209,43 @@ async def test_import_logs_one_terminal_record_when_it_fails(
 
 
 @pytest.mark.asyncio
+async def test_import_logs_a_cancelled_attempt_once(
+    service: EstateManagementService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D21: a cancelled import leaves one terminal record, then unwinds.
+
+    ``asyncio.CancelledError`` derives from ``BaseException``, so an
+    ``except Exception`` wrapper would skip the record and leave the attempt
+    with no outcome at all. Cancellation is a terminal outcome: it is recorded
+    once and re-raised so the caller's task still unwinds.
+    """
+
+    async def _cancelled(
+        _self: CatalogueImporter,
+        _catalogue: object,
+        *,
+        commit_sha: str | None = None,
+        dry_run: bool = False,
+    ) -> CatalogueImportResult:
+        """Raise the cancellation a client disconnect produces."""
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(CatalogueImporter, "import_catalogue", _cancelled)
+
+    with capture_femto_logs("ghillie.estate.service") as logs:
+        with pytest.raises(asyncio.CancelledError):
+            await import_catalogue(service)
+        logs.wait_for_timeout()
+
+    lines = _mutation_lines(logs, "estate.import")
+    assert len(lines) == 1, "a cancelled import should log exactly one record"
+    assert "outcome=cancelled" in lines[0], (
+        "the record should name the cancellation rather than a failure"
+    )
+
+
+@pytest.mark.asyncio
 async def test_import_logs_a_rejected_document_as_a_failed_attempt(
     service: EstateManagementService,
 ) -> None:

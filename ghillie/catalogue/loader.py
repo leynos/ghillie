@@ -83,7 +83,11 @@ def parse_catalogue_text(text: str) -> Catalogue:
     yaml = _yaml()
     try:
         loaded = yaml.load(text)
-    except YAMLError as exc:
+    except (YAMLError, ValueError) as exc:
+        # ``ValueError`` comes from a scalar whose constructor rejects its own
+        # text — an impossible calendar date such as ``2026-13-01``. Like
+        # malformed YAML, that is a property of the untrusted document rather
+        # than a defect in this service, so it must not escape as a 500.
         raise CatalogueValidationError([f"failed to parse YAML: {exc}"]) from exc
 
     if loaded is None:

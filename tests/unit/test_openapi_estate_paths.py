@@ -13,20 +13,15 @@ import yaml
 
 _SPEC_PATH = Path(__file__).resolve().parents[2] / "specs" / "openapi.yml"
 
-_ESTATE_OPERATIONS = {
-    "/estates": "get",
-    "/estates/{estate_key}/catalogue-import": "post",
-    "/estates/{estate_key}/registry-sync": "post",
-    "/estates/{estate_key}/repositories": "get",
-    "/repositories/{owner}/{name}/ingestion": "patch",
-}
-
-_EXPECTED_OPERATION_IDS = {
-    "listEstates",
-    "importCatalogue",
-    "syncRegistry",
-    "listEstateRepositories",
-    "setRepositoryIngestion",
+# Path -> (method, operationId). Pairing the id with its own path and method is
+# what lets the identifier test reject two endpoints trading ids; a set of ids
+# cannot tell that apart from a correct document.
+_ESTATE_OPERATIONS: dict[str, tuple[str, str]] = {
+    "/estates": ("get", "listEstates"),
+    "/estates/{estate_key}/catalogue-import": ("post", "importCatalogue"),
+    "/estates/{estate_key}/registry-sync": ("post", "syncRegistry"),
+    "/estates/{estate_key}/repositories": ("get", "listEstateRepositories"),
+    "/repositories/{owner}/{name}/ingestion": ("patch", "setRepositoryIngestion"),
 }
 
 
@@ -41,18 +36,24 @@ def test_every_documented_estate_path_is_present(
 ) -> None:
     """All five operations exist under their documented paths."""
     paths = spec["paths"]
-    for path, method in _ESTATE_OPERATIONS.items():
+    for path, (method, _operation_id) in _ESTATE_OPERATIONS.items():
         assert path in paths, path
         assert method in paths[path], f"{method.upper()} {path}"
 
 
 def test_estate_operations_have_stable_ids(spec: dict[str, typ.Any]) -> None:
-    """Each operation carries its documented ``operationId``."""
-    operation_ids = {
-        spec["paths"][path][method]["operationId"]
-        for path, method in _ESTATE_OPERATIONS.items()
-    }
-    assert operation_ids == _EXPECTED_OPERATION_IDS, "operation ids should be stable"
+    """Each operation carries its own documented ``operationId``.
+
+    Each id is compared with the operation it belongs to, not with the set of
+    ids in the document: a set would still match after two endpoints traded
+    ids, leaving a generated client calling the wrong endpoint.
+    """
+    for path, (method, expected) in _ESTATE_OPERATIONS.items():
+        actual = spec["paths"][path][method]["operationId"]
+        assert actual == expected, f"{method.upper()} {path} should use {expected}"
+
+    ids = [operation_id for _method, operation_id in _ESTATE_OPERATIONS.values()]
+    assert len(ids) == len(set(ids)), "each operation should have a distinct id"
 
 
 def test_bearer_security_scheme_is_declared(
@@ -138,7 +139,7 @@ def test_documented_failure_statuses_are_present(
 ) -> None:
     """Every documented failure status appears on at least one operation."""
     seen: set[str] = set()
-    for path, method in _ESTATE_OPERATIONS.items():
+    for path, (method, _operation_id) in _ESTATE_OPERATIONS.items():
         seen.update(spec["paths"][path][method]["responses"])
 
     expected = {"200", "400", "401", "404", "409", "413", "415", "422", "500", "503"}

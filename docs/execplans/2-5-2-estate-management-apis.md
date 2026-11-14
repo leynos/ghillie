@@ -1257,7 +1257,12 @@ expert-panel review.
 - D21, observability. Each mutation logs one structured line through
   `ghillie.logging`: operation, estate key, commit, dry run, counts, duration,
   and outcome. Toggles also log the old and new state. For a registry sync, D31
-  names the events and where they are emitted.
+  names the events and where they are emitted. Cancellation is a terminal
+  outcome like any other: each of the three wrappers records
+  `outcome=cancelled` from its own `except asyncio.CancelledError` clause and
+  re-raises, because `CancelledError` derives from `BaseException` and the
+  `except Exception` clause would otherwise leave a cancelled attempt with no
+  record at all.
 - D22, catalogue-import request value. The port method is
   `import_catalogue(estate_key, request: CatalogueImportRequest)` rather than a
   five-argument signature. Rationale: the four request fields travel together
