@@ -109,13 +109,19 @@ def test_dialect_upsert_strategy_names_the_strategy_for_each_dialect(
     expected: type[object],
 ) -> None:
     """Each known dialect resolves to its named strategy; the rest fall back."""
-    assert isinstance(storage.dialect_upsert_strategy(dialect_name), expected)
+    strategy = storage.dialect_upsert_strategy(dialect_name)
+    assert isinstance(strategy, expected), (
+        f"{dialect_name} resolved to {type(strategy).__name__},"
+        f" expected {expected.__name__}"
+    )
 
 
 def test_the_plain_strategy_declines_the_upsert() -> None:
     """The fallback returns no statement so the caller inserts plainly."""
-    assert (
-        storage.PlainInsertStrategy().build(_dialect_session("oracle"), _row()) is None
+    statement = storage.PlainInsertStrategy().build(_dialect_session("oracle"), _row())
+    assert statement is None, (
+        f"the plain strategy returned {statement!r}, so the caller would not"
+        " fall back to inserting through the session"
     )
 
 

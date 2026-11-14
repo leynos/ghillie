@@ -77,6 +77,14 @@ class SyncResult:
         the sync loop. A caller cannot add a slug without incrementing the
         count, and the API response is a projection of this object, so the
         bound is applied once for every consumer instead of at each edge.
+
+        Parameters
+        ----------
+        slug
+            Repository slug to record, in ``owner/name`` form. It is appended
+            to ``repositories_left_disabled`` only while that preview has room;
+            ``repositories_left_disabled_count`` always increments.
+
         """
         self.repositories_left_disabled_count += 1
         if len(self.repositories_left_disabled) < LEFT_DISABLED_PREVIEW_LIMIT:

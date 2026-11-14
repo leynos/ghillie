@@ -36,7 +36,22 @@ class UpsertStrategy(typ.Protocol):
     """
 
     def build(self, session: AsyncSession, row: Repository) -> Insert | None:
-        """Return the upsert statement for ``row``, or ``None`` to decline."""
+        """Return the upsert statement for ``row``, or ``None`` to decline.
+
+        Parameters
+        ----------
+        session
+            Session whose dialect supplies the upsert construct.
+        row
+            Silver repository row to insert.
+
+        Returns
+        -------
+        Insert | None
+            The dialect's upsert statement, or ``None`` when the dialect cannot
+            express one and the caller must insert plainly.
+
+        """
         ...
 
 
@@ -63,7 +78,22 @@ class PostgresUpsertStrategy:
     """Insert on PostgreSQL, ignoring an owner/name conflict."""
 
     def build(self, session: AsyncSession, row: Repository) -> Insert:
-        """Return a PostgreSQL insert that does nothing on a conflict."""
+        """Return a PostgreSQL insert that does nothing on a conflict.
+
+        Parameters
+        ----------
+        session
+            Session the statement will run on; the construct is fixed, so only
+            its dialect compatibility is implied.
+        row
+            Silver repository row to insert.
+
+        Returns
+        -------
+        Insert
+            ``INSERT ... ON CONFLICT DO NOTHING`` for the row.
+
+        """
         return (
             postgresql_insert(Repository)
             .values(**_insert_values(row))
@@ -75,7 +105,22 @@ class SqliteUpsertStrategy:
     """Insert on SQLite, ignoring an owner/name conflict."""
 
     def build(self, session: AsyncSession, row: Repository) -> Insert:
-        """Return a SQLite insert that does nothing on a conflict."""
+        """Return a SQLite insert that does nothing on a conflict.
+
+        Parameters
+        ----------
+        session
+            Session the statement will run on; the construct is fixed, so only
+            its dialect compatibility is implied.
+        row
+            Silver repository row to insert.
+
+        Returns
+        -------
+        Insert
+            ``INSERT ... ON CONFLICT DO NOTHING`` for the row.
+
+        """
         return (
             sqlite_insert(Repository)
             .values(**_insert_values(row))
@@ -94,7 +139,23 @@ class PlainInsertStrategy:
     """
 
     def build(self, session: AsyncSession, row: Repository) -> None:
-        """Decline, leaving the insert to the caller."""
+        """Decline, leaving the insert to the caller.
+
+        Parameters
+        ----------
+        session
+            Session the statement would have run on; unused, because declining
+            is a property of the dialect rather than of the session.
+        row
+            Silver repository row the caller will insert plainly.
+
+        Returns
+        -------
+        None
+            Always ``None``: the caller inserts through the session and the
+            uniqueness constraint arbitrates.
+
+        """
 
 
 _POSTGRES_UPSERT = PostgresUpsertStrategy()
@@ -108,6 +169,18 @@ def dialect_upsert_strategy(dialect_name: str) -> UpsertStrategy:
     Unknown dialects get the plain-insert fallback rather than an error, so a
     new backend degrades to "insert, then let the constraint arbitrate"
     instead of failing every sync.
+
+    Parameters
+    ----------
+    dialect_name
+        SQLAlchemy dialect name, such as ``"postgresql"`` or ``"sqlite"``.
+
+    Returns
+    -------
+    UpsertStrategy
+        The named strategy for a dialect with an upsert construct, otherwise
+        the shared ``PlainInsertStrategy`` fallback.
+
     """
     if dialect_name == "postgresql":
         return _POSTGRES_UPSERT
@@ -125,7 +198,21 @@ class DialectUpsertStrategy:
     """
 
     def build(self, session: AsyncSession, row: Repository) -> Insert | None:
-        """Build the upsert the session's dialect supports, if any."""
+        """Build the upsert the session's dialect supports, if any.
+
+        Parameters
+        ----------
+        session
+            Session whose bound dialect selects the strategy.
+        row
+            Silver repository row to insert.
+
+        Returns
+        -------
+        Insert | None
+            The resolved strategy's statement, or ``None`` when it declines.
+
+        """
         strategy = dialect_upsert_strategy(session.get_bind().dialect.name)
         return strategy.build(session, row)
 
@@ -169,7 +256,22 @@ async def insert_ignoring_duplicates(
 
 
 async def insert_plainly(session: AsyncSession, row: Repository) -> None:
-    """Insert ``row`` through the session, raising on any constraint failure."""
+    """Insert ``row`` through the session, raising on any constraint failure.
+
+    Parameters
+    ----------
+    session
+        Session that owns the pending insert.
+    row
+        Silver repository row to add and flush.
+
+    Returns
+    -------
+    None
+        The insert is expressed as a flush; a competing owner/name row surfaces
+        as the uniqueness error the caller maps to a conflict.
+
+    """
     session.add(row)
     await session.flush()
 
@@ -190,6 +292,23 @@ async def claim_unowned_repository(
 
     The statement bypasses the identity map, so a successful claim is mirrored
     onto the loaded instance by the caller before it continues.
+
+    Parameters
+    ----------
+    session
+        Session that runs the conditional UPDATE.
+    repository
+        Loaded Silver row whose ownership is being claimed.
+    estate_id
+        Estate claiming the row; ``None`` means the caller has no estate to
+        claim for and the row is left alone.
+
+    Returns
+    -------
+    bool
+        ``True`` when this sync claimed the row or had nothing to claim, and
+        ``False`` when another estate won the race.
+
     """
     if estate_id is None or repository.estate_id is not None:
         return True
@@ -226,6 +345,25 @@ async def deactivate_if_still_enabled(
     The statement synchronizes the session by fetch, so the loaded instance
     adopts the committed values without an assignment that would queue an
     unconditional UPDATE on the next flush and defeat the guard.
+
+    Parameters
+    ----------
+    session
+        Session that runs the conditional UPDATE.
+    repository
+        Loaded Silver row that the catalogue no longer lists.
+    estate_id
+        Estate running the sync; the UPDATE accepts only this estate's rows and
+        unowned ones.
+    now
+        Timestamp recorded as the row's ``last_synced_at``.
+
+    Returns
+    -------
+    bool
+        ``True`` when this sync disabled the row, ``False`` when the guards
+        matched nothing because another writer changed it first.
+
     """
     deactivated_id = await session.scalar(
         update(Repository)
