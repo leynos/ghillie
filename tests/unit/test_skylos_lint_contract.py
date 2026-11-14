@@ -135,6 +135,7 @@ _RUNTIME_ENTRY_POINTS: typ.Final = {
             "ghillie.estate.service._sync_details",
             "ghillie.estate.service._sync_error",
             "ghillie.estate.service._sync_summary",
+            "ghillie.estate.service._toggle_failure",
             "ghillie.estate.service._validate_page",
             "ghillie.registry.storage._insert_values",
             "ghillie.registry.storage.dialect_upsert_strategy",

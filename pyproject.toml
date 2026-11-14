@@ -219,6 +219,7 @@ full_name = [
     "ghillie.estate.service._sync_details",
     "ghillie.estate.service._sync_error",
     "ghillie.estate.service._sync_summary",
+    "ghillie.estate.service._toggle_failure",
     "ghillie.estate.service._validate_page",
 ]
 reason = "Skylos's liveness graph does not resolve these module-private helpers from the async EstateManagementService methods that call them; every name has a verified runtime caller in that class."

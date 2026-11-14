@@ -408,25 +408,18 @@ class EstateManagementService:
         try:
             changed = await self._toggle(owner, name, enabled=enabled)
         except asyncio.CancelledError as exc:
-            # D21: as for the import, cancellation is a terminal outcome the
-            # ``except Exception`` clause below would miss.
+            # D21: cancellation is a terminal outcome the ``except Exception``
+            # clause below would miss, and it must keep propagating.
             _log_toggle(toggle, outcome="cancelled", details=_failure_details(exc))
             raise
-        except RegistryRepositoryNotFoundError as exc:
-            error = RepositoryNotFoundError(owner, name)
-            _log_toggle(toggle, outcome="failed", details=_failure_details(error))
-            raise error from exc
-        except SQLAlchemyError as exc:
-            error = StorageUnavailableError(_STORAGE_MESSAGE)
-            _log_toggle(toggle, outcome="failed", details=_failure_details(error))
-            raise error from exc
         except Exception as exc:
-            # D21: a direct service caller has no HTTP catch-all, so an
-            # unexpected failure must still leave one terminal record. The
-            # exception is re-raised unchanged: this is observability, not a
-            # translation.
-            _log_toggle(toggle, outcome="failed", details=_failure_details(exc))
-            raise
+            # D21: a direct service caller has no HTTP catch-all, so any failure
+            # must still leave one terminal record. The record says what went
+            # wrong; the raised error is whatever the caller's contract names.
+            translated = _toggle_failure(toggle, exc, owner=owner, name=name)
+            if translated is None:
+                raise
+            raise translated from exc
 
         previous = not enabled if changed else enabled
         _log_toggle(
@@ -561,6 +554,31 @@ def _failure_details(exc: BaseException) -> str:
     forge a second record.
     """
     return f"error={type(exc).__name__} message={str(exc)!r}"
+
+
+def _toggle_failure(
+    toggle: _ToggleLog,
+    exc: Exception,
+    *,
+    owner: str,
+    name: str,
+) -> Exception | None:
+    """Record a failed toggle and return the error the port should raise.
+
+    ``None`` means the failure has no translation, so the caller re-raises it
+    unchanged; that is how an unexpected error stays visible to the caller
+    while still leaving the D21 terminal record.
+    """
+    match exc:
+        case RegistryRepositoryNotFoundError():
+            error: Exception = RepositoryNotFoundError(owner, name)
+        case SQLAlchemyError():
+            error = StorageUnavailableError(_STORAGE_MESSAGE)
+        case _:
+            _log_toggle(toggle, outcome="failed", details=_failure_details(exc))
+            return None
+    _log_toggle(toggle, outcome="failed", details=_failure_details(error))
+    return error
 
 
 def _sync_summary(
