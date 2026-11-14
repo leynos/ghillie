@@ -162,6 +162,7 @@ def test_optional_fields_use_json_schema_null_types(
         assert "null" in field_spec["type"], f"{schema_name}.{field}"
 
     def _has_nullable(value: object) -> bool:
+        """Report whether a schema fragment still uses the removed keyword."""
         match value:
             case dict():
                 return "nullable" in value or any(

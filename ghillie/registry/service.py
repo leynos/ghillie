@@ -14,7 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ghillie.registry.ingestion import get_repository_by_slug, set_ingestion_enabled
 from ghillie.registry.listing import (
     RepositoryListOptions,
-    list_repositories,
+)
+from ghillie.registry.listing import (
     list_repositories as query_repositories,
 )
 from ghillie.registry.storage import DialectUpsertStrategy
@@ -25,7 +26,6 @@ if typ.TYPE_CHECKING:
     from ghillie.registry.storage import UpsertStrategy
 
 type SessionFactory = async_sessionmaker[AsyncSession]
-
 
 
 """Repository registry service for managing GitHub ingestion targets.

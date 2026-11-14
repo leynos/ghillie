@@ -330,6 +330,7 @@ async def test_conflict_through_the_real_service_is_a_409(
     transport = httpx.ASGITransport(app=typ.cast("typ.Any", app))
 
     async def _import(commit_sha: str) -> httpx.Response:
+        """Import the catalogue document recorded at ``commit_sha``."""
         body = {"commit_sha": commit_sha, "catalogue_yaml": catalogue_document()}
         async with httpx.AsyncClient(
             transport=transport, base_url="http://test"

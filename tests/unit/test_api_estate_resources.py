@@ -362,6 +362,7 @@ async def test_import_rejects_a_streamed_body_over_the_limit() -> None:
     transport = httpx.ASGITransport(app=typ.cast("typ.Any", app))
 
     async def oversize() -> cabc.AsyncIterator[bytes]:
+        """Stream a body one byte past the configured request limit."""
         yield b"x" * (_MAX_REQUEST_BODY_BYTES + 1)
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -393,6 +394,7 @@ async def test_import_accepts_a_body_split_across_chunks() -> None:
     body = json.dumps(_IMPORT_BODY).encode()
 
     async def chunks() -> cabc.AsyncIterator[bytes]:
+        """Stream the encoded import body eight bytes at a time."""
         for start in range(0, len(body), 8):
             yield body[start : start + 8]
 

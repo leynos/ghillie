@@ -557,6 +557,7 @@ def test_importer_dry_run_leaves_no_rows(
     assert _count_rows(session_factory) == (0, 0, 0, 0), "dry run should leave no rows"
 
     async def _persistence() -> tuple[int, int]:
+        """Count the persisted estates and catalogue import records."""
         async with session_factory() as session:
             estates = (await session.scalars(select(Estate))).all()
             imports = (await session.scalars(select(CatalogueImportRecord))).all()
@@ -581,6 +582,7 @@ def test_importer_keeps_the_estate_description_on_rename(
     )
 
     async def _set_description() -> None:
+        """Set a description the catalogue itself never carries."""
         async with session_factory() as session, session.begin():
             estate = await session.scalar(select(Estate).where(Estate.key == "demo"))
             assert estate is not None, (
@@ -600,6 +602,7 @@ def test_importer_keeps_the_estate_description_on_rename(
     )
 
     async def _read_estate() -> Estate:
+        """Reload the estate the test has been importing into."""
         async with session_factory() as session:
             estate = await session.scalar(select(Estate).where(Estate.key == "demo"))
             assert estate is not None, "estate should exist after the rename"

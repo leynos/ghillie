@@ -41,6 +41,7 @@ _EXPECTED_TABLES = {
 
 
 async def _table_names(engine: AsyncEngine) -> set[str]:
+    """Return the table names the engine's database holds."""
     async with engine.connect() as connection:
         names = await connection.run_sync(
             lambda sync_connection: inspect(sync_connection).get_table_names()

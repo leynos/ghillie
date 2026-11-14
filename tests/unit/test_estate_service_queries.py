@@ -166,6 +166,7 @@ async def test_sync_registry_translates_a_not_found_reason(
         *,
         dry_run: bool = False,
     ) -> typ.Never:
+        """Fail the sync the way a missing estate does."""
         raise RegistrySyncError(estate_key, ESTATE_NOT_FOUND_REASON)
 
     monkeypatch.setattr(RepositoryRegistryService, "sync_from_catalogue", _missing)
@@ -201,6 +202,7 @@ async def test_sync_registry_translates_the_wrapped_cause(
         *,
         dry_run: bool = False,
     ) -> typ.Never:
+        """Raise the registry error that wraps ``cause``."""
         raise RegistrySyncError(estate_key, "Database error during sync") from cause
 
     monkeypatch.setattr(RepositoryRegistryService, "sync_from_catalogue", _fail)
@@ -246,6 +248,7 @@ async def test_sync_registry_logs_one_terminal_record_when_it_fails(
         *,
         dry_run: bool = False,
     ) -> typ.Never:
+        """Fail the sync with a storage error the service must log."""
         raise RegistrySyncError(estate_key, "Database error during sync") from (
             IntegrityError("INSERT", {}, Exception("duplicate"))
         )
@@ -352,6 +355,7 @@ async def test_list_repositories_queries_the_registry_silver_store(
         limit: int | None = None,
         offset: int | None = None,
     ) -> list[typ.Never]:
+        """Record the filters the service passes to the registry."""
         calls.append((estate_id, ingestion_enabled, limit, offset))
         return []
 
@@ -411,6 +415,7 @@ async def test_set_ingestion_escapes_a_hostile_repository_name(
     """A newline in the repository name cannot forge a second log line."""
 
     async def _changed(_owner: str, _name: str, *, enabled: bool) -> bool:
+        """Report every toggle as a change so the log line is always written."""
         return True
 
     monkeypatch.setattr(service, "_toggle", _changed)
@@ -467,6 +472,7 @@ async def test_set_ingestion_logs_one_terminal_record_for_an_unexpected_error(
     """
 
     async def _fail(_owner: str, _name: str) -> bool:
+        """Fail the toggle with an error the service does not translate."""
         raise RuntimeError("boom")
 
     monkeypatch.setattr(registry, "enable_ingestion", _fail)
@@ -503,6 +509,7 @@ async def test_set_ingestion_translates_storage_errors(
     """A database outage while toggling is unavailable storage."""
 
     async def _fail(_owner: str, _name: str) -> bool:
+        """Fail the toggle with a database outage."""
         raise OperationalError("UPDATE", {}, Exception("down"))
 
     monkeypatch.setattr(registry, "enable_ingestion", _fail)

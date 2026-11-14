@@ -191,6 +191,7 @@ async def test_import_logs_one_terminal_record_when_it_fails(
         commit_sha: str | None = None,
         dry_run: bool = False,
     ) -> CatalogueImportResult:
+        """Raise the uniqueness violation a duplicate import produces."""
         raise IntegrityError("INSERT", {}, Exception("duplicate"))
 
     monkeypatch.setattr(CatalogueImporter, "import_catalogue", _conflict)
@@ -361,6 +362,7 @@ async def test_import_translates_validation_from_the_importer(
         commit_sha: str | None = None,
         dry_run: bool = False,
     ) -> CatalogueImportResult:
+        """Raise the catalogue validation failure bad input produces."""
         raise CatalogueValidationError(["duplicate component key"])
 
     monkeypatch.setattr(CatalogueImporter, "import_catalogue", _reject)
@@ -387,6 +389,7 @@ async def test_import_translates_an_integrity_error_to_conflict(
         commit_sha: str | None = None,
         dry_run: bool = False,
     ) -> CatalogueImportResult:
+        """Raise the uniqueness violation a duplicate import produces."""
         raise IntegrityError("INSERT", {}, Exception("duplicate"))
 
     monkeypatch.setattr(CatalogueImporter, "import_catalogue", _conflict)
@@ -418,6 +421,7 @@ async def test_import_translates_storage_errors(
         commit_sha: str | None = None,
         dry_run: bool = False,
     ) -> CatalogueImportResult:
+        """Raise the parametrized storage error from the importer call."""
         raise error
 
     monkeypatch.setattr(CatalogueImporter, "import_catalogue", _fail)
@@ -442,6 +446,7 @@ async def test_import_lock_serializes_concurrent_imports(
         commit_sha: str | None = None,
         dry_run: bool = False,
     ) -> CatalogueImportResult:
+        """Hold the import open long enough for a second call to arrive."""
         nonlocal active, max_active
         active += 1
         max_active = max(max_active, active)
@@ -476,7 +481,10 @@ async def test_estate_locks_are_not_retained_after_use(
     real_lock = asyncio.Lock
 
     class _RecordingLock(real_lock):
+        """Record a weak reference to every lock the service creates."""
+
         def __init__(self) -> None:
+            """Create the lock and record it for the release check."""
             super().__init__()
             created.append(weakref.ref(self))
 

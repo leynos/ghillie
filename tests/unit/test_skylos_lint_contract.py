@@ -136,6 +136,8 @@ _RUNTIME_ENTRY_POINTS: typ.Final = {
             "ghillie.estate.service._sync_error",
             "ghillie.estate.service._sync_summary",
             "ghillie.estate.service._validate_page",
+            "ghillie.registry.storage._insert_values",
+            "ghillie.registry.storage.dialect_upsert_strategy",
         }
     ),
     "method": frozenset(
@@ -150,12 +152,6 @@ _RUNTIME_ENTRY_POINTS: typ.Final = {
             "ghillie.registry.storage.PostgresUpsertStrategy.build",
             "ghillie.registry.storage.SqliteUpsertStrategy.build",
             "ghillie.registry.storage._OnConflictDoNothingStrategy.build",
-        }
-    ),
-    "function": frozenset(
-        {
-            "ghillie.registry.storage._insert_values",
-            "ghillie.registry.storage.dialect_upsert_strategy",
         }
     ),
     "parameter": frozenset(
