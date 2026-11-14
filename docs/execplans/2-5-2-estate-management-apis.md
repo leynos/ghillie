@@ -980,6 +980,22 @@ per pull request.
       after this branch's base. All eight gates are green at `b9fd298`:
       `test` 1480 passed, 17 skipped, interrogate 100.0%, and the Skylos
       dead-code gate ran and was clean.
+- [x] (2026-11-14) Fixed the three findings from the first hosted review of
+      PR-B (`747d6dc`), each reproduced against the current head first and each
+      covered by a test observed red before the fix.
+      `parse_catalogue_text` let a `ValueError` escape: YAML 1.2 resolves
+      `2026-13-01` as a timestamp and the constructor's
+      `datetime.date(2026, 13, 1)` raised, so that uploaded text surfaced as an
+      unhandled error instead of a validation failure. Scalar construction now
+      shares the malformed-YAML translation. The three D21 wrappers missed
+      cancellation, because `asyncio.CancelledError` derives from
+      `BaseException`; each now records `outcome=cancelled` once and re-raises.
+      The OpenAPI identifier test compared an unordered set of ids, so two
+      endpoints could trade ids undetected; it now pairs each path with its own
+      method and id. The swap was injected into `specs/openapi.yml` to prove the
+      test fails, and the spec was restored. All eight gates are green on the
+      committed tree `b0a8bbc`: `test` 1484 passed, 17 skipped, interrogate
+      100.0%, and the Skylos dead-code gate ran and was clean.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
