@@ -1010,6 +1010,28 @@ per pull request.
       test that pins that table gains the name. `make lint` is green
       (interrogate 3506/3506, Ruff clean, Skylos clean) and `cs check
       ghillie/estate/service.py` reports code health 10.00.
+- [x] (2026-11-15) Cleared the second hosted review of PR-B at head `89aa30b`:
+      two inline findings and three failed pre-merge checks. The Unit
+      Architecture error was that D21 rendering and timing still lived in
+      `EstateManagementService`; they now live in `ghillie/estate/observability.py`
+      behind `MutationRecord.begin`, `ToggleRecord.begin`, `record_mutation`,
+      `record_toggle`, `import_details`, `sync_details` and `failure_details`,
+      with a closed `MutationOutcome` vocabulary. The service keeps only
+      orchestration and calls the renderer. The record format is unchanged, so
+      the log-based service tests only move their capture to the new logger
+      name, and `tests/unit/test_estate_observability.py` pins the format,
+      escaping and outcome vocabulary directly. Moving those helpers removed
+      four names and the `_MutationLog` class from the Skylos entrypoint rule;
+      the contract test's pin shrinks with it. The review also asked that the
+      two bootstrap tests share one engine fixture, which now creates and
+      disposes each test's own SQLite engine, and that the API tests name
+      statuses through `http.HTTPStatus` rather than bare numbers. The two
+      documentation warnings are answered by a new "Estate management HTTP API
+      (Task 2.5.b)" section in `docs/users-guide.md` and an "Estate management
+      boundary" section in `docs/developers-guide.md`. All eight gates are
+      green on the repaired tree: `test` 1496 passed, 17 skipped, interrogate
+      100.0%, Ruff and Skylos clean, and `cs check` reports code health 10.00
+      for both changed modules.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
@@ -1292,7 +1314,12 @@ expert-panel review.
   `outcome=cancelled` from its own `except asyncio.CancelledError` clause and
   re-raises, because `CancelledError` derives from `BaseException` and the
   `except Exception` clause would otherwise leave a cancelled attempt with no
-  record at all.
+  record at all. The rendering itself lives in
+  `ghillie/estate/observability.py`, following the pattern D31 set for registry
+  sync: the module owns the record format and the outcome vocabulary, and the
+  service only decides which outcome applies. Keeping it out of
+  `EstateManagementService` also keeps that class about orchestration, which is
+  what the hosted Unit Architecture check asks for.
 - D22, catalogue-import request value. The port method is
   `import_catalogue(estate_key, request: CatalogueImportRequest)` rather than a
   five-argument signature. Rationale: the four request fields travel together

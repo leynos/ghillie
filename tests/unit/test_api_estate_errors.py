@@ -6,6 +6,7 @@ mode returns the documented status and stable ``code``.
 
 from __future__ import annotations
 
+import http
 import typing as typ
 
 import falcon.testing
@@ -110,7 +111,7 @@ class _ErrorBody(typ.TypedDict, total=False):
 def _assert_error(
     result: falcon.testing.Result,
     *,
-    status: int,
+    status: http.HTTPStatus,
     code: str,
 ) -> _ErrorBody:
     """Assert a structured error body and return it."""
@@ -127,7 +128,9 @@ def test_unexpected_error_uses_the_envelope() -> None:
     """An unhandled exception still yields the shared 500 body (D7)."""
     result = _client(RuntimeError("boom")).simulate_get("/estates")
 
-    body = _assert_error(result, status=500, code="internal_error")
+    body = _assert_error(
+        result, status=http.HTTPStatus.INTERNAL_SERVER_ERROR, code="internal_error"
+    )
     assert "boom" not in result.text, "internal errors must not leak details"
     assert body["description"] == "An unexpected error occurred.", (
         "description should use the generic message"
@@ -141,7 +144,9 @@ def test_invalid_estate_key_is_invalid_input() -> None:
         "/estates/bad key/catalogue-import", json=_IMPORT_BODY
     )
 
-    body = _assert_error(result, status=400, code="invalid_input")
+    body = _assert_error(
+        result, status=http.HTTPStatus.BAD_REQUEST, code="invalid_input"
+    )
     assert body["field"] == "estate_key", "error should name the estate key"
 
 
@@ -150,7 +155,9 @@ def test_invalid_pagination_is_invalid_input() -> None:
     error = InvalidPaginationError("limit", "must be between 1 and 500")
     result = _client(error).simulate_get("/estates", params={"limit": "0"})
 
-    body = _assert_error(result, status=400, code="invalid_input")
+    body = _assert_error(
+        result, status=http.HTTPStatus.BAD_REQUEST, code="invalid_input"
+    )
     assert body["field"] == "limit", "error should name the limit field"
     assert body["description"] == "must be between 1 and 500", (
         "description should explain the limit"
@@ -169,7 +176,9 @@ def test_catalogue_rejected_is_unprocessable() -> None:
         "/estates/demo/catalogue-import", json=_IMPORT_BODY
     )
 
-    body = _assert_error(result, status=422, code="catalogue_invalid")
+    body = _assert_error(
+        result, status=http.HTTPStatus.UNPROCESSABLE_CONTENT, code="catalogue_invalid"
+    )
     assert body["issues"] == [
         {"code": "catalogue_schema", "message": "projects: required"},
         {"code": "catalogue_schema", "message": "components: invalid"},
@@ -181,7 +190,9 @@ def test_estate_not_found() -> None:
     error = EstateNotFoundError("missing")
     result = _client(error).simulate_post("/estates/missing/registry-sync")
 
-    body = _assert_error(result, status=404, code="estate_not_found")
+    body = _assert_error(
+        result, status=http.HTTPStatus.NOT_FOUND, code="estate_not_found"
+    )
     assert "missing" in body["description"], "description should name the estate"
 
 
@@ -194,7 +205,9 @@ def test_repository_not_found() -> None:
         headers={"Content-Type": "application/json"},
     )
 
-    body = _assert_error(result, status=404, code="repository_not_found")
+    body = _assert_error(
+        result, status=http.HTTPStatus.NOT_FOUND, code="repository_not_found"
+    )
     assert "org/alpha" in body["description"], "description should name the repository"
 
 
@@ -205,7 +218,7 @@ def test_conflict() -> None:
         "/estates/demo/catalogue-import", json=_IMPORT_BODY
     )
 
-    _assert_error(result, status=409, code="conflict")
+    _assert_error(result, status=http.HTTPStatus.CONFLICT, code="conflict")
 
 
 def test_storage_unavailable() -> None:
@@ -213,7 +226,9 @@ def test_storage_unavailable() -> None:
     error = StorageUnavailableError("storage is unavailable")
     result = _client(error).simulate_get("/estates")
 
-    _assert_error(result, status=503, code="storage_unavailable")
+    _assert_error(
+        result, status=http.HTTPStatus.SERVICE_UNAVAILABLE, code="storage_unavailable"
+    )
 
 
 def test_registry_sync_failed() -> None:
@@ -221,7 +236,11 @@ def test_registry_sync_failed() -> None:
     error = RegistrySyncFailedError("the registry sync failed")
     result = _client(error).simulate_post("/estates/demo/registry-sync")
 
-    _assert_error(result, status=500, code="registry_sync_failed")
+    _assert_error(
+        result,
+        status=http.HTTPStatus.INTERNAL_SERVER_ERROR,
+        code="registry_sync_failed",
+    )
 
 
 def test_storage_unavailable_is_logged() -> None:
@@ -254,7 +273,7 @@ def test_unroutable_path_is_not_found() -> None:
     """An unknown path is a structured 404."""
     result = _client(StorageUnavailableError("unused")).simulate_get("/nope")
 
-    _assert_error(result, status=404, code="not_found")
+    _assert_error(result, status=http.HTTPStatus.NOT_FOUND, code="not_found")
 
 
 def test_estate_key_with_encoded_slash_is_not_found() -> None:
@@ -268,14 +287,16 @@ def test_estate_key_with_encoded_slash_is_not_found() -> None:
         "/estates/wildside%2Fengine/repositories"
     )
 
-    _assert_error(result, status=404, code="not_found")
+    _assert_error(result, status=http.HTTPStatus.NOT_FOUND, code="not_found")
 
 
 def test_wrong_method_is_method_not_allowed() -> None:
     """A known path with an unsupported method is a structured 405."""
     result = _client(StorageUnavailableError("unused")).simulate_delete("/estates")
 
-    _assert_error(result, status=405, code="method_not_allowed")
+    _assert_error(
+        result, status=http.HTTPStatus.METHOD_NOT_ALLOWED, code="method_not_allowed"
+    )
 
 
 def _no_storage_details(text: str) -> bool:
@@ -302,7 +323,7 @@ async def test_over_long_field_is_invalid_input_through_the_real_service(
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post("/estates/demo/catalogue-import", json=body)
 
-    assert response.status_code == 400, response.text
+    assert response.status_code == http.HTTPStatus.BAD_REQUEST, response.text
     assert response.json()["code"] == "invalid_input", "expected invalid_input"
     assert _no_storage_details(response.text), "the body must not leak storage detail"
 
@@ -338,7 +359,7 @@ async def test_conflict_through_the_real_service_is_a_409(
             return await client.post("/estates/demo/catalogue-import", json=body)
 
     first = await _import("c1")
-    assert first.status_code == 200, first.text
+    assert first.status_code == http.HTTPStatus.OK, first.text
 
     async def _insert_duplicate(
         self: CatalogueImporter, session: AsyncSession
@@ -353,7 +374,7 @@ async def test_conflict_through_the_real_service_is_a_409(
 
     conflict = await _import("c2")
 
-    assert conflict.status_code == 409, conflict.text
+    assert conflict.status_code == http.HTTPStatus.CONFLICT, conflict.text
     assert conflict.json()["code"] == "conflict", "expected the conflict code"
     assert _no_storage_details(conflict.text), "the body must not leak storage detail"
 
@@ -366,7 +387,11 @@ def test_falcon_http_error_keeps_its_description() -> None:
         headers={"Content-Type": "text/plain"},
     )
 
-    _assert_error(result, status=415, code="unsupported_media_type")
+    _assert_error(
+        result,
+        status=http.HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
+        code="unsupported_media_type",
+    )
     assert "application/json" in result.json["description"], (
         "the Falcon error's own description should reach the envelope"
     )

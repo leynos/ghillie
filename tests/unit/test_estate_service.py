@@ -124,7 +124,7 @@ async def test_mutation_log_escapes_a_hostile_commit_sha(
     """
     hostile = "c1\nestate.import estate_key=forged outcome=succeeded"
 
-    with capture_femto_logs("ghillie.estate.service") as logs:
+    with capture_femto_logs("ghillie.estate.observability") as logs:
         await import_catalogue(service, commit_sha=hostile, dry_run=True)
         logs.wait_for_timeout()
 
@@ -150,7 +150,7 @@ async def test_import_logs_one_terminal_record_when_it_succeeds(
     service: EstateManagementService,
 ) -> None:
     """D21: a successful import emits exactly one terminal record with edge counts."""
-    with capture_femto_logs("ghillie.estate.service") as logs:
+    with capture_femto_logs("ghillie.estate.observability") as logs:
         await import_catalogue(service)
         logs.wait_for_timeout()
 
@@ -168,7 +168,7 @@ async def test_import_logs_one_terminal_record_when_it_is_skipped(
     """D21: a repeated commit logs one terminal record, not a success line."""
     await import_catalogue(service, commit_sha="c1")
 
-    with capture_femto_logs("ghillie.estate.service") as logs:
+    with capture_femto_logs("ghillie.estate.observability") as logs:
         await import_catalogue(service, commit_sha="c1")
         logs.wait_for_timeout()
 
@@ -196,7 +196,7 @@ async def test_import_logs_one_terminal_record_when_it_fails(
 
     monkeypatch.setattr(CatalogueImporter, "import_catalogue", _conflict)
 
-    with capture_femto_logs("ghillie.estate.service") as logs:
+    with capture_femto_logs("ghillie.estate.observability") as logs:
         with pytest.raises(EstateConflictError):
             await import_catalogue(service)
         logs.wait_for_timeout()
@@ -233,7 +233,7 @@ async def test_import_logs_a_cancelled_attempt_once(
 
     monkeypatch.setattr(CatalogueImporter, "import_catalogue", _cancelled)
 
-    with capture_femto_logs("ghillie.estate.service") as logs:
+    with capture_femto_logs("ghillie.estate.observability") as logs:
         with pytest.raises(asyncio.CancelledError):
             await import_catalogue(service)
         logs.wait_for_timeout()
@@ -250,7 +250,7 @@ async def test_import_logs_a_rejected_document_as_a_failed_attempt(
     service: EstateManagementService,
 ) -> None:
     """D21: a document rejected before the lock still produces one record."""
-    with capture_femto_logs("ghillie.estate.service") as logs:
+    with capture_femto_logs("ghillie.estate.observability") as logs:
         with pytest.raises(CatalogueRejectedError):
             await import_catalogue(service, catalogue_yaml="version: [unclosed")
         logs.wait_for_timeout()

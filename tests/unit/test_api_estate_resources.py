@@ -8,6 +8,7 @@ toggles are covered by ``test_api_repository_resources.py``.
 """
 
 import datetime as dt
+import http
 import json
 import typing as typ
 
@@ -50,7 +51,7 @@ def test_list_estates_returns_the_documented_envelope(
     """The default listing returns every documented field."""
     result = client.simulate_get("/estates")
 
-    assert result.status_code == 200, "expected 200 from /estates"
+    assert result.status_code == http.HTTPStatus.OK, "expected 200 from /estates"
     assert service.page_requests == [PageRequest()], "default page request expected"
     assert result.json == {
         "items": [
@@ -78,7 +79,7 @@ def test_list_estates_parses_pagination(
     """Limit and offset reach the port as integers."""
     result = client.simulate_get("/estates", params={"limit": "2", "offset": "3"})
 
-    assert result.status_code == 200, "expected 200 from /estates"
+    assert result.status_code == http.HTTPStatus.OK, "expected 200 from /estates"
     assert service.page_requests == [PageRequest(limit=2, offset=3)], (
         "limit and offset should reach the service"
     )
@@ -103,7 +104,7 @@ def test_list_estates_renders_a_null_last_import(
 
     result = client.simulate_get("/estates")
 
-    assert result.status_code == 200, "expected 200 from /estates"
+    assert result.status_code == http.HTTPStatus.OK, "expected 200 from /estates"
     assert result.json["items"][0]["last_import"] is None, "last import should be null"
     assert result.json["items"][0]["description"] is None, "description should be null"
 
@@ -130,7 +131,7 @@ def test_list_estates_normalizes_a_naive_timestamp(
 
     result = client.simulate_get("/estates")
 
-    assert result.status_code == 200, "expected 200 from /estates"
+    assert result.status_code == http.HTTPStatus.OK, "expected 200 from /estates"
     assert result.json["items"][0]["last_import"]["imported_at"] == (
         "2026-02-01T12:30:00Z"
     ), "a naive timestamp should be serialized as UTC"
@@ -145,7 +146,7 @@ def test_list_estates_offset_past_end_is_empty(
 
     result = client.simulate_get("/estates", params={"offset": "25"})
 
-    assert result.status_code == 200, "expected 200 from /estates"
+    assert result.status_code == http.HTTPStatus.OK, "expected 200 from /estates"
     assert result.json["items"] == [], "empty page should have no items"
     assert result.json["has_more"] is False, "empty page should not have more"
     assert result.json["next_offset"] is None, "no next offset on last page"
@@ -160,7 +161,9 @@ def test_list_estates_rejects_a_non_integer_limit(
     """A limit that is not an integer is invalid input."""
     result = client.simulate_get("/estates", params={"limit": value})
 
-    assert result.status_code == 400, "expected 400 for a bad limit"
+    assert result.status_code == http.HTTPStatus.BAD_REQUEST, (
+        "expected 400 for a bad limit"
+    )
     assert result.json["code"] == "invalid_input", "code should be invalid_input"
     assert result.json["field"] == "limit", "error should name the limit field"
     assert service.page_requests == [], "invalid input should not reach the service"
@@ -173,7 +176,9 @@ def test_list_estates_rejects_a_repeated_query_parameter(
     """A repeated pagination parameter is ambiguous and rejected."""
     result = client.simulate_get("/estates?limit=1&limit=2")
 
-    assert result.status_code == 400, "expected 400 for a repeated limit"
+    assert result.status_code == http.HTTPStatus.BAD_REQUEST, (
+        "expected 400 for a repeated limit"
+    )
     assert result.json["code"] == "invalid_input", "code should be invalid_input"
     assert result.json["field"] == "limit", "error should name the limit field"
     assert service.page_requests == [], "invalid input should not reach the service"
@@ -201,7 +206,9 @@ def test_import_returns_the_documented_envelope(
         json=_IMPORT_BODY,
     )
 
-    assert result.status_code == 200, "expected 200 from catalogue-import"
+    assert result.status_code == http.HTTPStatus.OK, (
+        "expected 200 from catalogue-import"
+    )
     assert service.imports == [
         {
             "estate_key": "demo",
@@ -236,7 +243,9 @@ def test_import_accepts_a_null_estate_name(
         json={"commit_sha": "c1", "estate_name": None, "catalogue_yaml": "x"},
     )
 
-    assert result.status_code == 200, "expected 200 from catalogue-import"
+    assert result.status_code == http.HTTPStatus.OK, (
+        "expected 200 from catalogue-import"
+    )
     assert service.imports[0]["estate_name"] is None, "estate name should be null"
 
 
@@ -251,7 +260,9 @@ def test_import_parses_dry_run(
         json=_IMPORT_BODY,
     )
 
-    assert result.status_code == 200, "expected 200 from catalogue-import"
+    assert result.status_code == http.HTTPStatus.OK, (
+        "expected 200 from catalogue-import"
+    )
     assert service.imports[0]["dry_run"] is True, "dry run should reach the service"
     assert result.json["dry_run"] is True, "response should be a dry run"
     assert result.json["registry_sync_required"] is False, "no registry sync on dry run"
@@ -268,7 +279,9 @@ def test_import_rejects_a_non_boolean_dry_run(
         json=_IMPORT_BODY,
     )
 
-    assert result.status_code == 400, "expected 400 for a bad boolean"
+    assert result.status_code == http.HTTPStatus.BAD_REQUEST, (
+        "expected 400 for a bad boolean"
+    )
     assert result.json["code"] == "invalid_input", "code should be invalid_input"
     assert result.json["field"] == "dry_run", "error should name dry_run"
     assert service.imports == [], "invalid input should not reach the service"
@@ -285,7 +298,9 @@ def test_import_rejects_an_unsupported_media_type(
         headers={"Content-Type": "text/yaml"},
     )
 
-    assert result.status_code == 415, "expected 415 for a YAML body"
+    assert result.status_code == http.HTTPStatus.UNSUPPORTED_MEDIA_TYPE, (
+        "expected 415 for a YAML body"
+    )
     assert result.json["code"] == "unsupported_media_type", "unsupported media type"
     assert service.imports == [], "invalid input should not reach the service"
 
@@ -301,7 +316,9 @@ def test_import_rejects_a_body_over_the_limit_by_content_length(
         headers={"Content-Type": "application/json"},
     )
 
-    assert result.status_code == 413, "expected 413 for an oversized body"
+    assert result.status_code == http.HTTPStatus.CONTENT_TOO_LARGE, (
+        "expected 413 for an oversized body"
+    )
     assert result.json["code"] == "payload_too_large", "expected payload_too_large code"
     assert result.json["max_bytes"] == _MAX_REQUEST_BODY_BYTES, "max bytes should match"
     assert service.imports == [], "invalid input should not reach the service"
@@ -344,10 +361,12 @@ def test_body_limit_boundary(
     )
 
     if offset <= 0:
-        assert result.status_code == 200, result.text
+        assert result.status_code == http.HTTPStatus.OK, result.text
         assert service.imports, "an accepted body should reach the service"
     else:
-        assert result.status_code == 413, "expected 413 one byte over the limit"
+        assert result.status_code == http.HTTPStatus.CONTENT_TOO_LARGE, (
+            "expected 413 one byte over the limit"
+        )
         assert result.json["code"] == "payload_too_large", "expected the size code"
         assert service.imports == [], "an oversized body should not reach the service"
 
@@ -372,7 +391,9 @@ async def test_import_rejects_a_streamed_body_over_the_limit() -> None:
             headers={"Content-Type": "application/json"},
         )
 
-    assert response.status_code == 413, "expected 413 for a streamed body"
+    assert response.status_code == http.HTTPStatus.CONTENT_TOO_LARGE, (
+        "expected 413 for a streamed body"
+    )
     assert response.json()["code"] == "payload_too_large", "expected payload_too_large"
     assert response.json()["max_bytes"] == _MAX_REQUEST_BODY_BYTES, (
         "max bytes should match"
@@ -405,7 +426,7 @@ async def test_import_accepts_a_body_split_across_chunks() -> None:
             headers={"Content-Type": "application/json"},
         )
 
-    assert response.status_code == 200, response.text
+    assert response.status_code == http.HTTPStatus.OK, response.text
     assert service.imports == [
         {
             "estate_key": "demo",
@@ -448,7 +469,9 @@ def test_import_rejects_a_malformed_or_incomplete_body(
         headers={"Content-Type": content_type},
     )
 
-    assert result.status_code == 400, "expected 400 for a malformed body"
+    assert result.status_code == http.HTTPStatus.BAD_REQUEST, (
+        "expected 400 for a malformed body"
+    )
     assert result.json["code"] == "invalid_input", "code should be invalid_input"
     assert service.imports == [], "invalid input should not reach the service"
 
@@ -465,7 +488,7 @@ def test_sync_returns_the_documented_envelope(
     """A sync echoes counts, conflicted slugs, and the disabled preview."""
     result = client.simulate_post("/estates/demo/registry-sync")
 
-    assert result.status_code == 200, "expected 200 from registry-sync"
+    assert result.status_code == http.HTTPStatus.OK, "expected 200 from registry-sync"
     assert service.syncs == [{"estate_key": "demo", "dry_run": False}], (
         "sync call should reach the service"
     )
@@ -491,7 +514,7 @@ def test_sync_parses_dry_run(
         "/estates/demo/registry-sync", params={"dry_run": "true"}
     )
 
-    assert result.status_code == 200, "expected 200 from registry-sync"
+    assert result.status_code == http.HTTPStatus.OK, "expected 200 from registry-sync"
     assert service.syncs == [{"estate_key": "demo", "dry_run": True}], (
         "dry-run sync should reach the service"
     )
@@ -509,7 +532,9 @@ def test_sync_rejects_a_non_boolean_dry_run(
         "/estates/demo/registry-sync", params={"dry_run": value}
     )
 
-    assert result.status_code == 400, "expected 400 for a bad boolean"
+    assert result.status_code == http.HTTPStatus.BAD_REQUEST, (
+        "expected 400 for a bad boolean"
+    )
     assert result.json["code"] == "invalid_input", "code should be invalid_input"
     assert service.syncs == [], "invalid input should not reach the service"
 
@@ -526,5 +551,5 @@ def test_unknown_extra_query_parameter_is_ignored(
     """Unknown query parameters do not change the documented behaviour."""
     result = client.simulate_get("/estates", params={"unknown": "value"})
 
-    assert result.status_code == 200, "expected 200 from /estates"
+    assert result.status_code == http.HTTPStatus.OK, "expected 200 from /estates"
     assert service.page_requests == [PageRequest()], "default page request expected"

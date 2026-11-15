@@ -561,6 +561,131 @@ The registry copies `documentation_paths` from catalogue repositories into
 Silver. These paths guide the ingestion worker when detecting documentation
 changes such as roadmaps and ADRs.
 
+## Estate management HTTP API (Task 2.5.b)
+
+The runtime exposes a Falcon ASGI API for estate management. Its five
+operations are defined in [`specs/openapi.yml`](../specs/openapi.yml) and
+driven by `ghillie.estate.ports.EstateManagement`. The catalogue document
+format is described in the
+[Estate catalogue (Phase 1.1)](#estate-catalogue-phase-11) section; the sync
+rules and their transition table are in
+[Repository discovery and registration (Phase 1.3)](#repository-discovery-and-registration-phase-13).
+This section covers only the HTTP surface.
+
+### Authentication
+
+Estate routes require `Authorization: Bearer <token>` when `GHILLIE_API_TOKEN`
+is set. When the variable is unset, every route stays open, so local
+development needs no credentials. `/health` and `/ready` never require the
+header, because orchestrators cannot be expected to hold the token. A missing
+or wrong token returns 401 `unauthorized` with a `WWW-Authenticate: Bearer`
+challenge.
+
+### Operations
+
+| Operation         | Method and path                                | Purpose                                                                 |
+| ----------------- | ---------------------------------------------- | ----------------------------------------------------------------------- |
+| List estates      | `GET /estates`                                 | Return a page of estates and each one's most recent import.             |
+| Import catalogue  | `POST /estates/{estate_key}/catalogue-import`  | Import one catalogue document, creating the estate when the key is new. |
+| Sync registry     | `POST /estates/{estate_key}/registry-sync`     | Project the estate's imported catalogue into the repository registry.   |
+| List repositories | `GET /estates/{estate_key}/repositories`       | Return a page of the estate's registered repositories.                  |
+| Set ingestion     | `PATCH /repositories/{owner}/{name}/ingestion` | Enable or disable ingestion for one registered repository.              |
+
+### Requests and responses
+
+- `GET /estates` returns `items`, `limit`, `offset`, `has_more`, and
+  `next_offset`. Each item carries `key`, `name`, `description`, and
+  `last_import`, which holds `commit_sha` and `imported_at` or is `null`.
+- `POST /estates/{estate_key}/catalogue-import` takes a JSON body and returns
+  the import summary described below.
+- `POST /estates/{estate_key}/registry-sync` takes no body and accepts the
+  `dry_run` query flag. It returns `estate_key`, `state`, `dry_run`, the
+  created, updated, and deactivated repository counts, the slugs in
+  `repositories_conflicted`, and the `repositories_left_disabled` preview with
+  its `repositories_left_disabled_count`.
+- `GET /estates/{estate_key}/repositories` accepts `ingestion_enabled` (strict
+  `true` or `false`) as a filter as well as the pagination parameters. Items
+  carry `owner`, `name`, `default_branch`, `ingestion_enabled`, and
+  `documentation_paths`.
+- `PATCH /repositories/{owner}/{name}/ingestion` takes a JSON or
+  `application/merge-patch+json` body of `{"ingestion_enabled": true}` or
+  `{"ingestion_enabled": false}`. It returns `owner`, `name`,
+  `ingestion_enabled`, and `changed`, which says whether the call altered the
+  stored value.
+
+### Importing a catalogue over HTTP
+
+The import body is a JSON object, never a raw YAML document:
+
+- `commit_sha` (required): the commit the document was read from, 1 to 64
+  characters.
+- `catalogue_yaml` (required): the catalogue document as YAML text.
+- `estate_name` (optional): display name, 1 to 255 characters. When omitted, an
+  existing name is kept and a new estate is named after its key.
+
+Only `application/json` is accepted; another media type returns 415
+`unsupported_media_type`. The `dry_run` query flag defaults to `false`. When
+`true`, the document is validated and its counts reported without writing
+anything.
+
+The response reports `state`, `dry_run`, `skipped`, `skipped_reason`, and
+`registry_sync_required` alongside `created`, `updated`, and `deleted` counts
+for `projects`, `components`, `repositories`, and `edges`. A commit that was
+already imported is skipped with reason `commit_already_imported`, and
+`registry_sync_required` is `false` for a skipped or dry-run import.
+
+### Pagination
+
+`GET /estates` and `GET /estates/{estate_key}/repositories` share the same
+pagination contract:
+
+| Parameter | Range           | Default |
+| --------- | --------------- | ------- |
+| `limit`   | 1 to 500        | 50      |
+| `offset`  | 0 to 2147483647 | 0       |
+
+A value outside its range, a non-integer, or a repeated parameter returns 400
+`invalid_input`; out-of-range pagination names the offending parameter in
+`field`. Every page echoes `limit` and `offset` and adds `has_more` and
+`next_offset`. `next_offset` is the offset of the following page, or `null`
+when the page is the last one.
+
+### Request size limit
+
+Catalogue import and the ingestion toggle read a body through a single limit of
+1,048,576 bytes (1 MiB). A declared `Content-Length` over that limit is
+rejected before the body is buffered, and a chunked body that exceeds it is
+rejected after reading one byte past the limit. Either case returns 413
+`payload_too_large`, and the envelope carries `max_bytes`.
+
+### Error envelope
+
+Every failure uses one JSON envelope:
+
+- `code`: stable machine-readable identifier.
+- `description`: human-readable explanation.
+- `title`: short error title.
+- `field`: optional name of the input field that failed validation.
+- `issues`: optional array of `code` and `message` objects, one per validation
+  problem; catalogue rejections use `code` `catalogue_schema`.
+- `max_bytes`: optional largest accepted body size, present on 413.
+
+The documented statuses are:
+
+| Status | Code                     | Declared by                 | Meaning                                                             |
+| ------ | ------------------------ | --------------------------- | ------------------------------------------------------------------- |
+| 400    | `invalid_input`          | all five operations         | Malformed body or query parameter, or pagination outside its range. |
+| 401    | `unauthorized`           | all five operations         | Missing or wrong bearer token when authentication is enabled.       |
+| 404    | `estate_not_found`       | sync and repository listing | No estate has the supplied key.                                     |
+| 404    | `repository_not_found`   | ingestion toggle            | No registered repository has that owner and name.                   |
+| 409    | `conflict`               | import and sync             | The write conflicts with an existing record.                        |
+| 413    | `payload_too_large`      | import and ingestion toggle | The request body exceeds the accepted size.                         |
+| 415    | `unsupported_media_type` | import and ingestion toggle | The request media type is not accepted.                             |
+| 422    | `catalogue_invalid`      | import                      | The uploaded document failed catalogue validation.                  |
+| 500    | `internal_error`         | all five operations         | An unexpected server failure.                                       |
+| 500    | `registry_sync_failed`   | sync                        | The registry reported a failure that is not storage-related.        |
+| 503    | `storage_unavailable`    | all five operations         | The database cannot be reached.                                     |
+
 ## Incremental GitHub ingestion (Phase 1.3.b)
 
 Ghillie polls GitHub per managed repository and appends activity into the Bronze

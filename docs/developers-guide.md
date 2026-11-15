@@ -349,6 +349,133 @@ Storage also reports outcomes and guarded changes:
   `bool` meaning "this sync made the change", so a claim or disable that lost a
   race is not counted.
 
+## Estate management boundary
+
+`ghillie.estate` is the application boundary for catalogue import, registry
+sync, repository listing, and ingestion toggles. Adapters depend on
+`ghillie.estate.ports.EstateManagement`, a `typing.Protocol`; the shipped
+implementation is `ghillie.estate.service.EstateManagementService`. The port
+contract is that implementations own their units of work and translate
+persistence and catalogue failures into `ghillie.estate.errors`, so the HTTP
+and CLI layers never import a catalogue, registry, or SQLAlchemy exception.
+
+### Service responsibilities
+
+- **Untrusted YAML off the event loop.** `import_catalogue` validates the key,
+  then runs `ghillie.catalogue.loader.parse_catalogue_text` through
+  `asyncio.to_thread`, so parsing a client-supplied document cannot block the
+  loop. A `CatalogueValidationError` becomes a `CatalogueRejectedError` holding
+  one `Issue(code="catalogue_schema")` per validation message.
+- **Per-estate serialization.** Import and sync each run under an
+  `asyncio.Lock` obtained from `_lock_for`. The locks live in a
+  `weakref.WeakValueDictionary`, so a coroutine inside `async with` holds the
+  only strong reference and an idle estate retains no lock. Two concurrent
+  requests for one estate therefore cannot interleave their catalogue writes,
+  while different estates proceed independently.
+- **Failure translation.** `IntegrityError` becomes `EstateConflictError`. A
+  catalogue read or write failure becomes `StorageUnavailableError`, and a
+  non-integrity SQLAlchemy failure raised by the registry projection becomes
+  `RegistrySyncFailedError`. Registry failures are classified through
+  `RegistrySyncError.__cause__`: an `IntegrityError` cause is a conflict, and
+  `OperationalError` or `InterfaceError` causes are storage outages. The
+  registry's `ESTATE_NOT_FOUND_REASON` becomes `EstateNotFoundError`; anything
+  else becomes `RegistrySyncFailedError`.
+- **Right database for Silver.** `list_repositories` lists through the
+  registry's own session factory rather than the catalogue factory, because the
+  two stores can be deployed separately.
+
+### Request value types
+
+`ghillie.estate.models` holds the frozen, slotted dataclasses that the port and
+its adapters pass. Hecate classifies it, with `ghillie.estate.errors` and
+`ghillie.estate.ports`, as `domain_ports`, so it imports only the standard
+library and estate-owned modules.
+
+- `CatalogueImportRequest` groups `catalogue_yaml`, `commit_sha`,
+  `estate_name`, and `dry_run`. The grouping keeps the port signature small and
+  lets an adapter pass one value through without re-listing each field;
+  `estate_name=None` keeps an existing name and names a new estate after its
+  key.
+- `PageRequest` carries `limit` and `offset`; `RepositoryQuery` adds the
+  optional `ingestion_enabled` filter. `Page[T]` and `RepositoryPage` return
+  the items with `limit`, `offset`, `has_more`, and `next_offset`.
+- The pagination bounds are module constants: `DEFAULT_PAGE_LIMIT` 50,
+  `MAX_PAGE_LIMIT` 500, and `MAX_PAGE_OFFSET` `2**31 - 1`. The offset ceiling
+  is a signed 32-bit maximum because SQLite raises `OverflowError` beyond its
+  signed 64-bit bind range and PostgreSQL rejects an out-of-range `OFFSET` as a
+  storage error.
+- `MAX_REQUEST_BODY_BYTES` is 1 MiB; the HTTP adapter enforces it.
+- `validate_new_estate_key` applies `NEW_ESTATE_KEY_PATTERN` only when the
+  import creates an estate; `validate_estate_key_reference` accepts any key of
+  one to `MAX_ESTATE_KEY_LENGTH` (64) characters, so keys created earlier
+  through Python stay reachable (D16).
+
+### Error vocabulary
+
+`ghillie.estate.errors` is the whole vocabulary an adapter may handle: `Issue`,
+the `EstateError` base class, `EstateNotFoundError`, `InvalidEstateKeyError`,
+`InvalidPaginationError`, `CatalogueRejectedError`, `RepositoryNotFoundError`,
+`EstateConflictError`, `StorageUnavailableError`, and
+`RegistrySyncFailedError`. Each error carries the minimum data needed to render
+the contract: `estate_key` for a missing or invalid key, `field` and `reason`
+for pagination, `owner` and `name` for a repository, and `issues` for a
+rejected catalogue. `ghillie.api.errors` maps these types to a status and code;
+adapters must see only these types, never a catalogue, registry, or SQLAlchemy
+exception in their place.
+
+### HTTP adapter and composition
+
+The inbound adapter is `ghillie/api/estate/resources.py`. It defines
+`EstateCollectionResource`, `CatalogueImportResource`, `RegistrySyncResource`,
+`EstateRepositoryCollectionResource`, and `RepositoryIngestionResource`, each
+holding an `EstateManagement` port. The resources depend on no catalogue,
+registry, or SQLAlchemy module: every failure they can see is an estate error,
+mapped centrally by `ghillie.api.errors`. Request and response bodies are
+msgspec structs in `ghillie/api/estate/schemas.py`; request structs forbid
+unknown fields, so a malformed body becomes one `DecodeError` and a 400.
+
+`ghillie/api/factory.py` composes the service. `build_estate_service`
+constructs one `RepositoryRegistryService(session_factory, session_factory)`
+and passes it to `EstateManagementService(session_factory, registry=registry)`,
+so that wiring shares one session factory between the catalogue and Silver
+stores.
+
+### Mutation records (D21)
+
+Import, sync, and ingestion-toggle attempts each emit one structured record,
+whether they succeed or fail. Rendering is owned by
+`ghillie/estate/observability.py`, which follows the shape that
+`ghillie/registry/observability.py` established: the module is the only place
+that renders these lines, and the service calls into it.
+
+- Import records carry `operation=estate.import`, the estate key, the commit
+  SHA (`-` when absent), the dry-run flag, the per-family created, updated, and
+  deleted counts, the duration in milliseconds, and the outcome.
+- Sync records carry `operation=estate.registry-sync`, the estate key, `-` for
+  the absent commit, the dry-run flag, the created, updated, deactivated,
+  conflicted, and left-disabled counts, the duration, and the outcome.
+- Toggle records carry `operation=estate.set-ingestion`, the owner and name,
+  the requested flag, the previous state and whether the call changed it, the
+  duration, and the outcome.
+
+The outcome vocabulary is `succeeded`, `skipped`, `failed`, and `cancelled`:
+
+- `succeeded` is the normal terminal record.
+- `skipped` is an import whose commit was already imported.
+- `failed` records the error class and message, so an operator can tell a
+  client error from a storage outage. A toggle failure that has no translation
+  is re-raised unchanged after its record is written.
+- `cancelled` is recorded because `asyncio.CancelledError` derives from
+  `BaseException` and cannot be seen by an `except Exception` clause; the error
+  still propagates so the caller's task unwinds.
+
+Estate keys, repository identities, and failure messages are rendered with
+`%r`, so a newline in client-supplied text cannot forge a second record. Read
+operations emit no mutation record. The sync's own per-slug events
+(`SYNC_COMPLETED`, `SYNC_CONFLICTED`, and so on) are separate and described in
+[Registry sync events](#registry-sync-events); the transition table is in
+[Registry synchronization](#registry-synchronization).
+
 ## Dead-code detection
 
 `make lint` runs Skylos `4.33.2` as an isolated `uv tool` with Python 3.14

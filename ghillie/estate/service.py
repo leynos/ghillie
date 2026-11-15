@@ -7,8 +7,6 @@ vocabulary so adapters never depend on an underlying package.
 """
 
 import asyncio
-import dataclasses
-import time
 import typing as typ
 import weakref
 
@@ -49,7 +47,16 @@ from ghillie.estate.models import (
     validate_estate_key_reference,
     validate_new_estate_key,
 )
-from ghillie.logging import get_logger, log_info
+from ghillie.estate.observability import (
+    MutationOutcome,
+    MutationRecord,
+    ToggleRecord,
+    failure_details,
+    import_details,
+    record_mutation,
+    record_toggle,
+    sync_details,
+)
 from ghillie.registry.errors import ESTATE_NOT_FOUND_REASON, RegistrySyncError
 from ghillie.registry.errors import (
     RepositoryNotFoundError as RegistryRepositoryNotFoundError,
@@ -61,8 +68,6 @@ if typ.TYPE_CHECKING:
     from ghillie.catalogue.models import Catalogue
     from ghillie.registry.models import SyncResult
     from ghillie.registry.service import RepositoryRegistryService
-
-logger = get_logger(__name__)
 
 
 class EstateManagementService:
@@ -173,13 +178,11 @@ class EstateManagementService:
             If the catalogue database cannot be written.
 
         """
-        started = time.perf_counter()
-        mutation = _MutationLog(
+        mutation = MutationRecord.begin(
             operation="estate.import",
             estate_key=estate_key,
             commit_sha=request.commit_sha,
             dry_run=request.dry_run,
-            started=started,
         )
         try:
             validate_estate_key_reference(estate_key)
@@ -190,20 +193,30 @@ class EstateManagementService:
             # D21: cancellation derives from ``BaseException``, so the clause
             # below cannot see it. It is still a terminal outcome, and it must
             # keep propagating so the caller's task unwinds.
-            _log_mutation(mutation, outcome="cancelled", details=_failure_details(exc))
+            record_mutation(
+                mutation,
+                outcome=MutationOutcome.CANCELLED,
+                details=failure_details(exc),
+            )
             raise
         except Exception as exc:
             # D21: a rejected or failed attempt is still a mutation attempt, and
             # an operator needs its outcome and duration to tell a client error
             # apart from a storage outage.
-            _log_mutation(mutation, outcome="failed", details=_failure_details(exc))
+            record_mutation(
+                mutation,
+                outcome=MutationOutcome.FAILED,
+                details=failure_details(exc),
+            )
             raise
 
         summary = _import_summary(estate_key, request, result)
-        _log_mutation(
+        record_mutation(
             mutation,
-            outcome="skipped" if result.skipped else "succeeded",
-            details=_import_details(summary),
+            outcome=(
+                MutationOutcome.SKIPPED if result.skipped else MutationOutcome.SUCCEEDED
+            ),
+            details=import_details(summary),
         )
         return summary
 
@@ -275,13 +288,11 @@ class EstateManagementService:
             If the catalogue or registry database cannot be reached.
 
         """
-        started = time.perf_counter()
-        mutation = _MutationLog(
+        mutation = MutationRecord.begin(
             operation="estate.registry-sync",
             estate_key=estate_key,
             commit_sha=None,
             dry_run=dry_run,
-            started=started,
         )
         try:
             validate_estate_key_reference(estate_key)
@@ -290,17 +301,25 @@ class EstateManagementService:
         except asyncio.CancelledError as exc:
             # D21: as for the import, cancellation is a terminal outcome the
             # ``except Exception`` clause below would miss.
-            _log_mutation(mutation, outcome="cancelled", details=_failure_details(exc))
+            record_mutation(
+                mutation,
+                outcome=MutationOutcome.CANCELLED,
+                details=failure_details(exc),
+            )
             raise
         except Exception as exc:
-            _log_mutation(mutation, outcome="failed", details=_failure_details(exc))
+            record_mutation(
+                mutation,
+                outcome=MutationOutcome.FAILED,
+                details=failure_details(exc),
+            )
             raise
 
         summary = _sync_summary(estate_key, result, dry_run=dry_run)
-        _log_mutation(
+        record_mutation(
             mutation,
-            outcome="succeeded",
-            details=_sync_details(summary),
+            outcome=MutationOutcome.SUCCEEDED,
+            details=sync_details(summary),
         )
         return summary
 
@@ -403,14 +422,17 @@ class EstateManagementService:
             If the registry database cannot be written.
 
         """
-        started = time.perf_counter()
-        toggle = _ToggleLog(owner=owner, name=name, enabled=enabled, started=started)
+        toggle = ToggleRecord.begin(owner=owner, name=name, enabled=enabled)
         try:
             changed = await self._toggle(owner, name, enabled=enabled)
         except asyncio.CancelledError as exc:
             # D21: cancellation is a terminal outcome the ``except Exception``
             # clause below would miss, and it must keep propagating.
-            _log_toggle(toggle, outcome="cancelled", details=_failure_details(exc))
+            record_toggle(
+                toggle,
+                outcome=MutationOutcome.CANCELLED,
+                details=failure_details(exc),
+            )
             raise
         except Exception as exc:
             # D21: a direct service caller has no HTTP catch-all, so any failure
@@ -422,9 +444,9 @@ class EstateManagementService:
             raise translated from exc
 
         previous = not enabled if changed else enabled
-        _log_toggle(
+        record_toggle(
             toggle,
-            outcome="succeeded",
+            outcome=MutationOutcome.SUCCEEDED,
             details=f"previous={previous} changed={changed}",
         )
         return IngestionToggleOutcome(
@@ -530,34 +552,8 @@ def _import_summary(
     )
 
 
-def _import_details(summary: CatalogueImportSummary) -> str:
-    """Render the per-record counts for the structured import log line."""
-    return (
-        f"projects={summary.projects.created}/"
-        f"{summary.projects.updated}/{summary.projects.deleted} "
-        f"components={summary.components.created}/"
-        f"{summary.components.updated}/{summary.components.deleted} "
-        f"repositories={summary.repositories.created}/"
-        f"{summary.repositories.updated}/"
-        f"{summary.repositories.deleted} "
-        f"edges={summary.edges.created}/"
-        f"{summary.edges.updated}/"
-        f"{summary.edges.deleted}"
-    )
-
-
-def _failure_details(exc: BaseException) -> str:
-    """Render the failure class and message for the structured mutation line.
-
-    The message can quote client-supplied text, so it is rendered with ``%r``
-    for the same reason as the request fields: a newline must not be able to
-    forge a second record.
-    """
-    return f"error={type(exc).__name__} message={str(exc)!r}"
-
-
 def _toggle_failure(
-    toggle: _ToggleLog,
+    toggle: ToggleRecord,
     exc: Exception,
     *,
     owner: str,
@@ -575,9 +571,17 @@ def _toggle_failure(
         case SQLAlchemyError():
             error = StorageUnavailableError(_STORAGE_MESSAGE)
         case _:
-            _log_toggle(toggle, outcome="failed", details=_failure_details(exc))
+            record_toggle(
+                toggle,
+                outcome=MutationOutcome.FAILED,
+                details=failure_details(exc),
+            )
             return None
-    _log_toggle(toggle, outcome="failed", details=_failure_details(error))
+    record_toggle(
+        toggle,
+        outcome=MutationOutcome.FAILED,
+        details=failure_details(error),
+    )
     return error
 
 
@@ -598,17 +602,6 @@ def _sync_summary(
         repositories_conflicted=tuple(result.repositories_conflicted),
         repositories_left_disabled=tuple(result.repositories_left_disabled),
         repositories_left_disabled_count=result.repositories_left_disabled_count,
-    )
-
-
-def _sync_details(summary: RegistrySyncSummary) -> str:
-    """Render the per-repository counts for the structured sync log line."""
-    return (
-        f"created={summary.repositories_created} "
-        f"updated={summary.repositories_updated} "
-        f"deactivated={summary.repositories_deactivated} "
-        f"conflicted={len(summary.repositories_conflicted)} "
-        f"left_disabled={summary.repositories_left_disabled_count}"
     )
 
 
@@ -649,69 +642,3 @@ def _validate_page(limit: int, offset: int) -> None:
 def _next_offset(limit: int, offset: int, *, has_more: bool) -> int | None:
     """Return the following page's offset, or ``None`` on the last page."""
     return offset + limit if has_more else None
-
-
-def _elapsed_ms(started: float) -> float:
-    """Return the milliseconds elapsed since *started*."""
-    return (time.perf_counter() - started) * 1000
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class _MutationLog:
-    """Request-scoped fields shared by every structured mutation line (D21)."""
-
-    operation: str
-    estate_key: str
-    commit_sha: str | None
-    dry_run: bool
-    started: float
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class _ToggleLog:
-    """Request-scoped fields shared by every toggle record (D21)."""
-
-    owner: str
-    name: str
-    enabled: bool
-    started: float
-
-
-def _log_toggle(toggle: _ToggleLog, *, outcome: str, details: str) -> None:
-    """Write the structured record for one ingestion toggle.
-
-    The repository identity is rendered with ``%r`` for the same reason as
-    the estate key: both come from the request and must not be able to forge
-    a second record.
-    """
-    log_info(
-        logger,
-        "estate.set-ingestion owner=%r name=%r enabled=%s %s "
-        "duration_ms=%.1f outcome=%s",
-        toggle.owner,
-        toggle.name,
-        toggle.enabled,
-        details,
-        _elapsed_ms(toggle.started),
-        outcome,
-    )
-
-
-def _log_mutation(mutation: _MutationLog, *, outcome: str, details: str) -> None:
-    """Write the one structured mutation line required by D21.
-
-    ``estate_key`` and ``commit_sha`` come from the request, so they are
-    rendered with ``%r``: a newline or other control character must appear as
-    an escape rather than split the record into a forged second line.
-    """
-    log_info(
-        logger,
-        "%s estate_key=%r commit_sha=%r dry_run=%s %s duration_ms=%.1f outcome=%s",
-        mutation.operation,
-        mutation.estate_key,
-        mutation.commit_sha or "-",
-        mutation.dry_run,
-        details,
-        _elapsed_ms(mutation.started),
-        outcome,
-    )

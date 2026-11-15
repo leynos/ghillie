@@ -8,10 +8,12 @@ start-up when ``GHILLIE_DB_BOOTSTRAP=create-all``.
 import typing as typ
 
 import pytest
+import pytest_asyncio
 from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
     from pathlib import Path
 
 _EXPECTED_TABLES = {
@@ -49,49 +51,55 @@ async def _table_names(engine: AsyncEngine) -> set[str]:
     return set(names)
 
 
+@pytest_asyncio.fixture
+async def engine(tmp_path: Path) -> cabc.AsyncIterator[AsyncEngine]:
+    """Yield a fresh SQLite engine, and dispose of it whatever the test does.
+
+    ``tmp_path`` is per test, so each test still starts from its own empty
+    database; only the create/dispose bookkeeping is shared.
+    """
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'bootstrap.db'}")
+    try:
+        yield engine
+    finally:
+        await engine.dispose()
+
+
 @pytest.mark.asyncio
-async def test_init_all_storage_creates_every_table(tmp_path: Path) -> None:
+async def test_init_all_storage_creates_every_table(engine: AsyncEngine) -> None:
     """An empty SQLite database gains every layer's tables."""
     from ghillie.storage_bootstrap import init_all_storage
 
-    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'bootstrap.db'}")
-    try:
-        await init_all_storage(engine)
+    await init_all_storage(engine)
 
-        assert await _table_names(engine) >= _EXPECTED_TABLES, (
-            "bootstrap should create every layer's tables"
-        )
-    finally:
-        await engine.dispose()
+    assert await _table_names(engine) >= _EXPECTED_TABLES, (
+        "bootstrap should create every layer's tables"
+    )
 
 
 @pytest.mark.asyncio
-async def test_init_all_storage_is_idempotent(tmp_path: Path) -> None:
+async def test_init_all_storage_is_idempotent(engine: AsyncEngine) -> None:
     """Running the bootstrap twice succeeds and leaves existing data intact."""
     from ghillie.storage_bootstrap import init_all_storage
 
-    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'twice.db'}")
-    try:
-        await init_all_storage(engine)
-        first = await _table_names(engine)
+    await init_all_storage(engine)
+    first = await _table_names(engine)
 
-        async with engine.begin() as connection:
-            await connection.execute(
-                text(
-                    "INSERT INTO estates (id, key, name, description, "
-                    "created_at, updated_at) VALUES "
-                    "('estate-1', 'demo', 'Demo', NULL, "
-                    "'2024-01-01 00:00:00', '2024-01-01 00:00:00')"
-                )
+    async with engine.begin() as connection:
+        await connection.execute(
+            text(
+                "INSERT INTO estates (id, key, name, description, "
+                "created_at, updated_at) VALUES "
+                "('estate-1', 'demo', 'Demo', NULL, "
+                "'2024-01-01 00:00:00', '2024-01-01 00:00:00')"
             )
-
-        await init_all_storage(engine)
-
-        assert await _table_names(engine) == first, (
-            "a second bootstrap should not change the schema"
         )
-        async with engine.connect() as connection:
-            keys = (await connection.execute(text("SELECT key FROM estates"))).all()
-        assert keys == [("demo",)], "a second bootstrap should preserve data"
-    finally:
-        await engine.dispose()
+
+    await init_all_storage(engine)
+
+    assert await _table_names(engine) == first, (
+        "a second bootstrap should not change the schema"
+    )
+    async with engine.connect() as connection:
+        keys = (await connection.execute(text("SELECT key FROM estates"))).all()
+    assert keys == [("demo",)], "a second bootstrap should preserve data"

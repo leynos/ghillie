@@ -224,7 +224,7 @@ async def test_sync_registry_logs_one_terminal_record_when_it_succeeds(
     """D21: a successful sync emits exactly one terminal record."""
     await import_catalogue(service)
 
-    with capture_femto_logs("ghillie.estate.service") as logs:
+    with capture_femto_logs("ghillie.estate.observability") as logs:
         await service.sync_registry(_ESTATE_KEY, dry_run=False)
         logs.wait_for_timeout()
 
@@ -256,7 +256,7 @@ async def test_sync_registry_logs_one_terminal_record_when_it_fails(
 
     monkeypatch.setattr(RepositoryRegistryService, "sync_from_catalogue", _fail)
 
-    with capture_femto_logs("ghillie.estate.service") as logs:
+    with capture_femto_logs("ghillie.estate.observability") as logs:
         with pytest.raises(EstateConflictError):
             await service.sync_registry(_ESTATE_KEY, dry_run=False)
         logs.wait_for_timeout()
@@ -291,7 +291,7 @@ async def test_sync_registry_logs_a_cancelled_attempt_once(
 
     monkeypatch.setattr(RepositoryRegistryService, "sync_from_catalogue", _cancel)
 
-    with capture_femto_logs("ghillie.estate.service") as logs:
+    with capture_femto_logs("ghillie.estate.observability") as logs:
         with pytest.raises(asyncio.CancelledError):
             await service.sync_registry(_ESTATE_KEY, dry_run=False)
         logs.wait_for_timeout()
@@ -308,7 +308,7 @@ async def test_sync_registry_logs_a_missing_estate_as_a_failed_attempt(
     service: EstateManagementService,
 ) -> None:
     """D21: a sync for an unknown estate still produces one terminal record."""
-    with capture_femto_logs("ghillie.estate.service") as logs:
+    with capture_femto_logs("ghillie.estate.observability") as logs:
         with pytest.raises(EstateNotFoundError):
             await service.sync_registry("missing", dry_run=False)
         logs.wait_for_timeout()
@@ -458,7 +458,7 @@ async def test_set_ingestion_escapes_a_hostile_repository_name(
     monkeypatch.setattr(service, "_toggle", _changed)
     hostile = "alpha\nestate.set-ingestion outcome=succeeded"
 
-    with capture_femto_logs("ghillie.estate.service") as logs:
+    with capture_femto_logs("ghillie.estate.observability") as logs:
         await service.set_ingestion(_OWNER, hostile, enabled=False)
         logs.wait_for_timeout()
 
@@ -481,7 +481,7 @@ async def test_set_ingestion_logs_one_terminal_record_when_it_fails(
     service: EstateManagementService,
 ) -> None:
     """D21: a failed toggle logs one terminal record with its error class."""
-    with capture_femto_logs("ghillie.estate.service") as logs:
+    with capture_femto_logs("ghillie.estate.observability") as logs:
         with pytest.raises(RepositoryNotFoundError):
             await service.set_ingestion(_OWNER, "missing", enabled=True)
         logs.wait_for_timeout()
@@ -514,7 +514,7 @@ async def test_set_ingestion_logs_one_terminal_record_for_an_unexpected_error(
 
     monkeypatch.setattr(registry, "enable_ingestion", _fail)
 
-    with capture_femto_logs("ghillie.estate.service") as logs:
+    with capture_femto_logs("ghillie.estate.observability") as logs:
         with pytest.raises(RuntimeError, match="boom"):
             await service.set_ingestion(_OWNER, _REPO_NAME, enabled=True)
         logs.wait_for_timeout()
@@ -540,7 +540,7 @@ async def test_set_ingestion_logs_a_cancelled_toggle_once(
 
     monkeypatch.setattr(registry, "enable_ingestion", _cancel)
 
-    with capture_femto_logs("ghillie.estate.service") as logs:
+    with capture_femto_logs("ghillie.estate.observability") as logs:
         with pytest.raises(asyncio.CancelledError):
             await service.set_ingestion(_OWNER, _REPO_NAME, enabled=True)
         logs.wait_for_timeout()
