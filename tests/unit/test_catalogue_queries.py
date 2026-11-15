@@ -66,6 +66,50 @@ async def _add_import(
         )
 
 
+async def _assert_read_only[ReadResult](
+    session_factory: async_sessionmaker[AsyncSession],
+    operation: typ.Callable[[], typ.Awaitable[ReadResult]],
+    *,
+    description: str,
+) -> ReadResult:
+    """Prove one read query writes no row and emits no mutation record.
+
+    Parameters
+    ----------
+    session_factory:
+        Factory for the session the query uses.
+    operation:
+        Zero-argument callable returning the read to await. It runs only after
+        the seed data is in place, so the snapshot covers exactly its effects.
+    description:
+        Short name for the operation, used in the failure messages.
+
+    Returns
+    -------
+    ReadResult
+        Whatever the read returned, so a caller can assert on it.
+
+    """
+    estate = await _add_estate(session_factory, key="alpha")
+    await _add_import(
+        session_factory,
+        estate,
+        commit_sha="c1",
+        imported_at=dt.datetime(2026, 2, 1, tzinfo=dt.UTC),
+    )
+    before = await _row_counts(session_factory)
+
+    with capture_femto_logs(_MUTATION_LOGGER) as logs:
+        result = await operation()
+        logs.wait_for_timeout()
+
+    assert await _row_counts(session_factory) == before, (
+        f"a {description} must not write"
+    )
+    assert not logs.records, f"a {description} must not emit a mutation record"
+    return result
+
+
 @pytest.mark.asyncio
 async def test_list_estates_is_empty_initially(
     session_factory: async_sessionmaker[AsyncSession],
@@ -208,21 +252,11 @@ async def test_list_estates_is_read_only(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     """A listing writes no row and emits no mutation record."""
-    estate = await _add_estate(session_factory, key="alpha")
-    await _add_import(
+    await _assert_read_only(
         session_factory,
-        estate,
-        commit_sha="c1",
-        imported_at=dt.datetime(2026, 2, 1, tzinfo=dt.UTC),
+        lambda: list_estates(session_factory, limit=10, offset=0),
+        description="listing",
     )
-    before = await _row_counts(session_factory)
-
-    with capture_femto_logs(_MUTATION_LOGGER) as logs:
-        await list_estates(session_factory, limit=10, offset=0)
-        logs.wait_for_timeout()
-
-    assert await _row_counts(session_factory) == before, "a listing must not write"
-    assert not logs.records, "a listing must not emit a mutation record"
 
 
 @pytest.mark.asyncio
@@ -230,22 +264,12 @@ async def test_get_estate_by_key_is_read_only(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     """A single-estate lookup writes no row and emits no mutation record."""
-    estate = await _add_estate(session_factory, key="alpha")
-    await _add_import(
+    row = await _assert_read_only(
         session_factory,
-        estate,
-        commit_sha="c1",
-        imported_at=dt.datetime(2026, 2, 1, tzinfo=dt.UTC),
+        lambda: get_estate_by_key(session_factory, "alpha"),
+        description="lookup",
     )
-    before = await _row_counts(session_factory)
-
-    with capture_femto_logs(_MUTATION_LOGGER) as logs:
-        row = await get_estate_by_key(session_factory, "alpha")
-        logs.wait_for_timeout()
-
     assert row is not None, "the lookup should resolve the seeded estate"
-    assert await _row_counts(session_factory) == before, "a lookup must not write"
-    assert not logs.records, "a lookup must not emit a mutation record"
 
 
 def test_estate_row_is_immutable() -> None:
