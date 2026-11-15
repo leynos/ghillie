@@ -21,21 +21,30 @@ from sqlalchemy.exc import (
 )
 
 from ghillie.catalogue.importer import CatalogueImporter, CatalogueImportResult
+from ghillie.catalogue.loader import parse_catalogue_text
 from ghillie.catalogue.storage import Estate, ProjectRecord
 from ghillie.catalogue.validation import CatalogueValidationError
+from ghillie.estate.collaborators import EstateCollaborators
 from ghillie.estate.errors import (
     CatalogueRejectedError,
     EstateConflictError,
     InvalidEstateKeyError,
     StorageUnavailableError,
 )
+from ghillie.estate.observability import MutationRecorder
+from ghillie.estate.service import EstateManagementService
 from tests.helpers.femtologging_capture import capture_femto_logs
-from tests.unit.estate_test_helpers import count_rows, import_catalogue
+from tests.unit.estate_test_helpers import (
+    catalogue_document,
+    count_rows,
+    import_catalogue,
+)
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-    from ghillie.estate.service import EstateManagementService
+    from ghillie.catalogue.models import Catalogue
+    from ghillie.registry.service import RepositoryRegistryService
     from tests.helpers.femtologging_capture import FemtoLogCapture
 
 _ESTATE_KEY = "demo"
@@ -534,4 +543,109 @@ async def test_estate_locks_are_not_retained_after_use(
     assert created, "each import should create a per-estate lock"
     assert all(lock_ref() is None for lock_ref in created), (
         "idle locks should be released"
+    )
+
+
+# ---------------------------------------------------------------------------
+# injected collaborators
+# ---------------------------------------------------------------------------
+
+
+class _TickingClock:
+    """Return successive instants, so a service-level duration is exact.
+
+    The step is exact in binary, so ``0.25`` seconds renders as ``250.0``
+    milliseconds without a floating-point rounding surprise.
+    """
+
+    def __init__(self, step: float) -> None:
+        """Start at zero and advance by *step* on each reading."""
+        self._step = step
+        self._now = 0.0
+
+    def __call__(self) -> float:
+        """Return the current instant and move to the next one."""
+        now = self._now
+        self._now += self._step
+        return now
+
+
+@pytest.mark.asyncio
+async def test_a_substituted_catalogue_parser_is_used(
+    session_factory: async_sessionmaker[AsyncSession],
+    registry: RepositoryRegistryService,
+) -> None:
+    """The parser is a constructor seam rather than a module global."""
+    parsed: list[str] = []
+
+    def _parse(document: str) -> Catalogue:
+        """Record the uploaded document, then parse it as production does."""
+        parsed.append(document)
+        return parse_catalogue_text(document)
+
+    service = EstateManagementService(
+        session_factory,
+        registry=registry,
+        collaborators=EstateCollaborators(parse_catalogue=_parse),
+    )
+
+    await import_catalogue(service)
+
+    assert parsed == [catalogue_document()], (
+        "the injected parser should receive the request's document"
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_substituted_importer_factory_builds_the_importer(
+    session_factory: async_sessionmaker[AsyncSession],
+    registry: RepositoryRegistryService,
+) -> None:
+    """The service builds its importer through the injected factory."""
+    built: list[tuple[str, str | None]] = []
+
+    def _build(
+        sessions: async_sessionmaker[AsyncSession],
+        *,
+        estate_key: str,
+        estate_name: str | None,
+    ) -> CatalogueImporter:
+        """Record the estate the importer is built for."""
+        built.append((estate_key, estate_name))
+        return CatalogueImporter(
+            sessions, estate_key=estate_key, estate_name=estate_name
+        )
+
+    service = EstateManagementService(
+        session_factory,
+        registry=registry,
+        collaborators=EstateCollaborators(importer_factory=_build),
+    )
+
+    summary = await import_catalogue(service, estate_name="Injected")
+
+    assert built == [("demo", "Injected")], "the factory should build one importer"
+    assert summary.projects.created == 1, "the built importer should do the work"
+
+
+@pytest.mark.asyncio
+async def test_the_service_times_records_with_the_injected_clock(
+    session_factory: async_sessionmaker[AsyncSession],
+    registry: RepositoryRegistryService,
+) -> None:
+    """A substituted clock pins the duration on the service's record."""
+    clock = _TickingClock(step=0.25)
+    service = EstateManagementService(
+        session_factory,
+        registry=registry,
+        collaborators=EstateCollaborators(recorder=MutationRecorder(clock=clock)),
+    )
+
+    with capture_femto_logs("ghillie.estate.observability") as logs:
+        await import_catalogue(service)
+        logs.wait_for_timeout()
+
+    [line] = _mutation_lines(logs, "estate.import")
+    assert "duration_ms=250.0" in line, (
+        "the record should take its duration from the injected clock"
     )

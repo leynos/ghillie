@@ -11,6 +11,7 @@ import typing as typ
 import pytest
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 
+from ghillie.catalogue.storage import CatalogueImportRecord, Estate, ProjectRecord
 from ghillie.estate.errors import (
     EstateConflictError,
     EstateNotFoundError,
@@ -22,16 +23,36 @@ from ghillie.estate.errors import (
 from ghillie.estate.models import MAX_PAGE_OFFSET, PageRequest, RepositoryQuery
 from ghillie.registry.errors import ESTATE_NOT_FOUND_REASON, RegistrySyncError
 from ghillie.registry.service import RepositoryRegistryService
+from ghillie.silver.storage import Repository as SilverRepository
 from tests.helpers.femtologging_capture import capture_femto_logs
-from tests.unit.estate_test_helpers import catalogue_document, import_catalogue
+from tests.unit.estate_test_helpers import (
+    catalogue_document,
+    count_rows,
+    import_catalogue,
+)
 
 if typ.TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
     from ghillie.estate.service import EstateManagementService
     from tests.helpers.femtologging_capture import FemtoLogCapture
 
 _ESTATE_KEY = "demo"
 _OWNER = "org"
 _REPO_NAME = "alpha"
+_MUTATION_LOGGER = "ghillie.estate.observability"
+
+
+async def _store_counts(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> tuple[int, int, int, int]:
+    """Snapshot every row count the estate read paths could disturb."""
+    return (
+        await count_rows(session_factory, Estate),
+        await count_rows(session_factory, ProjectRecord),
+        await count_rows(session_factory, CatalogueImportRecord),
+        await count_rows(session_factory, SilverRepository),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -77,6 +98,24 @@ async def test_list_estates_carries_the_latest_import(
     assert summary.name == "Demo", "summary should carry the estate name"
     assert summary.last_import_commit_sha == "c1", "summary should name the commit"
     assert summary.last_imported_at is not None, "summary should carry the import time"
+
+
+@pytest.mark.asyncio
+async def test_list_estates_leaves_the_stores_and_the_log_untouched(
+    service: EstateManagementService,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """A listing is a read: no row changes and no D21 record is emitted."""
+    await import_catalogue(service)
+    await service.sync_registry(_ESTATE_KEY, dry_run=False)
+    before = await _store_counts(session_factory)
+
+    with capture_femto_logs(_MUTATION_LOGGER) as logs:
+        await service.list_estates(PageRequest())
+        logs.wait_for_timeout()
+
+    assert await _store_counts(session_factory) == before, "a listing must not write"
+    assert not logs.records, "a listing must not emit a mutation record"
 
 
 @pytest.mark.asyncio
@@ -417,6 +456,33 @@ async def test_list_repositories_requires_an_existing_estate(
     """An unknown estate is reported as not found."""
     with pytest.raises(EstateNotFoundError):
         await service.list_repositories("missing", RepositoryQuery())
+
+
+@pytest.mark.asyncio
+async def test_list_repositories_leaves_the_stores_and_the_log_untouched(
+    service: EstateManagementService,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """The catalogue and Silver reads behind a listing write nothing.
+
+    The path resolves the estate through the catalogue factory and then lists
+    Silver through the registry, so both stores are snapshotted.
+    """
+    await import_catalogue(service)
+    await service.sync_registry(_ESTATE_KEY, dry_run=False)
+    before = await _store_counts(session_factory)
+
+    with capture_femto_logs(_MUTATION_LOGGER) as logs:
+        page = await service.list_repositories(_ESTATE_KEY, RepositoryQuery())
+        logs.wait_for_timeout()
+
+    assert [repo.slug for repo in page.items] == [f"{_OWNER}/{_REPO_NAME}"], (
+        "the listing should read the synced repository"
+    )
+    assert await _store_counts(session_factory) == before, (
+        "a repository listing must not write"
+    )
+    assert not logs.records, "a repository listing must not emit a mutation record"
 
 
 # ---------------------------------------------------------------------------

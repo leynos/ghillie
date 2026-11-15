@@ -1032,6 +1032,41 @@ per pull request.
       green on the repaired tree: `test` 1496 passed, 17 skipped, interrogate
       100.0%, Ruff and Skylos clean, and `cs check` reports code health 10.00
       for both changed modules.
+- [x] (2026-11-15) Answered the third hosted review of PR-B (`89aa30b`, review
+      `5909375798`) in full. Its Unit Architecture error asked for five
+      changes, and its documentation checks asked for the rest of the guides.
+      Rendering and timing now live behind `MutationRecorder` in
+      `ghillie/estate/observability.py`, which owns the record format, the
+      outcome vocabulary, and an injectable clock defaulting to
+      `time.perf_counter`; the record dataclasses keep only request fields and
+      the start instant, the format strings and `%r` escaping are unchanged,
+      and the service no longer measures anything. The importer factory and the
+      catalogue parser join the recorder in
+      `ghillie/estate/collaborators.py`, so `EstateManagementService` takes one
+      `EstateCollaborators` value and a test can substitute a single seam. The
+      pure translators moved to `ghillie/estate/translation.py` with the three
+      user-facing messages, and the service records the outcome itself, using
+      the translated error when a toggle failure has one. Query read-only tests
+      now snapshot the estate, project, import, and Silver repository counts
+      before and after `list_estates`, `get_estate_by_key`, and
+      `list_repositories` (both the catalogue and Silver paths) and assert that
+      no recorder line is emitted. The DDL placement is documented in the
+      `StorageBootstrapMiddleware` docstring and the developers guide: the ASGI
+      lifespan hook is the one point every driver awaits before accepting
+      requests, while the composition root still decides whether it runs.
+      The Skylos entrypoint pin shrinks from nine service helpers to the five
+      pure mappers that remain, and gains a method rule for `MutationRecorder`:
+      the service calls the recorder through an injected instance attribute,
+      which the analyser's liveness graph does not follow, so
+      `begin_mutation`, `begin_toggle`, `record_mutation`, `record_toggle` and
+      `_elapsed_ms` are declared entry points, with the verified callers named
+      in the rule's reason. The documentation additions are a start-up
+      warning, schema-bootstrap section, `curl` examples, and completed
+      environment and runtime tables in `docs/users-guide.md`; a 2.0.0 estate
+      API section in `docs/migration-guide.md`; middleware, Hecate placement,
+      and the recorder/collaborator design in `docs/developers-guide.md`; and
+      the corrected route conditions plus labelled D13 and D14 decision records
+      in `docs/ghillie-design.md` §8.4.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
@@ -1316,10 +1351,14 @@ expert-panel review.
   `except Exception` clause would otherwise leave a cancelled attempt with no
   record at all. The rendering itself lives in
   `ghillie/estate/observability.py`, following the pattern D31 set for registry
-  sync: the module owns the record format and the outcome vocabulary, and the
-  service only decides which outcome applies. Keeping it out of
-  `EstateManagementService` also keeps that class about orchestration, which is
-  what the hosted Unit Architecture check asks for.
+  sync: the `MutationRecorder` there owns the record format, the outcome
+  vocabulary, and the clock, and the service only decides which outcome
+  applies. The recorder is injected through `EstateCollaborators` beside the
+  importer factory and the catalogue parser, so a test can substitute one seam
+  — including a fixed clock that pins `duration_ms` — without the others.
+  Keeping rendering and timing out of `EstateManagementService` also keeps that
+  class about orchestration, which is what the hosted Unit Architecture check
+  asks for.
 - D22, catalogue-import request value. The port method is
   `import_catalogue(estate_key, request: CatalogueImportRequest)` rather than a
   five-argument signature. Rationale: the four request fields travel together

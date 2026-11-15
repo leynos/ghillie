@@ -1,34 +1,35 @@
 """Application service coordinating catalogue import and registry sync.
 
-The service owns the units of work behind estate management. It parses
-untrusted YAML off the event loop, serializes import and sync per estate, and
-translates catalogue, registry, and SQLAlchemy failures into the estate error
-vocabulary so adapters never depend on an underlying package.
+The service owns the units of work behind estate management. It validates a
+request, serializes import and sync per estate, and orchestrates the importer
+and registry. Failure translation lives in :mod:`ghillie.estate.translation` and
+the D21 records in :mod:`ghillie.estate.observability`; both are reached through
+the injected :class:`~ghillie.estate.collaborators.EstateCollaborators`, so the
+service itself contains only validation, locking, orchestration, and the
+decision of which outcome applies.
 """
+
+from __future__ import annotations
 
 import asyncio
 import typing as typ
 import weakref
 
-from sqlalchemy.exc import (
-    IntegrityError,
-    InterfaceError,
-    OperationalError,
-    SQLAlchemyError,
-)
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-from ghillie.catalogue.importer import CatalogueImporter, CatalogueImportResult
-from ghillie.catalogue.loader import parse_catalogue_text
 from ghillie.catalogue.queries import EstateRow, get_estate_by_key, list_estates
 from ghillie.catalogue.validation import CatalogueValidationError
+from ghillie.estate import translation
+from ghillie.estate.collaborators import (
+    CatalogueParser,
+    EstateCollaborators,
+    ImporterFactory,
+)
 from ghillie.estate.errors import (
-    CatalogueRejectedError,
     EstateConflictError,
     EstateNotFoundError,
     InvalidPaginationError,
-    Issue,
     RegistrySyncFailedError,
-    RepositoryNotFoundError,
     StorageUnavailableError,
 )
 from ghillie.estate.models import (
@@ -49,22 +50,17 @@ from ghillie.estate.models import (
 )
 from ghillie.estate.observability import (
     MutationOutcome,
-    MutationRecord,
-    ToggleRecord,
+    MutationRecorder,
     failure_details,
     import_details,
-    record_mutation,
-    record_toggle,
     sync_details,
 )
-from ghillie.registry.errors import ESTATE_NOT_FOUND_REASON, RegistrySyncError
-from ghillie.registry.errors import (
-    RepositoryNotFoundError as RegistryRepositoryNotFoundError,
-)
+from ghillie.registry.errors import RegistrySyncError
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+    from ghillie.catalogue.importer import CatalogueImportResult
     from ghillie.catalogue.models import Catalogue
     from ghillie.registry.models import SyncResult
     from ghillie.registry.service import RepositoryRegistryService
@@ -79,6 +75,10 @@ class EstateManagementService:
         Factory for async catalogue sessions.
     registry:
         Registry collaborator that projects catalogue repositories into Silver.
+    collaborators:
+        Importer factory, catalogue parser, and D21 recorder. ``None`` builds
+        the production defaults; a test substitutes one value so it can parse
+        without a database, supply an importer double, or pin the clock.
 
     Notes
     -----
@@ -92,10 +92,17 @@ class EstateManagementService:
         session_factory: async_sessionmaker[AsyncSession],
         *,
         registry: RepositoryRegistryService,
+        collaborators: EstateCollaborators | None = None,
     ) -> None:
-        """Store the session factory and registry collaborator."""
+        """Store the session factory, registry, and collaborators."""
         self._session_factory = session_factory
         self._registry = registry
+        resolved = collaborators if collaborators is not None else EstateCollaborators()
+        # Store each seam beside the service's own state rather than keeping
+        # the bundle: every call site then names the collaborator it uses.
+        self._importer_factory: ImporterFactory = resolved.importer_factory
+        self._parse_text: CatalogueParser = resolved.parse_catalogue
+        self._recorder: MutationRecorder = resolved.recorder
         # A weak map keeps per-estate serialization without retaining a lock
         # for every key a client has ever mentioned. A coroutine inside
         # ``async with`` holds the only strong reference, so an idle lock is
@@ -133,7 +140,7 @@ class EstateManagementService:
                 offset=page.offset,
             )
         except SQLAlchemyError as exc:
-            raise StorageUnavailableError(_STORAGE_MESSAGE) from exc
+            raise StorageUnavailableError(translation.STORAGE_MESSAGE) from exc
 
         has_more = len(rows) > page.limit
         items = tuple(_estate_summary(row) for row in rows[: page.limit])
@@ -178,7 +185,7 @@ class EstateManagementService:
             If the catalogue database cannot be written.
 
         """
-        mutation = MutationRecord.begin(
+        mutation = self._recorder.begin_mutation(
             operation="estate.import",
             estate_key=estate_key,
             commit_sha=request.commit_sha,
@@ -186,14 +193,14 @@ class EstateManagementService:
         )
         try:
             validate_estate_key_reference(estate_key)
-            catalogue = await _parse_catalogue(request.catalogue_yaml)
+            catalogue = await self._parse_catalogue(request.catalogue_yaml)
             async with self._lock_for(estate_key):
                 result = await self._run_import(estate_key, catalogue, request)
         except asyncio.CancelledError as exc:
             # D21: cancellation derives from ``BaseException``, so the clause
             # below cannot see it. It is still a terminal outcome, and it must
             # keep propagating so the caller's task unwinds.
-            record_mutation(
+            self._recorder.record_mutation(
                 mutation,
                 outcome=MutationOutcome.CANCELLED,
                 details=failure_details(exc),
@@ -203,7 +210,7 @@ class EstateManagementService:
             # D21: a rejected or failed attempt is still a mutation attempt, and
             # an operator needs its outcome and duration to tell a client error
             # apart from a storage outage.
-            record_mutation(
+            self._recorder.record_mutation(
                 mutation,
                 outcome=MutationOutcome.FAILED,
                 details=failure_details(exc),
@@ -211,7 +218,7 @@ class EstateManagementService:
             raise
 
         summary = _import_summary(estate_key, request, result)
-        record_mutation(
+        self._recorder.record_mutation(
             mutation,
             outcome=(
                 MutationOutcome.SKIPPED if result.skipped else MutationOutcome.SUCCEEDED
@@ -238,7 +245,7 @@ class EstateManagementService:
             if request.estate_name is not None
             else (stored.name if stored is not None else None)
         )
-        importer = CatalogueImporter(
+        importer = self._importer_factory(
             self._session_factory,
             estate_key=estate_key,
             estate_name=resolved_name,
@@ -250,11 +257,11 @@ class EstateManagementService:
                 dry_run=request.dry_run,
             )
         except CatalogueValidationError as exc:
-            raise _catalogue_rejected(exc) from exc
+            raise translation.catalogue_rejected(exc) from exc
         except IntegrityError as exc:
-            raise EstateConflictError(_CONFLICT_MESSAGE) from exc
+            raise EstateConflictError(translation.CONFLICT_MESSAGE) from exc
         except SQLAlchemyError as exc:
-            raise StorageUnavailableError(_STORAGE_MESSAGE) from exc
+            raise StorageUnavailableError(translation.STORAGE_MESSAGE) from exc
         return result
 
     async def sync_registry(
@@ -288,7 +295,7 @@ class EstateManagementService:
             If the catalogue or registry database cannot be reached.
 
         """
-        mutation = MutationRecord.begin(
+        mutation = self._recorder.begin_mutation(
             operation="estate.registry-sync",
             estate_key=estate_key,
             commit_sha=None,
@@ -301,14 +308,14 @@ class EstateManagementService:
         except asyncio.CancelledError as exc:
             # D21: as for the import, cancellation is a terminal outcome the
             # ``except Exception`` clause below would miss.
-            record_mutation(
+            self._recorder.record_mutation(
                 mutation,
                 outcome=MutationOutcome.CANCELLED,
                 details=failure_details(exc),
             )
             raise
         except Exception as exc:
-            record_mutation(
+            self._recorder.record_mutation(
                 mutation,
                 outcome=MutationOutcome.FAILED,
                 details=failure_details(exc),
@@ -316,7 +323,7 @@ class EstateManagementService:
             raise
 
         summary = _sync_summary(estate_key, result, dry_run=dry_run)
-        record_mutation(
+        self._recorder.record_mutation(
             mutation,
             outcome=MutationOutcome.SUCCEEDED,
             details=sync_details(summary),
@@ -331,11 +338,11 @@ class EstateManagementService:
                 estate_key, dry_run=dry_run
             )
         except RegistrySyncError as exc:
-            raise _sync_error(estate_key, exc) from exc
+            raise translation.sync_error(estate_key, exc) from exc
         except IntegrityError as exc:
-            raise EstateConflictError(_CONFLICT_MESSAGE) from exc
+            raise EstateConflictError(translation.CONFLICT_MESSAGE) from exc
         except SQLAlchemyError as exc:
-            raise RegistrySyncFailedError(_SYNC_FAILED_MESSAGE) from exc
+            raise RegistrySyncFailedError(translation.SYNC_FAILED_MESSAGE) from exc
         return result
 
     async def list_repositories(
@@ -382,7 +389,7 @@ class EstateManagementService:
                 offset=query.offset,
             )
         except SQLAlchemyError as exc:
-            raise StorageUnavailableError(_STORAGE_MESSAGE) from exc
+            raise StorageUnavailableError(translation.STORAGE_MESSAGE) from exc
 
         has_more = len(repositories) > query.limit
         items = tuple(repositories[: query.limit])
@@ -422,13 +429,13 @@ class EstateManagementService:
             If the registry database cannot be written.
 
         """
-        toggle = ToggleRecord.begin(owner=owner, name=name, enabled=enabled)
+        toggle = self._recorder.begin_toggle(owner=owner, name=name, enabled=enabled)
         try:
             changed = await self._toggle(owner, name, enabled=enabled)
         except asyncio.CancelledError as exc:
             # D21: cancellation is a terminal outcome the ``except Exception``
             # clause below would miss, and it must keep propagating.
-            record_toggle(
+            self._recorder.record_toggle(
                 toggle,
                 outcome=MutationOutcome.CANCELLED,
                 details=failure_details(exc),
@@ -436,15 +443,21 @@ class EstateManagementService:
             raise
         except Exception as exc:
             # D21: a direct service caller has no HTTP catch-all, so any failure
-            # must still leave one terminal record. The record says what went
-            # wrong; the raised error is whatever the caller's contract names.
-            translated = _toggle_failure(toggle, exc, owner=owner, name=name)
+            # must still leave one terminal record. The record names the error
+            # the caller will see, which is the translated one when the failure
+            # has a translation.
+            translated = translation.toggle_failure(exc, owner=owner, name=name)
+            self._recorder.record_toggle(
+                toggle,
+                outcome=MutationOutcome.FAILED,
+                details=failure_details(exc if translated is None else translated),
+            )
             if translated is None:
                 raise
             raise translated from exc
 
         previous = not enabled if changed else enabled
-        record_toggle(
+        self._recorder.record_toggle(
             toggle,
             outcome=MutationOutcome.SUCCEEDED,
             details=f"previous={previous} changed={changed}",
@@ -462,12 +475,20 @@ class EstateManagementService:
             return await self._registry.enable_ingestion(owner, name)
         return await self._registry.disable_ingestion(owner, name)
 
+    async def _parse_catalogue(self, catalogue_yaml: str) -> Catalogue:
+        """Parse untrusted YAML off the event loop, translating its failures."""
+        try:
+            catalogue = await asyncio.to_thread(self._parse_text, catalogue_yaml)
+        except CatalogueValidationError as exc:
+            raise translation.catalogue_rejected(exc) from exc
+        return catalogue
+
     async def _get_estate_row(self, estate_key: str) -> EstateRow | None:
         """Read one estate, translating storage failures."""
         try:
             return await get_estate_by_key(self._session_factory, estate_key)
         except SQLAlchemyError as exc:
-            raise StorageUnavailableError(_STORAGE_MESSAGE) from exc
+            raise StorageUnavailableError(translation.STORAGE_MESSAGE) from exc
 
     async def _require_estate(self, estate_key: str) -> EstateRow:
         """Return an estate row or raise :class:`EstateNotFoundError`."""
@@ -485,11 +506,6 @@ class EstateManagementService:
         return lock
 
 
-_STORAGE_MESSAGE = "storage is unavailable"
-_CONFLICT_MESSAGE = "the write conflicts with an existing record"
-_SYNC_FAILED_MESSAGE = "the registry sync failed"
-
-
 def _estate_summary(row: EstateRow) -> EstateSummary:
     """Convert a catalogue row into the port's estate summary."""
     return EstateSummary(
@@ -504,15 +520,6 @@ def _estate_summary(row: EstateRow) -> EstateSummary:
 def _count_summary(created: int, updated: int, deleted: int) -> CountSummary:
     """Pack three record counts into the shared count summary."""
     return CountSummary(created=created, updated=updated, deleted=deleted)
-
-
-async def _parse_catalogue(catalogue_yaml: str) -> Catalogue:
-    """Parse untrusted YAML off the event loop, translating its failures."""
-    try:
-        catalogue = await asyncio.to_thread(parse_catalogue_text, catalogue_yaml)
-    except CatalogueValidationError as exc:
-        raise _catalogue_rejected(exc) from exc
-    return catalogue
 
 
 def _import_summary(
@@ -552,39 +559,6 @@ def _import_summary(
     )
 
 
-def _toggle_failure(
-    toggle: ToggleRecord,
-    exc: Exception,
-    *,
-    owner: str,
-    name: str,
-) -> Exception | None:
-    """Record a failed toggle and return the error the port should raise.
-
-    ``None`` means the failure has no translation, so the caller re-raises it
-    unchanged; that is how an unexpected error stays visible to the caller
-    while still leaving the D21 terminal record.
-    """
-    match exc:
-        case RegistryRepositoryNotFoundError():
-            error: Exception = RepositoryNotFoundError(owner, name)
-        case SQLAlchemyError():
-            error = StorageUnavailableError(_STORAGE_MESSAGE)
-        case _:
-            record_toggle(
-                toggle,
-                outcome=MutationOutcome.FAILED,
-                details=failure_details(exc),
-            )
-            return None
-    record_toggle(
-        toggle,
-        outcome=MutationOutcome.FAILED,
-        details=failure_details(error),
-    )
-    return error
-
-
 def _sync_summary(
     estate_key: str,
     result: SyncResult,
@@ -603,30 +577,6 @@ def _sync_summary(
         repositories_left_disabled=tuple(result.repositories_left_disabled),
         repositories_left_disabled_count=result.repositories_left_disabled_count,
     )
-
-
-def _catalogue_rejected(exc: CatalogueValidationError) -> CatalogueRejectedError:
-    """Translate catalogue validation messages into port issues."""
-    issues = tuple(
-        Issue(code="catalogue_schema", message=message) for message in exc.issues
-    )
-    return CatalogueRejectedError(issues)
-
-
-def _sync_error(estate_key: str, exc: RegistrySyncError) -> Exception:
-    """Map a registry sync failure using its original cause when present."""
-    # The registry wraps low-level SQLAlchemy failures instead of exposing
-    # them, so the original cause is the only place that distinguishes a
-    # uniqueness clash from an outage. Anything else falls back to the reason
-    # the registry reported.
-    match exc.__cause__:
-        case IntegrityError():
-            return EstateConflictError(_CONFLICT_MESSAGE)
-        case OperationalError() | InterfaceError():
-            return StorageUnavailableError(_STORAGE_MESSAGE)
-    if exc.reason == ESTATE_NOT_FOUND_REASON:
-        return EstateNotFoundError(estate_key)
-    return RegistrySyncFailedError(str(exc))
 
 
 def _validate_page(limit: int, offset: int) -> None:

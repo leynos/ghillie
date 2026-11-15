@@ -362,19 +362,23 @@ and CLI layers never import a catalogue, registry, or SQLAlchemy exception.
 ### Service responsibilities
 
 - **Untrusted YAML off the event loop.** `import_catalogue` validates the key,
-  then runs `ghillie.catalogue.loader.parse_catalogue_text` through
-  `asyncio.to_thread`, so parsing a client-supplied document cannot block the
-  loop. A `CatalogueValidationError` becomes a `CatalogueRejectedError` holding
-  one `Issue(code="catalogue_schema")` per validation message.
+  then runs the injected catalogue parser through `asyncio.to_thread`, so
+  parsing a client-supplied document cannot block the loop. The production
+  parser is `ghillie.catalogue.loader.parse_catalogue_text`. A
+  `CatalogueValidationError` becomes a `CatalogueRejectedError` holding one
+  `Issue(code="catalogue_schema")` per validation message.
 - **Per-estate serialization.** Import and sync each run under an
   `asyncio.Lock` obtained from `_lock_for`. The locks live in a
   `weakref.WeakValueDictionary`, so a coroutine inside `async with` holds the
   only strong reference and an idle estate retains no lock. Two concurrent
   requests for one estate therefore cannot interleave their catalogue writes,
   while different estates proceed independently.
-- **Failure translation.** `IntegrityError` becomes `EstateConflictError`. A
-  catalogue read or write failure becomes `StorageUnavailableError`, and a
-  non-integrity SQLAlchemy failure raised by the registry projection becomes
+- **Failure translation.** `ghillie/estate/translation.py` holds the pure
+  translators: each decides which estate error a failure becomes and never
+  logs, so the service keeps ownership of the D21 record that accompanies the
+  outcome. `IntegrityError` becomes `EstateConflictError`. A catalogue read or
+  write failure becomes `StorageUnavailableError`, and a non-integrity
+  SQLAlchemy failure raised by the registry projection becomes
   `RegistrySyncFailedError`. Registry failures are classified through
   `RegistrySyncError.__cause__`: an `IntegrityError` cause is a conflict, and
   `OperationalError` or `InterfaceError` causes are storage outages. The
@@ -440,13 +444,101 @@ and passes it to `EstateManagementService(session_factory, registry=registry)`,
 so that wiring shares one session factory between the catalogue and Silver
 stores.
 
+The adapter's dependency direction is inward. The package docstring in
+`ghillie/api/estate/__init__.py` states that the resources depend only on
+`ghillie.estate.ports`, `ghillie.estate.models`, and `ghillie.estate.errors`;
+`resources.py` imports the `EstateManagement` port under `TYPE_CHECKING` and
+the request and result value types from `ghillie.estate.models`, while
+`schemas.py` imports only the standard library and msgspec. The resources also
+use `InvalidInputError` and `PayloadTooLargeError` from `ghillie.api.errors`,
+which is the adapter's own central error mapping, not a domain module. No
+module under `ghillie/api/estate/` imports catalogue, registry, or SQLAlchemy
+code.
+
+### Authentication and start-up middleware
+
+`BearerTokenMiddleware` in `ghillie/api/auth.py` enforces the optional token
+that `ghillie.runtime._read_api_token` supplies through
+`AppDependencies.api_token`. When a token is configured it requires
+`Authorization: Bearer <token>` on every route except `GET /health` and
+`GET /ready`, compares the supplied credential with `hmac.compare_digest`, and
+raises `falcon.HTTPUnauthorized` on failure; the app's Falcon HTTP error
+handler renders that as 401 `unauthorized` with a `WWW-Authenticate: Bearer`
+challenge. With no token it logs a warning and returns without checking.
+`AppDependencies.api_token` is declared with `repr=False`, so the secret cannot
+appear in a dataclass repr.
+
+`StorageBootstrapMiddleware` in `ghillie/storage_bootstrap.py` implements only
+the ASGI lifespan hook `process_startup`, which calls
+`init_all_storage(engine)` before the server accepts requests. It does no
+request or response work. `ghillie.runtime.create_app` supplies
+`bootstrap_engine` only when `GHILLIE_DATABASE_URL` is set and
+`GHILLIE_DB_BOOTSTRAP=create-all`, and `ghillie.api.app._build_middleware`
+appends the middleware to the Falcon stack.
+
+Running the DDL from the lifespan hook is deliberate. The lifespan start-up is
+the one point every ASGI driver, including Granian, awaits before it accepts
+its first request, so the tables exist before any request can read them. An
+explicit `init_all_storage` hook called from `create_app` would still have to
+be awaited by that same driver at that same moment, so it would add a wiring
+step without changing the ordering guarantee. The composition root keeps the
+decision of whether the DDL runs at all: the engine is supplied only for the
+`GHILLIE_DB_BOOTSTRAP=create-all` opt-in, so a managed deployment never
+bootstraps its schema here (D13).
+
+Both are composed in `ghillie/api/app.py`. `_build_middleware` appends the
+bearer check first so an unauthenticated request never opens a database
+session, then the SQLAlchemy session manager, and finally the bootstrap
+middleware because it implements only the lifespan hooks. Resources do not
+construct either middleware; `ghillie.runtime` and `ghillie.api.app` are the
+composition root for the middleware, and `ghillie.api.factory` is the
+composition root for the estate and reporting services.
+
+### Hecate group placement
+
+Hecate enforces the declared import direction through `[tool.hecate]` in
+`pyproject.toml`. The estate boundary spans four groups:
+
+- `ghillie.estate.errors`, `ghillie.estate.models`, and `ghillie.estate.ports`
+  are `domain_ports`; that group may import only `domain_ports`.
+- The remaining `ghillie.estate` modules, including the service and
+  observability code, fall under the generic `ghillie.estate` prefix in the
+  `application` group, which may import `application`, `domain_ports`, and
+  `outbound_adapter` modules.
+- `ghillie.catalogue.queries` is an `outbound_adapter`, the group allowed to
+  import `application`, `domain_ports`, and other `outbound_adapter` modules.
+- `ghillie.storage_bootstrap` is a `composition_root`, the group allowed to
+  import every other layer.
+
+Declaration order matters because Hecate uses first-match semantics. The leaf
+`ghillie.estate.errors`, `ghillie.estate.models`, and `ghillie.estate.ports`
+entries must precede the generic `ghillie.estate` prefix, or the application
+group would claim the domain ports. The composition-root group, which also holds
+`ghillie.api.app` and `ghillie.api.factory`, is declared before the
+inbound-adapter group so those modules are classified as composition roots
+rather than by the generic `ghillie.api` prefix. There is no generic
+`ghillie.catalogue` prefix, so the `ghillie.catalogue.queries` entry alone
+decides its group.
+
+The design rationale, including the component layout and the bootstrap and
+authentication decisions, is recorded in
+[HTTP API layer architecture](ghillie-design.md#84-http-api-layer-architecture).
+
 ### Mutation records (D21)
 
 Import, sync, and ingestion-toggle attempts each emit one structured record,
-whether they succeed or fail. Rendering is owned by
+whether they succeed or fail. Rendering is owned by `MutationRecorder` in
 `ghillie/estate/observability.py`, which follows the shape that
 `ghillie/registry/observability.py` established: the module is the only place
-that renders these lines, and the service calls into it.
+that renders these lines. The service decides which outcome applies and calls
+the recorder; it measures no duration itself.
+
+`ghillie/estate/collaborators.py` groups the three seams the service does not
+own: the importer factory, the catalogue parser, and the recorder. The service
+takes an `EstateCollaborators` value, defaulting to the production
+implementations, so a test can substitute one seam without the others. The
+recorder holds its clock, defaulting to `time.perf_counter`, so a test can pin
+the rendered `duration_ms` exactly.
 
 - Import records carry `operation=estate.import`, the estate key, the commit
   SHA (`-` when absent), the dry-run flag, the per-family created, updated, and

@@ -14,10 +14,24 @@ from ghillie.catalogue.queries import (
     list_estates,
 )
 from ghillie.catalogue.storage import CatalogueImportRecord, Estate
+from tests.helpers.femtologging_capture import capture_femto_logs
+from tests.unit.estate_test_helpers import count_rows
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
     from sqlalchemy.sql.selectable import Subquery
+
+_MUTATION_LOGGER = "ghillie.estate.observability"
+
+
+async def _row_counts(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> tuple[int, int]:
+    """Snapshot the catalogue tables a read query must leave untouched."""
+    return (
+        await count_rows(session_factory, Estate),
+        await count_rows(session_factory, CatalogueImportRecord),
+    )
 
 
 async def _add_estate(
@@ -187,6 +201,51 @@ async def test_get_estate_by_key_returns_none_for_unknown_keys(
     assert await get_estate_by_key(session_factory, "missing") is None, (
         "unknown key should resolve to nothing"
     )
+
+
+@pytest.mark.asyncio
+async def test_list_estates_is_read_only(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """A listing writes no row and emits no mutation record."""
+    estate = await _add_estate(session_factory, key="alpha")
+    await _add_import(
+        session_factory,
+        estate,
+        commit_sha="c1",
+        imported_at=dt.datetime(2026, 2, 1, tzinfo=dt.UTC),
+    )
+    before = await _row_counts(session_factory)
+
+    with capture_femto_logs(_MUTATION_LOGGER) as logs:
+        await list_estates(session_factory, limit=10, offset=0)
+        logs.wait_for_timeout()
+
+    assert await _row_counts(session_factory) == before, "a listing must not write"
+    assert not logs.records, "a listing must not emit a mutation record"
+
+
+@pytest.mark.asyncio
+async def test_get_estate_by_key_is_read_only(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """A single-estate lookup writes no row and emits no mutation record."""
+    estate = await _add_estate(session_factory, key="alpha")
+    await _add_import(
+        session_factory,
+        estate,
+        commit_sha="c1",
+        imported_at=dt.datetime(2026, 2, 1, tzinfo=dt.UTC),
+    )
+    before = await _row_counts(session_factory)
+
+    with capture_femto_logs(_MUTATION_LOGGER) as logs:
+        row = await get_estate_by_key(session_factory, "alpha")
+        logs.wait_for_timeout()
+
+    assert row is not None, "the lookup should resolve the seeded estate"
+    assert await _row_counts(session_factory) == before, "a lookup must not write"
+    assert not logs.records, "a lookup must not emit a mutation record"
 
 
 def test_estate_row_is_immutable() -> None:

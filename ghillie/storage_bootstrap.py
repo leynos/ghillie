@@ -60,6 +60,18 @@ class StorageBootstrapMiddleware:
     engine
         Engine to bootstrap at ASGI start-up.
 
+    Notes
+    -----
+    The DDL runs from the ASGI lifespan hook rather than from an explicit
+    hook that :func:`ghillie.api.app.create_app` hands back to the caller. The
+    lifespan start-up is the one point every ASGI driver, including Granian,
+    awaits before it accepts its first request, so the tables exist before any
+    request can read them; an explicit hook would have to be awaited by that
+    same driver at that same moment. The composition root still decides
+    whether the DDL runs at all, because it supplies the engine only when
+    ``GHILLIE_DB_BOOTSTRAP=create-all`` (D13), so a managed deployment never
+    reaches this middleware.
+
     """
 
     def __init__(self, engine: AsyncEngine) -> None:

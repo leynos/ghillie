@@ -123,14 +123,10 @@ _MUTMUT_REQUIRED_COPY_PATHS: typ.Final = frozenset(
 _RUNTIME_ENTRY_POINTS: typ.Final = {
     "function": frozenset(
         {
-            "ghillie.estate.service._catalogue_rejected",
             "ghillie.estate.service._estate_summary",
             "ghillie.estate.service._import_summary",
             "ghillie.estate.service._next_offset",
-            "ghillie.estate.service._parse_catalogue",
-            "ghillie.estate.service._sync_error",
             "ghillie.estate.service._sync_summary",
-            "ghillie.estate.service._toggle_failure",
             "ghillie.estate.service._validate_page",
             "ghillie.registry.storage._insert_values",
             "ghillie.registry.storage.dialect_upsert_strategy",
@@ -140,6 +136,11 @@ _RUNTIME_ENTRY_POINTS: typ.Final = {
         {
             "ghillie.bronze.storage.UTCDateTime.process_bind_param",
             "ghillie.bronze.storage.UTCDateTime.process_result_value",
+            "ghillie.estate.observability.MutationRecorder._elapsed_ms",
+            "ghillie.estate.observability.MutationRecorder.begin_mutation",
+            "ghillie.estate.observability.MutationRecorder.begin_toggle",
+            "ghillie.estate.observability.MutationRecorder.record_mutation",
+            "ghillie.estate.observability.MutationRecorder.record_toggle",
             "ghillie.evidence.event_targets.EventTargetExtractor.extract",
             "ghillie.registry.observability.SyncEventBuffer.record_conflict",
             "ghillie.registry.observability.SyncEventBuffer.record_transition",

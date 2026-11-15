@@ -208,17 +208,24 @@ reason = "Falcon passes these middleware hooks the request, response, resource, 
 [[tool.skylos.dead_code.entrypoints]]
 type = "function"
 full_name = [
-    "ghillie.estate.service._catalogue_rejected",
     "ghillie.estate.service._estate_summary",
     "ghillie.estate.service._import_summary",
     "ghillie.estate.service._next_offset",
-    "ghillie.estate.service._parse_catalogue",
-    "ghillie.estate.service._sync_error",
     "ghillie.estate.service._sync_summary",
-    "ghillie.estate.service._toggle_failure",
     "ghillie.estate.service._validate_page",
 ]
 reason = "Skylos's liveness graph does not resolve these module-private helpers from the async EstateManagementService methods that call them; every name has a verified runtime caller in that class."
+
+[[tool.skylos.dead_code.entrypoints]]
+type = "method"
+full_name = [
+    "ghillie.estate.observability.MutationRecorder._elapsed_ms",
+    "ghillie.estate.observability.MutationRecorder.begin_mutation",
+    "ghillie.estate.observability.MutationRecorder.begin_toggle",
+    "ghillie.estate.observability.MutationRecorder.record_mutation",
+    "ghillie.estate.observability.MutationRecorder.record_toggle",
+]
+reason = "Skylos's liveness graph does not follow the qualified instance-attribute calls the async EstateManagementService methods make through their injected MutationRecorder; every name has a verified runtime caller in that class, and _elapsed_ms is reached only by the recorder's own record methods."
 
 
 [[tool.skylos.dead_code.entrypoints]]

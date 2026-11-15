@@ -581,6 +581,32 @@ header, because orchestrators cannot be expected to hold the token. A missing
 or wrong token returns 401 `unauthorized` with a `WWW-Authenticate: Bearer`
 challenge.
 
+When `GHILLIE_API_TOKEN` is unset, start-up logs a warning that estate API
+authentication is disabled, so an unauthenticated deployment is visible in the
+logs. A value that is set but blank after trimming is a configuration error:
+start-up logs an error and exits rather than silently disabling authentication.
+A configured token shorter than 16 characters also logs a warning that a longer
+random value is preferred.
+
+### Schema bootstrap
+
+The runtime does not touch the schema by default. When `GHILLIE_DATABASE_URL`
+is set, set `GHILLIE_DB_BOOTSTRAP=create-all` to create any missing tables
+during ASGI start-up, before the server accepts requests. The bootstrap uses
+`create_all`, which checks for an existing table before issuing `CREATE TABLE`,
+so it creates only missing tables; it does not migrate existing ones. Any other
+non-blank value is an operator error that stops start-up rather than starting
+with a half-configured schema. A blank value is treated as unset.
+
+Use the flag for a single replica, or for a compose deployment that has no
+out-of-band migration step. Managed deployments run migrations out of band and
+leave the flag unset. The existence check and `CREATE TABLE` are not atomic, so
+replicas that start together can both see a missing table and race on the DDL;
+PostgreSQL may fail the loser with a duplicate-table error, that replica fails
+its start-up, and the orchestrator restarts it once the table exists. Prefer
+one bootstrap replica or managed migrations when the platform cannot tolerate
+that restart.
+
 ### Operations
 
 | Operation         | Method and path                                | Purpose                                                                 |
@@ -649,6 +675,39 @@ A value outside its range, a non-integer, or a repeated parameter returns 400
 `field`. Every page echoes `limit` and `offset` and adds `has_more` and
 `next_offset`. `next_offset` is the offset of the following page, or `null`
 when the page is the last one.
+
+### Worked examples
+
+The examples use `GHILLIE_API_TOKEN`, the variable the runtime reads, and
+assume it holds a configured token. Import a catalogue as a dry run first; the
+`dry_run=true` query flag validates the document and reports counts without
+writing anything:
+
+```bash
+curl --fail-with-body \
+  -X POST "http://localhost:8080/estates/demo/catalogue-import?dry_run=true" \
+  -H "Authorization: Bearer ${GHILLIE_API_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "commit_sha": "0123456789abcdef0123456789abcdef01234567",
+    "catalogue_yaml": "version: 1\nprojects:\n  - key: alpha\n    name: Alpha\n"
+  }'
+```
+
+To apply the import, omit the flag or pass `dry_run=false`. The body always
+carries `commit_sha` and `catalogue_yaml`; `estate_name` is optional.
+
+List an estate's repositories with pagination:
+
+```bash
+curl --fail-with-body \
+  "http://localhost:8080/estates/demo/repositories?limit=25&offset=50" \
+  -H "Authorization: Bearer ${GHILLIE_API_TOKEN}"
+```
+
+`limit` and `offset` select the page, and the response echoes both together with
+`has_more` and `next_offset`. Add `ingestion_enabled=true` or
+`ingestion_enabled=false` to filter by ingestion state.
 
 ### Request size limit
 
@@ -935,11 +994,13 @@ curl http://localhost:8080/ready
 
 The runtime reads configuration from environment variables:
 
-| Variable            | Default   | Description                             |
-| ------------------- | --------- | --------------------------------------- |
-| `GHILLIE_HOST`      | `0.0.0.0` | Bind address for the server             |
-| `GHILLIE_PORT`      | `8080`    | Listening port for HTTP                 |
-| `GHILLIE_LOG_LEVEL` | `INFO`    | Log level for the server and its worker |
+| Variable               | Default   | Description                                     |
+| ---------------------- | --------- | ----------------------------------------------- |
+| `GHILLIE_HOST`         | `0.0.0.0` | Bind address for the server                     |
+| `GHILLIE_PORT`         | `8080`    | Listening port for HTTP                         |
+| `GHILLIE_LOG_LEVEL`    | `INFO`    | Log level for the server and its worker         |
+| `GHILLIE_API_TOKEN`    | unset     | Bearer token; unset disables authentication     |
+| `GHILLIE_DB_BOOTSTRAP` | unset     | `create-all` creates missing tables at start-up |
 
 Additional environment variables for database and cache connectivity should be
 injected via Kubernetes Secrets when deploying with the Helm chart.
@@ -1513,26 +1574,31 @@ with no body.
 
 ### Enabling the endpoint
 
-The on-demand report endpoint requires a database connection. Set the
-`GHILLIE_DATABASE_URL` environment variable to enable domain endpoints:
+The on-demand report endpoint requires a database connection and a status model
+backend. Set the `GHILLIE_DATABASE_URL` environment variable to enable the
+estate routes:
 
 ```bash
 export GHILLIE_DATABASE_URL="postgresql+asyncpg://user:pass@host:5432/ghillie"
 ```
 
 When `GHILLIE_DATABASE_URL` is not set, the runtime starts in health-only mode
-(backwards compatible with existing deployments). The endpoint also respects
+(backwards compatible with existing deployments) and only `/health` and
+`/ready` are available. The report route is registered only when
+`GHILLIE_STATUS_MODEL_BACKEND` is also set. The endpoint also respects
 `GHILLIE_REPORT_SINK_PATH` — when set, generated reports are written to the
 filesystem as Markdown, just like scheduled reports.
 
-### On-demand reporting environment variables
+### Runtime environment variables
 
-| Variable                        | Required | Description                          |
-| ------------------------------- | -------- | ------------------------------------ |
-| `GHILLIE_DATABASE_URL`          | Yes      | Database connection URL              |
-| `GHILLIE_REPORT_SINK_PATH`      | No       | Directory for Markdown report output |
-| `GHILLIE_REPORTING_WINDOW_DAYS` | No       | Default window size (default: 7)     |
-| `GHILLIE_STATUS_MODEL_BACKEND`  | Yes      | Status model backend (e.g. `mock`)   |
+| Variable                        | Required          | Applies to        | Description                                                                                       |
+| ------------------------------- | ----------------- | ----------------- | ------------------------------------------------------------------------------------------------- |
+| `GHILLIE_DATABASE_URL`          | For estate routes | Estate and report | Database connection URL. Unset leaves only `/health` and `/ready`; set enables the estate routes. |
+| `GHILLIE_STATUS_MODEL_BACKEND`  | For report routes | Report            | Status model backend (for example `mock`). Adds the report route when set with the database URL.  |
+| `GHILLIE_API_TOKEN`             | No                | All except probes | Bearer token guarding every route except `/health` and `/ready`; unset leaves the API open.       |
+| `GHILLIE_DB_BOOTSTRAP`          | No                | Start-up          | `create-all` creates missing tables at start-up; any other non-blank value stops start-up.        |
+| `GHILLIE_REPORT_SINK_PATH`      | No                | Report            | Directory for Markdown report output.                                                             |
+| `GHILLIE_REPORTING_WINDOW_DAYS` | No                | Report            | Default window size (default: 7).                                                                 |
 
 ### On-demand reporting OpenAPI specification
 

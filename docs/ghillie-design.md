@@ -670,19 +670,26 @@ placing the Falcon Asynchronous Server Gateway Interface (ASGI) application at
 the adapter boundary between external HTTP consumers and the core Medallion
 data layers.
 
-**Current implementation (Phase 2.3.c):** The modular API structure has been
-partially implemented. The runtime module (`ghillie.runtime`) delegates to the
-`ghillie.api.app` application factory. The modular package structure is:
+**Current implementation:** The runtime module (`ghillie.runtime`) delegates to
+the `ghillie.api.app` application factory. `ghillie/api/app.py` builds the
+middleware stack, always registers the health probes, registers the estate
+routes when an `EstateManagement` port is supplied, and registers the report
+route when both a session factory and a reporting service are supplied. The
+package structure is:
 
 ```plaintext
 ghillie/api/
   __init__.py         # Package root, exports create_app
   app.py              # Application factory with AppDependencies dataclass
-  factory.py          # build_reporting_service() for API layer
+  auth.py             # BearerTokenMiddleware (optional bearer authentication)
+  factory.py          # build_estate_service() and build_reporting_service()
   middleware.py       # SQLAlchemySessionManager (request-scoped sessions)
   errors.py           # Domain exceptions and Falcon error handlers
   health/
     resources.py      # HealthResource, ReadyResource
+  estate/
+    resources.py      # Estate-management resources
+    schemas.py        # msgspec request and response structs
   gold/
     resources.py      # ReportResource (on-demand report generation)
 ```
@@ -691,20 +698,34 @@ The following components are implemented:
 
 - **Health probe endpoints** (`/health`, `/ready`): Stateless, always
   registered regardless of database availability.
+- **Estate management endpoints** (`/estates`,
+  `/estates/{estate_key}/catalogue-import`,
+  `/estates/{estate_key}/registry-sync`, `/estates/{estate_key}/repositories`,
+  and `/repositories/{owner}/{name}/ingestion`): Registered when an
+  `EstateManagement` port is supplied; the resources in `ghillie/api/estate/`
+  translate HTTP into calls on that port.
 - **On-demand report generation**
   (`POST /reports/repositories/{owner}/{name}`): Triggers report generation for
   a specific repository, using the same pipeline as scheduled reports. Returns
   200 with report metadata, 204 when no events exist in the window, or 404 when
   the repository slug is unknown.
+- **Optional bearer authentication** (`BearerTokenMiddleware`): Requires
+  `Authorization: Bearer <token>` on every route except the probes when
+  `GHILLIE_API_TOKEN` is configured, and acts as a no-op with a start-up
+  warning when it is not.
+- **Schema bootstrap** (`StorageBootstrapMiddleware`): Runs
+  `init_all_storage(engine)` from the ASGI `process_startup` lifespan hook when
+  `GHILLIE_DB_BOOTSTRAP=create-all`, creating any missing tables before the
+  server accepts requests.
 - **Session middleware** (`SQLAlchemySessionManager`): Provides
   request-scoped `AsyncSession` instances with automatic commit/rollback/close
   per the pattern documented in `async-sqlalchemy-with-pg-and-falcon.md`.
-- **Error handlers**: Map `RepositoryNotFoundError` to 404 and
-  `InvalidInputError` to 400.
+- **Error handlers**: Render every failure through the shared envelope with a
+  stable `code`, including Falcon's own HTTP errors and unexpected exceptions.
 
 **Planned evolution:** As additional domain endpoints are added (Concordat
-CloudEvents ingestion, estate-level queries), corresponding resource modules
-should be created under `ghillie/api/bronze/` and `ghillie/api/gold/`.
+CloudEvents ingestion), corresponding resource modules should be created under
+`ghillie/api/bronze/` and `ghillie/api/gold/`.
 
 This structure maintains clear separation between:
 
@@ -742,8 +763,52 @@ and the failure criteria.
   the middleware's transaction.  The ``ReportingService`` manages its own
   sessions internally for report generation.
 - `GHILLIE_DATABASE_URL` controls whether the runtime starts in health-only
-  mode or full mode with domain endpoints, maintaining backwards compatibility
-  with existing deployments.
+  mode or with estate routes. Without it, `ghillie.runtime.create_app` builds
+  no estate service and only `/health` and `/ready` are registered. With it,
+  `build_estate_service` supplies the estate routes, maintaining backwards
+  compatibility with existing deployments.
+- The report route has a second condition. `ghillie.runtime.create_app` builds
+  a `ReportingService` only when `GHILLIE_STATUS_MODEL_BACKEND` is also set, and
+  `ghillie.api.app` registers `ReportResource` only when both a session
+  factory and a reporting service are present. A database URL alone therefore
+  enables the estate routes but not the report route.
+
+**Decision records:**
+
+The following decisions are recorded here rather than in a separate
+Architecture Decision Record (ADR). They are D13 (start-up decoupling and
+schema bootstrap) and D14 (optional authentication) from the estate-management
+plan, together with the bootstrap opt-in that D13 depends on. The
+[developers guide](developers-guide.md#authentication-and-start-up-middleware)
+links back to this section.
+
+#### Start-up decoupling and schema bootstrap
+
+`ghillie/storage_bootstrap.py` provides `init_all_storage(engine)`, which does
+not run by default. When `GHILLIE_DATABASE_URL` is set and
+`GHILLIE_DB_BOOTSTRAP=create-all`, `ghillie.runtime.create_app` supplies the
+engine as `AppDependencies.bootstrap_engine`, and `StorageBootstrapMiddleware`
+runs `init_all_storage` from the Falcon `process_startup` lifespan hook before
+the server accepts requests. The bootstrap uses `create_all`, which checks for
+an existing table before issuing `CREATE TABLE`, so it creates only missing
+tables and does not migrate existing ones. It is documented as a
+single-replica, pre-migration convenience: managed deployments run migrations
+out of band, and replicas that start together can race on table creation.
+
+#### Optional authentication
+
+`GHILLIE_API_TOKEN` guards every route except `/health` and `/ready` with
+`hmac.compare_digest`. A missing or wrong credential returns 401 `unauthorized`
+with a `WWW-Authenticate: Bearer` challenge. When the variable is unset, the
+API is unauthenticated and start-up logs a warning; when it is set but blank,
+start-up fails. The token is never logged: the runtime passes it through
+`AppDependencies.api_token`, whose dataclass field is `repr=False`.
+
+#### Schema bootstrap opt-in
+
+`GHILLIE_DB_BOOTSTRAP=create-all` is the only accepted non-blank value. Any
+other value is treated as an operator error and fails start-up rather than
+starting with a half-configured schema; a blank value is treated as unset.
 
 ## 9. Evidence Bundle Architecture (Phase 2.1)
 

@@ -1,7 +1,8 @@
 """D21 record rendering for estate mutations.
 
-These tests exercise the renderer directly, so the record vocabulary and its
-escaping are pinned without going through a database or the service.
+These tests exercise the recorder directly, so the record vocabulary, its
+escaping, and its timing are pinned without going through a database or the
+service.
 """
 
 import typing as typ
@@ -15,12 +16,9 @@ from ghillie.estate.models import (
 )
 from ghillie.estate.observability import (
     MutationOutcome,
-    MutationRecord,
-    ToggleRecord,
+    MutationRecorder,
     failure_details,
     import_details,
-    record_mutation,
-    record_toggle,
     sync_details,
 )
 from tests.helpers.femtologging_capture import capture_femto_logs
@@ -31,6 +29,26 @@ if typ.TYPE_CHECKING:
 
 class _Cancelled(BaseException):
     """Stand-in for ``asyncio.CancelledError`` in rendering tests."""
+
+
+class _FixedClock:
+    """A clock the test advances by hand, so a duration can be asserted exactly.
+
+    ``0.25`` seconds is exact in binary, so ``0.25 * 1000`` renders as
+    ``250.0`` without a floating-point rounding surprise in the assertion.
+    """
+
+    def __init__(self) -> None:
+        """Start the clock at zero."""
+        self._now = 0.0
+
+    def __call__(self) -> float:
+        """Return the current instant in seconds."""
+        return self._now
+
+    def advance(self, seconds: float) -> None:
+        """Move the clock forward."""
+        self._now += seconds
 
 
 def _messages(logs: FemtoLogCapture) -> list[str]:
@@ -58,7 +76,8 @@ def _import_summary() -> CatalogueImportSummary:
 
 def test_record_mutation_escapes_request_fields_onto_one_line() -> None:
     """A hostile estate key or commit cannot forge a second record."""
-    mutation = MutationRecord.begin(
+    recorder = MutationRecorder()
+    mutation = recorder.begin_mutation(
         operation="estate.import",
         estate_key="demo\nestate.import outcome=succeeded",
         commit_sha="c1\nestate.import outcome=succeeded",
@@ -66,7 +85,7 @@ def test_record_mutation_escapes_request_fields_onto_one_line() -> None:
     )
 
     with capture_femto_logs("ghillie.estate.observability") as logs:
-        record_mutation(
+        recorder.record_mutation(
             mutation,
             outcome=MutationOutcome.SUCCEEDED,
             details="projects=1/0/0",
@@ -88,7 +107,8 @@ def test_record_mutation_escapes_request_fields_onto_one_line() -> None:
 
 def test_record_mutation_renders_a_missing_commit_as_a_dash() -> None:
     """A mutation with no commit still leaves a field in a fixed position."""
-    mutation = MutationRecord.begin(
+    recorder = MutationRecorder()
+    mutation = recorder.begin_mutation(
         operation="estate.registry-sync",
         estate_key="demo",
         commit_sha=None,
@@ -96,7 +116,7 @@ def test_record_mutation_renders_a_missing_commit_as_a_dash() -> None:
     )
 
     with capture_femto_logs("ghillie.estate.observability") as logs:
-        record_mutation(
+        recorder.record_mutation(
             mutation,
             outcome=MutationOutcome.FAILED,
             details="error=ValueError message='boom'",
@@ -111,14 +131,15 @@ def test_record_mutation_renders_a_missing_commit_as_a_dash() -> None:
 
 def test_record_toggle_escapes_the_repository_identity() -> None:
     """The owner and name come from the request, so both are quoted."""
-    toggle = ToggleRecord.begin(
+    recorder = MutationRecorder()
+    toggle = recorder.begin_toggle(
         owner="org\nestate.set-ingestion outcome=succeeded",
         name="alpha\nforged",
         enabled=False,
     )
 
     with capture_femto_logs("ghillie.estate.observability") as logs:
-        record_toggle(
+        recorder.record_toggle(
             toggle,
             outcome=MutationOutcome.SUCCEEDED,
             details="previous=True changed=True",
@@ -133,6 +154,49 @@ def test_record_toggle_escapes_the_repository_identity() -> None:
     assert "previous=True changed=True" in message, (
         "the record should carry the state change"
     )
+
+
+def test_recorder_times_the_record_with_its_injected_clock() -> None:
+    """The recorder measures the attempt with the clock it was given."""
+    clock = _FixedClock()
+    recorder = MutationRecorder(clock=clock)
+    mutation = recorder.begin_mutation(
+        operation="estate.import",
+        estate_key="demo",
+        commit_sha="c1",
+        dry_run=False,
+    )
+    clock.advance(0.25)
+
+    with capture_femto_logs("ghillie.estate.observability") as logs:
+        recorder.record_mutation(
+            mutation,
+            outcome=MutationOutcome.SUCCEEDED,
+            details="projects=0/0/0",
+        )
+        message = _messages(logs)[0]
+
+    assert "duration_ms=250.0" in message, (
+        "the duration should come from the injected clock"
+    )
+
+
+def test_recorder_times_a_toggle_with_its_injected_clock() -> None:
+    """A toggle record uses the same injected clock as a mutation record."""
+    clock = _FixedClock()
+    recorder = MutationRecorder(clock=clock)
+    toggle = recorder.begin_toggle(owner="org", name="alpha", enabled=True)
+    clock.advance(0.001)
+
+    with capture_femto_logs("ghillie.estate.observability") as logs:
+        recorder.record_toggle(
+            toggle,
+            outcome=MutationOutcome.SUCCEEDED,
+            details="previous=False changed=True",
+        )
+        message = _messages(logs)[0]
+
+    assert "duration_ms=1.0" in message, "the toggle should be timed by the same clock"
 
 
 def test_failure_details_quote_the_message() -> None:
@@ -194,7 +258,8 @@ def test_the_outcome_vocabulary_is_closed() -> None:
 @pytest.mark.parametrize("outcome", list(MutationOutcome))
 def test_every_outcome_renders_its_own_value(outcome: MutationOutcome) -> None:
     """``%s`` on a ``StrEnum`` member must yield the bare value."""
-    mutation = MutationRecord.begin(
+    recorder = MutationRecorder()
+    mutation = recorder.begin_mutation(
         operation="estate.import",
         estate_key="demo",
         commit_sha="c1",
@@ -202,7 +267,7 @@ def test_every_outcome_renders_its_own_value(outcome: MutationOutcome) -> None:
     )
 
     with capture_femto_logs("ghillie.estate.observability") as logs:
-        record_mutation(mutation, outcome=outcome, details="projects=0/0/0")
+        recorder.record_mutation(mutation, outcome=outcome, details="projects=0/0/0")
         message = _messages(logs)[0]
 
     assert message.endswith(f"outcome={outcome.value}"), (

@@ -58,8 +58,6 @@ from ghillie.registry.service import RepositoryRegistryService
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-    from ghillie.catalogue.storage import Estate, ProjectRecord
-
 __all__ = [
     "DOCUMENTATION_PATHS",
     "NOW",
@@ -297,8 +295,12 @@ async def import_catalogue(
 
 async def count_rows(
     session_factory: async_sessionmaker[AsyncSession],
-    model: type[Estate] | type[ProjectRecord],
+    model: type[typ.Any],
 ) -> int:
-    """Count every row in a catalogue table."""
+    """Count every row in one mapped table.
+
+    The model is opened up rather than listed so the read-only checks can
+    snapshot catalogue and Silver tables with one helper.
+    """
     async with session_factory() as session:
         return (await session.scalar(select(func.count()).select_from(model))) or 0
