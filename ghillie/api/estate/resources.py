@@ -30,7 +30,6 @@ from ghillie.api.estate.schemas import (
 )
 from ghillie.estate.models import (
     DEFAULT_PAGE_LIMIT,
-    MAX_REQUEST_BODY_BYTES,
     CatalogueImportRequest,
     CatalogueImportSummary,
     CountSummary,
@@ -58,6 +57,15 @@ __all__ = [
 
 _JSON_ONLY = frozenset({"application/json"})
 _PATCH_MEDIA_TYPES = frozenset({"application/json", "application/merge-patch+json"})
+
+MAX_REQUEST_BODY_BYTES = 1024 * 1024
+"""Largest catalogue-import or toggle body this HTTP adapter accepts.
+
+The catalogue document is the only unbounded field a client supplies, so one
+megabyte comfortably covers a large estate's YAML while bounding what a single
+request can make the process buffer. It is an HTTP transport limit: nothing
+below the adapter reads it, and the domain port never sees a byte count.
+"""
 
 
 def _content_type(req: Request) -> str:

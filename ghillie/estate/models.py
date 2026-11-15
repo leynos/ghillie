@@ -18,22 +18,16 @@ if typ.TYPE_CHECKING:
 MAX_ESTATE_KEY_LENGTH = 64
 MAX_PAGE_LIMIT = 500
 MAX_PAGE_OFFSET = 2**31 - 1
-"""Largest offset the API accepts.
+"""Largest offset any estate listing accepts.
 
-SQLite raises a bare ``OverflowError`` when a caller binds a value beyond its
-signed 64-bit range, and PostgreSQL rejects an out-of-range ``OFFSET`` as a
-storage error. A signed 32-bit ceiling keeps both backends inside their native
-integer range while remaining far beyond any real estate listing.
+A signed 32-bit ceiling is far beyond any real estate listing and stays within
+the native integer range of every store the project supports. The persistence
+adapter enforces the same bound before it binds the value, so an offset that
+reaches it despite this check is rejected as invalid pagination rather than
+failing in the driver.
 """
 
 DEFAULT_PAGE_LIMIT = 50
-MAX_REQUEST_BODY_BYTES = 1024 * 1024
-"""Largest catalogue-import or toggle body the HTTP adapter accepts.
-
-The catalogue document is the only unbounded field a client supplies, so one
-megabyte comfortably covers a large estate's YAML while bounding what a single
-request can make the process buffer.
-"""
 
 NEW_ESTATE_KEY_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
 """Pattern a *new* estate key must match.
@@ -101,7 +95,9 @@ class CatalogueImportRequest:
     Attributes
     ----------
     catalogue_yaml:
-        Catalogue document as YAML text.
+        Catalogue document as text. Parsing is a domain operation, so the port
+        carries the uploaded document rather than a parsed catalogue; see
+        :meth:`ghillie.estate.ports.EstateManagement.import_catalogue`.
     commit_sha:
         Commit the document was read from.
     estate_name:

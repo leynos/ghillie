@@ -12,6 +12,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 
 from ghillie.catalogue.storage import CatalogueImportRecord, Estate, ProjectRecord
+from ghillie.estate import persistence
 from ghillie.estate.errors import (
     EstateConflictError,
     EstateNotFoundError,
@@ -562,11 +563,13 @@ async def test_set_ingestion_escapes_a_hostile_repository_name(
 ) -> None:
     """A newline in the repository name cannot forge a second log line."""
 
-    async def _changed(_owner: str, _name: str, *, enabled: bool) -> bool:
+    async def _changed(
+        _registry: object, _owner: str, _name: str, *, enabled: bool
+    ) -> bool:
         """Report every toggle as a change so the log line is always written."""
         return True
 
-    monkeypatch.setattr(service, "_toggle", _changed)
+    monkeypatch.setattr(persistence, "set_ingestion", _changed)
     hostile = "alpha\nestate.set-ingestion outcome=succeeded"
 
     with capture_femto_logs("ghillie.estate.observability") as logs:

@@ -317,6 +317,29 @@ prefixes = [
 allowed = ["domain_ports"]
 
 [[tool.hecate.groups]]
+name = "outbound_adapter"
+# This group must precede the application group. Hecate uses first-match
+# semantics, and an adapter leaf inside an application package
+# (ghillie.estate.persistence) would otherwise be classified as application.
+prefixes = [
+    "ghillie.bronze.storage",
+    "ghillie.catalogue.queries",
+    "ghillie.catalogue.storage",
+    "ghillie.estate.persistence",
+    "ghillie.github.client",
+    "ghillie.gold.storage",
+    "ghillie.reporting.filesystem_sink",
+    "ghillie.silver.storage",
+    "ghillie.status.mock",
+    "ghillie.status.openai_client",
+]
+allowed = [
+    "application",
+    "domain_ports",
+    "outbound_adapter",
+]
+
+[[tool.hecate.groups]]
 name = "application"
 # Hecate uses first-match semantics. Keep narrower prefixes above generic
 # package prefixes such as ghillie.registry.
@@ -378,25 +401,6 @@ allowed = [
     "inbound_adapter",
     "outbound_adapter",
     "package_facade",
-]
-
-[[tool.hecate.groups]]
-name = "outbound_adapter"
-prefixes = [
-    "ghillie.bronze.storage",
-    "ghillie.catalogue.queries",
-    "ghillie.catalogue.storage",
-    "ghillie.github.client",
-    "ghillie.gold.storage",
-    "ghillie.reporting.filesystem_sink",
-    "ghillie.silver.storage",
-    "ghillie.status.mock",
-    "ghillie.status.openai_client",
-]
-allowed = [
-    "application",
-    "domain_ports",
-    "outbound_adapter",
 ]
 
 [[tool.hecate.groups]]

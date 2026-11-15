@@ -137,7 +137,7 @@ class InvalidInputError(Exception):
 
 
 class PayloadTooLargeError(Exception):
-    """Raised when a request body exceeds ``MAX_REQUEST_BODY_BYTES``.
+    """Raised when a request body exceeds the estate request-body limit.
 
     Attributes
     ----------

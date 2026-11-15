@@ -8,12 +8,14 @@ import pytest
 from sqlalchemy import select
 
 from ghillie.catalogue.queries import (
+    MAXIMUM_OFFSET,
     EstateRow,
     _latest_import_subquery,
     get_estate_by_key,
     list_estates,
 )
 from ghillie.catalogue.storage import CatalogueImportRecord, Estate
+from ghillie.estate.errors import InvalidPaginationError
 from tests.helpers.femtologging_capture import capture_femto_logs
 from tests.unit.estate_test_helpers import (
     count_rows,
@@ -257,6 +259,17 @@ async def test_get_estate_by_key_returns_none_for_unknown_keys(
     assert await get_estate_by_key(session_factory, "missing") is None, (
         "unknown key should resolve to nothing"
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("offset", [-1, MAXIMUM_OFFSET + 1])
+async def test_list_estates_rejects_an_unbindable_offset(
+    session_factory: async_sessionmaker[AsyncSession],
+    offset: int,
+) -> None:
+    """An offset beyond the storage range is invalid pagination, not a driver error."""
+    with pytest.raises(InvalidPaginationError):
+        await list_estates(session_factory, limit=10, offset=offset)
 
 
 @pytest.mark.asyncio

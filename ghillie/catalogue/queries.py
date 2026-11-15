@@ -12,6 +12,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ghillie.catalogue.storage import CatalogueImportRecord, Estate
+from ghillie.estate.errors import InvalidPaginationError
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -20,6 +21,36 @@ if typ.TYPE_CHECKING:
     from sqlalchemy.sql.selectable import Subquery
 
 type SessionFactory = async_sessionmaker[AsyncSession]
+
+MAXIMUM_OFFSET = 2**31 - 1
+"""Largest offset the storage engine can bind.
+
+SQLite raises a bare ``OverflowError`` when a caller binds a value beyond its
+signed 64-bit range, and PostgreSQL rejects an out-of-range ``OFFSET`` as a
+storage error. Checking here, before the value reaches the driver, turns either
+failure into the port's ``InvalidPaginationError`` instead of an unhandled
+error. The domain publishes the same ceiling as ``MAX_PAGE_OFFSET``; this copy
+exists so the adapter does not depend on the port's policy constant.
+"""
+
+
+def _require_bindable_offset(offset: int) -> None:
+    """Reject an offset the storage engine cannot bind.
+
+    Parameters
+    ----------
+    offset:
+        Offset the caller asked the listing to start at.
+
+    Raises
+    ------
+    InvalidPaginationError
+        If ``offset`` is negative or beyond :data:`MAXIMUM_OFFSET`.
+
+    """
+    if not 0 <= offset <= MAXIMUM_OFFSET:
+        message = f"must be between 0 and {MAXIMUM_OFFSET}"
+        raise InvalidPaginationError("offset", message)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -115,7 +146,13 @@ async def list_estates(
     list[EstateRow]
         Estates in key order.
 
+    Raises
+    ------
+    InvalidPaginationError
+        If ``offset`` is outside the range the storage engine can bind.
+
     """
+    _require_bindable_offset(offset)
     async with session_factory() as session:
         # Select the page first so the ranking window only covers the estates
         # it will return instead of the whole import history.

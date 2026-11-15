@@ -91,6 +91,17 @@ class EstateManagement(typ.Protocol):
         StorageUnavailableError
             If the catalogue database cannot be written.
 
+        Notes
+        -----
+        ``request.catalogue_yaml`` carries the document as text rather than a
+        parsed catalogue. Parsing is a domain operation with its own failure
+        vocabulary: the service parses off the event loop and turns a malformed
+        document into :class:`~ghillie.estate.errors.CatalogueRejectedError`
+        with one issue per validation message. Keeping the text in the port
+        leaves that decision, and the raw document the importer records against
+        the commit, inside the domain instead of splitting validation between a
+        transport adapter and the importer.
+
         """
         ...
 

@@ -2,35 +2,32 @@
 
 The service owns the units of work behind estate management. It validates a
 request, serializes import and sync per estate, and orchestrates the importer
-and registry. Failure translation lives in :mod:`ghillie.estate.translation` and
-the D21 records in :mod:`ghillie.estate.observability`; both are reached through
-the injected :class:`~ghillie.estate.collaborators.EstateCollaborators`, so the
-service itself contains only validation, locking, orchestration, and the
-decision of which outcome applies.
+and registry. Storage failures are classified at the persistence boundary in
+:mod:`ghillie.estate.persistence`, catalogue validation in
+:mod:`ghillie.estate.translation`, and the D21 records come from
+:mod:`ghillie.estate.observability` through the injected
+:class:`~ghillie.estate.collaborators.EstateCollaborators`. The service itself
+therefore contains only validation, locking, orchestration, and the decision of
+which outcome applies.
 """
 
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import typing as typ
 import weakref
 
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-
-from ghillie.catalogue.queries import EstateRow, get_estate_by_key, list_estates
 from ghillie.catalogue.validation import CatalogueValidationError
-from ghillie.estate import translation
+from ghillie.estate import persistence, translation
 from ghillie.estate.collaborators import (
     CatalogueParser,
     EstateCollaborators,
     ImporterFactory,
 )
 from ghillie.estate.errors import (
-    EstateConflictError,
     EstateNotFoundError,
     InvalidPaginationError,
-    RegistrySyncFailedError,
-    StorageUnavailableError,
 )
 from ghillie.estate.models import (
     MAX_PAGE_LIMIT,
@@ -55,13 +52,13 @@ from ghillie.estate.observability import (
     import_details,
     sync_details,
 )
-from ghillie.registry.errors import RegistrySyncError
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from ghillie.catalogue.importer import CatalogueImportResult
     from ghillie.catalogue.models import Catalogue
+    from ghillie.catalogue.queries import EstateRow
     from ghillie.registry.models import SyncResult
     from ghillie.registry.service import RepositoryRegistryService
 
@@ -133,14 +130,11 @@ class EstateManagementService:
 
         """
         _validate_page(page.limit, page.offset)
-        try:
-            rows = await list_estates(
-                self._session_factory,
-                limit=page.limit + 1,
-                offset=page.offset,
-            )
-        except SQLAlchemyError as exc:
-            raise StorageUnavailableError(translation.STORAGE_MESSAGE) from exc
+        rows = await persistence.list_estates(
+            self._session_factory,
+            limit=page.limit + 1,
+            offset=page.offset,
+        )
 
         has_more = len(rows) > page.limit
         items = tuple(_estate_summary(row) for row in rows[: page.limit])
@@ -251,17 +245,14 @@ class EstateManagementService:
             estate_name=resolved_name,
         )
         try:
-            result = await importer.import_catalogue(
+            result = await persistence.import_catalogue(
+                importer,
                 catalogue,
                 commit_sha=request.commit_sha,
                 dry_run=request.dry_run,
             )
         except CatalogueValidationError as exc:
             raise translation.catalogue_rejected(exc) from exc
-        except IntegrityError as exc:
-            raise EstateConflictError(translation.CONFLICT_MESSAGE) from exc
-        except SQLAlchemyError as exc:
-            raise StorageUnavailableError(translation.STORAGE_MESSAGE) from exc
         return result
 
     async def sync_registry(
@@ -333,17 +324,9 @@ class EstateManagementService:
     async def _run_sync(self, estate_key: str, *, dry_run: bool) -> SyncResult:
         """Run the registry projection under the estate lock."""
         await self._require_estate(estate_key)
-        try:
-            result = await self._registry.sync_from_catalogue(
-                estate_key, dry_run=dry_run
-            )
-        except RegistrySyncError as exc:
-            raise translation.sync_error(estate_key, exc) from exc
-        except IntegrityError as exc:
-            raise EstateConflictError(translation.CONFLICT_MESSAGE) from exc
-        except SQLAlchemyError as exc:
-            raise RegistrySyncFailedError(translation.SYNC_FAILED_MESSAGE) from exc
-        return result
+        return await persistence.sync_registry(
+            self._registry, estate_key, dry_run=dry_run
+        )
 
     async def list_repositories(
         self, estate_key: str, query: RepositoryQuery
@@ -378,18 +361,14 @@ class EstateManagementService:
         _validate_page(query.limit, query.offset)
 
         estate = await self._require_estate(estate_key)
-        try:
-            # The registry owns the Silver session factory. Querying Silver
-            # through the catalogue factory would read the wrong database when
-            # the stores are deployed separately.
-            repositories = await self._registry.list_repositories(
-                estate.id,
-                ingestion_enabled=query.ingestion_enabled,
-                limit=query.limit + 1,
-                offset=query.offset,
-            )
-        except SQLAlchemyError as exc:
-            raise StorageUnavailableError(translation.STORAGE_MESSAGE) from exc
+        # The registry owns the Silver session factory. Querying Silver through
+        # the catalogue factory would read the wrong database when the stores
+        # are deployed separately. Read one row past the page so the caller can
+        # tell whether a further page exists.
+        over_fetch = dataclasses.replace(query, limit=query.limit + 1)
+        repositories = await persistence.list_repositories(
+            self._registry, estate.id, over_fetch
+        )
 
         has_more = len(repositories) > query.limit
         items = tuple(repositories[: query.limit])
@@ -431,7 +410,9 @@ class EstateManagementService:
         """
         toggle = self._recorder.begin_toggle(owner=owner, name=name, enabled=enabled)
         try:
-            changed = await self._toggle(owner, name, enabled=enabled)
+            changed = await persistence.set_ingestion(
+                self._registry, owner, name, enabled=enabled
+            )
         except asyncio.CancelledError as exc:
             # D21: cancellation is a terminal outcome the ``except Exception``
             # clause below would miss, and it must keep propagating.
@@ -443,18 +424,15 @@ class EstateManagementService:
             raise
         except Exception as exc:
             # D21: a direct service caller has no HTTP catch-all, so any failure
-            # must still leave one terminal record. The record names the error
-            # the caller will see, which is the translated one when the failure
-            # has a translation.
-            translated = translation.toggle_failure(exc, owner=owner, name=name)
+            # must still leave one terminal record. The persistence adapter has
+            # already translated storage and registry failures, so the record
+            # names the error the caller will see.
             self._recorder.record_toggle(
                 toggle,
                 outcome=MutationOutcome.FAILED,
-                details=failure_details(exc if translated is None else translated),
+                details=failure_details(exc),
             )
-            if translated is None:
-                raise
-            raise translated from exc
+            raise
 
         previous = not enabled if changed else enabled
         self._recorder.record_toggle(
@@ -469,12 +447,6 @@ class EstateManagementService:
             changed=changed,
         )
 
-    async def _toggle(self, owner: str, name: str, *, enabled: bool) -> bool:
-        """Delegate the toggle so ``set_ingestion`` stays within complexity."""
-        if enabled:
-            return await self._registry.enable_ingestion(owner, name)
-        return await self._registry.disable_ingestion(owner, name)
-
     async def _parse_catalogue(self, catalogue_yaml: str) -> Catalogue:
         """Parse untrusted YAML off the event loop, translating its failures."""
         try:
@@ -484,11 +456,8 @@ class EstateManagementService:
         return catalogue
 
     async def _get_estate_row(self, estate_key: str) -> EstateRow | None:
-        """Read one estate, translating storage failures."""
-        try:
-            return await get_estate_by_key(self._session_factory, estate_key)
-        except SQLAlchemyError as exc:
-            raise StorageUnavailableError(translation.STORAGE_MESSAGE) from exc
+        """Read one estate; the persistence adapter translates storage failures."""
+        return await persistence.get_estate_by_key(self._session_factory, estate_key)
 
     async def _require_estate(self, estate_key: str) -> EstateRow:
         """Return an estate row or raise :class:`EstateNotFoundError`."""
