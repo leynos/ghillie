@@ -1115,6 +1115,38 @@ per pull request.
       checks fail closed. The regression cases live in
       `tests/unit/test_estate_test_helpers.py` and were observed failing against
       the old filter before the fix.
+- [x] (2026-11-16) Closed review `5913322290` on PR-B. The two inline
+      findings were real write forms the read-only filter missed:
+      `PRAGMA user_version = 7` and `PRAGMA journal_mode(WAL)` change
+      connection or database state, and `EXPLAIN ANALYZE UPDATE ...` executes
+      the statement it explains on PostgreSQL. Read pragmas are now
+      allow-listed by name, an `=` argument marks an assignment, and `EXPLAIN`
+      is not a read keyword. The three regressions were observed failing
+      against the old filter first.
+- [x] (2026-11-16) Reconciled the two failed pre-merge rows. The Domain
+      Architecture row's five items: `MAX_REQUEST_BODY_BYTES` moved to
+      `ghillie/api/estate/resources.py` as an HTTP transport limit;
+      `MAX_PAGE_OFFSET` restated as a domain ceiling with the storage range
+      enforced in `ghillie/catalogue/queries.py`; the port's YAML text
+      justified in `ghillie/estate/ports.py`; every `sqlalchemy.exc` import and
+      registry failure classification moved to the new
+      `ghillie/estate/persistence.py`, classified `outbound_adapter`; and the
+      per-estate lock qualified as an in-process guarantee in the developers
+      guide. The Developer Documentation row: the design document's module
+      tree re-roots at `ghillie/`, gains an estate-layer component bullet and
+      decision records D9, D13, D14, D16, D17, D21, D22 and D32.
+- [x] (2026-11-16) Cleared the CodeScene gate. The two new files scored 9.38
+      (`Overall Code Complexity` for `persistence.py`, `Code Duplication` for
+      its test). Each persistence function now states its store call and a
+      pure translator, with one wrapper that raises the translated error from
+      the original; the two catalogue-read tests became one parametrized test.
+      Both files score 10.00 under `cs review`.
+- [x] (2026-11-16) Gate evidence for the above: all eight gates ran
+      sequentially on the candidate; `check-fmt` first flagged mdtablefix
+      drift in the two edited Markdown files and `lint` first flagged two
+      undocumented nested functions, both fixed and the affected gates re-ran
+      green; `test` reported 1531 passed and 17 skipped, and
+      `check-architecture` printed `hecate: architecture check passed`.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
