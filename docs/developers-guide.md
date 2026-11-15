@@ -358,6 +358,9 @@ implementation is `ghillie.estate.service.EstateManagementService`. The port
 contract is that implementations own their units of work and translate
 persistence and catalogue failures into `ghillie.estate.errors`, so the HTTP
 and CLI layers never import a catalogue, registry, or SQLAlchemy exception.
+`ghillie/estate/persistence.py` is the storage boundary: it issues the
+catalogue and registry calls and classifies their failures into the estate
+error vocabulary.
 
 ### Service responsibilities
 
@@ -368,22 +371,31 @@ and CLI layers never import a catalogue, registry, or SQLAlchemy exception.
   `CatalogueValidationError` becomes a `CatalogueRejectedError` holding one
   `Issue(code="catalogue_schema")` per validation message.
 - **Per-estate serialization.** Import and sync each run under an
-  `asyncio.Lock` obtained from `_lock_for`. The locks live in a
-  `weakref.WeakValueDictionary`, so a coroutine inside `async with` holds the
-  only strong reference and an idle estate retains no lock. Two concurrent
-  requests for one estate therefore cannot interleave their catalogue writes,
-  while different estates proceed independently.
-- **Failure translation.** `ghillie/estate/translation.py` holds the pure
-  translators: each decides which estate error a failure becomes and never
-  logs, so the service keeps ownership of the D21 record that accompanies the
-  outcome. `IntegrityError` becomes `EstateConflictError`. A catalogue read or
-  write failure becomes `StorageUnavailableError`, and a non-integrity
-  SQLAlchemy failure raised by the registry projection becomes
-  `RegistrySyncFailedError`. Registry failures are classified through
-  `RegistrySyncError.__cause__`: an `IntegrityError` cause is a conflict, and
-  `OperationalError` or `InterfaceError` causes are storage outages. The
-  registry's `ESTATE_NOT_FOUND_REASON` becomes `EstateNotFoundError`; anything
-  else becomes `RegistrySyncFailedError`.
+  `asyncio.Lock` obtained from `_lock_for`. The lock is in-process, so it
+  serializes import and sync within a single server process only; across worker
+  processes or replicas there is no such guarantee. Serializing imports
+  therefore relies on running one worker or replica, which is the MVP
+  deployment. The locks live in a `weakref.WeakValueDictionary`, so a coroutine
+  inside `async with` holds the only strong reference and an idle estate
+  retains no lock. Two concurrent requests for one estate within that process
+  cannot interleave their catalogue writes, while different estates proceed
+  independently.
+- **Failure translation.** SQLAlchemy and registry failure classification lives
+  in `ghillie/estate/persistence.py`, the only estate module that imports
+  `sqlalchemy.exc`. `ghillie/estate/translation.py` holds only the pure
+  catalogue-validation translation: a `CatalogueValidationError` becomes a
+  `CatalogueRejectedError` with one `catalogue_schema` `Issue` per message.
+  Neither module logs, so the service keeps ownership of the D21 record that
+  accompanies the outcome. `IntegrityError` becomes `EstateConflictError`. A
+  catalogue read or write SQLAlchemy failure becomes `StorageUnavailableError`,
+  and a non-integrity SQLAlchemy failure raised by the registry projection
+  becomes `RegistrySyncFailedError`. A registry projection failure is
+  classified through `RegistrySyncError.__cause__`: an `IntegrityError` cause
+  is a conflict, and `OperationalError` or `InterfaceError` causes are storage
+  outages. The registry's `ESTATE_NOT_FOUND_REASON` becomes
+  `EstateNotFoundError`; anything else becomes `RegistrySyncFailedError`. The
+  adapter raises these errors directly, so the service contains no
+  `SQLAlchemyError` handling.
 - **Right database for Silver.** `list_repositories` lists through the
   registry's own session factory rather than the catalogue factory, because the
   two stores can be deployed separately.
@@ -404,11 +416,14 @@ library and estate-owned modules.
   optional `ingestion_enabled` filter. `Page[T]` and `RepositoryPage` return
   the items with `limit`, `offset`, `has_more`, and `next_offset`.
 - The pagination bounds are module constants: `DEFAULT_PAGE_LIMIT` 50,
-  `MAX_PAGE_LIMIT` 500, and `MAX_PAGE_OFFSET` `2**31 - 1`. The offset ceiling
-  is a signed 32-bit maximum because SQLite raises `OverflowError` beyond its
-  signed 64-bit bind range and PostgreSQL rejects an out-of-range `OFFSET` as a
+  `MAX_PAGE_LIMIT` 500, and `MAX_PAGE_OFFSET` `2**31 - 1`. `MAX_PAGE_OFFSET` is
+  a domain-level ceiling in `ghillie/estate/models.py`;
+  `ghillie/catalogue/queries.py` enforces the same storage range before the
+  value is bound, because SQLite raises `OverflowError` beyond its signed
+  64-bit bind range and PostgreSQL rejects an out-of-range `OFFSET` as a
   storage error.
-- `MAX_REQUEST_BODY_BYTES` is 1 MiB; the HTTP adapter enforces it.
+- `MAX_REQUEST_BODY_BYTES` is an HTTP transport limit of 1 MiB, defined in
+  `ghillie/api/estate/resources.py`; that adapter enforces it.
 - `validate_new_estate_key` applies `NEW_ESTATE_KEY_PATTERN` only when the
   import creates an estate; `validate_estate_key_reference` accepts any key of
   one to `MAX_ESTATE_KEY_LENGTH` (64) characters, so keys created earlier
@@ -494,6 +509,21 @@ construct either middleware; `ghillie.runtime` and `ghillie.api.app` are the
 composition root for the middleware, and `ghillie.api.factory` is the
 composition root for the estate and reporting services.
 
+### Worker logging configuration
+
+Granian calls the application factory in a worker process, so the logging
+configuration that `main` performs in the parent process never reaches the
+worker. `ghillie.runtime.create_app` therefore applies `GHILLIE_LOG_LEVEL`
+through `configure_logging` before it delegates to `ghillie.api.app.create_app`
+to build the app. Without that call the worker's application logs, including
+the D21 mutation records, are discarded. `configure_logging` defaults to
+`force=False`, so it leaves an existing handler in place and in-process callers
+such as the unit tests are unaffected.
+
+The decision is recorded under
+[worker logging configuration](ghillie-design.md#worker-logging-configuration)
+in the design document's decision records.
+
 ### Hecate group placement
 
 Hecate enforces the declared import direction through `[tool.hecate]` in
@@ -501,19 +531,21 @@ Hecate enforces the declared import direction through `[tool.hecate]` in
 
 - `ghillie.estate.errors`, `ghillie.estate.models`, and `ghillie.estate.ports`
   are `domain_ports`; that group may import only `domain_ports`.
-- The remaining `ghillie.estate` modules, including the service and
-  observability code, fall under the generic `ghillie.estate` prefix in the
-  `application` group, which may import `application`, `domain_ports`, and
-  `outbound_adapter` modules.
-- `ghillie.catalogue.queries` is an `outbound_adapter`, the group allowed to
-  import `application`, `domain_ports`, and other `outbound_adapter` modules.
+- The remaining `ghillie.estate` modules — the service, translation,
+  observability, and collaborators code — fall under the generic
+  `ghillie.estate` prefix in the `application` group, which may import
+  `application`, `domain_ports`, and `outbound_adapter` modules.
+- `ghillie.estate.persistence` and `ghillie.catalogue.queries` are
+  `outbound_adapter` modules, the group allowed to import `application`,
+  `domain_ports`, and other `outbound_adapter` modules.
 - `ghillie.storage_bootstrap` is a `composition_root`, the group allowed to
   import every other layer.
 
 Declaration order matters because Hecate uses first-match semantics. The leaf
-`ghillie.estate.errors`, `ghillie.estate.models`, and `ghillie.estate.ports`
-entries must precede the generic `ghillie.estate` prefix, or the application
-group would claim the domain ports. The composition-root group, which also holds
+`ghillie.estate.errors`, `ghillie.estate.models`, `ghillie.estate.ports`, and
+`ghillie.estate.persistence` entries must precede the generic `ghillie.estate`
+prefix, or the application group would claim the domain ports and the
+persistence adapter. The composition-root group, which also holds
 `ghillie.api.app` and `ghillie.api.factory`, is declared before the
 inbound-adapter group so those modules are classified as composition roots
 rather than by the generic `ghillie.api` prefix. There is no generic

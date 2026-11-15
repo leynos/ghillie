@@ -678,20 +678,33 @@ route when both a session factory and a reporting service are supplied. The
 package structure is:
 
 ```plaintext
-ghillie/api/
-  __init__.py         # Package root, exports create_app
-  app.py              # Application factory with AppDependencies dataclass
-  auth.py             # BearerTokenMiddleware (optional bearer authentication)
-  factory.py          # build_estate_service() and build_reporting_service()
-  middleware.py       # SQLAlchemySessionManager (request-scoped sessions)
-  errors.py           # Domain exceptions and Falcon error handlers
-  health/
-    resources.py      # HealthResource, ReadyResource
+ghillie/
+  api/
+    __init__.py         # Package root, exports create_app
+    app.py              # Application factory with AppDependencies dataclass
+    auth.py             # BearerTokenMiddleware (optional bearer authentication)
+    factory.py          # build_estate_service() and build_reporting_service()
+    middleware.py       # SQLAlchemySessionManager (request-scoped sessions)
+    errors.py           # Domain exceptions and Falcon error handlers
+    health/
+      resources.py      # HealthResource, ReadyResource
+    estate/
+      resources.py      # Estate-management resources
+      schemas.py        # msgspec request and response structs
+    gold/
+      resources.py      # ReportResource (on-demand report generation)
   estate/
-    resources.py      # Estate-management resources
-    schemas.py        # msgspec request and response structs
-  gold/
-    resources.py      # ReportResource (on-demand report generation)
+    ports.py            # EstateManagement typing.Protocol (driving port)
+    models.py           # Frozen request, summary, and page value types
+    errors.py           # Estate error vocabulary adapters may handle
+    service.py          # EstateManagementService: validation and orchestration
+    persistence.py      # Only estate module importing sqlalchemy.exc
+    translation.py      # Pure catalogue-validation translation
+    observability.py    # MutationRecorder and the D21 record format
+    collaborators.py    # Injected importer factory, parser, and recorder
+  catalogue/
+    queries.py          # Estate read queries over the catalogue tables
+  storage_bootstrap.py  # init_all_storage(engine) opt-in schema creation
 ```
 
 The following components are implemented:
@@ -704,6 +717,18 @@ The following components are implemented:
   and `/repositories/{owner}/{name}/ingestion`): Registered when an
   `EstateManagement` port is supplied; the resources in `ghillie/api/estate/`
   translate HTTP into calls on that port.
+- **Estate application layer** (`ghillie/estate`): The driving port
+  `EstateManagement` in `ghillie/estate/ports.py` is a `typing.Protocol`;
+  `EstateManagementService` in `ghillie/estate/service.py` coordinates
+  catalogue import, registry sync, repository listings, and ingestion toggles
+  behind it. `ghillie/estate/persistence.py` is the only estate module that
+  imports `sqlalchemy.exc` or the registry failure shape, and it translates
+  storage failures into `ghillie.estate.errors`;
+  `ghillie/estate/translation.py` keeps only the pure catalogue-validation
+  translation. Imports and syncs are serialized per estate by an in-process
+  `asyncio.Lock`, which gives a guarantee within a single server process only
+  (D17). Each mutation emits one D21 record through `MutationRecorder` in
+  `ghillie/estate/observability.py`.
 - **On-demand report generation**
   (`POST /reports/repositories/{owner}/{name}`): Triggers report generation for
   a specific repository, using the same pipeline as scheduled reports. Returns
@@ -723,9 +748,12 @@ The following components are implemented:
 - **Error handlers**: Render every failure through the shared envelope with a
   stable `code`, including Falcon's own HTTP errors and unexpected exceptions.
 
-**Planned evolution:** As additional domain endpoints are added (Concordat
-CloudEvents ingestion), corresponding resource modules should be created under
-`ghillie/api/bronze/` and `ghillie/api/gold/`.
+**Planned evolution:** The estate application layer is shipped:
+`ghillie/estate/` and the catalogue read queries in
+`ghillie/catalogue/queries.py` implement the current estate surface. The
+remaining planned endpoints are Concordat CloudEvents ingestion, for which
+corresponding resource modules should be created under `ghillie/api/bronze/` and
+`ghillie/api/gold/`.
 
 This structure maintains clear separation between:
 
@@ -776,11 +804,30 @@ and the failure criteria.
 **Decision records:**
 
 The following decisions are recorded here rather than in a separate
-Architecture Decision Record (ADR). They are D13 (start-up decoupling and
-schema bootstrap) and D14 (optional authentication) from the estate-management
-plan, together with the bootstrap opt-in that D13 depends on. The
+Architecture Decision Record (ADR). They are D9 (driving port), D13 (start-up
+decoupling and schema bootstrap), D14 (optional authentication), D16 (estate
+keys), D17 (concurrency and storage failures), D21 (observability), D22
+(catalogue-import request value), and D32 (worker logging configuration) from
+the estate-management plan, together with the bootstrap opt-in that D13 depends
+on. The
 [developers guide](developers-guide.md#authentication-and-start-up-middleware)
 links back to this section.
+
+#### Driving port
+
+`ghillie.estate.ports.EstateManagement` is a `typing.Protocol` implemented by
+`ghillie.estate.service.EstateManagementService`, which composes a
+`CatalogueImporter`, a `RepositoryRegistryService`, and the read queries in
+`ghillie.catalogue.queries`. The alternative considered was to put the methods
+directly on `RepositoryRegistryService`, with concrete services in the
+resources: it would save about six files, but it couples the HTTP layer to
+catalogue and registry exceptions and leaves no single place for estate-key
+resolution, translation, locking, and logging. The port is kept because the
+task requires domain logic to be separated from adapters, and the service stays
+a thin coordinator.
+
+**Affected modules:** `ghillie/estate/ports.py`, `ghillie/estate/service.py`,
+`ghillie/estate/collaborators.py`, and `ghillie/catalogue/queries.py`.
 
 #### Start-up decoupling and schema bootstrap
 
@@ -813,6 +860,83 @@ start-up fails. The token is never logged: the runtime passes it through
 `GHILLIE_DB_BOOTSTRAP=create-all` is the only accepted non-blank value. Any
 other value is treated as an operator error and fails start-up rather than
 starting with a half-configured schema; a blank value is treated as unset.
+
+#### Estate keys
+
+Creating an estate, which happens on import, requires a key matching
+`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`. Every other endpoint accepts any key of
+one to 64 characters, so keys created earlier through Python stay reachable.
+Keys containing `/` cannot be routed and surface as `not_found`.
+
+**Affected modules:** `ghillie/estate/models.py` defines
+`NEW_ESTATE_KEY_PATTERN`, `validate_new_estate_key`, and
+`validate_estate_key_reference`; `ghillie/estate/service.py` applies the
+creation rule only when an import creates an estate.
+
+#### Concurrency and storage failures
+
+`EstateManagementService` serializes import and sync per estate with an
+`asyncio.Lock`. The lock is in-process, so the guarantee holds within one
+server process; the MVP runs a single replica. `IntegrityError` becomes a `409`
+`conflict`, and a connection-level `OperationalError` or `InterfaceError`
+becomes a `503` `storage_unavailable`. Error descriptions never include SQL or
+driver detail; the original failure is chained as the cause rather than
+rendered.
+
+**Affected modules:** `ghillie/estate/service.py` holds the per-estate locks,
+`ghillie/estate/persistence.py` classifies the storage failures, and
+`ghillie/api/errors.py` maps the resulting estate errors to the status codes.
+
+#### Observability
+
+Each mutation logs one structured line through `ghillie.logging`, carrying the
+operation, estate key, commit, dry-run flag, counts, duration, and outcome.
+Toggles also log the old and new state. For a registry sync, D31 names the
+events and where they are emitted. Cancellation is a terminal outcome like any
+other: each of the three wrappers records `outcome=cancelled` from its own
+`except asyncio.CancelledError` clause and re-raises, because `CancelledError`
+derives from `BaseException` and the `except Exception` clause would otherwise
+leave a cancelled attempt with no record at all. Rendering and timing live in
+`MutationRecorder` in `ghillie/estate/observability.py`, which owns the record
+format, the outcome vocabulary (`succeeded`, `skipped`, `failed`, and
+`cancelled`), and the clock; the service decides only which outcome applies.
+The recorder is injected through `EstateCollaborators` beside the importer
+factory and the catalogue parser, so a test can replace one seam, including
+with a fixed clock that pins `duration_ms`, without the others. Keeping this
+out of `EstateManagementService` also keeps that class about orchestration,
+which the hosted Unit Architecture check asks for.
+
+**Affected modules:** `ghillie/estate/observability.py`,
+`ghillie/estate/collaborators.py`, and `ghillie/estate/service.py`.
+
+#### Catalogue-import request value
+
+The port method is
+`import_catalogue(estate_key, request: CatalogueImportRequest)` rather than a
+five-argument signature. The four request fields travel together from the HTTP
+resource through the service to the importer, so grouping them removes a data
+clump and keeps the driven port inside the repository's parameter limits
+without a suppression. The frozen, slotted dataclass lives in
+`ghillie.estate.models`, so the port stays free of transport types. The API
+layer constructs it from the decoded body and the `dry_run` query flag, and the
+service passes it through unchanged, so behaviour is identical to the
+positional form.
+
+**Affected modules:** `ghillie/estate/models.py`, `ghillie/estate/ports.py`,
+`ghillie/estate/service.py`, and `ghillie/api/estate/resources.py`.
+
+#### Worker logging configuration
+
+The Granian factory `ghillie.runtime.create_app` applies `GHILLIE_LOG_LEVEL`
+through `configure_logging` before it builds the app. Granian calls the factory
+in a worker process, so the configuration `main` performs in the parent never
+reaches it; without this call the worker's application logs, including D21's
+mutation records, are discarded. `configure_logging` defaults to `force=False`,
+which leaves an existing handler in place, so in-process callers such as the
+unit tests are unaffected.
+
+**Affected modules:** `ghillie/runtime.py` (`create_app`) and
+`ghillie/logging.py` (`configure_logging`).
 
 ## 9. Evidence Bundle Architecture (Phase 2.1)
 
