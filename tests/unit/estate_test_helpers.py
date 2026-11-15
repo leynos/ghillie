@@ -81,11 +81,28 @@ __all__ = [
     "record_statements",
 ]
 
-# Statement keywords the filter can prove cannot change a stored row. Anything
+# Statement keywords the filter can prove cannot change stored state. Anything
 # else the engine runs inside a capture window, including a form this filter
 # does not recognise, is treated as a write so a read-only check fails closed.
-_READ_STATEMENT_KEYWORDS: typ.Final = frozenset(
-    {"explain", "pragma", "select", "values"}
+# ``EXPLAIN`` is deliberately absent: ``EXPLAIN ANALYZE`` runs the statement it
+# explains, and telling the executing forms from the planning ones needs a
+# parser this filter does not have.
+_READ_STATEMENT_KEYWORDS: typ.Final = frozenset({"select", "values"})
+
+# PRAGMA names SQLite documents as reporting state without changing anything.
+# The list is intentionally short: the read-only checks only issue
+# ``table_info``, and an unrecognised pragma must fail closed because SQLite
+# accepts both getter and setter forms for many of these names.
+_READ_PRAGMA_NAMES: typ.Final = frozenset(
+    {
+        "database_list",
+        "foreign_key_list",
+        "index_info",
+        "index_list",
+        "index_xinfo",
+        "table_info",
+        "table_xinfo",
+    }
 )
 
 NOW = dt.datetime(2024, 7, 7, 12, 0, tzinfo=dt.UTC)
@@ -399,16 +416,42 @@ def _strip_leading_comments(statement: str) -> str:
     return remainder
 
 
+def _is_read_pragma(text: str) -> bool:
+    """Return whether *text* is a PRAGMA form that only reports state.
+
+    SQLite accepts both a getter and a setter form for many pragmas, and
+    ``PRAGMA journal_mode(WAL)`` assigns exactly as ``PRAGMA journal_mode =
+    WAL`` does. A form is a read only when it assigns nothing and names a
+    pragma on the verified list; an optional schema prefix such as ``main.``
+    is ignored.
+    """
+    arguments = text[len("pragma") :].lstrip()
+    if "=" in arguments:
+        return False
+    name = arguments.split("(", 1)[0].strip().rsplit(".", 1)[-1].lower()
+    return name in _READ_PRAGMA_NAMES
+
+
+def _is_provably_read(statement: str) -> bool:
+    """Return whether *statement* is a form this filter can prove is a read."""
+    text = _strip_leading_comments(statement)
+    words = text.split(None, 1)
+    if not words:
+        return False
+    keyword = words[0].lower()
+    if keyword in _READ_STATEMENT_KEYWORDS:
+        return True
+    return keyword == "pragma" and _is_read_pragma(text)
+
+
 def data_writes(statements: typ.Iterable[str]) -> list[str]:
     """Return the recorded statements that are not provably read-only.
 
-    Only forms this filter knows to be reads pass. A write verb, a ``WITH``
-    form it cannot classify, or anything else unrecognised is reported, so a
-    gap in the filter makes a read-only check fail rather than pass vacuously.
+    Only forms this filter can prove are reads pass: a ``SELECT``, a
+    ``VALUES`` clause, or a PRAGMA that assigns nothing and names a verified
+    getter. A write verb, an ``EXPLAIN`` (whose ``ANALYZE`` form executes), a
+    ``WITH`` form it cannot classify, or anything else unrecognised is
+    reported, so a gap in the filter makes a read-only check fail rather than
+    pass vacuously.
     """
-    writes: list[str] = []
-    for statement in statements:
-        words = _strip_leading_comments(statement).split(None, 1)
-        if not words or words[0].lower() not in _READ_STATEMENT_KEYWORDS:
-            writes.append(statement)
-    return writes
+    return [statement for statement in statements if not _is_provably_read(statement)]

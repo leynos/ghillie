@@ -11,10 +11,50 @@ def test_select_is_not_a_write() -> None:
 
 
 def test_pragma_is_not_a_write() -> None:
-    """SQLite pragmas that only report state pass the filter."""
+    """The one pragma form the read-only checks issue passes the filter."""
     statement = "PRAGMA main.table_info('estates')"
 
-    assert data_writes([statement]) == [], "a PRAGMA should not be reported"
+    assert data_writes([statement]) == [], "a table_info PRAGMA should not be reported"
+
+
+def test_pragma_assignment_is_reported() -> None:
+    """A pragma that assigns state is a write even though it changes no row.
+
+    ``PRAGMA user_version = 7`` rewrites the database header, which row-count
+    assertions cannot see, so the filter must report it.
+    """
+    statement = "PRAGMA user_version = 7"
+
+    assert data_writes([statement]) == [statement], (
+        "a pragma assignment should be reported"
+    )
+
+
+def test_pragma_outside_the_verified_read_forms_is_reported() -> None:
+    """A pragma the filter cannot prove is a getter fails closed.
+
+    SQLite accepts ``PRAGMA journal_mode(WAL)`` as an assignment form, so a
+    parenthesised pragma is only a read when its name is on the verified list.
+    """
+    statement = "PRAGMA journal_mode(WAL)"
+
+    assert data_writes([statement]) == [statement], (
+        "an unverified pragma form should be reported"
+    )
+
+
+def test_explain_analyze_update_is_reported() -> None:
+    """``EXPLAIN ANALYZE`` executes the statement it explains.
+
+    PostgreSQL runs the underlying update, and the row counts are unchanged,
+    so accepting every ``EXPLAIN`` would let a write slip past a read-only
+    check.
+    """
+    statement = "EXPLAIN ANALYZE UPDATE estates SET name = 'changed'"
+
+    assert data_writes([statement]) == [statement], (
+        "an execution-capable EXPLAIN should be reported"
+    )
 
 
 def test_write_verbs_are_reported() -> None:
