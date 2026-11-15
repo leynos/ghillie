@@ -15,7 +15,11 @@ from ghillie.catalogue.queries import (
 )
 from ghillie.catalogue.storage import CatalogueImportRecord, Estate
 from tests.helpers.femtologging_capture import capture_femto_logs
-from tests.unit.estate_test_helpers import count_rows
+from tests.unit.estate_test_helpers import (
+    count_rows,
+    data_writes,
+    record_statements,
+)
 
 if typ.TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -99,13 +103,21 @@ async def _assert_read_only[ReadResult](
     )
     before = await _row_counts(session_factory)
 
-    with capture_femto_logs(_MUTATION_LOGGER) as logs:
+    with (
+        capture_femto_logs(_MUTATION_LOGGER) as logs,
+        record_statements(session_factory) as statements,
+    ):
         result = await operation()
         logs.wait_for_timeout()
 
+    # An empty capture would make the write assertion below vacuous, so the
+    # query must at least have issued the statement that reads its rows.
+    assert statements, f"a {description} must run its query"
+    writes = data_writes(statements)
     assert await _row_counts(session_factory) == before, (
         f"a {description} must not write"
     )
+    assert not writes, f"a {description} must not write: {writes}"
     assert not logs.records, f"a {description} must not emit a mutation record"
     return result
 

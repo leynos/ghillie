@@ -28,7 +28,9 @@ from tests.helpers.femtologging_capture import capture_femto_logs
 from tests.unit.estate_test_helpers import (
     catalogue_document,
     count_rows,
+    data_writes,
     import_catalogue,
+    record_statements,
 )
 
 if typ.TYPE_CHECKING:
@@ -53,6 +55,54 @@ async def _store_counts(
         await count_rows(session_factory, CatalogueImportRecord),
         await count_rows(session_factory, SilverRepository),
     )
+
+
+async def _assert_read_only[ReadResult](
+    session_factory: async_sessionmaker[AsyncSession],
+    operation: typ.Callable[[], typ.Awaitable[ReadResult]],
+    *,
+    description: str,
+) -> ReadResult:
+    """Prove one service read changes no row and emits no D21 record.
+
+    Row counts alone cannot see an update that leaves them unchanged, so the
+    call also runs under a statement capture that must record no
+    data-modifying statement.
+
+    Parameters
+    ----------
+    session_factory:
+        Factory for the session both stores share.
+    operation:
+        Zero-argument callable returning the read to await.
+    description:
+        Short name for the operation, used in the failure messages.
+
+    Returns
+    -------
+    ReadResult
+        Whatever the read returned, so a caller can assert on it.
+
+    """
+    before = await _store_counts(session_factory)
+
+    with (
+        capture_femto_logs(_MUTATION_LOGGER) as logs,
+        record_statements(session_factory) as statements,
+    ):
+        result = await operation()
+        logs.wait_for_timeout()
+
+    # An empty capture would make the write assertion below vacuous, so the
+    # read must at least have issued the statement that loads its rows.
+    assert statements, f"a {description} must run its query"
+    writes = data_writes(statements)
+    assert await _store_counts(session_factory) == before, (
+        f"a {description} must not write"
+    )
+    assert not writes, f"a {description} must not write: {writes}"
+    assert not logs.records, f"a {description} must not emit a mutation record"
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -108,14 +158,12 @@ async def test_list_estates_leaves_the_stores_and_the_log_untouched(
     """A listing is a read: no row changes and no D21 record is emitted."""
     await import_catalogue(service)
     await service.sync_registry(_ESTATE_KEY, dry_run=False)
-    before = await _store_counts(session_factory)
 
-    with capture_femto_logs(_MUTATION_LOGGER) as logs:
-        await service.list_estates(PageRequest())
-        logs.wait_for_timeout()
-
-    assert await _store_counts(session_factory) == before, "a listing must not write"
-    assert not logs.records, "a listing must not emit a mutation record"
+    await _assert_read_only(
+        session_factory,
+        lambda: service.list_estates(PageRequest()),
+        description="listing",
+    )
 
 
 @pytest.mark.asyncio
@@ -470,19 +518,16 @@ async def test_list_repositories_leaves_the_stores_and_the_log_untouched(
     """
     await import_catalogue(service)
     await service.sync_registry(_ESTATE_KEY, dry_run=False)
-    before = await _store_counts(session_factory)
 
-    with capture_femto_logs(_MUTATION_LOGGER) as logs:
-        page = await service.list_repositories(_ESTATE_KEY, RepositoryQuery())
-        logs.wait_for_timeout()
+    page = await _assert_read_only(
+        session_factory,
+        lambda: service.list_repositories(_ESTATE_KEY, RepositoryQuery()),
+        description="repository listing",
+    )
 
     assert [repo.slug for repo in page.items] == [f"{_OWNER}/{_REPO_NAME}"], (
         "the listing should read the synced repository"
     )
-    assert await _store_counts(session_factory) == before, (
-        "a repository listing must not write"
-    )
-    assert not logs.records, "a repository listing must not emit a mutation record"
 
 
 # ---------------------------------------------------------------------------

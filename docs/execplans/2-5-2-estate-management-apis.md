@@ -1067,6 +1067,24 @@ per pull request.
       and the recorder/collaborator design in `docs/developers-guide.md`; and
       the corrected route conditions plus labelled D13 and D14 decision records
       in `docs/ghillie-design.md` §8.4.
+- [x] (2026-11-15) Closed CodeRabbit's follow-up assessment of that round.
+      The users-guide import example was invalid: a project without
+      `components` cannot parse, because `ghillie/catalogue/models.py` requires
+      the field. The worked example now shows the smallest catalogue the schema
+      accepts and builds the request body with `jq --rawfile`, so the newlines
+      are encoded rather than hand-escaped. The migration guide now records the
+      specification change it previously denied: `specs/openapi.yml` at the
+      base revision declared a placeholder `ApiKeyAuth` header scheme that no
+      route enforced, and 2.0.0 replaces it with `BearerAuth`. The read-only
+      tests no longer rely on row counts alone, which cannot see an update that
+      leaves the counts unchanged: `record_statements` and `data_writes` in
+      `tests/unit/estate_test_helpers.py` capture the SQL the test database
+      runs, and both query suites assert that no data-modifying statement ran
+      while asserting the capture is non-empty so the check cannot pass
+      vacuously. A probe that updated one estate's name inside the capture
+      failed with `a lookup must not write: ['UPDATE estates SET name=?,
+      updated_at=?']` while the row counts stayed equal, so the assertion
+      detects exactly what the counts miss.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.

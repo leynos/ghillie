@@ -681,17 +681,40 @@ when the page is the last one.
 The examples use `GHILLIE_API_TOKEN`, the variable the runtime reads, and
 assume it holds a configured token. Import a catalogue as a dry run first; the
 `dry_run=true` query flag validates the document and reports counts without
-writing anything:
+writing anything.
+
+Start from the smallest catalogue the schema accepts. A project owns its
+components, and every component names its own repository:
+
+```yaml
+version: 1
+projects:
+  - key: alpha
+    name: Alpha
+    components:
+      - key: alpha-api
+        name: Alpha API
+        type: service
+        lifecycle: active
+        repository:
+          owner: org
+          name: alpha
+          default_branch: main
+```
+
+The request body carries that document as a string, so build it with a JSON
+encoder rather than hand-escaping the newlines:
 
 ```bash
+jq -n --rawfile catalogue estate.yaml \
+  --arg commit_sha 0123456789abcdef0123456789abcdef01234567 \
+  '{commit_sha: $commit_sha, catalogue_yaml: $catalogue}' > import.json
+
 curl --fail-with-body \
   -X POST "http://localhost:8080/estates/demo/catalogue-import?dry_run=true" \
   -H "Authorization: Bearer ${GHILLIE_API_TOKEN}" \
   -H "Content-Type: application/json" \
-  -d '{
-    "commit_sha": "0123456789abcdef0123456789abcdef01234567",
-    "catalogue_yaml": "version: 1\nprojects:\n  - key: alpha\n    name: Alpha\n"
-  }'
+  --data @import.json
 ```
 
 To apply the import, omit the flag or pass `dry_run=false`. The body always

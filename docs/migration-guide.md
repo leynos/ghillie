@@ -75,12 +75,16 @@ than on response prose.
 
 ### Bearer authentication
 
-The API has no API-key scheme; bearer authentication is new, not a replacement
-for an earlier mechanism. Set `GHILLIE_API_TOKEN` and send
-`Authorization: Bearer <token>` with every request except `GET /health` and
-`GET /ready`. A missing or wrong token returns 401 `unauthorized` with a
-`WWW-Authenticate: Bearer` challenge. When the variable is unset, the API stays
-open and start-up logs a warning; when it is set but blank, start-up fails.
+The 2.0.0 specification replaces the earlier `ApiKeyAuth` scheme with
+`BearerAuth`. `ApiKeyAuth` was an `apiKey` header declaration that the
+specification itself described as a placeholder for future endpoints, and no
+route enforced it, so nothing that only called the shipped routes changes
+behaviour by itself. The estate routes are the first to require a credential.
+Set `GHILLIE_API_TOKEN` and send `Authorization: Bearer <token>` with every
+request except `GET /health` and `GET /ready`. A missing or wrong token returns
+401 `unauthorized` with a `WWW-Authenticate: Bearer` challenge. When the
+variable is unset, the API stays open and start-up logs a warning; when it is
+set but blank, start-up fails.
 
 **Action after upgrading.** Provision `GHILLIE_API_TOKEN` as a secret and send
 the bearer header from every API client. Leave the variable unset only when the

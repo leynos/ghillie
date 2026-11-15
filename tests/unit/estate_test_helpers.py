@@ -26,17 +26,24 @@ Exported builders
     importer.
 ``count_rows``
     Count every row in one catalogue table.
+``record_statements``
+    Capture the SQL the test database runs, so a read-only check can prove a
+    query issued no data-modifying statement.
+``data_writes``
+    Select the statements from that capture that could change stored rows.
 
 ``NOW`` and ``DOCUMENTATION_PATHS`` provide the fixed timestamp and path
 fixtures the doubles advertise.
 """
 
+import contextlib
 import dataclasses
 import datetime as dt
 import typing as typ
 
 import falcon.testing
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ghillie.api.app import AppDependencies, create_app
 from ghillie.estate.models import (
@@ -56,6 +63,7 @@ from ghillie.registry.models import RepositoryInfo
 from ghillie.registry.service import RepositoryRegistryService
 
 if typ.TYPE_CHECKING:
+    from sqlalchemy.engine import Engine
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 __all__ = [
@@ -68,8 +76,17 @@ __all__ = [
     "build_service",
     "catalogue_document",
     "count_rows",
+    "data_writes",
     "import_catalogue",
+    "record_statements",
 ]
+
+# Statement keywords that can leave a stored row different from how the query
+# found it. Anything else the engine runs inside a capture window, such as
+# SELECT or a pragma, is not evidence of a write.
+_WRITE_STATEMENT_KEYWORDS: typ.Final = frozenset(
+    {"delete", "insert", "merge", "replace", "update"}
+)
 
 NOW = dt.datetime(2024, 7, 7, 12, 0, tzinfo=dt.UTC)
 DOCUMENTATION_PATHS = ("docs/", "README.md")
@@ -304,3 +321,61 @@ async def count_rows(
     """
     async with session_factory() as session:
         return (await session.scalar(select(func.count()).select_from(model))) or 0
+
+
+@contextlib.contextmanager
+def record_statements(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> typ.Iterator[list[str]]:
+    """Record every SQL statement the factory's engine executes.
+
+    A row-count snapshot cannot see an update that leaves the counts unchanged,
+    so a read-only check pairs the snapshot with this capture and asserts that
+    nothing data-modifying ran. ``sessionmaker`` keeps its constructor
+    arguments in ``kw``, which avoids opening a session only to ask for its
+    bind.
+
+    Parameters
+    ----------
+    session_factory:
+        Factory whose bound engine is the one to listen on.
+
+    Yields
+    ------
+    list[str]
+        Statements in execution order, appended as they run.
+
+    """
+    bind = session_factory.kw["bind"]
+    # An async factory binds an AsyncEngine, and SQLAlchemy will not register
+    # a cursor event on the async wrapper; the sync engine it wraps runs the
+    # statements.
+    engine: Engine = bind.sync_engine if isinstance(bind, AsyncEngine) else bind
+    statements: list[str] = []
+
+    def _record(
+        _connection: object,
+        _cursor: object,
+        statement: str,
+        _parameters: object,
+        _context: object,
+        _executemany: bool,  # noqa: FBT001 - SQLAlchemy passes it positionally.
+    ) -> None:
+        """Append one statement as the engine runs it."""
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", _record)
+    try:
+        yield statements
+    finally:
+        event.remove(engine, "before_cursor_execute", _record)
+
+
+def data_writes(statements: typ.Iterable[str]) -> list[str]:
+    """Return the recorded statements that could change stored rows."""
+    writes: list[str] = []
+    for statement in statements:
+        words = statement.lstrip().split(None, 1)
+        if words and words[0].lower() in _WRITE_STATEMENT_KEYWORDS:
+            writes.append(statement)
+    return writes
