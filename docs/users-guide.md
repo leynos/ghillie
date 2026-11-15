@@ -594,9 +594,13 @@ The runtime does not touch the schema by default. When `GHILLIE_DATABASE_URL`
 is set, set `GHILLIE_DB_BOOTSTRAP=create-all` to create any missing tables
 during ASGI start-up, before the server accepts requests. The bootstrap uses
 `create_all`, which checks for an existing table before issuing `CREATE TABLE`,
-so it creates only missing tables; it does not migrate existing ones. Any other
-non-blank value is an operator error that stops start-up rather than starting
-with a half-configured schema. A blank value is treated as unset.
+so it creates only missing tables; it does not migrate existing ones. The one
+exception is the `reports` table: if it exists without the report telemetry
+columns (`model_latency_ms`, `prompt_tokens`, `completion_tokens`,
+`total_tokens`), bootstrap adds them with `ALTER TABLE ... ADD COLUMN`, which
+needs ALTER privileges on that table. Any other non-blank value is an operator
+error that stops start-up rather than starting with a half-configured schema. A
+blank value is treated as unset.
 
 Use the flag for a single replica, or for a compose deployment that has no
 out-of-band migration step. Managed deployments run migrations out of band and

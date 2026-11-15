@@ -30,7 +30,7 @@ Exported builders
     Capture the SQL the test database runs, so a read-only check can prove a
     query issued no data-modifying statement.
 ``data_writes``
-    Select the statements from that capture that could change stored rows.
+    Select the statements from that capture that are not provably reads.
 
 ``NOW`` and ``DOCUMENTATION_PATHS`` provide the fixed timestamp and path
 fixtures the doubles advertise.
@@ -81,11 +81,11 @@ __all__ = [
     "record_statements",
 ]
 
-# Statement keywords that can leave a stored row different from how the query
-# found it. Anything else the engine runs inside a capture window, such as
-# SELECT or a pragma, is not evidence of a write.
-_WRITE_STATEMENT_KEYWORDS: typ.Final = frozenset(
-    {"delete", "insert", "merge", "replace", "update"}
+# Statement keywords the filter can prove cannot change a stored row. Anything
+# else the engine runs inside a capture window, including a form this filter
+# does not recognise, is treated as a write so a read-only check fails closed.
+_READ_STATEMENT_KEYWORDS: typ.Final = frozenset(
+    {"explain", "pragma", "select", "values"}
 )
 
 NOW = dt.datetime(2024, 7, 7, 12, 0, tzinfo=dt.UTC)
@@ -371,11 +371,39 @@ def record_statements(
         event.remove(engine, "before_cursor_execute", _record)
 
 
+def _strip_leading_comments(statement: str) -> str:
+    """Return *statement* without leading whitespace and SQL comments.
+
+    SQLite accepts ``--`` and ``/* ... */`` comments before a statement, so
+    looking at the raw first word would let a commented write look like a
+    read.
+    """
+    remainder = statement.lstrip()
+    while remainder:
+        if remainder.startswith("--"):
+            _, separator, remainder = remainder.partition("\n")
+            if not separator:
+                return ""
+        elif remainder.startswith("/*"):
+            _, separator, remainder = remainder.partition("*/")
+            if not separator:
+                return remainder
+        else:
+            break
+        remainder = remainder.lstrip()
+    return remainder
+
+
 def data_writes(statements: typ.Iterable[str]) -> list[str]:
-    """Return the recorded statements that could change stored rows."""
+    """Return the recorded statements that are not provably read-only.
+
+    Only forms this filter knows to be reads pass. A write verb, a ``WITH``
+    form it cannot classify, or anything else unrecognised is reported, so a
+    gap in the filter makes a read-only check fail rather than pass vacuously.
+    """
     writes: list[str] = []
     for statement in statements:
-        words = statement.lstrip().split(None, 1)
-        if words and words[0].lower() in _WRITE_STATEMENT_KEYWORDS:
+        words = _strip_leading_comments(statement).split(None, 1)
+        if not words or words[0].lower() not in _READ_STATEMENT_KEYWORDS:
             writes.append(statement)
     return writes

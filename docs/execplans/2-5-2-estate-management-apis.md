@@ -1099,6 +1099,22 @@ per pull request.
       Both replacements were checked against the base revision: the report
       route exists at `54e4436`, and `specs/openapi.yml` at that revision
       declares `ApiKeyAuth` with no route enforcing it.
+- [x] (2026-11-15) Closed the two findings from the full review of `f7deecb`.
+      The bootstrap guarantee was false for one table: `init_all_storage` calls
+      `init_gold_storage`, which runs `_ensure_report_metric_columns` and
+      issues `ALTER TABLE reports ADD COLUMN` for telemetry columns an older
+      database lacks. `docs/ghillie-design.md` and the schema-bootstrap section
+      of `docs/users-guide.md` now state that exception and its ALTER
+      privilege, and keep the create-only description for every other table.
+      `data_writes` in `tests/unit/estate_test_helpers.py` was a first-word
+      check, so `/* audit */ UPDATE ...` and a `WITH ... UPDATE` both read as
+      writes-free. It now strips leading `--` and `/* ... */` comments and
+      allow-lists the keywords it can prove are reads (`select`, `values`,
+      `pragma`, `explain`), so any form it cannot classify — a `WITH` clause, a
+      blank statement, an unknown verb — counts as a write and the read-only
+      checks fail closed. The regression cases live in
+      `tests/unit/test_estate_test_helpers.py` and were observed failing against
+      the old filter before the fix.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.

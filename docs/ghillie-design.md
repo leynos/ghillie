@@ -791,8 +791,12 @@ engine as `AppDependencies.bootstrap_engine`, and `StorageBootstrapMiddleware`
 runs `init_all_storage` from the Falcon `process_startup` lifespan hook before
 the server accepts requests. The bootstrap uses `create_all`, which checks for
 an existing table before issuing `CREATE TABLE`, so it creates only missing
-tables and does not migrate existing ones. It is documented as a
-single-replica, pre-migration convenience: managed deployments run migrations
+tables and does not migrate existing ones. One exception is deliberate:
+`init_gold_storage` also adds the report telemetry columns (`model_latency_ms`,
+`prompt_tokens`, `completion_tokens`, `total_tokens`) to a `reports` table that
+predates them, which issues `ALTER TABLE ... ADD COLUMN` and so needs ALTER
+privileges on that table. Every other table is create-only. It is documented as
+a single-replica, pre-migration convenience: managed deployments run migrations
 out of band, and replicas that start together can race on table creation.
 
 #### Optional authentication
