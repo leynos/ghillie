@@ -7,6 +7,12 @@ once, and leaves as an error :mod:`ghillie.estate.ports` already documents.
 Hecate classifies the module as ``outbound_adapter``: the application service
 may depend on it, and it depends only on the port and the modules that actually
 reach a store.
+
+Each public function states its store call and the translator that classifies a
+failure, so the translation policy sits beside the call it applies to instead of
+being repeated in every ``except`` clause. The translators are pure: they map
+the failures they recognise and return ``None`` for anything else, which the
+wrapper re-raises unchanged.
 """
 
 from __future__ import annotations
@@ -34,6 +40,8 @@ from ghillie.registry.errors import (
 )
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from ghillie.catalogue.importer import CatalogueImporter, CatalogueImportResult
@@ -46,6 +54,92 @@ if typ.TYPE_CHECKING:
 STORAGE_MESSAGE = "storage is unavailable"
 CONFLICT_MESSAGE = "the write conflicts with an existing record"
 SYNC_FAILED_MESSAGE = "the registry sync failed"
+
+type FailureTranslator = cabc.Callable[[Exception], Exception | None]
+"""Map a recognised store failure to an estate error, or return ``None``.
+
+A translator that returns ``None`` has decided the failure is not one it owns;
+the wrapper re-raises the original so an unexpected defect is never disguised
+as a storage outcome.
+"""
+
+
+async def _translate[ResultT](
+    operation: cabc.Coroutine[object, object, ResultT],
+    translator: FailureTranslator,
+) -> ResultT:
+    """Await one store call, letting ``translator`` classify a failure.
+
+    Parameters
+    ----------
+    operation:
+        Coroutine for the store call. ``async def`` calls do not run until they
+        are awaited, so creating it cannot skip the translation below.
+    translator:
+        Classification for a failure this operation can raise.
+
+    Returns
+    -------
+    ResultT
+        Whatever the store call returned.
+
+    """
+    try:
+        return await operation
+    except Exception as exc:
+        translated = translator(exc)
+        if translated is None:
+            raise
+        raise translated from exc
+
+
+def _catalogue_failure(exc: Exception) -> Exception | None:
+    """Classify a failed catalogue read as an outage, or pass it through."""
+    if isinstance(exc, SQLAlchemyError):
+        return StorageUnavailableError(STORAGE_MESSAGE)
+    return None
+
+
+def _import_failure(exc: Exception) -> Exception | None:
+    """Classify a failed catalogue import as a conflict or an outage."""
+    match exc:
+        case IntegrityError():
+            return EstateConflictError(CONFLICT_MESSAGE)
+        case SQLAlchemyError():
+            return StorageUnavailableError(STORAGE_MESSAGE)
+    return None
+
+
+def _sync_failure(estate_key: str) -> FailureTranslator:
+    """Build the translator for one estate's registry sync."""
+
+    def translate(exc: Exception) -> Exception | None:
+        """Classify one registry sync failure for the estate it belongs to."""
+        match exc:
+            case RegistrySyncError():
+                return _sync_error(estate_key, exc)
+            case IntegrityError():
+                return EstateConflictError(CONFLICT_MESSAGE)
+            case SQLAlchemyError():
+                return RegistrySyncFailedError(SYNC_FAILED_MESSAGE)
+        return None
+
+    return translate
+
+
+def _ingestion_failure(owner: str, name: str) -> FailureTranslator:
+    """Build the translator for one repository's ingestion toggle."""
+
+    def translate(exc: Exception) -> Exception | None:
+        """Classify one ingestion-toggle failure for the repository it names."""
+        match exc:
+            case RegistryRepositoryNotFoundError():
+                return RepositoryNotFoundError(owner, name)
+            case SQLAlchemyError():
+                return StorageUnavailableError(STORAGE_MESSAGE)
+        return None
+
+    return translate
 
 
 async def list_estates(
@@ -76,10 +170,10 @@ async def list_estates(
         If the catalogue database cannot be read.
 
     """
-    try:
-        return await queries.list_estates(session_factory, limit=limit, offset=offset)
-    except SQLAlchemyError as exc:
-        raise StorageUnavailableError(STORAGE_MESSAGE) from exc
+    return await _translate(
+        queries.list_estates(session_factory, limit=limit, offset=offset),
+        _catalogue_failure,
+    )
 
 
 async def get_estate_by_key(
@@ -105,10 +199,10 @@ async def get_estate_by_key(
         If the catalogue database cannot be read.
 
     """
-    try:
-        return await queries.get_estate_by_key(session_factory, estate_key)
-    except SQLAlchemyError as exc:
-        raise StorageUnavailableError(STORAGE_MESSAGE) from exc
+    return await _translate(
+        queries.get_estate_by_key(session_factory, estate_key),
+        _catalogue_failure,
+    )
 
 
 async def import_catalogue(
@@ -147,16 +241,10 @@ async def import_catalogue(
         If the catalogue database cannot be written.
 
     """
-    try:
-        return await importer.import_catalogue(
-            catalogue,
-            commit_sha=commit_sha,
-            dry_run=dry_run,
-        )
-    except IntegrityError as exc:
-        raise EstateConflictError(CONFLICT_MESSAGE) from exc
-    except SQLAlchemyError as exc:
-        raise StorageUnavailableError(STORAGE_MESSAGE) from exc
+    return await _translate(
+        importer.import_catalogue(catalogue, commit_sha=commit_sha, dry_run=dry_run),
+        _import_failure,
+    )
 
 
 async def sync_registry(
@@ -193,14 +281,10 @@ async def sync_registry(
         If the registry wraps a connection-level outage.
 
     """
-    try:
-        return await registry.sync_from_catalogue(estate_key, dry_run=dry_run)
-    except RegistrySyncError as exc:
-        raise _sync_error(estate_key, exc) from exc
-    except IntegrityError as exc:
-        raise EstateConflictError(CONFLICT_MESSAGE) from exc
-    except SQLAlchemyError as exc:
-        raise RegistrySyncFailedError(SYNC_FAILED_MESSAGE) from exc
+    return await _translate(
+        registry.sync_from_catalogue(estate_key, dry_run=dry_run),
+        _sync_failure(estate_key),
+    )
 
 
 async def list_repositories(
@@ -230,15 +314,15 @@ async def list_repositories(
         If the registry database cannot be read.
 
     """
-    try:
-        return await registry.list_repositories(
+    return await _translate(
+        registry.list_repositories(
             estate_id,
             ingestion_enabled=query.ingestion_enabled,
             limit=query.limit,
             offset=query.offset,
-        )
-    except SQLAlchemyError as exc:
-        raise StorageUnavailableError(STORAGE_MESSAGE) from exc
+        ),
+        _catalogue_failure,
+    )
 
 
 async def set_ingestion(
@@ -274,14 +358,12 @@ async def set_ingestion(
         If the registry database cannot be written.
 
     """
-    try:
-        if enabled:
-            return await registry.enable_ingestion(owner, name)
-        return await registry.disable_ingestion(owner, name)
-    except RegistryRepositoryNotFoundError as exc:
-        raise RepositoryNotFoundError(owner, name) from exc
-    except SQLAlchemyError as exc:
-        raise StorageUnavailableError(STORAGE_MESSAGE) from exc
+    toggle = (
+        registry.enable_ingestion(owner, name)
+        if enabled
+        else registry.disable_ingestion(owner, name)
+    )
+    return await _translate(toggle, _ingestion_failure(owner, name))
 
 
 def _sync_error(estate_key: str, exc: RegistrySyncError) -> Exception:

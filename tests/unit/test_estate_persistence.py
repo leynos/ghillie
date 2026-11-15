@@ -27,6 +27,8 @@ from ghillie.registry.errors import (
 )
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from ghillie.catalogue.importer import CatalogueImporter
@@ -111,35 +113,36 @@ def _registry(double: _RegistryDouble) -> RepositoryRegistryService:
 
 
 @pytest.mark.asyncio
-async def test_list_estates_translates_storage_failures(
+@pytest.mark.parametrize(
+    ("query_name", "read"),
+    [
+        (
+            "list_estates",
+            lambda: persistence.list_estates(
+                _UNUSED_SESSION_FACTORY, limit=10, offset=0
+            ),
+        ),
+        (
+            "get_estate_by_key",
+            lambda: persistence.get_estate_by_key(_UNUSED_SESSION_FACTORY, "demo"),
+        ),
+    ],
+)
+async def test_catalogue_reads_translate_storage_failures(
     monkeypatch: pytest.MonkeyPatch,
+    query_name: str,
+    read: cabc.Callable[[], cabc.Coroutine[object, object, object]],
 ) -> None:
-    """A catalogue read failure leaves as unavailable storage."""
+    """A failed catalogue read leaves as unavailable storage."""
 
     async def _fail(*_args: object, **_kwargs: object) -> typ.Never:
         """Fail the way an unreachable database does."""
         raise OperationalError("SELECT", {}, Exception("down"))
 
-    monkeypatch.setattr(queries, "list_estates", _fail)
+    monkeypatch.setattr(queries, query_name, _fail)
 
     with pytest.raises(StorageUnavailableError):
-        await persistence.list_estates(_UNUSED_SESSION_FACTORY, limit=10, offset=0)
-
-
-@pytest.mark.asyncio
-async def test_get_estate_by_key_translates_storage_failures(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A failed estate lookup leaves as unavailable storage."""
-
-    async def _fail(*_args: object, **_kwargs: object) -> typ.Never:
-        """Fail the way an unreachable database does."""
-        raise SQLAlchemyError("unexpected")
-
-    monkeypatch.setattr(queries, "get_estate_by_key", _fail)
-
-    with pytest.raises(StorageUnavailableError):
-        await persistence.get_estate_by_key(_UNUSED_SESSION_FACTORY, "demo")
+        await read()
 
 
 @pytest.mark.asyncio
