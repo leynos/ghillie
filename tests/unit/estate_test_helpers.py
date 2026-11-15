@@ -371,6 +371,21 @@ def record_statements(
         event.remove(engine, "before_cursor_execute", _record)
 
 
+def _without_one_comment(text: str) -> str | None:
+    """Return *text* without one leading SQL comment, or ``None`` if it has none.
+
+    An unterminated comment swallows the rest of the statement, which is what
+    SQLite does too.
+    """
+    if text.startswith("--"):
+        _, _, remainder = text.partition("\n")
+        return remainder
+    if text.startswith("/*"):
+        _, _, remainder = text.partition("*/")
+        return remainder
+    return None
+
+
 def _strip_leading_comments(statement: str) -> str:
     """Return *statement* without leading whitespace and SQL comments.
 
@@ -379,18 +394,8 @@ def _strip_leading_comments(statement: str) -> str:
     read.
     """
     remainder = statement.lstrip()
-    while remainder:
-        if remainder.startswith("--"):
-            _, separator, remainder = remainder.partition("\n")
-            if not separator:
-                return ""
-        elif remainder.startswith("/*"):
-            _, separator, remainder = remainder.partition("*/")
-            if not separator:
-                return remainder
-        else:
-            break
-        remainder = remainder.lstrip()
+    while (stripped := _without_one_comment(remainder)) is not None:
+        remainder = stripped.lstrip()
     return remainder
 
 
