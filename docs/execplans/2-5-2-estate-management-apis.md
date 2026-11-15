@@ -1070,9 +1070,9 @@ per pull request.
 - [x] (2026-11-15) Closed CodeRabbit's follow-up assessment of that round.
       The users-guide import example was invalid: a project without
       `components` cannot parse, because `ghillie/catalogue/models.py` requires
-      the field. The worked example now shows the smallest catalogue the schema
-      accepts and builds the request body with `jq --rawfile`, so the newlines
-      are encoded rather than hand-escaped. The migration guide now records the
+      the field. The worked example now shows a complete catalogue and builds
+      the request body with `jq --rawfile`, so the newlines are encoded rather
+      than hand-escaped. The migration guide now records the
       specification change it previously denied: `specs/openapi.yml` at the
       base revision declared a placeholder `ApiKeyAuth` header scheme that no
       route enforced, and 2.0.0 replaces it with `BearerAuth`. The read-only
@@ -1085,6 +1085,20 @@ per pull request.
       failed with `a lookup must not write: ['UPDATE estates SET name=?,
       updated_at=?']` while the row counts stayed equal, so the assertion
       detects exactly what the counts miss.
+- [x] (2026-11-15) Corrected two claims CodeRabbit's re-assessment found in
+      the estate documentation. `docs/users-guide.md` called its import
+      catalogue "the smallest catalogue the schema accepts" and said every
+      component names its repository; `ghillie/catalogue/models.py` makes
+      `Component.repository` optional, so the example is now described as an
+      example and the prose says a component names a repository when it has
+      code to track. `docs/migration-guide.md` claimed the estate routes are
+      "the first to require a credential"; `BearerTokenMiddleware` protects
+      every route except the two probes, but only when `GHILLIE_API_TOKEN` is
+      set, so the guide now says authentication is optional and that a
+      configured token also covers the report route that already shipped.
+      Both replacements were checked against the base revision: the report
+      route exists at `54e4436`, and `specs/openapi.yml` at that revision
+      declares `ApiKeyAuth` with no route enforcing it.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.

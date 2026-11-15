@@ -683,8 +683,8 @@ assume it holds a configured token. Import a catalogue as a dry run first; the
 `dry_run=true` query flag validates the document and reports counts without
 writing anything.
 
-Start from the smallest catalogue the schema accepts. A project owns its
-components, and every component names its own repository:
+Start from this example catalogue. A project owns its components, and a
+component names a repository when it has code to track:
 
 ```yaml
 version: 1
