@@ -876,12 +876,16 @@ creation rule only when an import creates an estate.
 #### Concurrency and storage failures
 
 `EstateManagementService` serializes import and sync per estate with an
-`asyncio.Lock`. The lock is in-process, so the guarantee holds within one
-server process; the MVP runs a single replica. `IntegrityError` becomes a `409`
-`conflict`, and a connection-level `OperationalError` or `InterfaceError`
-becomes a `503` `storage_unavailable`. Error descriptions never include SQL or
-driver detail; the original failure is chained as the cause rather than
-rendered.
+`asyncio.Lock`. The lock table belongs to one service instance, so the
+guarantee covers calls that reach the same instance; separate instances, worker
+processes, and replicas share nothing. The MVP builds one instance in a single
+replica. Storage failures map per operation: an `IntegrityError` raised by an
+import or a registry projection becomes a `409` `conflict`; a connection-level
+`OperationalError` or `InterfaceError` becomes a `503` `storage_unavailable`;
+and any other `SQLAlchemyError`, including an integrity failure during an
+ingestion toggle, also becomes `503` `storage_unavailable`. Error descriptions
+never include SQL or driver detail; the original failure is chained as the
+cause rather than rendered.
 
 **Affected modules:** `ghillie/estate/service.py` holds the per-estate locks,
 `ghillie/estate/persistence.py` classifies the storage failures, and
@@ -889,22 +893,27 @@ rendered.
 
 #### Observability
 
-Each mutation logs one structured line through `ghillie.logging`, carrying the
-operation, estate key, commit, dry-run flag, counts, duration, and outcome.
-Toggles also log the old and new state. For a registry sync, D31 names the
-events and where they are emitted. Cancellation is a terminal outcome like any
-other: each of the three wrappers records `outcome=cancelled` from its own
-`except asyncio.CancelledError` clause and re-raises, because `CancelledError`
-derives from `BaseException` and the `except Exception` clause would otherwise
-leave a cancelled attempt with no record at all. Rendering and timing live in
-`MutationRecorder` in `ghillie/estate/observability.py`, which owns the record
-format, the outcome vocabulary (`succeeded`, `skipped`, `failed`, and
-`cancelled`), and the clock; the service decides only which outcome applies.
-The recorder is injected through `EstateCollaborators` beside the importer
-factory and the catalogue parser, so a test can replace one seam, including
-with a fixed clock that pins `duration_ms`, without the others. Keeping this
-out of `EstateManagementService` also keeps that class about orchestration,
-which the hosted Unit Architecture check asks for.
+Each mutation logs one structured line through `ghillie.logging`. An import or
+registry sync record carries the operation, estate key, commit, dry-run flag,
+duration, and outcome; a completed attempt renders counts, while a failed or
+cancelled one renders the error class and quoted message instead. A toggle
+record carries no estate key, commit, or dry-run flag: it names the repository
+by owner and name, records the requested `enabled` state, and on success
+renders the previous state and whether the call changed anything. For a
+registry sync, D31 names the events and where they are emitted. Cancellation is
+a terminal outcome like any other: each of the three wrappers records
+`outcome=cancelled` from its own `except asyncio.CancelledError` clause and
+re-raises, because `CancelledError` derives from `BaseException` and the
+`except Exception` clause would otherwise leave a cancelled attempt with no
+record at all. Rendering and timing live in `MutationRecorder` in
+`ghillie/estate/observability.py`, which owns the record format, the outcome
+vocabulary (`succeeded`, `skipped`, `failed`, and `cancelled`), and the clock;
+the service decides only which outcome applies. The recorder is injected through
+`EstateCollaborators` beside the importer factory and the catalogue parser, so
+a test can replace one seam, including with a fixed clock that pins
+`duration_ms`, without the others. Keeping this out of
+`EstateManagementService` also keeps that class about orchestration, which the
+hosted Unit Architecture check asks for.
 
 **Affected modules:** `ghillie/estate/observability.py`,
 `ghillie/estate/collaborators.py`, and `ghillie/estate/service.py`.
@@ -914,13 +923,14 @@ which the hosted Unit Architecture check asks for.
 The port method is
 `import_catalogue(estate_key, request: CatalogueImportRequest)` rather than a
 five-argument signature. The four request fields travel together from the HTTP
-resource through the service to the importer, so grouping them removes a data
-clump and keeps the driven port inside the repository's parameter limits
-without a suppression. The frozen, slotted dataclass lives in
-`ghillie.estate.models`, so the port stays free of transport types. The API
-layer constructs it from the decoded body and the `dry_run` query flag, and the
-service passes it through unchanged, so behaviour is identical to the
-positional form.
+resource into the service, so grouping them removes a data clump and keeps the
+driven port inside the repository's parameter limits without a suppression. The
+frozen, slotted dataclass lives in `ghillie.estate.models`, so the port stays
+free of transport types. The API layer constructs it from the decoded body and
+the `dry_run` query flag. The service then parses `catalogue_yaml` into a
+`Catalogue`, resolves the estate name, and passes the parsed catalogue,
+`commit_sha`, and `dry_run` separately to the persistence boundary and the
+importer; the request object itself stops at the service.
 
 **Affected modules:** `ghillie/estate/models.py`, `ghillie/estate/ports.py`,
 `ghillie/estate/service.py`, and `ghillie/api/estate/resources.py`.

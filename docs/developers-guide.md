@@ -371,31 +371,35 @@ error vocabulary.
   `CatalogueValidationError` becomes a `CatalogueRejectedError` holding one
   `Issue(code="catalogue_schema")` per validation message.
 - **Per-estate serialization.** Import and sync each run under an
-  `asyncio.Lock` obtained from `_lock_for`. The lock is in-process, so it
-  serializes import and sync within a single server process only; across worker
-  processes or replicas there is no such guarantee. Serializing imports
-  therefore relies on running one worker or replica, which is the MVP
-  deployment. The locks live in a `weakref.WeakValueDictionary`, so a coroutine
-  inside `async with` holds the only strong reference and an idle estate
-  retains no lock. Two concurrent requests for one estate within that process
-  cannot interleave their catalogue writes, while different estates proceed
-  independently.
+  `asyncio.Lock` obtained from `_lock_for`. Each `EstateManagementService`
+  instance keeps its own lock table, so the lock serializes import and sync
+  only between calls that reach the same instance: two instances in one process
+  do not share it, and neither do worker processes or replicas. Serializing
+  imports therefore relies on the application building one service instance in
+  one worker or replica, which is the MVP deployment. The locks live in a
+  `weakref.WeakValueDictionary`, so a coroutine inside `async with` holds the
+  only strong reference and an idle estate retains no lock. Two concurrent
+  requests for one estate through that instance cannot interleave their
+  catalogue writes, while different estates proceed independently.
 - **Failure translation.** SQLAlchemy and registry failure classification lives
   in `ghillie/estate/persistence.py`, the only estate module that imports
   `sqlalchemy.exc`. `ghillie/estate/translation.py` holds only the pure
   catalogue-validation translation: a `CatalogueValidationError` becomes a
   `CatalogueRejectedError` with one `catalogue_schema` `Issue` per message.
   Neither module logs, so the service keeps ownership of the D21 record that
-  accompanies the outcome. `IntegrityError` becomes `EstateConflictError`. A
-  catalogue read or write SQLAlchemy failure becomes `StorageUnavailableError`,
-  and a non-integrity SQLAlchemy failure raised by the registry projection
-  becomes `RegistrySyncFailedError`. A registry projection failure is
-  classified through `RegistrySyncError.__cause__`: an `IntegrityError` cause
-  is a conflict, and `OperationalError` or `InterfaceError` causes are storage
-  outages. The registry's `ESTATE_NOT_FOUND_REASON` becomes
-  `EstateNotFoundError`; anything else becomes `RegistrySyncFailedError`. The
-  adapter raises these errors directly, so the service contains no
-  `SQLAlchemyError` handling.
+  accompanies the outcome. An `IntegrityError` raised by an import or by a
+  registry projection becomes `EstateConflictError`. Any other SQLAlchemy
+  failure from a catalogue read or write becomes `StorageUnavailableError`, and
+  a non-integrity SQLAlchemy failure raised by the registry projection becomes
+  `RegistrySyncFailedError`. An ingestion toggle maps only
+  `RepositoryNotFoundError` and a storage outage, so an `IntegrityError` there
+  becomes `StorageUnavailableError` like any other SQLAlchemy failure. A
+  registry projection failure is classified through
+  `RegistrySyncError.__cause__`: an `IntegrityError` cause is a conflict, and
+  `OperationalError` or `InterfaceError` causes are storage outages. The
+  registry's `ESTATE_NOT_FOUND_REASON` becomes `EstateNotFoundError`; anything
+  else becomes `RegistrySyncFailedError`. The adapter raises these errors
+  directly, so the service contains no `SQLAlchemyError` handling.
 - **Right database for Silver.** `list_repositories` lists through the
   registry's own session factory rather than the catalogue factory, because the
   two stores can be deployed separately.

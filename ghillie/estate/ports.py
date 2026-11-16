@@ -98,9 +98,9 @@ class EstateManagement(typ.Protocol):
         vocabulary: the service parses off the event loop and turns a malformed
         document into :class:`~ghillie.estate.errors.CatalogueRejectedError`
         with one issue per validation message. Keeping the text in the port
-        leaves that decision, and the raw document the importer records against
-        the commit, inside the domain instead of splitting validation between a
-        transport adapter and the importer.
+        leaves that decision inside the domain instead of splitting validation
+        between a transport adapter and the importer; the importer itself
+        records only the estate and commit it processed, never the document.
 
         """
         ...

@@ -1147,6 +1147,31 @@ per pull request.
       undocumented nested functions, both fixed and the affected gates re-ran
       green; `test` reported 1531 passed and 17 skipped, and
       `check-architecture` printed `hecate: architecture check passed`.
+- [x] (2026-11-16) Closed the six inline findings from the review posted at
+      08:20Z on head `baf4a1b`; all were documentation claims that had drifted
+      from the code. Each was checked against the source before editing. The
+      per-estate lock is now
+      described as one lock table per `EstateManagementService` instance rather
+      than an in-process guarantee, because `_locks` lives on the instance.
+      `IntegrityError` mapping is stated per operation: an import or registry
+      projection yields `EstateConflictError`, while an ingestion toggle, whose
+      translator recognizes only `RepositoryNotFoundError` and outages, yields
+      `StorageUnavailableError`. The observability paragraph distinguishes the
+      estate-keyed import and sync records, whose details are counts or an
+      error summary, from the toggle record, which names owner and name and has
+      no commit or dry-run field. The catalogue-import request value now says
+      the request object stops at the service, which passes the parsed
+      catalogue and metadata separately. The port's `Notes` keeps the
+      domain-parsing rationale but drops the false claim that the importer
+      stores the raw document; `CatalogueImportRecord` holds only the estate
+      and the commit.
+- [x] (2026-11-16) Gate evidence for that repair: all eight gates ran
+      sequentially on the working tree. `check-fmt`, `check-architecture`,
+      `typecheck`, `lint`, `test`, and `nixie` were green, with `test`
+      reporting 1531 passed and 17 skipped. `spelling` first failed on the
+      -ise spelling of `recognize` in this file, which the oxendict rule
+      rejects; after correcting it, `spelling`, `markdownlint`, and `check-fmt`
+      re-ran green over the 59 Markdown files.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
