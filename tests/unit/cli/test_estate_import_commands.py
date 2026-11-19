@@ -13,13 +13,13 @@ import typing as typ
 import httpx
 import pytest
 
+from ghillie.api.estate.resources import MAX_REQUEST_BODY_BYTES as SERVICE_BODY_LIMIT
 from ghillie.cli.commands.estate import (
     MAX_REQUEST_BODY_BYTES,
     NEW_ESTATE_KEY_PATTERN,
     import_catalogue,
 )
 from ghillie.cli.control_plane import encode_json_body
-from ghillie.api.estate.resources import MAX_REQUEST_BODY_BYTES as SERVICE_BODY_LIMIT
 from ghillie.estate.models import NEW_ESTATE_KEY_PATTERN as SERVICE_KEY_PATTERN
 from tests.unit.cli.payloads import IMPORT_PAYLOAD, error_document
 
