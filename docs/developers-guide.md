@@ -1088,6 +1088,19 @@ uses `pytest -n auto`, and parallel workers would each reset the same schema
 while other workers were using it. The fixture raises rather than run under
 `pytest-xdist`.
 
+### End-to-end tests only
+
+```bash
+uv run pytest tests/e2e -v
+```
+
+`tests/e2e` starts the packaged runtime as a real subprocess: it runs
+`python -m ghillie.runtime` against a fresh SQLite database with
+`GHILLIE_DB_BOOTSTRAP=create-all` and a configured bearer token, then drives
+the estate routes over HTTP. Each test gets its own server, database, and port,
+so the suite runs under `pytest-xdist` with the rest of `make test`. Deselect
+it with `-m "not e2e"`.
+
 ### Helm chart tests only
 
 ```bash

@@ -1172,6 +1172,15 @@ per pull request.
       -ise spelling of `recognize` in this file, which the oxendict rule
       rejects; after correcting it, `spelling`, `markdownlint`, and `check-fmt`
       re-ran green over the 59 Markdown files.
+- [x] (2026-11-19) Added the HTTP end-to-end suite to PR-B under D33:
+      `tests/e2e/__init__.py`, `tests/e2e/conftest.py` and
+      `tests/e2e/test_estate_management_e2e.py`, plus the `e2e` marker in
+      `pyproject.toml`. The three tests start the packaged runtime against a
+      fresh SQLite database with `GHILLIE_DB_BOOTSTRAP=create-all` and a
+      configured bearer token, then assert the open `/health` and `/ready`
+      probes, the `401` envelope for an unauthenticated `GET /estates`, and an
+      authenticated import, list, sync and ingestion toggle whose result a
+      second client reads back. All three passed on the working tree.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
@@ -1726,6 +1735,13 @@ expert-panel review.
   including D21's mutation lines, are discarded. `force=False` leaves an
   existing handler in place, so in-process callers such as the unit tests are
   unaffected.
+- D33, end-to-end coverage within each pull request. The HTTP end-to-end suite
+  lands in PR-B (EP-M3) rather than PR-C (EP-M5), because the hosted pre-merge
+  check requires an end-to-end journey inside the pull request's own range and
+  accepts no deferral to a stacked child. The suite proves the ASGI lifespan
+  bootstrap, the bearer-token boundary, and the full import, sync and toggle
+  journey over HTTP; PR-C keeps the CLI journey, which needs EP-M4's commands.
+  D19's plateau boundary is otherwise unchanged.
 
 ## Outcomes & retrospective
 
@@ -2313,6 +2329,23 @@ existing reporting tests unchanged), `tests/unit/test_runtime_wiring.py`
 (estate-only, estate plus reporting, invalid bootstrap value), and
 `tests/unit/test_openapi_estate_paths.py`.
 
+End-to-end (D33). `tests/e2e/__init__.py`, `tests/e2e/conftest.py`, and
+`tests/e2e/test_estate_management_e2e.py` prove this plateau over the wire,
+without the CLI that lands in PR-C. The fixture builds the child environment
+from `os.environ` minus every `PYTEST_*` variable, sets `GHILLIE_HOST`,
+`GHILLIE_PORT`, `GHILLIE_DATABASE_URL` for a fresh SQLite file,
+`GHILLIE_DB_BOOTSTRAP=create-all`, `GHILLIE_ALLOW_STUB_BROKER=1` and
+`GHILLIE_API_TOKEN`, starts `[sys.executable, "-m", "ghillie.runtime"]` with
+`start_new_session=True`, polls an authenticated `GET /estates` until it answers
+`200 {"items": []}` for up to 20 seconds, retries on a fresh port when the
+child exits early, and on teardown signals the process group with `SIGTERM` then
+`SIGKILL`, printing the captured log when the test failed. The tests assert
+that `/health` and `/ready` stay open without credentials, that `GET /estates`
+answers `401` with `code: "unauthorized"`, and that an import, estate list,
+registry sync and ingestion toggle each succeed under a bearer token and are
+still visible to a later read in a separate client. Register the `e2e` marker in
+`pyproject.toml` and put `pytest.mark.timeout(120)` on the module.
+
 ### EP-M4 (PR-C): CLI commands, rendering, and error mapping
 
 In `ghillie/cli/control_plane.py` add
@@ -2430,32 +2463,15 @@ Feature: Estate management through the operator CLI and HTTP API
     And no HTTP request was sent
 ```
 
-End-to-end. `tests/e2e/__init__.py`, `tests/e2e/conftest.py`, and
-`tests/e2e/test_estate_management_e2e.py`, marked `e2e` (register the marker in
-`pyproject.toml`) with `pytest.mark.timeout(120)`. The fixture:
-
-1. Builds the child environment from `os.environ` minus every `PYTEST_*`
-   variable, then sets `GHILLIE_HOST=127.0.0.1`, `GHILLIE_PORT`,
-   `GHILLIE_DATABASE_URL=sqlite+aiosqlite:///<tmp_path>/ghillie.db`,
-   `GHILLIE_DB_BOOTSTRAP=create-all`, and `GHILLIE_ALLOW_STUB_BROKER=1`. It
-   does not set `GHILLIE_STATUS_MODEL_BACKEND`, proving estate routes do not
-   need reporting configuration.
-2. Starts `[sys.executable, "-m", "ghillie.runtime"]` with
-   `start_new_session=True`, standard output and error redirected to files under
-   `tmp_path`.
-3. Polls `GET /estates` until `200 {"items": [], ...}` for up to 20 seconds,
-   checking `proc.poll()` each iteration; on early exit it retries up to three
-   times on a fresh port.
-4. On teardown sends `SIGTERM` to the process group, waits 10 seconds, then
-   `SIGKILL`; attaches the server log to any failure.
-
-The test drives the journey with `[sys.executable, "-m", "ghillie.cli"]`
-(import, list estates, sync, list, disable, re-import `c2`, re-sync, list
-inactive) and once through the installed console script
-(`Path(sys.executable).parent / "ghillie"`), and issues one raw `httpx` request
-per endpoint to check the wire contract independently of the CLI. Confirm the
-test runs in the CI `generate-coverage` step; document `-m "not e2e"` as the
-opt-out. Regenerate snapshots with `-p no:xdist`.
+End-to-end. Extend the harness EP-M3 creates (D33) with the CLI, which cannot
+exist before EP-M4. `run_cli` starts `[sys.executable, "-m", "ghillie.cli"]`
+against the running server with the same child environment plus
+`--api-base-url`, and the test drives import, estate list, sync, repository
+list, disable ingestion, re-import `c2`, re-sync, and the inactive list; one
+command also runs through the installed console script
+(`Path(sys.executable).parent / "ghillie"`). Confirm the tests run in the CI
+`generate-coverage` step; document `-m "not e2e"` as the opt-out. Regenerate
+snapshots with `-p no:xdist`.
 
 ### EP-M6 (PR-C): documentation, roadmap, and final gates
 
@@ -2669,3 +2685,6 @@ Error contract:
   harness; a hardened e2e fixture that strips `PYTEST_*` variables; expanded
   edge cases. Remaining work is unchanged in shape: approval, then EP-M1
   onwards.
+- 2026-11-19: added D33, which moves the HTTP end-to-end suite from EP-M5 into
+  EP-M3 so each pull request carries an end-to-end journey in its own range;
+  EP-M5 now extends that harness with the CLI journey.
