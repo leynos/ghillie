@@ -725,10 +725,11 @@ The following components are implemented:
   imports `sqlalchemy.exc` or the registry failure shape, and it translates
   storage failures into `ghillie.estate.errors`;
   `ghillie/estate/translation.py` keeps only the pure catalogue-validation
-  translation. Imports and syncs are serialized per estate by an in-process
-  `asyncio.Lock`, which gives a guarantee within a single server process only
-  (D17). Each mutation emits one D21 record through `MutationRecorder` in
-  `ghillie/estate/observability.py`.
+  translation. Imports and syncs are serialized per estate by a lock table that
+  belongs to one `EstateManagementService` instance; calls that reach different
+  instances, worker processes, or replicas share no lock and can run operations
+  for the same estate concurrently (D17). Each mutation emits one D21 record
+  through `MutationRecorder` in `ghillie/estate/observability.py`.
 - **On-demand report generation**
   (`POST /reports/repositories/{owner}/{name}`): Triggers report generation for
   a specific repository, using the same pipeline as scheduled reports. Returns
