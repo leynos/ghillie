@@ -201,6 +201,7 @@ def test_render_document_json_is_unchanged() -> None:
 
 
 def _error() -> ControlPlaneError:
+    """Return the catalogue-invalid error the rendering cases share."""
     return ControlPlaneError(
         "catalogue_invalid",
         "catalogue validation failed",

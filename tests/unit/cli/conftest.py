@@ -23,6 +23,7 @@ def harness(monkeypatch: pytest.MonkeyPatch) -> typ.Callable[..., CliHarness]:
         api_base_url: str = BASE_URL,
         auth_token: str | None = None,
     ) -> CliHarness:
+        """Build a harness whose config carries the supplied options."""
         return CliHarness(
             monkeypatch,
             make_config(

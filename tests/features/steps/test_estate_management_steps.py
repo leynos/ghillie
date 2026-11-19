@@ -350,7 +350,8 @@ class _StepRegister(typ.Protocol):
         name: str | parsers.StepParser,
         *,
         stacklevel: int = ...,
-    ) -> typ.Callable[[typ.Callable[..., None]], typ.Callable[..., None]]: ...
+    ) -> typ.Callable[[typ.Callable[..., None]], typ.Callable[..., None]]:
+        """Register *name* as a step and return the decorated function."""
 
 
 class _ImportStepOptions(typ.NamedTuple):
@@ -378,6 +379,7 @@ def _register_import(
         estate_key: str,
         commit_sha: str,
     ) -> None:
+        """Import the step's catalogue with the encoded options."""
         _import(
             estate_state,
             _ImportSpec(
@@ -400,6 +402,7 @@ def _register_import_and_sync(
 
     @register(parsers.parse(phrase), stacklevel=2)
     def step(estate_state: ScenarioState, estate_key: str, commit_sha: str) -> None:
+        """Import the wildside catalogue and sync the estate."""
         _import(
             estate_state,
             _ImportSpec(WILDSIDE_CATALOGUE, estate_key, commit_sha, output="json"),
