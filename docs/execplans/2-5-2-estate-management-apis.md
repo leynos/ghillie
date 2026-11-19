@@ -1466,6 +1466,24 @@ per pull request.
         803a2bf..5ea16f1` reports identity apart from the resolutions above,
         and the reference to `EstateManagementPort` survives only in this
         plan's record of the corrected finding.
+  - [x] (2026-11-19) PR-B answered its last unresolved thread, the lock-table
+        guarantee wording, and published `ae63172`; branch C was replayed onto
+        it from the same exclusive boundary `747d6dc`. The 27 C-owned commits
+        reapplied cleanly with no conflict, and the lock paragraph now carries
+        PR-B's wording. That replay exposed three defects that exist only
+        because PR-B's review repairs moved shared resources: the CLI test
+        imported `MAX_REQUEST_BODY_BYTES` from `ghillie.estate.models` after
+        it had moved to `ghillie.api.estate.resources`, eight test helpers had
+        no docstring once interrogate covered them, and the resulting CLI test
+        import block was unsorted. Each was repaired in its own commit (D13's
+        duplication rationale is unchanged; the test now pins the two copies
+        to the moved constant). All eight gates then passed sequentially at
+        `45e8aee`: `check-fmt`, `check-architecture`, `typecheck`, `lint`
+        (including Skylos, which the earlier Ruff failure had hidden), `test`
+        (1629 passed, 17 skipped, 12 snapshots), `markdownlint` (59 files, 0
+        issues), `nixie`, and `spelling` (logs `/tmp/gate-C-45e8aee-*.out`).
+        Branch C was force-pushed with lease from `e2144af` to `45e8aee`, and
+        the refreshed tracking ref and `ls-remote` both report `45e8aee`.
 
 ## Surprises & discoveries
 
