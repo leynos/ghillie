@@ -1484,6 +1484,14 @@ per pull request.
         issues), `nixie`, and `spelling` (logs `/tmp/gate-C-45e8aee-*.out`).
         Branch C was force-pushed with lease from `e2144af` to `45e8aee`, and
         the refreshed tracking ref and `ls-remote` both report `45e8aee`.
+  - [x] (2026-11-19) The hosted Module-Level Documentation pre-merge check
+        named two modules whose docstrings no longer described their contents:
+        `ghillie/api/factory.py` covered only `build_reporting_service`, and
+        `ghillie/catalogue/loader.py` covered neither loader. PR-B published
+        the corrected docstrings as `1951d01`, and branch C was replayed onto
+        it from the exclusive boundary `ae63172`; all 29 C-owned commits
+        reapplied cleanly and `git range-diff ae63172..0e394e4
+        1951d01..dc494fc` reports identity.
 
 ## Surprises & discoveries
 
