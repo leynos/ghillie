@@ -1,10 +1,17 @@
-"""Factory for building a ReportingService from environment configuration.
+"""Factories that assemble the services used by the HTTP API.
 
-This module provides ``build_reporting_service()`` which constructs a
-fully configured ``ReportingService`` from a pre-existing session factory
-and environment variables.  This mirrors the Dramatiq actor's
-``_build_service()`` pattern but accepts a session factory directly
-rather than a database URL string.
+``build_estate_service(session_factory)`` builds an
+``EstateManagementService`` for the estate routes. It passes the supplied
+session factory as both registry database arguments, so catalogue and
+registry work share the one configured database, and it reads no environment
+configuration. :mod:`ghillie.runtime` builds it and passes the result to
+``AppDependencies``, from which :mod:`ghillie.api.app` registers the estate
+routes; without that dependency those routes are absent.
+
+``build_reporting_service(session_factory)`` builds a fully configured
+``ReportingService`` from the same kind of session factory plus the current
+environment. This mirrors the Dramatiq actor's ``_build_service()`` pattern
+but accepts a session factory directly rather than a database URL string.
 
 Usage
 -----

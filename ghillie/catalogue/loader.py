@@ -1,4 +1,16 @@
-"""YAML loaders for catalogue configuration files."""
+"""YAML loaders for catalogue configuration files.
+
+``load_catalogue(path)`` reads a catalogue file from disk and hands its text
+to ``parse_catalogue_text(text)``. That parser takes a YAML document as a
+string, so the estate import path can validate a catalogue submitted over
+HTTP without first writing it to disk.
+
+Every entry point rejects documents that define anchors, use aliases, or nest
+collections beyond ``_MAX_YAML_DEPTH`` levels before the loader expands or
+composes them. That keeps an alias bomb from allocating exponentially and a
+deeply nested document from exhausting the interpreter stack, both within the
+request-size limit.
+"""
 
 import io
 from pathlib import Path
