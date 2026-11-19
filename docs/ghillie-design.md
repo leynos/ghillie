@@ -839,10 +839,10 @@ resolution, translation, locking, and logging. The port is kept because the
 task requires domain logic to be separated from adapters, and the service stays
 a thin coordinator.
 
-The adapters import only `ghillie.estate.ports`, `ghillie.estate.models`,
-and `ghillie.estate.errors`; the service, catalogue, and registry packages
-stay behind the port, which keeps the boundary checkable by Hecate and by
-the import-closure test (O6).
+The adapters import only `ghillie.estate.ports`, `ghillie.estate.models`, and
+`ghillie.estate.errors`; the service, catalogue, and registry packages stay
+behind the port, which keeps the boundary checkable by Hecate and by the
+import-closure test (O6).
 
 **Affected modules:** `ghillie/estate/ports.py`, `ghillie/estate/service.py`,
 `ghillie/estate/collaborators.py`, and `ghillie/catalogue/queries.py`.
