@@ -242,4 +242,3 @@ def ghillie_server(
         report = getattr(request.node, "rep_call", None)
         if report is not None and report.failed:
             print(server.log_text(), file=sys.stderr)
-# weave: run 'weave explain tests/e2e/conftest.py' for per-hunk detail, 'weave check' to verify your resolution
