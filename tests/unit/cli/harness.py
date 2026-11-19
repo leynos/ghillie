@@ -70,6 +70,7 @@ class CliHarness:
         )
 
     def _dispatch(self, request: httpx.Request) -> httpx.Response:
+        """Record the request and answer it with the next queued response."""
         self.requests.append(request)
         if not self._responses:
             message = f"unexpected request: {request.method} {request.url}"

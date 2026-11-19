@@ -42,6 +42,7 @@ _SYNC_PAYLOAD: dict[str, object] = {
 
 
 def _assert_no_url_password(*texts: str) -> None:
+    """Fail if any of *texts* leaks the password embedded in the base URL."""
     combined = "\n".join(texts)
     assert "hunter2" not in combined, "the URL password leaked into output"
     assert "operator:hunter2" not in combined

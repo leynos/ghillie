@@ -247,6 +247,7 @@ def test_toggle_table_snapshot(
 
 
 def _error() -> ControlPlaneError:
+    """Return the catalogue-invalid error the rendering cases share."""
     return ControlPlaneError(
         "catalogue_invalid",
         "catalogue validation failed",
