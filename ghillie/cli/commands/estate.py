@@ -34,9 +34,10 @@ repo_app = App(name="repo", help="Manage estate repository configuration.")
 MAX_REQUEST_BODY_BYTES = 1024 * 1024
 """Largest request body the service accepts (O5).
 
-Duplicated from :mod:`ghillie.estate.models` because the CLI must not import
-the server package (O6); :mod:`tests.unit.cli.test_estate_import_commands` asserts the
-two values and the two key patterns stay equal.
+Duplicated from :mod:`ghillie.api.estate.resources` because the CLI must not
+import the server package (O6);
+:mod:`tests.unit.cli.test_estate_import_commands` asserts the two values and
+the two key patterns stay equal.
 """
 
 NEW_ESTATE_KEY_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
