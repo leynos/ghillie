@@ -1451,6 +1451,21 @@ per pull request.
         `d6356b7` and PR-B was replayed onto it, so branch C was replayed onto
         PR-B's `747d6dc`. The replay applied cleanly and changed only this
         plan; PR-C's own commits are unchanged.
+  - [x] (2026-11-19) PR-B answered its six hosted review findings and published
+        `803a2bf`, so branch C was replayed onto it from the exclusive
+        boundary `747d6dc`. All 23 commits were replayed. Four conflict sites
+        were resolved: the `_api_placeholder` deletion and its blank lines in
+        the CLI, this plan's EP-M4 Progress block and D20/D21 decision
+        records, and the design document. The design resolutions keep PR-B's
+        "Current implementation" paragraph, package tree, and shared-envelope
+        error-handler bullet, adopt branch C's corrected §8.5 architecture
+        wording (the CLI is a separate client adapter), and keep the fuller
+        decision list that names D10 and D15. The replay also dropped a
+        `# weave:` hint line that the merge driver had appended to
+        `ghillie/cli/commands/estate.py`. `git range-diff 747d6dc..e2144af
+        803a2bf..5ea16f1` reports identity apart from the resolutions above,
+        and the reference to `EstateManagementPort` survives only in this
+        plan's record of the corrected finding.
 
 ## Surprises & discoveries
 
