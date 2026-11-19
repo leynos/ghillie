@@ -1492,6 +1492,32 @@ per pull request.
         it from the exclusive boundary `ae63172`; all 29 C-owned commits
         reapplied cleanly and `git range-diff ae63172..0e394e4
         1951d01..dc494fc` reports identity.
+  - [x] (2026-11-19) The hosted Testing (Unit And Behavioural) pre-merge check
+        required an end-to-end journey inside PR-B's own range and refused the
+        stacked deferral to PR-C, so PR-B gained an HTTP end-to-end suite
+        (`tests/e2e/{__init__,conftest,test_estate_management_e2e}.py`) and
+        published it as `0f26aef` under D33. Branch C was replayed onto it
+        from the exclusive boundary `1951d01`. Five of the 30 C-owned commits
+        differ from their originals, all through the e2e merge: commit 1 keeps
+        the new D33 progress bullet alongside the checked EP-M4 entry; commit 3
+        adds only the CLI delta, because the harness, the `e2e` marker and the
+        HTTP journey already exist in the base; commit 6 differs only in hunk
+        context, shifted by the developers' guide's new e2e section; commit 7
+        no longer refactors `test_estate_management_e2e.py`; and commit 22
+        keeps the six-field `GhillieServer`. The merged harness keeps PR-B's
+        bearer-token server and adds `CliResult` and `run_cli`, which hands the
+        CLI `GHILLIE_AUTH_TOKEN` so the CLI journey crosses the same
+        authenticated boundary. C's CLI journey now lives in
+        `tests/e2e/test_estate_cli_e2e.py`; its `_assert_wire_contract` was
+        dropped because PR-B's journey proves the same wire contract. The gates
+        at `26889a2` found two replay artefacts, a surviving `# weave:` line
+        and a missing trailing newline, repaired in `0adfb96`. All eight gates
+        then passed sequentially at `0adfb96`: `check-fmt` (318 files, 59
+        Markdown files unchanged), `check-architecture`, `typecheck`, `lint`
+        (including Skylos), `test` (1632 passed, 17 skipped, 12 snapshots, all
+        five e2e tests green), `markdownlint` (59 files, 0 issues), `nixie`,
+        and `spelling` (logs
+        `/tmp/<gate>-ghillie-2-5-2-estate-management-apis-c-repair.out`).
 
 ## Surprises & discoveries
 
