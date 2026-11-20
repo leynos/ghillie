@@ -1193,7 +1193,10 @@ per pull request.
       Observability row by its third option: a new "Metrics and tracing
       decision" subsection in `docs/ghillie-design.md` records D27, the
       intended metric shape and labels, the exclusion of unbounded identifiers,
-      and the #219 dependency that must settle the platform first.
+      and the #219 dependency that must settle the platform first. The hosted
+      check's follow-up asked that the subsection name it explicitly, so it now
+      names the Observability pre-merge check as the record's reason and
+      explains why options 1 and 2 are the deferred work itself.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.

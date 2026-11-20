@@ -939,6 +939,14 @@ Estate keys, owners, repository names, commit SHAs, and error strings never
 become labels, because they are unbounded. Spans would exclude catalogue
 payloads and bearer tokens for the same reason.
 
+This subsection is the record the hosted **Observability** pre-merge check asks
+for. That check's third remediation option is to record the metrics and tracing
+decision here and link it to the check; this paragraph is that link, and D27
+with #219 are the decision's other references. The first two options, adding
+metric events and adding spans, are the deferred work itself and cannot precede
+the platform choice. The fourth, an explicit check-owner waiver, is the
+maintainer's to issue if this record is not accepted as a discharge.
+
 **Affected modules:** none in this change; the deferred work lands in
 `ghillie/api/estate/`, `ghillie/estate/persistence.py`, and
 `ghillie/estate/service.py` when #219 settles the platform.
