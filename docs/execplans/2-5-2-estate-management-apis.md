@@ -1181,6 +1181,19 @@ per pull request.
       probes, the `401` envelope for an unauthenticated `GET /estates`, and an
       authenticated import, list, sync and ingestion toggle whose result a
       second client reads back. All three passed on the working tree.
+- [x] (2026-11-20) Closed the two inline findings from the review of
+      `0f26aef`. The e2e modules now name statuses through the standard-library
+      `http.HTTPStatus` enum instead of `httpx.codes`, matching the repository's
+      coding guideline and the API tests. The journey now reads the listed
+      repository before the PATCH and asserts `ingestion_enabled` is true, then
+      asserts the PATCH response's `changed` is true, so the second client's
+      read proves a transition rather than a value that was already there.
+      Both changes are in e2e tests, and `uv run pytest tests/e2e -v` passed
+      three tests on the working tree. The repair also answers the standing
+      Observability row by its third option: a new "Metrics and tracing
+      decision" subsection in `docs/ghillie-design.md` records D27, the
+      intended metric shape and labels, the exclusion of unbounded identifiers,
+      and the #219 dependency that must settle the platform first.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
@@ -1538,6 +1551,10 @@ expert-panel review.
      one structured line per mutation at the estate-service boundary; adding a
      second line in the registry module would contradict that. Metrics and
      tracing are a cross-cutting platform decision, not an EP-M1 deliverable.
+     Since 2026-11-20 the decision is also recorded where readers of the
+     architecture expect it, in the "Metrics and tracing decision" subsection
+     of `docs/ghillie-design.md`, with the intended metric names, labels, and
+     exclusions, and the #219 dependency that must settle the platform first.
 - D28, atomic adoption of an unowned Silver row. `_claim_unowned_repository`
   (moved to `ghillie.registry.storage` by D30) issues a conditional update of
   `estate_id` that matches only rows where `estate_id` is null. A zero row

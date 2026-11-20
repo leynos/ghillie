@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
+import http
 import os
 import signal
 import socket
@@ -108,7 +109,7 @@ def _wait_until_serving(process: subprocess.Popen[bytes], base_url: str) -> None
             time.sleep(_POLL_INTERVAL_S)
             continue
         if (
-            response.status_code == httpx.codes.OK
+            response.status_code == http.HTTPStatus.OK
             and response.json().get("items") == []
         ):
             return

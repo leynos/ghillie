@@ -919,6 +919,30 @@ hosted Unit Architecture check asks for.
 **Affected modules:** `ghillie/estate/observability.py`,
 `ghillie/estate/collaborators.py`, and `ghillie/estate/service.py`.
 
+#### Metrics and tracing decision
+
+The estate control plane ships its structured mutation logs (D21) and its
+registry events (D31). Bounded-cardinality metrics and tracing are deliberately
+not delivered with it. The repository has no metrics client, exporter, tracer,
+or collector, so adding counters for the five estate endpoints, a duration
+histogram for the import, sync, and toggle mutations, and spans around the
+catalogue YAML parse or the persistence calls would mean choosing a telemetry
+platform and a destination. That is a platform decision, recorded as D27 and
+tracked by issue [#219](https://github.com/leynos/ghillie/issues/219), whose
+scope names the estate endpoint and mutation metrics, the catalogue-parsing
+span, and the platform approval that must precede both.
+
+The intended shape is fixed now so the deferred work has an agreed contract:
+one count per HTTP outcome, labelled only by `operation`, `outcome`, and
+`status_class`, following the `ghillie/github/observability.py` convention.
+Estate keys, owners, repository names, commit SHAs, and error strings never
+become labels, because they are unbounded. Spans would exclude catalogue
+payloads and bearer tokens for the same reason.
+
+**Affected modules:** none in this change; the deferred work lands in
+`ghillie/api/estate/`, `ghillie/estate/persistence.py`, and
+`ghillie/estate/service.py` when #219 settles the platform.
+
 #### Catalogue-import request value
 
 The port method is

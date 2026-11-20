@@ -9,6 +9,7 @@ read in a separate request.
 
 from __future__ import annotations
 
+import http
 import typing as typ
 
 import httpx
@@ -52,8 +53,8 @@ def test_probes_answer_without_credentials(ghillie_server: GhillieServer) -> Non
         health = anonymous_client.get("/health")
         ready = anonymous_client.get("/ready")
 
-    assert health.status_code == httpx.codes.OK, health.text
-    assert ready.status_code == httpx.codes.OK, ready.text
+    assert health.status_code == http.HTTPStatus.OK, health.text
+    assert ready.status_code == http.HTTPStatus.OK, ready.text
 
 
 def test_estate_routes_reject_missing_credentials(
@@ -65,7 +66,7 @@ def test_estate_routes_reject_missing_credentials(
     ) as anonymous_client:
         response = anonymous_client.get("/estates")
 
-    assert response.status_code == httpx.codes.UNAUTHORIZED, response.text
+    assert response.status_code == http.HTTPStatus.UNAUTHORIZED, response.text
     assert response.json()["code"] == "unauthorized", response.text
 
 
@@ -77,34 +78,38 @@ def test_estate_management_journey(ghillie_server: GhillieServer) -> None:
             "/estates/demo/catalogue-import",
             json={"commit_sha": "c1", "catalogue_yaml": catalogue_yaml},
         )
-        assert imported.status_code == httpx.codes.OK, imported.text
+        assert imported.status_code == http.HTTPStatus.OK, imported.text
         assert imported.json()["skipped"] is False, imported.text
 
         estates = client.get("/estates")
-        assert estates.status_code == httpx.codes.OK, estates.text
+        assert estates.status_code == http.HTTPStatus.OK, estates.text
         assert [item.get("key") for item in _items(estates.json())] == ["demo"], (
             estates.text
         )
 
         synced = client.post("/estates/demo/registry-sync")
-        assert synced.status_code == httpx.codes.OK, synced.text
+        assert synced.status_code == http.HTTPStatus.OK, synced.text
         assert synced.json()["state"] == "succeeded", synced.text
 
         listed = client.get("/estates/demo/repositories")
-        assert listed.status_code == httpx.codes.OK, listed.text
-        assert _repository(listed.json(), "leynos", "wildside") is not None, listed.text
+        assert listed.status_code == http.HTTPStatus.OK, listed.text
+        registered = _repository(listed.json(), "leynos", "wildside")
+        assert registered is not None, listed.text
+        # The toggle below is only a transition if it starts enabled.
+        assert registered["ingestion_enabled"] is True, listed.text
 
         toggled = client.patch(
             "/repositories/leynos/wildside/ingestion",
             json={"ingestion_enabled": False},
         )
-        assert toggled.status_code == httpx.codes.OK, toggled.text
+        assert toggled.status_code == http.HTTPStatus.OK, toggled.text
         assert toggled.json()["ingestion_enabled"] is False, toggled.text
+        assert toggled.json()["changed"] is True, toggled.text
 
     # A second client proves the toggle outlived the request that wrote it.
     with ghillie_server.client() as client:
         reread = client.get("/estates/demo/repositories")
-        assert reread.status_code == httpx.codes.OK, reread.text
+        assert reread.status_code == http.HTTPStatus.OK, reread.text
         persisted = _repository(reread.json(), "leynos", "wildside")
         assert persisted is not None, reread.text
-        assert persisted.get("ingestion_enabled") is False, reread.text
+        assert persisted["ingestion_enabled"] is False, reread.text
