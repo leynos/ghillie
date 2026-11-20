@@ -772,6 +772,29 @@ The documented statuses are:
 | 500    | `registry_sync_failed`   | sync                        | The registry reported a failure that is not storage-related.        |
 | 503    | `storage_unavailable`    | all five operations         | The database cannot be reached.                                     |
 
+### Request outcome events
+
+Every estate API request writes exactly one structured outcome event to the
+application log, whatever the response:
+
+```plaintext
+estate.http.outcome operation=import_catalogue outcome=rejected status_class=4xx
+```
+
+`operation` names the service method that served the request, or would have:
+`list_estates`, `import_catalogue`, `sync_registry`, `list_repositories`, or
+`set_ingestion`. `outcome` is `succeeded` for a 2xx, `rejected` for a 4xx, and
+`failed` for anything else. `status_class` is the response's hundred band, such
+as `2xx` or `5xx`. Nothing else is recorded in the line: estate keys, owners,
+repository names, commits, and error text never appear, so the events can be
+counted per operation without their cardinality growing with the estate.
+Requests rejected before routing, including a 401 for a missing bearer token,
+are recorded against the endpoint the path names.
+
+A success logs at INFO, a rejection at WARNING, and a failure at ERROR. An
+operator can count failures per operation from the log, and an alert can watch
+for `estate.http.outcome` lines with `outcome=failed`.
+
 ## Incremental GitHub ingestion (Phase 1.3.b)
 
 Ghillie polls GitHub per managed repository and appends activity into the Bronze

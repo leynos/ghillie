@@ -44,6 +44,7 @@ from ghillie.api.errors import (
     handle_storage_unavailable,
     handle_unexpected_error,
 )
+from ghillie.api.estate.observability import EstateOutcomeMiddleware
 from ghillie.api.health.resources import HealthResource, ReadyResource
 from ghillie.estate.errors import (
     CatalogueRejectedError,
@@ -144,13 +145,19 @@ def _build_middleware(
 ) -> list[AsyncMiddlewareProto]:
     """Assemble the middleware stack in the order it must run.
 
-    Authentication runs first so an unauthenticated request never opens a
+    The estate outcome recorder is first so its response hook runs last, after
+    the session middleware has settled the status the client receives.
+    Authentication follows, so an unauthenticated request never opens a
     database session. The bootstrap middleware only implements the ASGI
     lifespan hooks, which is why it is appended last.
     """
     from ghillie.api.auth import BearerTokenMiddleware
 
-    middleware: list[AsyncMiddlewareProto] = []
+    # The recorder implements only ``process_response``, so it is cast to the
+    # request/response protocol the list is typed with.
+    middleware: list[AsyncMiddlewareProto] = [
+        typ.cast("AsyncMiddlewareProto", EstateOutcomeMiddleware())
+    ]
     if _needs_auth(deps):
         # Build the middleware whenever authentication is configured or the
         # estate routes are exposed. With no token it warns at start-up and

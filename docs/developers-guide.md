@@ -604,6 +604,32 @@ operations emit no mutation record. The sync's own per-slug events
 [Registry sync events](#registry-sync-events); the transition table is in
 [Registry synchronization](#registry-synchronization).
 
+### HTTP outcome events (D27)
+
+Every request to one of the five estate endpoints records exactly one
+metric-style event, whether it succeeds, is rejected, or fails:
+
+```plaintext
+estate.http.outcome operation=list_estates outcome=succeeded status_class=2xx
+```
+
+`ghillie/api/estate/observability.py` owns the vocabulary and rendering, and
+`EstateOutcomeMiddleware` in the same module emits the line. The middleware is
+registered first in the application's stack so its response hook runs last,
+after the session middleware has settled the final status; Falcon calls that
+hook even when an earlier request hook raised. A request rejected before
+routing, such as an unauthenticated one, is therefore counted against the
+endpoint its path names, matched through the same route shapes. The event
+carries only three bounded labels: the operation (the `EstateManagement` method
+name), the outcome (`succeeded`, `rejected`, or `failed`), and the status class
+(`2xx`, `4xx`, or `5xx`). No estate key, repository name, commit SHA, or error
+string is ever a label. A success logs at INFO, a rejection at WARNING, and a
+failure at ERROR.
+
+When a new estate route is added, add it to `_ROUTE_OPERATIONS` in
+`ghillie/api/estate/observability.py`; the path patterns used before routing
+are derived from the same table.
+
 ## Dead-code detection
 
 `make lint` runs Skylos `4.33.2` as an isolated `uv tool` with Python 3.14

@@ -921,35 +921,54 @@ hosted Unit Architecture check asks for.
 
 #### Metrics and tracing decision
 
-The estate control plane ships its structured mutation logs (D21) and its
-registry events (D31). Bounded-cardinality metrics and tracing are deliberately
-not delivered with it. The repository has no metrics client, exporter, tracer,
-or collector, so adding counters for the five estate endpoints, a duration
-histogram for the import, sync, and toggle mutations, and spans around the
-catalogue YAML parse or the persistence calls would mean choosing a telemetry
-platform and a destination. That is a platform decision, recorded as D27 and
-tracked by issue [#219](https://github.com/leynos/ghillie/issues/219), whose
-scope names the estate endpoint and mutation metrics, the catalogue-parsing
-span, and the platform approval that must precede both.
+The estate control plane emits two kinds of structured event through
+`ghillie.logging`. D21's mutation records describe a mutation's work, and the
+HTTP boundary records one outcome event per request. D27 originally treated the
+outcome events and tracing as one platform decision. The events turned out not
+to need a platform: the repository's convention, established by
+`ghillie/github/observability.py`, is already to emit metrics as structured log
+events a log aggregator can count, so the endpoint events are delivered here.
+What remains deferred is a metrics exporter or client, a duration histogram for
+the import, sync, and toggle mutations, and tracing spans around the catalogue
+YAML parse and the persistence calls. Those still mean choosing a telemetry
+platform and a destination, which is the platform decision D27 records and issue
+[#219](https://github.com/leynos/ghillie/issues/219) tracks.
 
-The intended shape is fixed now so the deferred work has an agreed contract:
-one count per HTTP outcome, labelled only by `operation`, `outcome`, and
-`status_class`, following the `ghillie/github/observability.py` convention.
-Estate keys, owners, repository names, commit SHAs, and error strings never
-become labels, because they are unbounded. Spans would exclude catalogue
-payloads and bearer tokens for the same reason.
+`ghillie/api/estate/observability.py` owns the outcome vocabulary and the
+emitter, and `EstateOutcomeMiddleware` in the same module records the event. It
+is registered first in the middleware stack so its response hook runs last,
+after the session middleware has committed or rolled back, and the status it
+records is the one the client receives. Falcon calls a response hook even when
+an earlier request hook raised, so a request rejected before routing -- an
+unauthenticated request, for example -- is counted against the endpoint it
+addressed; the path is matched against the five route shapes when routing never
+supplied a template. Each estate request therefore records exactly one event:
+
+```plaintext
+estate.http.outcome operation=import_catalogue outcome=rejected status_class=4xx
+```
+
+The labels are bounded to `operation` (the `EstateManagement` method name),
+`outcome` (`succeeded`, `rejected`, or `failed`), and `status_class` (`2xx`,
+`4xx`, or `5xx`). Estate keys, owners, repository names, commit SHAs, and error
+strings never become labels, because they are unbounded, so the event's
+cardinality cannot grow with the data. A 2xx logs at INFO, a 4xx at WARNING,
+and anything else at ERROR: an unexpected 3xx, which this API never issues,
+counts as a failure. Spans would exclude catalogue payloads and bearer tokens
+for the same reason.
 
 This subsection is the record the hosted **Observability** pre-merge check asks
-for. That check's third remediation option is to record the metrics and tracing
-decision here and link it to the check; this paragraph is that link, and D27
-with #219 are the decision's other references. The first two options, adding
-metric events and adding spans, are the deferred work itself and cannot precede
-the platform choice. The fourth, an explicit check-owner waiver, is the
-maintainer's to issue if this record is not accepted as a discharge.
+for. That check's first remediation option -- bounded-cardinality metric events
+for the five estate endpoints and the mutation outcomes, using only `operation`,
+`outcome`, and `status_class` -- is delivered by the events described above.
+Its second option, spans, remains the deferred platform work. The fourth, an
+explicit check-owner waiver, is the maintainer's to issue for that remainder if
+this record is not accepted as a discharge.
 
-**Affected modules:** none in this change; the deferred work lands in
-`ghillie/api/estate/`, `ghillie/estate/persistence.py`, and
-`ghillie/estate/service.py` when #219 settles the platform.
+**Affected modules:** `ghillie/api/estate/observability.py` and
+`ghillie/api/app.py`. The deferred work lands in
+`ghillie/estate/persistence.py` and `ghillie/estate/service.py` when #219
+settles the platform.
 
 #### Catalogue-import request value
 

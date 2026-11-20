@@ -1197,6 +1197,27 @@ per pull request.
       check's follow-up asked that the subsection name it explicitly, so it now
       names the Observability pre-merge check as the record's reason and
       explains why options 1 and 2 are the deferred work itself.
+- [x] (2026-11-20) Delivered the Observability row's first remediation option.
+      The hosted check separates the logging part, which it accepts, from the
+      metrics and tracing parts, which it did not; its third option, a
+      design-doc record, had already been taken. The row's own latest wording
+      then asked that the record stop claiming metrics need a platform where
+      the log-event convention applies, so the events themselves are now
+      delivered. `ghillie/api/estate/observability.py` owns a bounded
+      `operation`, `outcome`, and `status_class` vocabulary, and
+      `EstateOutcomeMiddleware` records exactly one `estate.http.outcome` line
+      per request. The middleware is registered first in
+      `ghillie/api/app.py::_build_middleware`, so its response hook runs last
+      and sees the status the client receives after the session middleware
+      settles. Falcon calls that hook even for a request an earlier request
+      hook rejected, so the path fallback attributes a pre-routing 401 to the
+      endpoint addressed. Unit tests pin the vocabulary and the capture shape;
+      app-level tests cover a 200, a 400, a 503, and a 401 through the real
+      application. The design doc's "Metrics and tracing decision" subsection
+      now separates the delivered events from the still-deferred exporter,
+      duration histogram, and spans, and the users' and developers' guides
+      document the event. Spans and an external metrics pipeline stay with
+      #219.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
@@ -1558,6 +1579,13 @@ expert-panel review.
      architecture expect it, in the "Metrics and tracing decision" subsection
      of `docs/ghillie-design.md`, with the intended metric names, labels, and
      exclusions, and the #219 dependency that must settle the platform first.
+     **Amended later on 2026-11-20.** Delivery showed that the metric events
+     themselves never needed the platform: the hosting convention already
+     renders metrics as structured log events, so the five estate endpoints now
+     emit one bounded `estate.http.outcome` event per request, emitted by
+     `ghillie/api/estate/observability.py`. D27 now defers only the metrics
+     exporter or client, the mutation duration histogram, and the tracing spans
+     to #219.
 - D28, atomic adoption of an unowned Silver row. `_claim_unowned_repository`
   (moved to `ghillie.registry.storage` by D30) issues a conditional update of
   `estate_id` that matches only rows where `estate_id` is null. A zero row

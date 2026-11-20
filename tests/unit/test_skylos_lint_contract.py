@@ -158,6 +158,8 @@ _RUNTIME_ENTRY_POINTS: typ.Final = {
             "ghillie.api.auth.BearerTokenMiddleware.process_response.resp",
             "ghillie.api.auth.BearerTokenMiddleware.process_response.resource",
             "ghillie.api.auth.BearerTokenMiddleware.process_response.req_succeeded",
+            "ghillie.api.estate.observability.EstateOutcomeMiddleware.process_response.resource",
+            "ghillie.api.estate.observability.EstateOutcomeMiddleware.process_response.req_succeeded",
             "ghillie.bronze.storage.UTCDateTime.process_bind_param.dialect",
             "ghillie.bronze.storage.UTCDateTime.process_result_value.dialect",
             "ghillie.registry.storage.PlainInsertStrategy.build.row",

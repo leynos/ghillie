@@ -207,6 +207,14 @@ full_name = [
 reason = "Falcon passes these middleware hooks the request, response, resource, and success flag positionally; the bearer-token check only needs the request and must keep the names its protocol declares."
 
 [[tool.skylos.dead_code.entrypoints]]
+type = "parameter"
+full_name = [
+    "ghillie.api.estate.observability.EstateOutcomeMiddleware.process_response.resource",
+    "ghillie.api.estate.observability.EstateOutcomeMiddleware.process_response.req_succeeded",
+]
+reason = "Falcon passes the response hook the request, response, resource, and success flag positionally; the outcome recorder reads only the request and the response status and must keep the names its protocol declares."
+
+[[tool.skylos.dead_code.entrypoints]]
 type = "function"
 full_name = [
     "ghillie.estate.service._estate_summary",
