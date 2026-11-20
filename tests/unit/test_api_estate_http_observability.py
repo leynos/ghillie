@@ -9,6 +9,7 @@ The tests pin the vocabulary directly, then drive the real application so the
 middleware wiring, including a request rejected before routing, is covered.
 """
 
+import dataclasses
 import types
 import typing as typ
 
@@ -39,6 +40,7 @@ from tests.unit.estate_test_helpers import (
 
 if typ.TYPE_CHECKING:
     from ghillie.estate.models import EstateSummary, Page, PageRequest
+    from ghillie.estate.ports import EstateManagement
     from tests.helpers.femtologging_capture import FemtoLogCapture
 
 _LOGGER_NAME = "ghillie.api.estate.observability"
@@ -215,39 +217,40 @@ def test_operation_for_ignores_other_paths(template: str | None, path: str) -> N
     assert operation_for(template, path) is None
 
 
+@pytest.mark.parametrize(
+    ("uri_template", "path", "expected_operation"),
+    [
+        ("/estates", "/estates", "list_estates"),
+        ("/health", "/health", None),
+    ],
+    ids=["estate-route", "health-probe"],
+)
 @pytest.mark.asyncio
-async def test_middleware_records_a_routed_request() -> None:
-    """The response hook attributes the request and records its status."""
+async def test_middleware_records_only_estate_routes(
+    uri_template: str, path: str, expected_operation: str | None
+) -> None:
+    """The response hook attributes estate routes and ignores every other path.
+
+    Falcon supplies a template once a request is routed, so a health probe has
+    none of the five estate shapes and produces no event at all.
+    """
     request = typ.cast(
         "falcon.asgi.Request",
-        types.SimpleNamespace(uri_template="/estates", path="/estates"),
+        types.SimpleNamespace(uri_template=uri_template, path=path),
     )
     response = typ.cast("falcon.asgi.Response", types.SimpleNamespace(status_code=200))
+
     with capture_femto_logs(_LOGGER_NAME) as logs:
         await EstateOutcomeMiddleware().process_response(
             request, response, None, req_succeeded=True
         )
         captured = _captured(logs)
 
+    if expected_operation is None:
+        assert captured == [], captured
+        return
     assert len(captured) == 1, captured
-    assert _fields(captured[0][1])["operation"] == "list_estates"
-
-
-@pytest.mark.asyncio
-async def test_middleware_ignores_other_routes() -> None:
-    """The health probes produce no estate event."""
-    request = typ.cast(
-        "falcon.asgi.Request",
-        types.SimpleNamespace(uri_template="/health", path="/health"),
-    )
-    response = typ.cast("falcon.asgi.Response", types.SimpleNamespace(status_code=200))
-    with capture_femto_logs(_LOGGER_NAME) as logs:
-        await EstateOutcomeMiddleware().process_response(
-            request, response, None, req_succeeded=True
-        )
-        captured = _captured(logs)
-
-    assert captured == [], captured
+    assert _fields(captured[0][1])["operation"] == expected_operation
 
 
 def test_each_estate_route_records_its_own_operation() -> None:
@@ -283,60 +286,81 @@ def test_each_estate_route_records_its_own_operation() -> None:
     ] * 5, captured
 
 
-def test_rejected_request_records_a_rejected_outcome() -> None:
-    """A 400 is recorded against the endpoint and the 4xx class."""
-    client = falcon.testing.TestClient(
-        create_app(AppDependencies(estate_service=_InvalidPageEstateManagement()))
-    )
+@dataclasses.dataclass(frozen=True, slots=True)
+class _OutcomeCase:
+    """One client-visible status the five estate routes must record."""
 
-    with capture_femto_logs(_LOGGER_NAME) as logs:
-        response = client.simulate_get("/estates", params={"limit": "0"})
-        captured = _captured(logs)
-
-    assert response.status_code == 400, response.text
-    assert len(captured) == 1, captured
-    assert _fields(captured[0][1]) == {
-        "operation": "list_estates",
-        "outcome": "rejected",
-        "status_class": "4xx",
-    }, captured
+    service_type: typ.Callable[[], EstateManagement]
+    expected_status: int
+    expected_fields: dict[str, str]
+    api_token: str | None = None
+    params: dict[str, str] | None = None
 
 
-def test_failed_request_records_a_failed_outcome() -> None:
-    """A 503 is recorded against the endpoint and the 5xx class."""
-    client = falcon.testing.TestClient(
-        create_app(AppDependencies(estate_service=_UnavailableEstateManagement()))
-    )
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(
+            _OutcomeCase(
+                service_type=_InvalidPageEstateManagement,
+                expected_status=400,
+                expected_fields={
+                    "operation": "list_estates",
+                    "outcome": "rejected",
+                    "status_class": "4xx",
+                },
+                params={"limit": "0"},
+            ),
+            id="rejected-400",
+        ),
+        pytest.param(
+            _OutcomeCase(
+                service_type=_UnavailableEstateManagement,
+                expected_status=503,
+                expected_fields={
+                    "operation": "list_estates",
+                    "outcome": "failed",
+                    "status_class": "5xx",
+                },
+            ),
+            id="failed-503",
+        ),
+        pytest.param(
+            _OutcomeCase(
+                service_type=FakeEstateManagement,
+                expected_status=401,
+                expected_fields={
+                    "operation": "list_estates",
+                    "outcome": "rejected",
+                    "status_class": "4xx",
+                },
+                api_token=_TOKEN,
+            ),
+            id="unauthenticated-401",
+        ),
+    ],
+)
+def test_estate_request_records_the_outcome_the_client_receives(
+    case: _OutcomeCase,
+) -> None:
+    """Each client-visible status is recorded once against its endpoint.
 
-    with capture_femto_logs(_LOGGER_NAME) as logs:
-        response = client.simulate_get("/estates")
-        captured = _captured(logs)
-
-    assert response.status_code == 503, response.text
-    assert len(captured) == 1, captured
-    assert _fields(captured[0][1]) == {
-        "operation": "list_estates",
-        "outcome": "failed",
-        "status_class": "5xx",
-    }, captured
-
-
-def test_unauthenticated_request_names_the_endpoint_it_addressed() -> None:
-    """A 401 rejected before routing is still recorded for its endpoint."""
+    The cases cover a page request the endpoint rejects, a storage failure,
+    and an unauthenticated request that is refused before routing: the last
+    still names the endpoint the client addressed.
+    """
     client = falcon.testing.TestClient(
         create_app(
-            AppDependencies(estate_service=FakeEstateManagement(), api_token=_TOKEN)
+            AppDependencies(
+                estate_service=case.service_type(), api_token=case.api_token
+            )
         )
     )
 
     with capture_femto_logs(_LOGGER_NAME) as logs:
-        response = client.simulate_get("/estates")
+        response = client.simulate_get("/estates", params=case.params)
         captured = _captured(logs)
 
-    assert response.status_code == 401, response.text
+    assert response.status_code == case.expected_status, response.text
     assert len(captured) == 1, captured
-    assert _fields(captured[0][1]) == {
-        "operation": "list_estates",
-        "outcome": "rejected",
-        "status_class": "4xx",
-    }, captured
+    assert _fields(captured[0][1]) == case.expected_fields, captured
