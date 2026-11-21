@@ -12,6 +12,7 @@ import json
 import typing as typ
 
 import httpx
+import pytest
 
 from ghillie.cli.app import main as cli_main
 from ghillie.cli.commands.estate import list_repositories, set_repository
@@ -21,9 +22,6 @@ from tests.unit.cli.payloads import (
     TOGGLE_PAYLOAD,
     error_document,
 )
-
-if typ.TYPE_CHECKING:
-    import pytest
 
 
 def test_repo_list_passes_filters_and_pagination(
@@ -159,6 +157,68 @@ def test_repo_set_quotes_each_path_segment(
 
     request = client.requests[0]
     assert request.url.raw_path == b"/repositories/ley%20nos/wild%2Fside/ingestion"
+
+
+@pytest.mark.parametrize("estate_key", [pytest.param("..", id="two-dots"), "."])
+def test_repo_list_encodes_a_dot_only_estate_key(
+    harness: typ.Callable[..., CliHarness],
+    estate_key: str,
+) -> None:
+    """A legacy dot-only key stays a path segment, not a normalised dot.
+
+    ``quote(..., safe="")`` leaves dots alone, so ``..`` would build
+    ``/estates/../repositories`` and the HTTP client would send ``/repositories``
+    instead. The read-only endpoints accept keys created before the creation
+    pattern existed, so the key must reach the server intact.
+    """
+    client = harness()
+    client.queue_json(REPOSITORY_LIST_PAYLOAD)
+
+    client.invoke(list_repositories, estate_key=estate_key)
+
+    request = client.requests[0]
+    encoded = "%2E" * len(estate_key)
+    assert request.url.raw_path.split(b"?")[0] == (
+        f"/estates/{encoded}/repositories".encode()
+    )
+
+
+@pytest.mark.parametrize(
+    ("owner", "name"),
+    [
+        pytest.param(".", "..", id="dot-then-two-dots"),
+        pytest.param("..", ".", id="two-dots-then-dot"),
+    ],
+)
+def test_repo_set_encodes_dot_only_segments(
+    harness: typ.Callable[..., CliHarness],
+    owner: str,
+    name: str,
+) -> None:
+    """A dot-only owner or name cannot be normalised out of the route."""
+    client = harness()
+    client.queue_json(TOGGLE_PAYLOAD)
+
+    client.invoke(set_repository, owner=owner, name=name, ingestion_enabled=True)
+
+    request = client.requests[0]
+    owner_segment = "%2E" * len(owner)
+    name_segment = "%2E" * len(name)
+    assert request.url.raw_path == (
+        f"/repositories/{owner_segment}/{name_segment}/ingestion".encode()
+    )
+
+
+def test_repo_list_leaves_an_ordinary_dotted_key_unchanged(
+    harness: typ.Callable[..., CliHarness],
+) -> None:
+    """Encoded segments contain no literal dot, so only dot-only keys change."""
+    client = harness()
+    client.queue_json(REPOSITORY_LIST_PAYLOAD)
+
+    client.invoke(list_repositories, estate_key="wildside.v2")
+
+    assert client.requests[0].url.path == "/estates/wildside.v2/repositories"
 
 
 def test_repo_set_refuses_a_dry_run_without_sending_a_request(

@@ -173,9 +173,24 @@ def _success_document(response: httpx.Response) -> dict[str, object]:
     return payload
 
 
+def _quote_segment(segment: str) -> str:
+    """Quote one path segment, keeping a dot-only segment from being normalised.
+
+    ``quote`` never escapes ``.`` because it is unreserved in RFC 3986, but a
+    segment consisting only of dots is a relative-path marker to every HTTP
+    client and server: ``..`` would remove its parent from the route and a lone
+    ``.`` would be dropped. Encoding each dot keeps the segment literal, so a
+    key created before the creation pattern existed still addresses its own
+    resource.
+    """
+    if segment and set(segment) == {"."}:
+        return "%2E" * len(segment)
+    return quote(segment, safe="")
+
+
 def _quote_path(path_segments: typ.Sequence[str]) -> str:
     """Quote each segment so a value containing ``/`` cannot change the route."""
-    return "/" + "/".join(quote(segment, safe="") for segment in path_segments)
+    return "/" + "/".join(_quote_segment(segment) for segment in path_segments)
 
 
 def _prepare_body(
