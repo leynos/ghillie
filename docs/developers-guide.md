@@ -856,11 +856,14 @@ adapters. Keep new estate work inside that shape.
   layer import. The one remaining duplicate is `MAX_REQUEST_BODY_BYTES`: it is
   an HTTP transport limit declared by `ghillie.api.estate.resources`, which the
   CLI must not import either, so the unit tests assert the two values stay
-  equal. The offset ceiling and the key pattern have no such field; their
-  equality tests are gone because there is nothing left to compare. The ceiling
-  is enforced by the `PageOffset` validator as well as by the service, so an
-  out-of-range page request costs no request and exits `2` like every other
-  local rejection.
+  equal. The key pattern has no such field, so its equality test is gone
+  because there is nothing left to compare. The offset ceiling has one more
+  deliberate copy: `MAXIMUM_OFFSET` in `ghillie/catalogue/queries.py` keeps the
+  storage adapter independent of the port's policy, and
+  `tests/unit/test_catalogue_queries.py` asserts the two values match so a
+  change to one cannot leave the other behind. The ceiling is enforced by the
+  `PageOffset` validator as well as by the service, so an out-of-range page
+  request costs no request and exits `2` like every other local rejection.
 
 ### Behavioural and end-to-end coverage
 
