@@ -3,10 +3,11 @@
 These values are part of the contract an operator and the service both depend
 on: the pattern a new estate key must match, and the largest page offset any
 listing accepts. They live here rather than in :mod:`ghillie.estate.models`
-because importing anything under :mod:`ghillie.estate` loads that package's
-application re-exports, which the CLI must not pull in (O6). Keeping one
-dependency-free definition lets the CLI, the application service, and the HTTP
-adapter agree without either copying the value or importing the server side.
+because O6 keeps the CLI out of the server-side packages: the CLI is a thin
+HTTP client and must not import ``ghillie.estate``, ``ghillie.api`` or the
+storage layers. A dependency-free shared module gives the CLI, the application
+service, and the domain models one definition without crossing that boundary,
+and ``tests/unit/cli/test_cli_import_closure.py`` enforces the restriction.
 
 The module imports nothing, so it sits in the ``domain_ports`` Hecate group and
 stays safe for every layer to import.
