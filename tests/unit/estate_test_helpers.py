@@ -1,0 +1,457 @@
+"""Reusable doubles and builders for estate-management tests.
+
+Route-registration tests need the port registered but never call most of its
+methods, so :class:`EmptyEstateManagement` keeps one empty double instead of
+every test module repeating the five-method signature. The HTTP and service
+suites share :class:`FakeEstateManagement` and the database-backed builders
+from the same module so each split test file starts from the same fixtures.
+
+Exported builders
+-----------------
+``build_estate_client``
+    Wrap a :class:`FakeEstateManagement` in a Falcon test client whose app has
+    only the estate service wired in.
+``build_registry``
+    Construct a :class:`RepositoryRegistryService` over a test session factory,
+    using the same factory for the catalogue and Silver stores.
+``build_service``
+    Construct the :class:`EstateManagementService` under test from a session
+    factory and a registry.
+``catalogue_document``
+    Render a minimal valid catalogue YAML document with overridable component
+    and repository names.
+``import_catalogue``
+    Import through the service with terse defaults, treating only ``None`` as
+    "use the fixture document" so an explicit empty upload still reaches the
+    importer.
+``count_rows``
+    Count every row in one catalogue table.
+``record_statements``
+    Capture the SQL the test database runs, so a read-only check can prove a
+    query issued no data-modifying statement.
+``data_writes``
+    Select the statements from that capture that are not provably reads.
+
+``NOW`` and ``DOCUMENTATION_PATHS`` provide the fixed timestamp and path
+fixtures the doubles advertise.
+"""
+
+import contextlib
+import dataclasses
+import datetime as dt
+import typing as typ
+
+import falcon.testing
+from sqlalchemy import event, func, select
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+from ghillie.api.app import AppDependencies, create_app
+from ghillie.estate.models import (
+    CatalogueImportRequest,
+    CatalogueImportSummary,
+    CountSummary,
+    EstateSummary,
+    IngestionToggleOutcome,
+    Page,
+    PageRequest,
+    RegistrySyncSummary,
+    RepositoryPage,
+    RepositoryQuery,
+)
+from ghillie.estate.service import EstateManagementService
+from ghillie.registry.models import RepositoryInfo
+from ghillie.registry.service import RepositoryRegistryService
+
+if typ.TYPE_CHECKING:
+    from sqlalchemy.engine import Engine
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+__all__ = [
+    "DOCUMENTATION_PATHS",
+    "NOW",
+    "EmptyEstateManagement",
+    "FakeEstateManagement",
+    "build_estate_client",
+    "build_registry",
+    "build_service",
+    "catalogue_document",
+    "count_rows",
+    "data_writes",
+    "import_catalogue",
+    "record_statements",
+]
+
+# Statement keywords the filter can prove cannot change stored state. Anything
+# else the engine runs inside a capture window, including a form this filter
+# does not recognise, is treated as a write so a read-only check fails closed.
+# ``EXPLAIN`` is deliberately absent: ``EXPLAIN ANALYZE`` runs the statement it
+# explains, and telling the executing forms from the planning ones needs a
+# parser this filter does not have.
+_READ_STATEMENT_KEYWORDS: typ.Final = frozenset({"select", "values"})
+
+# PRAGMA names SQLite documents as reporting state without changing anything.
+# The list is intentionally short: the read-only checks only issue
+# ``table_info``, and an unrecognised pragma must fail closed because SQLite
+# accepts both getter and setter forms for many of these names.
+_READ_PRAGMA_NAMES: typ.Final = frozenset(
+    {
+        "database_list",
+        "foreign_key_list",
+        "index_info",
+        "index_list",
+        "index_xinfo",
+        "table_info",
+        "table_xinfo",
+    }
+)
+
+NOW = dt.datetime(2024, 7, 7, 12, 0, tzinfo=dt.UTC)
+DOCUMENTATION_PATHS = ("docs/", "README.md")
+
+
+def _estate_page(
+    items: tuple[EstateSummary, ...], page: PageRequest
+) -> Page[EstateSummary]:
+    """Build a single-page estate result for a port double."""
+    return Page(
+        items=items,
+        limit=page.limit,
+        offset=page.offset,
+        has_more=False,
+        next_offset=None,
+    )
+
+
+class EmptyEstateManagement:
+    """Estate port double that returns an empty first page."""
+
+    async def list_estates(self, page: PageRequest) -> Page[EstateSummary]:
+        """Return an empty page."""
+        return _estate_page((), page)
+
+    async def import_catalogue(
+        self, estate_key: str, request: CatalogueImportRequest
+    ) -> CatalogueImportSummary:
+        """Raise because route-registration tests never import a catalogue."""
+        raise NotImplementedError
+
+    async def sync_registry(
+        self, estate_key: str, *, dry_run: bool
+    ) -> RegistrySyncSummary:
+        """Raise because route-registration tests never synchronize the registry."""
+        raise NotImplementedError
+
+    async def list_repositories(
+        self, estate_key: str, query: RepositoryQuery
+    ) -> RepositoryPage:
+        """Raise because route-registration tests never list repositories."""
+        raise NotImplementedError
+
+    async def set_ingestion(
+        self, owner: str, name: str, *, enabled: bool
+    ) -> IngestionToggleOutcome:
+        """Raise because route-registration tests never toggle ingestion."""
+        raise NotImplementedError
+
+
+class FakeEstateManagement:
+    """In-memory estate port double that records every call."""
+
+    def __init__(self) -> None:
+        """Build a double with one estate and one repository."""
+        self.page_requests: list[PageRequest] = []
+        self.repository_queries: list[RepositoryQuery] = []
+        self.imports: list[dict[str, object]] = []
+        self.syncs: list[dict[str, object]] = []
+        self.toggles: list[dict[str, object]] = []
+        self.estate_items: tuple[EstateSummary, ...] = (
+            EstateSummary(
+                key="demo",
+                name="Demo",
+                description="A demo estate",
+                last_import_commit_sha="c1",
+                last_imported_at=NOW,
+            ),
+        )
+        self.repository_items: tuple[RepositoryInfo, ...] = (
+            RepositoryInfo(
+                id="repo-1",
+                owner="org",
+                name="alpha",
+                default_branch="main",
+                ingestion_enabled=True,
+                documentation_paths=DOCUMENTATION_PATHS,
+                estate_id="estate-1",
+            ),
+        )
+
+    async def list_estates(self, page: PageRequest) -> Page[EstateSummary]:
+        """Return the configured estate page."""
+        self.page_requests.append(page)
+        return _estate_page(self.estate_items, page)
+
+    async def import_catalogue(
+        self, estate_key: str, request: CatalogueImportRequest
+    ) -> CatalogueImportSummary:
+        """Record and return a fixed import summary."""
+        self.imports.append({"estate_key": estate_key, **dataclasses.asdict(request)})
+        return CatalogueImportSummary(
+            estate_key=estate_key,
+            commit_sha=request.commit_sha,
+            state="succeeded",
+            dry_run=request.dry_run,
+            skipped=False,
+            skipped_reason=None,
+            registry_sync_required=not request.dry_run,
+            projects=CountSummary(created=1, updated=0, deleted=0),
+            components=CountSummary(created=2, updated=0, deleted=1),
+            repositories=CountSummary(created=1, updated=0, deleted=0),
+            edges=CountSummary(created=1, updated=0, deleted=0),
+        )
+
+    async def sync_registry(
+        self, estate_key: str, *, dry_run: bool
+    ) -> RegistrySyncSummary:
+        """Record and return a fixed sync summary."""
+        self.syncs.append({"estate_key": estate_key, "dry_run": dry_run})
+        return RegistrySyncSummary(
+            estate_key=estate_key,
+            state="succeeded",
+            dry_run=dry_run,
+            repositories_created=1,
+            repositories_updated=2,
+            repositories_deactivated=0,
+            repositories_conflicted=("other/estate-repo",),
+            repositories_left_disabled=("org/alpha",),
+            repositories_left_disabled_count=1,
+        )
+
+    async def list_repositories(
+        self, estate_key: str, query: RepositoryQuery
+    ) -> RepositoryPage:
+        """Record and return the configured repository page."""
+        self.repository_queries.append(query)
+        return RepositoryPage(
+            estate_key=estate_key,
+            items=self.repository_items,
+            limit=query.limit,
+            offset=query.offset,
+            has_more=False,
+            next_offset=None,
+        )
+
+    async def set_ingestion(
+        self, owner: str, name: str, *, enabled: bool
+    ) -> IngestionToggleOutcome:
+        """Record and return a fixed toggle outcome."""
+        self.toggles.append({"owner": owner, "name": name, "enabled": enabled})
+        return IngestionToggleOutcome(
+            owner=owner,
+            name=name,
+            ingestion_enabled=enabled,
+            changed=True,
+        )
+
+
+def build_estate_client(service: FakeEstateManagement) -> falcon.testing.TestClient:
+    """Build a client for an app with only the estate service configured."""
+    return falcon.testing.TestClient(
+        create_app(AppDependencies(estate_service=service))
+    )
+
+
+def build_registry(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> RepositoryRegistryService:
+    """Build a registry service over the shared test database."""
+    return RepositoryRegistryService(session_factory, session_factory)
+
+
+def build_service(
+    session_factory: async_sessionmaker[AsyncSession],
+    registry: RepositoryRegistryService,
+) -> EstateManagementService:
+    """Build the estate service under test."""
+    return EstateManagementService(session_factory, registry=registry)
+
+
+def catalogue_document(
+    *,
+    component_key: str = "alpha-api",
+    repo_owner: str = "org",
+    repo_name: str = "alpha",
+) -> str:
+    """Build a minimal valid catalogue document."""
+    return f"""
+version: 1
+projects:
+  - key: alpha
+    name: Alpha
+    components:
+      - key: {component_key}
+        name: Alpha API
+        type: service
+        lifecycle: active
+        repository:
+          owner: {repo_owner}
+          name: {repo_name}
+          default_branch: main
+"""
+
+
+class _ImportOverrides(typ.TypedDict, total=False):
+    """Per-test overrides for :func:`import_catalogue`'s defaults."""
+
+    estate_key: str
+    commit_sha: str
+    estate_name: str | None
+    dry_run: bool
+    catalogue_yaml: str | None
+
+
+async def import_catalogue(
+    service: EstateManagementService,
+    **overrides: typ.Unpack[_ImportOverrides],
+) -> CatalogueImportSummary:
+    """Import a catalogue through the service with terse test defaults."""
+    # Only ``None`` means "use the fixture"; an explicitly empty upload must
+    # reach the importer so rejection tests exercise the real validation path.
+    catalogue_yaml = overrides.get("catalogue_yaml")
+    document = catalogue_document() if catalogue_yaml is None else catalogue_yaml
+    request = CatalogueImportRequest(
+        catalogue_yaml=document,
+        commit_sha=overrides.get("commit_sha", "c1"),
+        estate_name=overrides.get("estate_name", "Demo"),
+        dry_run=overrides.get("dry_run", False),
+    )
+    return await service.import_catalogue(overrides.get("estate_key", "demo"), request)
+
+
+async def count_rows(
+    session_factory: async_sessionmaker[AsyncSession],
+    model: type[typ.Any],
+) -> int:
+    """Count every row in one mapped table.
+
+    The model is opened up rather than listed so the read-only checks can
+    snapshot catalogue and Silver tables with one helper.
+    """
+    async with session_factory() as session:
+        return (await session.scalar(select(func.count()).select_from(model))) or 0
+
+
+@contextlib.contextmanager
+def record_statements(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> typ.Iterator[list[str]]:
+    """Record every SQL statement the factory's engine executes.
+
+    A row-count snapshot cannot see an update that leaves the counts unchanged,
+    so a read-only check pairs the snapshot with this capture and asserts that
+    nothing data-modifying ran. ``sessionmaker`` keeps its constructor
+    arguments in ``kw``, which avoids opening a session only to ask for its
+    bind.
+
+    Parameters
+    ----------
+    session_factory:
+        Factory whose bound engine is the one to listen on.
+
+    Yields
+    ------
+    list[str]
+        Statements in execution order, appended as they run.
+
+    """
+    bind = session_factory.kw["bind"]
+    # An async factory binds an AsyncEngine, and SQLAlchemy will not register
+    # a cursor event on the async wrapper; the sync engine it wraps runs the
+    # statements.
+    engine: Engine = bind.sync_engine if isinstance(bind, AsyncEngine) else bind
+    statements: list[str] = []
+
+    def _record(
+        _connection: object,
+        _cursor: object,
+        statement: str,
+        _parameters: object,
+        _context: object,
+        _executemany: bool,  # noqa: FBT001 - SQLAlchemy passes it positionally.
+    ) -> None:
+        """Append one statement as the engine runs it."""
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", _record)
+    try:
+        yield statements
+    finally:
+        event.remove(engine, "before_cursor_execute", _record)
+
+
+def _without_one_comment(text: str) -> str | None:
+    """Return *text* without one leading SQL comment, or ``None`` if it has none.
+
+    An unterminated comment swallows the rest of the statement, which is what
+    SQLite does too.
+    """
+    if text.startswith("--"):
+        _, _, remainder = text.partition("\n")
+        return remainder
+    if text.startswith("/*"):
+        _, _, remainder = text.partition("*/")
+        return remainder
+    return None
+
+
+def _strip_leading_comments(statement: str) -> str:
+    """Return *statement* without leading whitespace and SQL comments.
+
+    SQLite accepts ``--`` and ``/* ... */`` comments before a statement, so
+    looking at the raw first word would let a commented write look like a
+    read.
+    """
+    remainder = statement.lstrip()
+    while (stripped := _without_one_comment(remainder)) is not None:
+        remainder = stripped.lstrip()
+    return remainder
+
+
+def _is_read_pragma(text: str) -> bool:
+    """Return whether *text* is a PRAGMA form that only reports state.
+
+    SQLite accepts both a getter and a setter form for many pragmas, and
+    ``PRAGMA journal_mode(WAL)`` assigns exactly as ``PRAGMA journal_mode =
+    WAL`` does. A form is a read only when it assigns nothing and names a
+    pragma on the verified list; an optional schema prefix such as ``main.``
+    is ignored.
+    """
+    arguments = text[len("pragma") :].lstrip()
+    if "=" in arguments:
+        return False
+    name = arguments.split("(", 1)[0].strip().rsplit(".", 1)[-1].lower()
+    return name in _READ_PRAGMA_NAMES
+
+
+def _is_provably_read(statement: str) -> bool:
+    """Return whether *statement* is a form this filter can prove is a read."""
+    text = _strip_leading_comments(statement)
+    words = text.split(None, 1)
+    if not words:
+        return False
+    keyword = words[0].lower()
+    if keyword in _READ_STATEMENT_KEYWORDS:
+        return True
+    return keyword == "pragma" and _is_read_pragma(text)
+
+
+def data_writes(statements: typ.Iterable[str]) -> list[str]:
+    """Return the recorded statements that are not provably read-only.
+
+    Only forms this filter can prove are reads pass: a ``SELECT``, a
+    ``VALUES`` clause, or a PRAGMA that assigns nothing and names a verified
+    getter. A write verb, an ``EXPLAIN`` (whose ``ANALYZE`` form executes), a
+    ``WITH`` form it cannot classify, or anything else unrecognised is
+    reported, so a gap in the filter makes a read-only check fail rather than
+    pass vacuously.
+    """
+    return [statement for statement in statements if not _is_provably_read(statement)]

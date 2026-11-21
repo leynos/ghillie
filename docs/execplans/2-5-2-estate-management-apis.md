@@ -306,6 +306,403 @@ per pull request.
       longer says every D28 test drives a sync:
       `test_claim_unowned_repository_is_atomic_under_a_stale_view` calls the
       claim primitive directly.
+- [x] (2026-11-06) Rebased onto PR-A's `38f3cac` so this branch carries the
+      CodeScene repair. One plan conflict was resolved by keeping PR-A's
+      CodeScene bullet ahead of this branch's EP-M2 block, and D28's closing
+      sentence still names branch C alone. Later replays moved the branch onto
+      `a7a796e`, which records the unowned-row limits the third review round
+      asked for, and then onto `d6356b7`, which corrects their provenance.
+- [x] (2026-11-06) The EP-B-R11 assessment found the interfaces example still
+      sketched the five-argument `import_catalogue` that D22 replaced with a
+      `CatalogueImportRequest`. The example now matches D22 and
+      `ghillie/estate/ports.py`.
+- [x] (2026-11-06) The EP-C-R8 assessment of branch C left the EP-M5
+      Granian-to-Falcon lifespan check open. Probing the packaged runtime
+      showed that Granian's worker discarded the application logs, so the
+      bootstrap lines never reached the operator. D29 configures logging in
+      the factory; branch C's end-to-end test proves the startup hook runs.
+- [x] PR-B, EP-M2: estate port, service, and catalogue queries.
+  - [x] (2026-11-03) Red observed: `test_estate_service.py` hit
+        `NotImplementedError` from the service stub, and the new importer
+        dry-run and rename tests exercised the missing behaviour.
+  - [x] (2026-11-03) Green: `parse_catalogue_text` rejects anchors and aliases
+        in `asyncio.to_thread`; `ghillie.catalogue.queries` reads estates with
+        their latest import; the importer accepts `dry_run` and keeps an
+        existing description on rename (D18); `EstateManagementService`
+        validates keys and pages, serializes import and sync per estate,
+        translates every underlying failure (D17), logs each mutation (D21),
+        and implements dry runs (D20).
+  - [x] (2026-11-03) Focused suites green: 84 tests on SQLite and 53 tests on
+        py-pglite across the models, parser, queries, service, pagination, and
+        importer modules. The O2 walk covers 780 count, filter, and limit
+        combinations.
+  - [x] (2026-11-03) Hecate groups extended for the new ports, application
+        service, and catalogue query adapter; `build_estate_service` provides
+        the production caller.
+  - [x] (2026-11-03) Full gate suite green sequentially: `check-fmt`,
+        `test` (1298 passed, 11 skipped), `markdownlint`, and `nixie` on the
+        candidate. The first `lint`/`typecheck` run failed: Skylos reported
+        six service helpers as dead and `MAX_REQUEST_BODY_BYTES` as unused, and
+        `ty` rejected the importer's transaction annotation and a possibly
+        `None` page offset.
+  - [x] (2026-11-03) Repairs: the importer now annotates
+        `AsyncSessionTransaction` (the type `session.begin()` returns), the
+        pagination test narrows `next_offset` before arithmetic,
+        `MAX_REQUEST_BODY_BYTES` was removed until EP-M3 adds it with its
+        consumer, and a reasoned `type = "function"` Skylos entrypoint rule
+        records that the six helpers have verified runtime callers in
+        `EstateManagementService`. `make lint` and `make typecheck` then
+        passed on the repaired candidate.
+- [x] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
+  - [x] (2026-11-03) Red artefacts written: `tests/unit/test_api_auth.py`,
+        `test_api_estate_errors.py`, `test_api_estate_resources.py`,
+        `test_openapi_estate_paths.py`, `test_runtime_wiring.py`, and
+        `test_storage_bootstrap.py`, plus updates to `test_api_app.py`,
+        `test_api_errors.py`, and `test_api_report_resource.py`.
+  - [x] (2026-11-03) Green: `ghillie/api/estate/schemas.py` and
+        `resources.py` implement the five endpoints with msgspec decoding, a
+        one-megabyte body limit, media-type checks, and single-valued query
+        parameters; `ghillie/api/auth.py` adds the optional bearer middleware
+        (D14); `ghillie/storage_bootstrap.py` creates missing tables at ASGI
+        start-up behind `GHILLIE_DB_BOOTSTRAP` (D13); `ghillie/api/errors.py`
+        renders every failure through the D7 envelope with stable codes and
+        Falcon's own headers preserved; `ghillie/api/app.py` registers route
+        families independently and `ghillie/runtime.py` reads the new
+        environment variables; `specs/openapi.yml` documents the endpoints,
+        security scheme, parameters, and reusable error responses.
+  - [x] (2026-11-03) Focused suites green: 129 tests across the nine API,
+        runtime, and OpenAPI modules.
+  - [x] (2026-11-03) First full gate run found four `ty` diagnostics and one
+        stale Skylos contract test. Repairs: the middleware protocol keeps
+        Falcon's keyword-compatible parameter names, the error handler narrows
+        `HTTPError.headers` to `dict[str, str]`, the chunked-body test casts
+        the Falcon app at the `httpx.ASGITransport` boundary, and
+        `_RUNTIME_ENTRY_POINTS` gained the EP-M2 function rule.
+  - [x] (2026-11-03) Second full gate run went seven of eight green;
+        `make lint` then reported five `SKY-U006` unused-parameter findings on
+        the Falcon-mandated middleware arguments. A narrow `type =
+        "parameter"` entrypoint rule with its rationale records why the bearer
+        check cannot consume them, and the contract test asserts that rule.
+  - [x] (2026-11-03) Third full gate run went seven of eight green again; the
+        exhaustive O2 walk timed out during py-pglite fixture start-up on a
+        heavily loaded host. The module now carries the explicit 120-second
+        timeout the plan reserves for database-heavy runs; its test body takes
+        about four seconds, so the longer budget covers start-up only.
+  - [x] (2026-11-03) Fourth full gate run green sequentially: `check-fmt`,
+        `check-architecture`, `typecheck`, `lint` (Hecate, Ruff, and Skylos),
+        `test` (1391 passed, 11 skipped), `markdownlint`, `nixie`, and
+        `spelling`.
+  - [x] (2026-11-04) CodeRabbit review of this milestone returned nine
+        findings (six minor, three trivial). Repairs: the bootstrap docstring
+        now states that concurrent `CREATE TABLE` can fail a replica;
+        `GHILLIE_API_TOKEN` is stripped before use; the bearer check compares
+        bytes so a Latin-1 credential is a 401 rather than a `TypeError`; a
+        catch-all `Exception` handler renders the D7 envelope and logs the
+        detail; the BOM literal is an escape sequence; per-estate locks live
+        in a `WeakValueDictionary` with a regression test; the empty estate
+        port double is shared from `tests/unit/estate_test_helpers.py`; every
+        new-test assert carries a failure message; and the four
+        `nullable: true` OpenAPI fields are JSON Schema null unions, asserted
+        by a new test.
+  - [x] (2026-11-04) Final gate suite after the review repairs, run
+        sequentially on the candidate: `check-fmt`, `check-architecture`,
+        `typecheck`, `test` (1396 passed, 11 skipped), `markdownlint`,
+        `nixie`, and `spelling` were green. `lint` found one `ANN401` in the
+        new OpenAPI walker; retyping its argument as `object` fixed it, and
+        `make lint` and the OpenAPI module then passed on the final
+        candidate.
+  - [x] (2026-11-04) Second CodeRabbit review (against the real base
+        `2-5-2-estate-management-apis`) returned fourteen findings (twelve
+        unique; one was reported twice). Repairs: `MAX_PAGE_OFFSET` bounds
+        `offset` so an oversized value is a 400 instead of a SQLite
+        `OverflowError` 500 or a PostgreSQL storage 503, and the OpenAPI
+        `Offset` parameter documents the same maximum; the bearer middleware
+        is built whenever estate routes are exposed (or a token is
+        configured) so the disabled-authentication warning logs without
+        dropping protection from a reports-only app; `handle_falcon_http_error`
+        passes `HTTPError.headers` to `set_headers` so list-form headers
+        survive; `get_estate_by_key` scopes its ranking window to the
+        requested estate; the unreachable 409 and 422 responses are removed
+        from `setRepositoryIngestion`; the `-ise` docstrings use en-GB
+        Oxford `-ize` spelling; and the remaining bare test asserts carry
+        failure messages. Regression tests were added for the offset bound,
+        middleware construction, and scoped subquery. The full gate suite was
+        green on the repair commit (`6bb5d44`): `check-fmt`,
+        `check-architecture`, `typecheck`, `lint`, `test` (1401 passed, 11
+        skipped), `markdownlint`, `nixie`, and `spelling`.
+  - [x] (2026-11-04) Third CodeRabbit review returned five findings (one
+        minor, four trivial). Repairs: `CatalogueImportRequest.estate_name`
+        is a JSON Schema null union, matching the server's accepted null; the
+        public port, service, and `get_estate_by_key` docstrings carry NumPy
+        parameter, return, and raise sections; `_sync_error` matches on the
+        wrapped cause and compares `RegistrySyncError.reason` to the new
+        `ESTATE_NOT_FOUND_REASON` constant exported by
+        `ghillie.registry.errors`; the remaining bare property-test assert
+        carries a message; and the two oversized test modules were split at
+        their endpoint and service seams, with the shared fake port and
+        database builders moved into `tests/unit/estate_test_helpers.py`. The
+        full gate suite was green on `946ad03`: `check-fmt`,
+        `check-architecture`, `typecheck`, `lint`, `test` (1401 passed, 11
+        skipped), `markdownlint`, `nixie`, and `spelling`.
+  - [x] (2026-11-05) Fourth CodeRabbit review returned fifteen findings (three
+        major, three minor, nine trivial). Triage and repairs:
+        - The reported partial-read upload bug is a false positive for Falcon
+          4.3: `BoundedStream.read(size)` already loops over ASGI events until
+          it fills the requested size or reaches the end of the body. A new
+          regression test pins multi-chunk assembly and the existing streamed
+          oversize test still rejects at the limit.
+        - `parse_catalogue_text` now rejects collections nested deeper than 64
+          levels during the preparse event scan, before the recursive
+          constructor can exhaust the interpreter stack.
+        - `EstateManagementService.list_repositories` delegates to a new
+          `RepositoryRegistryService.list_repositories`, so the Silver query
+          uses the registry's own session factory instead of the catalogue
+          factory.
+        - `list_estates` selects its page before ranking latest imports, and
+          `_latest_import_subquery` accepts `estate_ids` so the window covers
+          only that page.
+        - `generateReport` documents its 401 response.
+        - The test helper treats only `None` as "use the fixture", so an
+          explicitly empty upload reaches validation.
+        - NumPy `Attributes` sections were added to the public estate data
+          classes, estate exceptions, and `EstateRow`; the three newly exported
+          API handlers gained parameter and return sections.
+        - Remaining trivial repairs: a `TypedDict` for the error-body helper,
+          `collections.abc.AsyncIterator`, removal of a redundant `__future__`
+          import, and `AsyncSessionTransaction` moved under `TYPE_CHECKING`.
+        Focused red-then-green runs are recorded above; fast gates
+        (`check-fmt`, `typecheck`, `lint`) were green before the repair commit.
+  - [x] (2026-11-05) Fifth CodeRabbit review returned seventeen findings (two
+        major, four minor, eleven trivial). Triage and repairs:
+        - A configured but blank `GHILLIE_API_TOKEN` now stops start-up instead
+          of silently disabling authentication. `_read_api_token` strips the
+          value (secrets read from files often carry a newline) and raises
+          `SystemExit` when the stripped value is empty; a regression test
+          covers it.
+        - `ghillie.estate.ports` imports its model types at runtime, so
+          `typing.get_type_hints` resolves annotations for adapters and
+          documentation tools under PEP 649; a regression test resolves the
+          `list_estates` return type.
+        - `handle_registry_sync_failed` logs the exception before rendering the
+          envelope, so a handled 500 still leaves an operator-visible record;
+          a `capture_femto_logs` test asserts the line.
+        - The generated-report 422 example and `ErrorResponse` schema now carry
+          the optional `review_id`, asserted by the OpenAPI walker.
+        - `estate service` private helpers gained single-line docstrings; every
+          API error handler gained full NumPy sections.
+        - The registry, service, and estate-service test fixtures moved to
+          `tests/unit/conftest.py`, removing three duplicate local fixtures; the
+          pagination matrix now walks an empty registry for every filter and
+          limit; the lock-leak test probes lock lifetime through weak
+          references instead of reading the protected `_locks` map; the dry-run
+          importer test asserts neither an estate nor an import record
+          persists; the bootstrap idempotence test inserts a row between runs
+          and asserts it survives; and `estate_test_helpers` documents its
+          exported builders.
+        - Skipped with reasons: the claimed future-dated plan entry is correct
+          (the cited commit `8d26df3` is dated 2026-11-05), and no
+          `types-PyYAML` stub package is needed (`pyright` reports no
+          missing-stub diagnostic for the test file, and Pyright is not a
+          gate). The suggestion to rewrite the loader's explicit `isinstance`
+          event scan as structural pattern matching is stylistic; the current
+          form is clear, and the `getattr(event, "anchor", None)` guard
+          deliberately covers event types that declare the attribute
+          differently.
+  - [x] (2026-11-05) Full gates on the fifth-review repair commit `bb2d39d`
+        were green sequentially: `check-fmt`, `check-architecture`,
+        `typecheck`, `lint`, `test` (1410 passed, 11 skipped), `markdownlint`,
+        `nixie`, and `spelling`. The milestone CodeRabbit CLI review against
+        base `2-5-2-estate-management-apis` returned two trivial findings:
+        - The five exported estate resource classes gained NumPy `Parameters`
+          and `Raises` sections on their public `on_get`, `on_post`, and
+          `on_patch` handlers, naming the API and port errors each path can
+          raise.
+        - Skipped with reason: making an unset `GHILLIE_API_TOKEN` a fail-fast
+          configuration error unless `GHILLIE_API_AUTH=disabled` is set would
+          contradict decision D14, which deliberately keeps an unset token as
+          "unauthenticated with a start-up warning". The reviewer labels it a
+          posture suggestion rather than a defect; changing it needs a new
+          decision and is outside this plan's approved scope.
+        The follow-up review of the docstring commit returned one minor
+        finding: `tests/unit/test_api_auth.py` used `-ise` spellings in
+        assertion messages. They now use the repository's en-GB Oxford `-ize`
+        form; the `unauthorized` code literal was already correct.
+        A third pass returned one trivial test-strength finding: the
+        Falcon-description test repeated the `/nope` case and only asserted
+        truthiness. It now drives the 415 media-type path, where the resource
+        sets its own description, and asserts that the accepted media type
+        reaches the envelope.
+        A fourth pass returned two minor findings, both accepted:
+        - `GET /estates` now normalizes `last_import.imported_at` to an aware
+          UTC timestamp at the wire boundary. SQLite drops `tzinfo` on
+          round-trip, so a self-hosted deployment previously emitted an ISO
+          string with no offset, violating the OpenAPI `format: date-time`
+          contract. A red-then-green test covers the naive case.
+        - The `ghillie/api/auth.py` module docstring claimed an unset *or
+          empty* token leaves every route open. The launcher now refuses a
+          set-but-blank token, so the docstring and the corresponding test
+          docstring state the middleware-level behaviour separately from the
+          launcher's fail-fast.
+        A fifth pass returned one trivial finding: `ghillie/catalogue/queries.py`
+        annotated `estate_ids` as `typ.Sequence`. It now imports
+        `collections.abc` under `TYPE_CHECKING` and uses `cabc.Sequence`, per
+        the repository rule that ABCs come from their defining module.
+        A sixth pass returned two findings, both accepted:
+        - `handle_storage_unavailable` now logs the chained exception before
+          rendering the 503, matching the other server-fault handlers; a
+          `capture_femto_logs` test asserts the line.
+        - `_log_mutation` renders the client-supplied `estate_key` and
+          `commit_sha` with `%r`. A newline can no longer split the record or
+          forge a second line; a red-then-green test feeds a hostile
+          `commit_sha` and asserts the record stays single-line with a visible
+          escape.
+        A seventh pass returned two findings, both accepted:
+        - `import_catalogue` applied `validate_new_estate_key` before the
+          lookup, so an estate created earlier through Python under a legacy
+          key (for example `"Wildside Estate"`) could never be re-imported.
+          That contradicted D16: the strict pattern belongs only to creation.
+          The method now validates the key as a reference up front and applies
+          the creation pattern inside the per-estate lock only when no row
+          exists. A red-then-green test seeds a legacy-key estate and imports
+          into it.
+        - `set_ingestion` interpolated the client-supplied `owner` and `name`
+          with `%s`. They now use `%r`, matching `_log_mutation`, and a test
+          feeds a newline-bearing name and asserts the record stays on one
+          line. `make test` also produced five `vidaimock` fixture-teardown
+          timeout errors under twelve-worker load in code untouched by this
+          branch; the next gate run confirmed they were flaky: `test`
+          reported 1415 passed and 11 skipped with no vidaimock errors.
+        An eighth pass returned two findings:
+        - `AppDependencies.api_token` appeared in the dataclass-generated
+          `__repr__`, so a token could leak through a log line or traceback.
+          The field is now excluded from `repr`, with a red-then-green test
+          asserting the token never renders.
+        - Skipped with the earlier reason: rewriting the loader's explicit
+          `isinstance` event scan as structural pattern matching is stylistic;
+          the current form is clear, and the `getattr(event, "anchor", None)`
+          guard deliberately covers event types that declare the attribute
+          differently.
+        A ninth pass returned one minor finding: `load_catalogue` caught only
+        `OSError`, so a file with invalid UTF-8 raised an uncaught
+        `UnicodeDecodeError` instead of the validation report the catalogue
+        CLI prints for other read and parse failures. The read-time handler
+        now covers `UnicodeError` too, with a red-then-green test writing
+        undecodable bytes to a temporary file.
+        A tenth pass returned two low-severity findings on the same lines,
+        proposing conflicting remedies for one gap: an over-length catalogue
+        value (project or component name, repository owner/name/default
+        branch) passed validation and failed at flush with `DataError`, which
+        the service reported as a 503 storage fault rather than a 422
+        rejection. The validator remedy was chosen over mapping `DataError` to
+        422, because `DataError` also covers faults unrelated to length, and
+        the validator runs before a session opens, so a dry run now fails
+        exactly as a real import does. `_validate_stored_length` records an
+        issue for any value beyond `String(255)`, without echoing the
+        over-length value; red-then-green unit tests cover each field at 255
+        (accepted) and 256 (rejected), and a service test asserts the HTTP
+        boundary maps it to `CatalogueRejectedError`. The reviewer's separate
+        observation that the `except (OperationalError, InterfaceError)` branch
+        duplicates the following `SQLAlchemyError` branch is correct — both
+        exceptions are subclasses — and was applied as its own behaviour-
+        preserving refactor commit, after the functional change, per the
+        repository's atomic-refactor rule.
+  - [x] (2026-11-05) Final EP-M3 gate run at `1dde1aa` was green across all
+        eight gates: `check-fmt`, `check-architecture`, `typecheck`, `lint`,
+        `test` (1424 passed, 11 skipped, 94 warnings, exit 0),
+        `markdownlint`, `nixie`, and `spelling`. The milestone CodeRabbit CLI
+        review against base `2-5-2-estate-management-apis` reviewed 45 files
+        and returned no findings; the two previously skipped stylistic and
+        D14-posture suggestions were not re-raised. EP-M3 is complete and
+        PR-B is ready for publication.
+  - [x] (2026-11-05) Hosted CodeScene review of the PR-B head flagged eleven
+        findings: `EstateManagementService.import_catalogue` (large method,
+        excessive parameters, complex conditionals), `_log_mutation` (excessive
+        parameters), `_reject_unsafe_structure` (bumpy road), six duplicated
+        error handlers in `ghillie/api/errors.py`, `_build_middleware`
+        conditionals, and duplicated assertion blocks in the API, catalogue,
+        and pagination test modules. Repairs, all behaviour-preserving:
+        - `CatalogueImportRequest` (D22) replaces the five-argument port
+          method; `_run_import`, `_import_summary`, `_import_details`,
+          `_parse_catalogue`, and `_MutationLog` split the service method.
+        - `_reject_unsafe_structure` delegates to `_reject_anchor` and
+          `_track_depth`.
+        - A declarative `_ESTATE_ERROR_SPECS` table plus a shared `_Envelope`
+          and `_set_error` collapse the six estate handlers, the catalogue
+          rejection handler, and the report-validation handler into one
+          `handle_estate_error`; every remaining handler renders through the
+          same envelope builder.
+        - `_needs_auth` and `_has_bootstrap` name the middleware conditions.
+        - The duplicated tests merge into parametrized cases, and the 780-case
+          pagination walk extracts `_walk_every_limit`, `_walk_every_filter`,
+          and `_import_seed`.
+        Focused suites were green; the eight-gate run at `6903e14`, recorded below,
+        covers this entry (its first attempt at `507f684` failed `check-fmt`
+        on `mdtablefix` and was reformatted before the green run).
+  - [x] (2026-11-05) The hosted ExecPlan assessment for PR-B found no core
+        mutation or authentication defect and listed three evidence gaps,
+        all now closed:
+        - D21: `import_catalogue`, `sync_registry`, and `set_ingestion` wrap
+          their work and log exactly one terminal record on success, skip, or
+          failure, with the error class and message on failure; import records
+          now include edge counts. Red run first: the five new tests failed
+          against the previous service (missing edge counts and missing
+          failure records) and pass after the change. The success, skipped,
+          failed, and pre-lock rejection paths each assert a single record.
+        - O4: two database-backed HTTP cases now run the real service over
+          `session_factory`. An over-long `estate_name` is a 400
+          `invalid_input`, and a second import replays the losing insert of a
+          concurrent import so the unique estate key raises a real
+          `IntegrityError` and the response is a 409 `conflict`; both assert
+          that no SQL or driver text reaches the body.
+        - O5: `test_body_limit_boundary` builds exact-byte JSON bodies at
+          1 MiB − 1, 1 MiB, and 1 MiB + 1 using multibyte padding and escaped
+          newlines, so character count and byte count differ; the first two are
+          accepted and the third is a 413 `payload_too_large`.
+        - The PR-B scope-tolerance exception is recorded as D23.
+        Focused suites (101 tests) were green; the full eight-gate run at
+        `6903e14` then passed: `check-fmt`, `check-architecture` (`hecate:
+        architecture check passed`), `typecheck` (`All checks passed!`), `lint`
+        (Hecate, Ruff, Skylos), `test` (1440 passed, 11 skipped, 94 warnings,
+        exit 0), `markdownlint` (58 files, 0 issues), `nixie` (all diagrams
+        validated), and `spelling` (93.70% coverage). Logs are under
+        `/tmp/*-ghillie-2-5-2-estate-management-apis-b.out`; the hosted
+        re-observation follows.
+  - [x] (2026-11-05) The PR-B re-assessment at `6903e14` confirmed the O4,
+        O5, and D23 closures and left one narrow D21 omission: `set_ingestion`
+        logged a terminal record only for `RegistryRepositoryNotFoundError`
+        and `SQLAlchemyError`, so any other exception escaped without one. A
+        direct service caller has no HTTP catch-all to log it, so the attempt
+        vanished from the operator's view. Red run first: the new test
+        (`test_set_ingestion_logs_one_terminal_record_for_an_unexpected_error`)
+        failed because no record was written; it now passes. The fix logs one
+        `estate.set-ingestion` record naming the error class and re-raises the
+        exception unchanged, preserving the two existing translations. The
+        full eight-gate run at `ec3a80d` passed: `check-fmt`,
+        `check-architecture`, `typecheck`, `lint`, `test` (1441 passed, 11
+        skipped, 0 failed), `markdownlint`, `nixie`, and `spelling`. Logs are
+        under `/tmp/*-ghillie-2-5-2-estate-management-apis-b.out`.
+  - [x] (2026-11-05) The PR-C gate run at `0655461` failed `make test` with a
+        native segmentation fault in `msgspec._core`, crashing xdist worker
+        `gw3` while the O4 conflict test raced two imports. The test now
+        replays the loser's insert deterministically: one import commits the
+        estate, then a patched `_ensure_estate` inserts the duplicate and
+        flushes, so the database's unique key produces the `IntegrityError`
+        the service translates. The focused module passes (16 tests). The
+        crash itself is recorded under Surprises as unexplained; the
+        two-thread `msgspec.convert` race did not reproduce in 200 fresh
+        processes. The PR-B re-gate at `95c7886` then passed all eight gates:
+        `check-fmt`, `check-architecture`, `typecheck`, `lint`, `test` (1442
+        passed, 11 skipped, 0 failed), `markdownlint`, `nixie`, and `spelling`.
+        Logs are under `/tmp/gate-B-95c7886-*.out`. PR-C's rebase follows this
+        entry.
+  - [x] (2026-11-06) Rebased onto PR-A's `497283b`, which closes the hosted
+        pre-merge checks. The three plan conflicts were resolved by keeping
+        PR-A's D27 block alongside this branch's D22/D23 entries; `git diff
+        497283b HEAD` names the same implementation, test, and documentation
+        changes as the pre-rebase diff. The full eight gates passed at
+        `9333bc3`: `check-fmt`, `check-architecture`, `typecheck`, `lint`,
+        `test` (1442 passed, 11 skipped, 0 failed), `markdownlint`, `nixie`,
+        and `spelling`. Logs are under `/tmp/gate-B-9333bc3-*.out`.
 - [x] (2026-11-07) The first formal review of `d6356b7` failed the pre-merge
       checks on four rows. Two were actioned rather than reconciled a third
       time. A sync that loses an owner/name insert race no longer aborts the
@@ -560,8 +957,303 @@ per pull request.
       D31) after the evidence that the repository has no metrics or tracing
       stack to extend and that a dependency needs the D27 platform decision.
       The exception covers metrics and spans only.
-- [ ] PR-B, EP-M2: estate port, service, and catalogue query.
-- [ ] PR-B, EP-M3: HTTP endpoints, error contract, bootstrap, and auth.
+- [x] (2026-11-14) Replayed PR-B onto the landed PR-A squash `54e4436`.
+      PR-A advanced past this branch's base `d6356b7` while this branch
+      waited: it moved the persistence statements into
+      `ghillie/registry/storage.py`, added `observability.py`, the migration
+      guide and the Interrogate gate, and main took #227–#230 on top. A merge
+      of the old branch into main would have deleted those files, so the 32
+      PR-B commits were replayed with `git rebase --onto 54e4436 d6356b7`.
+      The one conflict was this document. The replay kept this branch's text
+      so the later plan edits applied cleanly, and PR-A's entries were merged
+      back afterwards with `git merge-file` against the shared base. The
+      Progress section keeps this branch's entries and then PR-A's
+      2026-11-07..13 entries; PR-A's two unchecked PR-B placeholders are
+      dropped because the checked milestone blocks replace them. The decision
+      log keeps the landed D21 wording before D22 and D23. PR-A's landed D29
+      is the left-disabled report contract, so this branch's D29 (worker
+      logging) is renumbered D32; no source, test or other document names it.
+      The gates then found three replay artefacts, all fixed: two
+      `list_repositories` imports in `ghillie/registry/service.py`, two
+      `function` keys in the Skylos contract's `_RUNTIME_ENTRY_POINTS`, and 22
+      nested test helpers the Interrogate gate wants documented, which landed
+      after this branch's base. All eight gates are green at `b9fd298`:
+      `test` 1480 passed, 17 skipped, interrogate 100.0%, and the Skylos
+      dead-code gate ran and was clean.
+- [x] (2026-11-14) Fixed the three findings from the first hosted review of
+      PR-B (`747d6dc`), each reproduced against the current head first and each
+      covered by a test observed red before the fix.
+      `parse_catalogue_text` let a `ValueError` escape: YAML 1.2 resolves
+      `2026-13-01` as a timestamp and the constructor's
+      `datetime.date(2026, 13, 1)` raised, so that uploaded text surfaced as an
+      unhandled error instead of a validation failure. Scalar construction now
+      shares the malformed-YAML translation. The three D21 wrappers missed
+      cancellation, because `asyncio.CancelledError` derives from
+      `BaseException`; each now records `outcome=cancelled` once and re-raises.
+      The OpenAPI identifier test compared an unordered set of ids, so two
+      endpoints could trade ids undetected; it now pairs each path with its own
+      method and id. The swap was injected into `specs/openapi.yml` to prove the
+      test fails, and the spec was restored. All eight gates are green on the
+      committed tree `b0a8bbc`: `test` 1484 passed, 17 skipped, interrogate
+      100.0%, and the Skylos dead-code gate ran and was clean.
+- [x] (2026-11-14) Cleared the CodeScene gate on the repaired head. The
+      database review flagged `EstateManagementService.set_ingestion` as a
+      Complex Method (file health 9.69) once the cancellation clause landed,
+      because each `except` clause adds to the method's cyclomatic complexity.
+      The two translations moved into `_toggle_failure`, which logs the D21
+      record and returns the error to raise, or `None` to re-raise unchanged;
+      the method keeps two clauses. Behaviour is unchanged and the four
+      pre-existing failure tests plus the cancellation test pass unmodified.
+      The helper joins the module's existing Skylos function entrypoint rule in
+      `pyproject.toml`, which already records that Skylos cannot resolve these
+      private helpers from the async methods that call them, and the contract
+      test that pins that table gains the name. `make lint` is green
+      (interrogate 3506/3506, Ruff clean, Skylos clean) and `cs check
+      ghillie/estate/service.py` reports code health 10.00.
+- [x] (2026-11-15) Cleared the second hosted review of PR-B at head `89aa30b`:
+      two inline findings and three failed pre-merge checks. The Unit
+      Architecture error was that D21 rendering and timing still lived in
+      `EstateManagementService`; they now live in `ghillie/estate/observability.py`
+      behind `MutationRecord.begin`, `ToggleRecord.begin`, `record_mutation`,
+      `record_toggle`, `import_details`, `sync_details` and `failure_details`,
+      with a closed `MutationOutcome` vocabulary. The service keeps only
+      orchestration and calls the renderer. The record format is unchanged, so
+      the log-based service tests only move their capture to the new logger
+      name, and `tests/unit/test_estate_observability.py` pins the format,
+      escaping and outcome vocabulary directly. Moving those helpers removed
+      four names and the `_MutationLog` class from the Skylos entrypoint rule;
+      the contract test's pin shrinks with it. The review also asked that the
+      two bootstrap tests share one engine fixture, which now creates and
+      disposes each test's own SQLite engine, and that the API tests name
+      statuses through `http.HTTPStatus` rather than bare numbers. The two
+      documentation warnings are answered by a new "Estate management HTTP API
+      (Task 2.5.b)" section in `docs/users-guide.md` and an "Estate management
+      boundary" section in `docs/developers-guide.md`. All eight gates are
+      green on the repaired tree: `test` 1496 passed, 17 skipped, interrogate
+      100.0%, Ruff and Skylos clean, and `cs check` reports code health 10.00
+      for both changed modules.
+- [x] (2026-11-15) Answered the third hosted review of PR-B (`89aa30b`, review
+      `5909375798`) in full. Its Unit Architecture error asked for five
+      changes, and its documentation checks asked for the rest of the guides.
+      Rendering and timing now live behind `MutationRecorder` in
+      `ghillie/estate/observability.py`, which owns the record format, the
+      outcome vocabulary, and an injectable clock defaulting to
+      `time.perf_counter`; the record dataclasses keep only request fields and
+      the start instant, the format strings and `%r` escaping are unchanged,
+      and the service no longer measures anything. The importer factory and the
+      catalogue parser join the recorder in
+      `ghillie/estate/collaborators.py`, so `EstateManagementService` takes one
+      `EstateCollaborators` value and a test can substitute a single seam. The
+      pure translators moved to `ghillie/estate/translation.py` with the three
+      user-facing messages, and the service records the outcome itself, using
+      the translated error when a toggle failure has one. Query read-only tests
+      now snapshot the estate, project, import, and Silver repository counts
+      before and after `list_estates`, `get_estate_by_key`, and
+      `list_repositories` (both the catalogue and Silver paths) and assert that
+      no recorder line is emitted. The DDL placement is documented in the
+      `StorageBootstrapMiddleware` docstring and the developers guide: the ASGI
+      lifespan hook is the one point every driver awaits before accepting
+      requests, while the composition root still decides whether it runs.
+      The Skylos entrypoint pin shrinks from nine service helpers to the five
+      pure mappers that remain, and gains a method rule for `MutationRecorder`:
+      the service calls the recorder through an injected instance attribute,
+      which the analyser's liveness graph does not follow, so
+      `begin_mutation`, `begin_toggle`, `record_mutation`, `record_toggle` and
+      `_elapsed_ms` are declared entry points, with the verified callers named
+      in the rule's reason. The documentation additions are a start-up
+      warning, schema-bootstrap section, `curl` examples, and completed
+      environment and runtime tables in `docs/users-guide.md`; a 2.0.0 estate
+      API section in `docs/migration-guide.md`; middleware, Hecate placement,
+      and the recorder/collaborator design in `docs/developers-guide.md`; and
+      the corrected route conditions plus labelled D13 and D14 decision records
+      in `docs/ghillie-design.md` §8.4.
+- [x] (2026-11-15) Closed CodeRabbit's follow-up assessment of that round.
+      The users-guide import example was invalid: a project without
+      `components` cannot parse, because `ghillie/catalogue/models.py` requires
+      the field. The worked example now shows a complete catalogue and builds
+      the request body with `jq --rawfile`, so the newlines are encoded rather
+      than hand-escaped. The migration guide now records the
+      specification change it previously denied: `specs/openapi.yml` at the
+      base revision declared a placeholder `ApiKeyAuth` header scheme that no
+      route enforced, and 2.0.0 replaces it with `BearerAuth`. The read-only
+      tests no longer rely on row counts alone, which cannot see an update that
+      leaves the counts unchanged: `record_statements` and `data_writes` in
+      `tests/unit/estate_test_helpers.py` capture the SQL the test database
+      runs, and both query suites assert that no data-modifying statement ran
+      while asserting the capture is non-empty so the check cannot pass
+      vacuously. A probe that updated one estate's name inside the capture
+      failed with `a lookup must not write: ['UPDATE estates SET name=?,
+      updated_at=?']` while the row counts stayed equal, so the assertion
+      detects exactly what the counts miss.
+- [x] (2026-11-15) Corrected two claims CodeRabbit's re-assessment found in
+      the estate documentation. `docs/users-guide.md` called its import
+      catalogue "the smallest catalogue the schema accepts" and said every
+      component names its repository; `ghillie/catalogue/models.py` makes
+      `Component.repository` optional, so the example is now described as an
+      example and the prose says a component names a repository when it has
+      code to track. `docs/migration-guide.md` claimed the estate routes are
+      "the first to require a credential"; `BearerTokenMiddleware` protects
+      every route except the two probes, but only when `GHILLIE_API_TOKEN` is
+      set, so the guide now says authentication is optional and that a
+      configured token also covers the report route that already shipped.
+      Both replacements were checked against the base revision: the report
+      route exists at `54e4436`, and `specs/openapi.yml` at that revision
+      declares `ApiKeyAuth` with no route enforcing it.
+- [x] (2026-11-15) Closed the two findings from the full review of `f7deecb`.
+      The bootstrap guarantee was false for one table: `init_all_storage` calls
+      `init_gold_storage`, which runs `_ensure_report_metric_columns` and
+      issues `ALTER TABLE reports ADD COLUMN` for telemetry columns an older
+      database lacks. `docs/ghillie-design.md` and the schema-bootstrap section
+      of `docs/users-guide.md` now state that exception and its ALTER
+      privilege, and keep the create-only description for every other table.
+      `data_writes` in `tests/unit/estate_test_helpers.py` was a first-word
+      check, so `/* audit */ UPDATE ...` and a `WITH ... UPDATE` both read as
+      writes-free. It now strips leading `--` and `/* ... */` comments and
+      allow-lists the keywords it can prove are reads (`select`, `values`,
+      `pragma`, `explain`), so any form it cannot classify — a `WITH` clause, a
+      blank statement, an unknown verb — counts as a write and the read-only
+      checks fail closed. The regression cases live in
+      `tests/unit/test_estate_test_helpers.py` and were observed failing against
+      the old filter before the fix.
+- [x] (2026-11-16) Closed review `5913322290` on PR-B. The two inline
+      findings were real write forms the read-only filter missed:
+      `PRAGMA user_version = 7` and `PRAGMA journal_mode(WAL)` change
+      connection or database state, and `EXPLAIN ANALYZE UPDATE ...` executes
+      the statement it explains on PostgreSQL. Read pragmas are now
+      allow-listed by name, an `=` argument marks an assignment, and `EXPLAIN`
+      is not a read keyword. The three regressions were observed failing
+      against the old filter first.
+- [x] (2026-11-16) Reconciled the two failed pre-merge rows. The Domain
+      Architecture row's five items: `MAX_REQUEST_BODY_BYTES` moved to
+      `ghillie/api/estate/resources.py` as an HTTP transport limit;
+      `MAX_PAGE_OFFSET` restated as a domain ceiling with the storage range
+      enforced in `ghillie/catalogue/queries.py`; the port's YAML text
+      justified in `ghillie/estate/ports.py`; every `sqlalchemy.exc` import and
+      registry failure classification moved to the new
+      `ghillie/estate/persistence.py`, classified `outbound_adapter`; and the
+      per-estate lock qualified as an in-process guarantee in the developers
+      guide. The Developer Documentation row: the design document's module
+      tree re-roots at `ghillie/`, gains an estate-layer component bullet and
+      decision records D9, D13, D14, D16, D17, D21, D22 and D32.
+- [x] (2026-11-16) Cleared the CodeScene gate. The two new files scored 9.38
+      (`Overall Code Complexity` for `persistence.py`, `Code Duplication` for
+      its test). Each persistence function now states its store call and a
+      pure translator, with one wrapper that raises the translated error from
+      the original; the two catalogue-read tests became one parametrized test.
+      Both files score 10.00 under `cs review`.
+- [x] (2026-11-16) Gate evidence for the above: all eight gates ran
+      sequentially on the candidate; `check-fmt` first flagged mdtablefix
+      drift in the two edited Markdown files and `lint` first flagged two
+      undocumented nested functions, both fixed and the affected gates re-ran
+      green; `test` reported 1531 passed and 17 skipped, and
+      `check-architecture` printed `hecate: architecture check passed`.
+- [x] (2026-11-16) Closed the six inline findings from the review posted at
+      08:20Z on head `baf4a1b`; all were documentation claims that had drifted
+      from the code. Each was checked against the source before editing. The
+      per-estate lock is now
+      described as one lock table per `EstateManagementService` instance rather
+      than an in-process guarantee, because `_locks` lives on the instance.
+      `IntegrityError` mapping is stated per operation: an import or registry
+      projection yields `EstateConflictError`, while an ingestion toggle, whose
+      translator recognizes only `RepositoryNotFoundError` and outages, yields
+      `StorageUnavailableError`. The observability paragraph distinguishes the
+      estate-keyed import and sync records, whose details are counts or an
+      error summary, from the toggle record, which names owner and name and has
+      no commit or dry-run field. The catalogue-import request value now says
+      the request object stops at the service, which passes the parsed
+      catalogue and metadata separately. The port's `Notes` keeps the
+      domain-parsing rationale but drops the false claim that the importer
+      stores the raw document; `CatalogueImportRecord` holds only the estate
+      and the commit.
+- [x] (2026-11-16) Gate evidence for that repair: all eight gates ran
+      sequentially on the working tree. `check-fmt`, `check-architecture`,
+      `typecheck`, `lint`, `test`, and `nixie` were green, with `test`
+      reporting 1531 passed and 17 skipped. `spelling` first failed on the
+      -ise spelling of `recognize` in this file, which the oxendict rule
+      rejects; after correcting it, `spelling`, `markdownlint`, and `check-fmt`
+      re-ran green over the 59 Markdown files.
+- [x] (2026-11-19) Added the HTTP end-to-end suite to PR-B under D33:
+      `tests/e2e/__init__.py`, `tests/e2e/conftest.py` and
+      `tests/e2e/test_estate_management_e2e.py`, plus the `e2e` marker in
+      `pyproject.toml`. The three tests start the packaged runtime against a
+      fresh SQLite database with `GHILLIE_DB_BOOTSTRAP=create-all` and a
+      configured bearer token, then assert the open `/health` and `/ready`
+      probes, the `401` envelope for an unauthenticated `GET /estates`, and an
+      authenticated import, list, sync and ingestion toggle whose result a
+      second client reads back. All three passed on the working tree.
+- [x] (2026-11-20) Closed the two inline findings from the review of
+      `0f26aef`. The e2e modules now name statuses through the standard-library
+      `http.HTTPStatus` enum instead of `httpx.codes`, matching the repository's
+      coding guideline and the API tests. The journey now reads the listed
+      repository before the PATCH and asserts `ingestion_enabled` is true, then
+      asserts the PATCH response's `changed` is true, so the second client's
+      read proves a transition rather than a value that was already there.
+      Both changes are in e2e tests, and `uv run pytest tests/e2e -v` passed
+      three tests on the working tree. The repair also answers the standing
+      Observability row by its third option: a new "Metrics and tracing
+      decision" subsection in `docs/ghillie-design.md` records D27, the
+      intended metric shape and labels, the exclusion of unbounded identifiers,
+      and the #219 dependency that must settle the platform first. The hosted
+      check's follow-up asked that the subsection name it explicitly, so it now
+      names the Observability pre-merge check as the record's reason and
+      explains why options 1 and 2 are the deferred work itself.
+- [x] (2026-11-20) Delivered the Observability row's first remediation option.
+      The hosted check separates the logging part, which it accepts, from the
+      metrics and tracing parts, which it did not; its third option, a
+      design-doc record, had already been taken. The row's own latest wording
+      then asked that the record stop claiming metrics need a platform where
+      the log-event convention applies, so the events themselves are now
+      delivered. `ghillie/api/estate/observability.py` owns a bounded
+      `operation`, `outcome`, and `status_class` vocabulary, and
+      `EstateOutcomeMiddleware` records exactly one `estate.http.outcome` line
+      per request. The middleware is registered first in
+      `ghillie/api/app.py::_build_middleware`, so its response hook runs last
+      and sees the status the client receives after the session middleware
+      settles. Falcon calls that hook even for a request an earlier request
+      hook rejected, so the path fallback attributes a pre-routing 401 to the
+      endpoint addressed. Unit tests pin the vocabulary and the capture shape;
+      app-level tests cover a 200, a 400, a 503, and a 401 through the real
+      application. The design doc's "Metrics and tracing decision" subsection
+      now separates the delivered events from the still-deferred exporter,
+      duration histogram, and spans, and the users' and developers' guides
+      document the event. Spans and an external metrics pipeline stay with
+      #219.
+- [x] (2026-11-21) Reconciled the round-four review of `f95f0d1` and the four
+      failed pre-merge rows. Three inline findings were valid and are fixed:
+      the pre-routing fallback in `operation_for` now collapses repeated
+      leading slashes the way Falcon's router does, so an unauthenticated
+      `//estates` is attributed to `list_estates` instead of emitting no
+      event; the developers' guide and the users' guide now state that
+      femtologging's bounded queue can drop a record, and that the failure
+      alert needs `GHILLIE_LOG_LEVEL` to admit ERROR records. The module
+      docstrings for `ghillie/catalogue/validation.py` and
+      `ghillie/registry/errors.py` now name their callers, closing the
+      Module-Level Documentation row. The Testing row's property ask is met by
+      Hypothesis tests over `data_writes` (a statement that passes the filter
+      cannot write, and a pragma call form tracks its bare getter) and the
+      64-level YAML depth guard (every depth up to the limit reaches the schema
+      check, every depth beyond it is rejected). The Domain Architecture row's
+      port decomposition contradicts the composition recorded in
+      `docs/ghillie-design.md` and EP-M2, and it changes the port contract
+      PR-C builds on, so it is proposed as issue #233; the Observability
+      remainder (spans) stays with D27 and #219. Both rows are dispositioned
+      with that evidence in the reconciliation comment.
+- [x] (2026-11-21) Strengthened the property tests and corrected wording after
+      the review's own assessment of `91fe39e`. `ghillie/catalogue/storage.py`
+      declares project and component names as `String(255)`, so the
+      `validation.py` docstring now attributes those limits to the catalogue
+      tables and the repository segment and branch limits to both
+      `catalogue_repositories` and the Silver `repositories` table. The depth
+      boundary is pinned to literal 64 and 65, with a guard test that fails if
+      `_MAX_YAML_DEPTH` moves, and the properties now cover flow sequences,
+      flow mappings, and mixed forms. The pragma properties use an
+      independently listed verified-getter set, plus an unverified generator
+      over the whole name alphabet rather than a `zz_` prefix. The lock wording
+      in `docs/developers-guide.md`, `docs/ghillie-design.md`, and
+      `ghillie/estate/service.py` now says one service instance in one worker
+      in one replica. The Domain Architecture deferral to #233 and the
+      Observability deferral to #219 stand, with the waiver left to the
+      maintainer.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
@@ -616,6 +1308,44 @@ per pull request.
 - Observation: `/tmp` contains a stray `bisect.py`, so Python run with `/tmp`
   as its working directory cannot import the standard library. Impact: run
   scratch Python with `-I` from the repository root.
+- Observation: `ty` matches Falcon middleware protocol members by parameter
+  name, so an underscore-prefixed unused argument fails conformance, while the
+  keyword-compatible name triggers Skylos's `SKY-U006`. Impact: the protocol
+  keeps Falcon's names and the five arguments the bearer check cannot consume
+  are declared as documented Skylos parameter entry points.
+- Observation: Falcon's ASGI `App` annotates the scope as `dict[str, Any]`,
+  while `httpx.ASGITransport` requires a `MutableMapping`. Impact: the
+  chunked-body test casts at that boundary instead of weakening either type.
+- Observation: `session_factory` starts a fresh py-pglite Postgres for every
+  test, so fixture set-up alone costs about 26 seconds; under heavy host load
+  pytest-timeout's 30-second default can expire during set-up before the test
+  body runs. Impact: `test_estate_pagination` carries the plan's explicit
+  120-second module timeout.
+- Observation: Falcon routes an exception with no registered handler to its
+  default 500, which bypasses the D7 envelope and emits only a `title`.
+  Registering a domain handler set is therefore not "every failure type"; the
+  catch-all `Exception` handler is required, and `falcon.HTTPError` handlers
+  still win by method-resolution order. Impact: EP-M3.
+- Observation: OpenAPI 3.1 aligns the Schema Object with JSON Schema
+  2020-12, which has no `nullable` keyword, so `nullable: true` is silently
+  ignored by validators; `type: [T, "null"]` is the portable form. Impact: the
+  four optional response fields in `specs/openapi.yml`.
+- Observation: the local CodeRabbit CLI reviews committed history, not the
+  working tree, so review repairs must be committed before a re-assessment can
+  cover them. Impact: the review loop for EP-M3.
+- Observation: the O4 conflict proof raced two imports through
+  `asyncio.to_thread(parse_catalogue_text, ...)`, and one full-suite run
+  crashed an xdist worker with a native segmentation fault inside
+  `msgspec._core` at `ghillie/catalogue/loader.py`'s `msgspec.convert` call.
+  Evidence: the scrutineer's gate-5 log for PR-C head `0655461` (1 failed, 1529
+  passed, 11 skipped); the same test alone passed ten times, and 200 fresh
+  processes racing two threads through the first `msgspec.convert` of
+  `Catalogue` did not reproduce it. Impact: the proof now replays the losing
+  insert deterministically instead of racing, so O4 no longer depends on thread
+  scheduling or on a concurrent parse. The crash remains unexplained and is
+  recorded here rather than attributed to a cause the evidence does not
+  support; if it recurs, capture a core dump before changing production code.
+
 - Observation: the Silver schema permits an unowned row (`estate_id` null) that
   still carries a `catalogue_repository_id`. Because the policy treats a null
   `estate_id` as adoptable, and therefore as owned for its purposes, such a row
@@ -801,7 +1531,45 @@ expert-panel review.
 - D21, observability. Each mutation logs one structured line through
   `ghillie.logging`: operation, estate key, commit, dry run, counts, duration,
   and outcome. Toggles also log the old and new state. For a registry sync, D31
-  names the events and where they are emitted.
+  names the events and where they are emitted. Cancellation is a terminal
+  outcome like any other: each of the three wrappers records
+  `outcome=cancelled` from its own `except asyncio.CancelledError` clause and
+  re-raises, because `CancelledError` derives from `BaseException` and the
+  `except Exception` clause would otherwise leave a cancelled attempt with no
+  record at all. The rendering itself lives in
+  `ghillie/estate/observability.py`, following the pattern D31 set for registry
+  sync: the `MutationRecorder` there owns the record format, the outcome
+  vocabulary, and the clock, and the service only decides which outcome
+  applies. The recorder is injected through `EstateCollaborators` beside the
+  importer factory and the catalogue parser, so a test can substitute one seam
+  — including a fixed clock that pins `duration_ms` — without the others.
+  Keeping rendering and timing out of `EstateManagementService` also keeps that
+  class about orchestration, which is what the hosted Unit Architecture check
+  asks for.
+- D22, catalogue-import request value. The port method is
+  `import_catalogue(estate_key, request: CatalogueImportRequest)` rather than a
+  five-argument signature. Rationale: the four request fields travel together
+  from the HTTP resource through the service to the importer, so grouping them
+  removes a data clump and keeps the driven port inside the repository's
+  parameter limits without a suppression. The frozen, slotted dataclass lives in
+  `ghillie.estate.models`, so the port stays free of transport types. The API
+  layer constructs it from the decoded body and the `dry_run` query flag; the
+  service passes it through unchanged. Behaviour is identical to the positional
+  form.
+- D23, PR-B scope-tolerance exception. PR-B exceeds the per-PR tolerance in
+  `Tolerances (exception triggers)`: GitHub's comparison against `2a56711`
+  reports 45 changed files and 7,718 net added lines, against limits of 35
+  files and 2,500 lines. The overage is an exception, not an unnoticed drift.
+  Rationale: EP-M2 and EP-M3 are one coherent plateau — the service, its
+  models, and its error vocabulary are not independently testable from the five
+  HTTP routes, the auth middleware, and the bootstrap wiring that expose them,
+  and D19 fixes that pairing in PR-B. Splitting them would leave an unexercised
+  port in one PR and an untested adapter in the next. The escalation outcome is
+  the standing instruction to continue the approved plan to completion; no
+  scope was added beyond EP-M2 and EP-M3, and no interface, dependency, or
+  persisted-schema tolerance is exceeded. Recorded here so a later reviewer
+  sees the deviation and its basis rather than discovering it from the
+  comparison.
 - D24, PR-A scope-tolerance exception. The hosted ExecPlan assessment measured
   PR-A against `main` at `2ffdb4d` as 13 files, 2748 additions, and 91
   deletions: 2657 net new lines, 157 above the 2500-line tolerance. The overage
@@ -813,8 +1581,7 @@ expert-panel review.
   and preview guarantees unproved. Recorded as an accepted exception under the
   standing instruction to continue delivery. No interface, dependency, or
   persistence tolerance is exceeded, and the file-count tolerance (35) is not
-  approached. D22 and D23 are introduced by PR-B and follow this entry once the
-  stack is applied.
+  approached.
 - D27, pre-merge-check reconciliation. The hosted pre-merge checks raised six
   findings against PR-A. Three are actioned in this round: the title names
   roadmap task 2.5.b; `test_sync_reports_cross_estate_conflict` gives the
@@ -844,6 +1611,17 @@ expert-panel review.
      one structured line per mutation at the estate-service boundary; adding a
      second line in the registry module would contradict that. Metrics and
      tracing are a cross-cutting platform decision, not an EP-M1 deliverable.
+     Since 2026-11-20 the decision is also recorded where readers of the
+     architecture expect it, in the "Metrics and tracing decision" subsection
+     of `docs/ghillie-design.md`, with the intended metric names, labels, and
+     exclusions, and the #219 dependency that must settle the platform first.
+     **Amended later on 2026-11-20.** Delivery showed that the metric events
+     themselves never needed the platform: the hosting convention already
+     renders metrics as structured log events, so the five estate endpoints now
+     emit one bounded `estate.http.outcome` event per request, emitted by
+     `ghillie/api/estate/observability.py`. D27 now defers only the metrics
+     exporter or client, the mutation duration histogram, and the tracing spans
+     to #219.
 - D28, atomic adoption of an unowned Silver row. `_claim_unowned_repository`
   (moved to `ghillie.registry.storage` by D30) issues a conditional update of
   `estate_id` that matches only rows where `estate_id` is null. A zero row
@@ -1034,6 +1812,40 @@ expert-panel review.
   The exception covers the metrics and spans only. It waives no other finding
   and no required check, and #219 stays open until the platform work lands.
 
+- D32, worker logging configuration. `create_app` applies `GHILLIE_LOG_LEVEL`
+  through `configure_logging` before building the app. Granian calls the
+  factory in a worker process, so the configuration `main` performs in the
+  parent never reaches it; without this call the worker's application logs,
+  including D21's mutation lines, are discarded. `force=False` leaves an
+  existing handler in place, so in-process callers such as the unit tests are
+  unaffected.
+- D33, end-to-end coverage within each pull request. The HTTP end-to-end suite
+  lands in PR-B (EP-M3) rather than PR-C (EP-M5), because the hosted pre-merge
+  check requires an end-to-end journey inside the pull request's own range and
+  accepts no deferral to a stacked child. The suite proves the ASGI lifespan
+  bootstrap, the bearer-token boundary, and the full import, sync and toggle
+  journey over HTTP; PR-C keeps the CLI journey, which needs EP-M4's commands.
+  D19's plateau boundary is otherwise unchanged.
+- D34, round-four review reconciliation. The review of `f95f0d1` raised three
+  inline findings and four failed pre-merge rows. The leading-slash fix is a
+  behaviour decision: `operation_for`'s pre-routing fallback strips leading
+  slashes before matching `_PATH_OPERATIONS`, because Falcon's router collapses
+  repeated slashes before routing, so `//estates` and `/estates` are the same
+  endpoint and a refused request must be attributed to it. The femtologging
+  caveat is documentation, not a code change: the middleware emits one event
+  per request, but the handler's bounded queue may drop a record, so the events
+  are a stream to rate and trend rather than an exact request count. The Domain
+  Architecture row asks the estate service to take read and registry ports and
+  to leave YAML parsing to the adapter. That decomposition is coherent but
+  contradicts the composition recorded in `docs/ghillie-design.md` (the estate
+  application layer bullet, and `persistence.py` as the only `sqlalchemy.exc`
+  importer) and EP-M2, and it changes the port contract that PR-C's CLI work
+  builds on, so it is proposed as a follow-up in issue #233 rather than folded
+  into this stacked PR. The Observability row's remaining option is tracing
+  spans, which D27 defers to the telemetry platform decision tracked in #219;
+  the fourth option is a check-owner waiver, which only the maintainer can
+  issue.
+
 ## Outcomes & retrospective
 
 Not complete. On completion record, per pull request, what shipped against the
@@ -1060,6 +1872,54 @@ exercised interleavings in which one estate claims a slug first. A CodeRabbit
 review then found that a dry run could report counts for a sync whose unique
 constraint would fail on commit; flushing before the rollback closes that gap
 and keeps the dry-run contract honest.
+
+### PR-B, EP-M2 (complete)
+
+Outcome: `ghillie.estate` provides the `EstateManagement` protocol and its
+`EstateManagementService`, which composes `CatalogueImporter`,
+`RepositoryRegistryService`, and `ghillie.catalogue.queries`. The service
+validates keys and pages, serializes import and sync per estate, translates
+every underlying failure into the estate error vocabulary, logs each mutation,
+and implements dry runs. `parse_catalogue_text` rejects anchors and aliases off
+the event loop, and the importer keeps an estate's description on rename.
+
+Evidence: red and green runs are recorded in Progress; the focused suites pass
+on SQLite (84 tests) and py-pglite (53 tests), and the O2 walk covers 780
+count, filter, and limit combinations. The full gate suite passed, then the
+dead-code and type repairs described in Progress were re-gated with `make lint`
+and `make typecheck`.
+
+Retrospective: Skylos's liveness graph misses module-private helpers called
+from async methods, so the six false positives needed an entrypoint rule with
+the caller rationale; the rule stays narrow rather than disabling the gate.
+
+### PR-B, EP-M3 (complete)
+
+Outcome: `ghillie/api/estate/` exposes the five documented endpoints over
+msgspec request and response structs. `ghillie/api/errors.py` renders the D7
+envelope — `title`, `description`, and a stable `code`, plus optional fields
+such as `field`, `issues`, or `max_bytes` — for every failure, with the HTTP
+status carried separately on the response, including the catch-all handler
+Falcon would otherwise answer with a bare 500. `BearerTokenMiddleware` enforces
+an optional token while the probes stay open, `AppDependencies` lets each route
+family appear independently, and `StorageBootstrapMiddleware` creates the
+schema only when `GHILLIE_DB_BOOTSTRAP` opts in. Catalogue parsing runs off the
+event loop, rejects anchors, aliases, and excessive nesting before composition,
+and now also rejects values that cannot fit their storage columns.
+
+Evidence: the ten review cycles recorded in Progress each ended in a green
+eight-gate run; the final run at `1dde1aa` reported 1424 passed, 11 skipped,
+and 94 warnings with exit 0, and the milestone CodeRabbit CLI review returned
+no findings across 45 files. The O4 and O5 server halves are covered by
+`tests/unit/test_api_estate_resources.py`, `test_api_estate_errors.py`,
+`test_api_auth.py`, and the py-pglite endpoint suite.
+
+Retrospective: ten independent review passes were needed because each pass
+looked at a different facet — wire-format contracts, log safety, validation
+ordering, secret redaction, and input decoding. Two lessons carried forward:
+validate untrusted input against the storage contract rather than mapping the
+database's error afterwards, and treat a seeded legacy key as a first-class
+case whenever a new key format is introduced.
 
 ## Context and orientation
 
@@ -1296,8 +2156,11 @@ Obligation O3, estate-key validation (D16).
   the other draws `text()` filtered to non-matching strings (a filter that
   rejects few inputs, so no health-check suppression is needed) and asserts
   rejection. The mutation "drop the length bound" must fail the 65-character
-  row. The route-miss behaviour of `/` is pinned by a named API test expecting
-  `404` with code `not_found`.
+  row. The route-miss behaviour of `/` is pinned by
+  `tests/unit/test_api_estate_errors.py::test_estate_key_with_encoded_slash_is_not_found`,
+  which sends `%2F` inside the estate-key segment and expects `404` with code
+  `not_found`; the port double raises `StorageUnavailableError`, so routing
+  would have produced `503` and the `404` proves the route was never matched.
 
 Obligation O4, error-contract totality (D7, D17).
 
@@ -1569,6 +2432,23 @@ existing reporting tests unchanged), `tests/unit/test_runtime_wiring.py`
 (estate-only, estate plus reporting, invalid bootstrap value), and
 `tests/unit/test_openapi_estate_paths.py`.
 
+End-to-end (D33). `tests/e2e/__init__.py`, `tests/e2e/conftest.py`, and
+`tests/e2e/test_estate_management_e2e.py` prove this plateau over the wire,
+without the CLI that lands in PR-C. The fixture builds the child environment
+from `os.environ` minus every `PYTEST_*` variable, sets `GHILLIE_HOST`,
+`GHILLIE_PORT`, `GHILLIE_DATABASE_URL` for a fresh SQLite file,
+`GHILLIE_DB_BOOTSTRAP=create-all`, `GHILLIE_ALLOW_STUB_BROKER=1` and
+`GHILLIE_API_TOKEN`, starts `[sys.executable, "-m", "ghillie.runtime"]` with
+`start_new_session=True`, polls an authenticated `GET /estates` until it answers
+`200 {"items": []}` for up to 20 seconds, retries on a fresh port when the
+child exits early, and on teardown signals the process group with `SIGTERM` then
+`SIGKILL`, printing the captured log when the test failed. The tests assert
+that `/health` and `/ready` stay open without credentials, that `GET /estates`
+answers `401` with `code: "unauthorized"`, and that an import, estate list,
+registry sync and ingestion toggle each succeed under a bearer token and are
+still visible to a later read in a separate client. Register the `e2e` marker in
+`pyproject.toml` and put `pytest.mark.timeout(120)` on the module.
+
 ### EP-M4 (PR-C): CLI commands, rendering, and error mapping
 
 In `ghillie/cli/control_plane.py` add
@@ -1686,32 +2566,15 @@ Feature: Estate management through the operator CLI and HTTP API
     And no HTTP request was sent
 ```
 
-End-to-end. `tests/e2e/__init__.py`, `tests/e2e/conftest.py`, and
-`tests/e2e/test_estate_management_e2e.py`, marked `e2e` (register the marker in
-`pyproject.toml`) with `pytest.mark.timeout(120)`. The fixture:
-
-1. Builds the child environment from `os.environ` minus every `PYTEST_*`
-   variable, then sets `GHILLIE_HOST=127.0.0.1`, `GHILLIE_PORT`,
-   `GHILLIE_DATABASE_URL=sqlite+aiosqlite:///<tmp_path>/ghillie.db`,
-   `GHILLIE_DB_BOOTSTRAP=create-all`, and `GHILLIE_ALLOW_STUB_BROKER=1`. It
-   does not set `GHILLIE_STATUS_MODEL_BACKEND`, proving estate routes do not
-   need reporting configuration.
-2. Starts `[sys.executable, "-m", "ghillie.runtime"]` with
-   `start_new_session=True`, standard output and error redirected to files under
-   `tmp_path`.
-3. Polls `GET /estates` until `200 {"items": [], ...}` for up to 20 seconds,
-   checking `proc.poll()` each iteration; on early exit it retries up to three
-   times on a fresh port.
-4. On teardown sends `SIGTERM` to the process group, waits 10 seconds, then
-   `SIGKILL`; attaches the server log to any failure.
-
-The test drives the journey with `[sys.executable, "-m", "ghillie.cli"]`
-(import, list estates, sync, list, disable, re-import `c2`, re-sync, list
-inactive) and once through the installed console script
-(`Path(sys.executable).parent / "ghillie"`), and issues one raw `httpx` request
-per endpoint to check the wire contract independently of the CLI. Confirm the
-test runs in the CI `generate-coverage` step; document `-m "not e2e"` as the
-opt-out. Regenerate snapshots with `-p no:xdist`.
+End-to-end. Extend the harness EP-M3 creates (D33) with the CLI, which cannot
+exist before EP-M4. `run_cli` starts `[sys.executable, "-m", "ghillie.cli"]`
+against the running server with the same child environment plus
+`--api-base-url`, and the test drives import, estate list, sync, repository
+list, disable ingestion, re-import `c2`, re-sync, and the inactive list; one
+command also runs through the installed console script
+(`Path(sys.executable).parent / "ghillie"`). Confirm the tests run in the CI
+`generate-coverage` step; document `-m "not e2e"` as the opt-out. Regenerate
+snapshots with `-p no:xdist`.
 
 ### EP-M6 (PR-C): documentation, roadmap, and final gates
 
@@ -1853,8 +2716,7 @@ No new dependencies.
 class EstateManagement(typ.Protocol):
     async def list_estates(self, page: PageRequest) -> Page[EstateSummary]: ...
     async def import_catalogue(
-        self, estate_key: str, *, catalogue_yaml: str, commit_sha: str,
-        estate_name: str | None, dry_run: bool,
+        self, estate_key: str, request: CatalogueImportRequest
     ) -> CatalogueImportSummary: ...
     async def sync_registry(self, estate_key: str, *, dry_run: bool) -> RegistrySyncSummary: ...
     async def list_repositories(self, estate_key: str, query: RepositoryQuery) -> RepositoryPage: ...
@@ -1926,3 +2788,6 @@ Error contract:
   harness; a hardened e2e fixture that strips `PYTEST_*` variables; expanded
   edge cases. Remaining work is unchanged in shape: approval, then EP-M1
   onwards.
+- 2026-11-19: added D33, which moves the HTTP end-to-end suite from EP-M5 into
+  EP-M3 so each pull request carries an end-to-end journey in its own range;
+  EP-M5 now extends that harness with the CLI journey.

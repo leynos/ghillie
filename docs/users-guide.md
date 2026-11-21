@@ -561,6 +561,246 @@ The registry copies `documentation_paths` from catalogue repositories into
 Silver. These paths guide the ingestion worker when detecting documentation
 changes such as roadmaps and ADRs.
 
+## Estate management HTTP API (Task 2.5.b)
+
+The runtime exposes a Falcon ASGI API for estate management. Its five
+operations are defined in [`specs/openapi.yml`](../specs/openapi.yml) and
+driven by `ghillie.estate.ports.EstateManagement`. The catalogue document
+format is described in the
+[Estate catalogue (Phase 1.1)](#estate-catalogue-phase-11) section; the sync
+rules and their transition table are in
+[Repository discovery and registration (Phase 1.3)](#repository-discovery-and-registration-phase-13).
+This section covers only the HTTP surface.
+
+### Authentication
+
+Estate routes require `Authorization: Bearer <token>` when `GHILLIE_API_TOKEN`
+is set. When the variable is unset, every route stays open, so local
+development needs no credentials. `/health` and `/ready` never require the
+header, because orchestrators cannot be expected to hold the token. A missing
+or wrong token returns 401 `unauthorized` with a `WWW-Authenticate: Bearer`
+challenge.
+
+When `GHILLIE_API_TOKEN` is unset, start-up logs a warning that estate API
+authentication is disabled, so an unauthenticated deployment is visible in the
+logs. A value that is set but blank after trimming is a configuration error:
+start-up logs an error and exits rather than silently disabling authentication.
+A configured token shorter than 16 characters also logs a warning that a longer
+random value is preferred.
+
+### Schema bootstrap
+
+The runtime does not touch the schema by default. When `GHILLIE_DATABASE_URL`
+is set, set `GHILLIE_DB_BOOTSTRAP=create-all` to create any missing tables
+during ASGI start-up, before the server accepts requests. The bootstrap uses
+`create_all`, which checks for an existing table before issuing `CREATE TABLE`,
+so it creates only missing tables; it does not migrate existing ones. The one
+exception is the `reports` table: if it exists without the report telemetry
+columns (`model_latency_ms`, `prompt_tokens`, `completion_tokens`,
+`total_tokens`), bootstrap adds them with `ALTER TABLE ... ADD COLUMN`, which
+needs ALTER privileges on that table. Any other non-blank value is an operator
+error that stops start-up rather than starting with a half-configured schema. A
+blank value is treated as unset.
+
+Use the flag for a single replica, or for a compose deployment that has no
+out-of-band migration step. Managed deployments run migrations out of band and
+leave the flag unset. The existence check and `CREATE TABLE` are not atomic, so
+replicas that start together can both see a missing table and race on the DDL;
+PostgreSQL may fail the loser with a duplicate-table error, that replica fails
+its start-up, and the orchestrator restarts it once the table exists. Prefer
+one bootstrap replica or managed migrations when the platform cannot tolerate
+that restart.
+
+### Operations
+
+| Operation         | Method and path                                | Purpose                                                                 |
+| ----------------- | ---------------------------------------------- | ----------------------------------------------------------------------- |
+| List estates      | `GET /estates`                                 | Return a page of estates and each one's most recent import.             |
+| Import catalogue  | `POST /estates/{estate_key}/catalogue-import`  | Import one catalogue document, creating the estate when the key is new. |
+| Sync registry     | `POST /estates/{estate_key}/registry-sync`     | Project the estate's imported catalogue into the repository registry.   |
+| List repositories | `GET /estates/{estate_key}/repositories`       | Return a page of the estate's registered repositories.                  |
+| Set ingestion     | `PATCH /repositories/{owner}/{name}/ingestion` | Enable or disable ingestion for one registered repository.              |
+
+### Requests and responses
+
+- `GET /estates` returns `items`, `limit`, `offset`, `has_more`, and
+  `next_offset`. Each item carries `key`, `name`, `description`, and
+  `last_import`, which holds `commit_sha` and `imported_at` or is `null`.
+- `POST /estates/{estate_key}/catalogue-import` takes a JSON body and returns
+  the import summary described below.
+- `POST /estates/{estate_key}/registry-sync` takes no body and accepts the
+  `dry_run` query flag. It returns `estate_key`, `state`, `dry_run`, the
+  created, updated, and deactivated repository counts, the slugs in
+  `repositories_conflicted`, and the `repositories_left_disabled` preview with
+  its `repositories_left_disabled_count`.
+- `GET /estates/{estate_key}/repositories` accepts `ingestion_enabled` (strict
+  `true` or `false`) as a filter as well as the pagination parameters. Items
+  carry `owner`, `name`, `default_branch`, `ingestion_enabled`, and
+  `documentation_paths`.
+- `PATCH /repositories/{owner}/{name}/ingestion` takes a JSON or
+  `application/merge-patch+json` body of `{"ingestion_enabled": true}` or
+  `{"ingestion_enabled": false}`. It returns `owner`, `name`,
+  `ingestion_enabled`, and `changed`, which says whether the call altered the
+  stored value.
+
+### Importing a catalogue over HTTP
+
+The import body is a JSON object, never a raw YAML document:
+
+- `commit_sha` (required): the commit the document was read from, 1 to 64
+  characters.
+- `catalogue_yaml` (required): the catalogue document as YAML text.
+- `estate_name` (optional): display name, 1 to 255 characters. When omitted, an
+  existing name is kept and a new estate is named after its key.
+
+Only `application/json` is accepted; another media type returns 415
+`unsupported_media_type`. The `dry_run` query flag defaults to `false`. When
+`true`, the document is validated and its counts reported without writing
+anything.
+
+The response reports `state`, `dry_run`, `skipped`, `skipped_reason`, and
+`registry_sync_required` alongside `created`, `updated`, and `deleted` counts
+for `projects`, `components`, `repositories`, and `edges`. A commit that was
+already imported is skipped with reason `commit_already_imported`, and
+`registry_sync_required` is `false` for a skipped or dry-run import.
+
+### Pagination
+
+`GET /estates` and `GET /estates/{estate_key}/repositories` share the same
+pagination contract:
+
+| Parameter | Range           | Default |
+| --------- | --------------- | ------- |
+| `limit`   | 1 to 500        | 50      |
+| `offset`  | 0 to 2147483647 | 0       |
+
+A value outside its range, a non-integer, or a repeated parameter returns 400
+`invalid_input`; out-of-range pagination names the offending parameter in
+`field`. Every page echoes `limit` and `offset` and adds `has_more` and
+`next_offset`. `next_offset` is the offset of the following page, or `null`
+when the page is the last one.
+
+### Worked examples
+
+The examples use `GHILLIE_API_TOKEN`, the variable the runtime reads, and
+assume it holds a configured token. Import a catalogue as a dry run first; the
+`dry_run=true` query flag validates the document and reports counts without
+writing anything.
+
+Start from this example catalogue. A project owns its components, and a
+component names a repository when it has code to track:
+
+```yaml
+version: 1
+projects:
+  - key: alpha
+    name: Alpha
+    components:
+      - key: alpha-api
+        name: Alpha API
+        type: service
+        lifecycle: active
+        repository:
+          owner: org
+          name: alpha
+          default_branch: main
+```
+
+The request body carries that document as a string, so build it with a JSON
+encoder rather than hand-escaping the newlines:
+
+```bash
+jq -n --rawfile catalogue estate.yaml \
+  --arg commit_sha 0123456789abcdef0123456789abcdef01234567 \
+  '{commit_sha: $commit_sha, catalogue_yaml: $catalogue}' > import.json
+
+curl --fail-with-body \
+  -X POST "http://localhost:8080/estates/demo/catalogue-import?dry_run=true" \
+  -H "Authorization: Bearer ${GHILLIE_API_TOKEN}" \
+  -H "Content-Type: application/json" \
+  --data @import.json
+```
+
+To apply the import, omit the flag or pass `dry_run=false`. The body always
+carries `commit_sha` and `catalogue_yaml`; `estate_name` is optional.
+
+List an estate's repositories with pagination:
+
+```bash
+curl --fail-with-body \
+  "http://localhost:8080/estates/demo/repositories?limit=25&offset=50" \
+  -H "Authorization: Bearer ${GHILLIE_API_TOKEN}"
+```
+
+`limit` and `offset` select the page, and the response echoes both together with
+`has_more` and `next_offset`. Add `ingestion_enabled=true` or
+`ingestion_enabled=false` to filter by ingestion state.
+
+### Request size limit
+
+Catalogue import and the ingestion toggle read a body through a single limit of
+1,048,576 bytes (1 MiB). A declared `Content-Length` over that limit is
+rejected before the body is buffered, and a chunked body that exceeds it is
+rejected after reading one byte past the limit. Either case returns 413
+`payload_too_large`, and the envelope carries `max_bytes`.
+
+### Error envelope
+
+Every failure uses one JSON envelope:
+
+- `code`: stable machine-readable identifier.
+- `description`: human-readable explanation.
+- `title`: short error title.
+- `field`: optional name of the input field that failed validation.
+- `issues`: optional array of `code` and `message` objects, one per validation
+  problem; catalogue rejections use `code` `catalogue_schema`.
+- `max_bytes`: optional largest accepted body size, present on 413.
+
+The documented statuses are:
+
+| Status | Code                     | Declared by                 | Meaning                                                             |
+| ------ | ------------------------ | --------------------------- | ------------------------------------------------------------------- |
+| 400    | `invalid_input`          | all five operations         | Malformed body or query parameter, or pagination outside its range. |
+| 401    | `unauthorized`           | all five operations         | Missing or wrong bearer token when authentication is enabled.       |
+| 404    | `estate_not_found`       | sync and repository listing | No estate has the supplied key.                                     |
+| 404    | `repository_not_found`   | ingestion toggle            | No registered repository has that owner and name.                   |
+| 409    | `conflict`               | import and sync             | The write conflicts with an existing record.                        |
+| 413    | `payload_too_large`      | import and ingestion toggle | The request body exceeds the accepted size.                         |
+| 415    | `unsupported_media_type` | import and ingestion toggle | The request media type is not accepted.                             |
+| 422    | `catalogue_invalid`      | import                      | The uploaded document failed catalogue validation.                  |
+| 500    | `internal_error`         | all five operations         | An unexpected server failure.                                       |
+| 500    | `registry_sync_failed`   | sync                        | The registry reported a failure that is not storage-related.        |
+| 503    | `storage_unavailable`    | all five operations         | The database cannot be reached.                                     |
+
+### Request outcome events
+
+Every estate API request writes one structured outcome event to the application
+log, whatever the response:
+
+```plaintext
+estate.http.outcome operation=import_catalogue outcome=rejected status_class=4xx
+```
+
+`operation` names the service method that served the request, or would have:
+`list_estates`, `import_catalogue`, `sync_registry`, `list_repositories`, or
+`set_ingestion`. `outcome` is `succeeded` for a 2xx, `rejected` for a 4xx, and
+`failed` for anything else. `status_class` is the response's hundred band, such
+as `2xx` or `5xx`. Nothing else is recorded in the line: estate keys, owners,
+repository names, commits, and error text never appear, so the events can be
+counted per operation without their cardinality growing with the estate.
+Requests rejected before routing, including a 401 for a missing bearer token,
+are recorded against the endpoint the path names.
+
+A success logs at INFO, a rejection at WARNING, and a failure at ERROR. An
+operator can count failures per operation from the log, and an alert can watch
+for `estate.http.outcome` lines with `outcome=failed`.
+
+Two limits apply to that alert. It needs `GHILLIE_LOG_LEVEL` to admit ERROR
+records: the default `INFO` does, but `CRITICAL` filters out every failure
+event, so the alert would never fire. And the handler writes through a bounded
+queue whose overflow policy can drop a record, so the events give rates and
+trends rather than an exact request count.
+
 ## Incremental GitHub ingestion (Phase 1.3.b)
 
 Ghillie polls GitHub per managed repository and appends activity into the Bronze
@@ -810,11 +1050,13 @@ curl http://localhost:8080/ready
 
 The runtime reads configuration from environment variables:
 
-| Variable            | Default   | Description                   |
-| ------------------- | --------- | ----------------------------- |
-| `GHILLIE_HOST`      | `0.0.0.0` | Bind address for the server   |
-| `GHILLIE_PORT`      | `8080`    | Listening port for HTTP       |
-| `GHILLIE_LOG_LEVEL` | `INFO`    | Log level (DEBUG, INFO, etc.) |
+| Variable               | Default   | Description                                     |
+| ---------------------- | --------- | ----------------------------------------------- |
+| `GHILLIE_HOST`         | `0.0.0.0` | Bind address for the server                     |
+| `GHILLIE_PORT`         | `8080`    | Listening port for HTTP                         |
+| `GHILLIE_LOG_LEVEL`    | `INFO`    | Log level for the server and its worker         |
+| `GHILLIE_API_TOKEN`    | unset     | Bearer token; unset disables authentication     |
+| `GHILLIE_DB_BOOTSTRAP` | unset     | `create-all` creates missing tables at start-up |
 
 Additional environment variables for database and cache connectivity should be
 injected via Kubernetes Secrets when deploying with the Helm chart.
@@ -1388,26 +1630,31 @@ with no body.
 
 ### Enabling the endpoint
 
-The on-demand report endpoint requires a database connection. Set the
-`GHILLIE_DATABASE_URL` environment variable to enable domain endpoints:
+The on-demand report endpoint requires a database connection and a status model
+backend. Set the `GHILLIE_DATABASE_URL` environment variable to enable the
+estate routes:
 
 ```bash
 export GHILLIE_DATABASE_URL="postgresql+asyncpg://user:pass@host:5432/ghillie"
 ```
 
 When `GHILLIE_DATABASE_URL` is not set, the runtime starts in health-only mode
-(backwards compatible with existing deployments). The endpoint also respects
+(backwards compatible with existing deployments) and only `/health` and
+`/ready` are available. The report route is registered only when
+`GHILLIE_STATUS_MODEL_BACKEND` is also set. The endpoint also respects
 `GHILLIE_REPORT_SINK_PATH` — when set, generated reports are written to the
 filesystem as Markdown, just like scheduled reports.
 
-### On-demand reporting environment variables
+### Runtime environment variables
 
-| Variable                        | Required | Description                          |
-| ------------------------------- | -------- | ------------------------------------ |
-| `GHILLIE_DATABASE_URL`          | Yes      | Database connection URL              |
-| `GHILLIE_REPORT_SINK_PATH`      | No       | Directory for Markdown report output |
-| `GHILLIE_REPORTING_WINDOW_DAYS` | No       | Default window size (default: 7)     |
-| `GHILLIE_STATUS_MODEL_BACKEND`  | Yes      | Status model backend (e.g. `mock`)   |
+| Variable                        | Required          | Applies to        | Description                                                                                       |
+| ------------------------------- | ----------------- | ----------------- | ------------------------------------------------------------------------------------------------- |
+| `GHILLIE_DATABASE_URL`          | For estate routes | Estate and report | Database connection URL. Unset leaves only `/health` and `/ready`; set enables the estate routes. |
+| `GHILLIE_STATUS_MODEL_BACKEND`  | For report routes | Report            | Status model backend (for example `mock`). Adds the report route when set with the database URL.  |
+| `GHILLIE_API_TOKEN`             | No                | All except probes | Bearer token guarding every route except `/health` and `/ready`; unset leaves the API open.       |
+| `GHILLIE_DB_BOOTSTRAP`          | No                | Start-up          | `create-all` creates missing tables at start-up; any other non-blank value stops start-up.        |
+| `GHILLIE_REPORT_SINK_PATH`      | No                | Report            | Directory for Markdown report output.                                                             |
+| `GHILLIE_REPORTING_WINDOW_DAYS` | No                | Report            | Default window size (default: 7).                                                                 |
 
 ### On-demand reporting OpenAPI specification
 

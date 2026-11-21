@@ -121,10 +121,26 @@ _MUTMUT_REQUIRED_COPY_PATHS: typ.Final = frozenset(
     {"Makefile", ".github/workflows/", ".gitignore"}
 )
 _RUNTIME_ENTRY_POINTS: typ.Final = {
+    "function": frozenset(
+        {
+            "ghillie.estate.service._estate_summary",
+            "ghillie.estate.service._import_summary",
+            "ghillie.estate.service._next_offset",
+            "ghillie.estate.service._sync_summary",
+            "ghillie.estate.service._validate_page",
+            "ghillie.registry.storage._insert_values",
+            "ghillie.registry.storage.dialect_upsert_strategy",
+        }
+    ),
     "method": frozenset(
         {
             "ghillie.bronze.storage.UTCDateTime.process_bind_param",
             "ghillie.bronze.storage.UTCDateTime.process_result_value",
+            "ghillie.estate.observability.MutationRecorder._elapsed_ms",
+            "ghillie.estate.observability.MutationRecorder.begin_mutation",
+            "ghillie.estate.observability.MutationRecorder.begin_toggle",
+            "ghillie.estate.observability.MutationRecorder.record_mutation",
+            "ghillie.estate.observability.MutationRecorder.record_toggle",
             "ghillie.evidence.event_targets.EventTargetExtractor.extract",
             "ghillie.registry.observability.SyncEventBuffer.record_conflict",
             "ghillie.registry.observability.SyncEventBuffer.record_transition",
@@ -135,14 +151,15 @@ _RUNTIME_ENTRY_POINTS: typ.Final = {
             "ghillie.registry.storage._OnConflictDoNothingStrategy.build",
         }
     ),
-    "function": frozenset(
-        {
-            "ghillie.registry.storage._insert_values",
-            "ghillie.registry.storage.dialect_upsert_strategy",
-        }
-    ),
     "parameter": frozenset(
         {
+            "ghillie.api.auth.BearerTokenMiddleware.process_request.resp",
+            "ghillie.api.auth.BearerTokenMiddleware.process_response.req",
+            "ghillie.api.auth.BearerTokenMiddleware.process_response.resp",
+            "ghillie.api.auth.BearerTokenMiddleware.process_response.resource",
+            "ghillie.api.auth.BearerTokenMiddleware.process_response.req_succeeded",
+            "ghillie.api.estate.observability.EstateOutcomeMiddleware.process_response.resource",
+            "ghillie.api.estate.observability.EstateOutcomeMiddleware.process_response.req_succeeded",
             "ghillie.bronze.storage.UTCDateTime.process_bind_param.dialect",
             "ghillie.bronze.storage.UTCDateTime.process_result_value.dialect",
             "ghillie.registry.storage.PlainInsertStrategy.build.row",

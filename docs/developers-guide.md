@@ -349,6 +349,294 @@ Storage also reports outcomes and guarded changes:
   `bool` meaning "this sync made the change", so a claim or disable that lost a
   race is not counted.
 
+## Estate management boundary
+
+`ghillie.estate` is the application boundary for catalogue import, registry
+sync, repository listing, and ingestion toggles. Adapters depend on
+`ghillie.estate.ports.EstateManagement`, a `typing.Protocol`; the shipped
+implementation is `ghillie.estate.service.EstateManagementService`. The port
+contract is that implementations own their units of work and translate
+persistence and catalogue failures into `ghillie.estate.errors`, so the HTTP
+and CLI layers never import a catalogue, registry, or SQLAlchemy exception.
+`ghillie/estate/persistence.py` is the storage boundary: it issues the
+catalogue and registry calls and classifies their failures into the estate
+error vocabulary.
+
+### Service responsibilities
+
+- **Untrusted YAML off the event loop.** `import_catalogue` validates the key,
+  then runs the injected catalogue parser through `asyncio.to_thread`, so
+  parsing a client-supplied document cannot block the loop. The production
+  parser is `ghillie.catalogue.loader.parse_catalogue_text`. A
+  `CatalogueValidationError` becomes a `CatalogueRejectedError` holding one
+  `Issue(code="catalogue_schema")` per validation message.
+- **Per-estate serialization.** Import and sync each run under an
+  `asyncio.Lock` obtained from `_lock_for`. Each `EstateManagementService`
+  instance keeps its own lock table, so the lock serializes import and sync
+  only between calls that reach the same instance: two instances in one process
+  do not share it, and neither do worker processes or replicas. Serializing
+  imports therefore relies on the application building one service instance in
+  one worker in one replica, which is the MVP deployment. The locks live in a
+  `weakref.WeakValueDictionary`, so a coroutine inside `async with` holds the
+  only strong reference and an idle estate retains no lock. Two concurrent
+  requests for one estate through that instance cannot interleave their
+  catalogue writes, while different estates proceed independently.
+- **Failure translation.** SQLAlchemy and registry failure classification lives
+  in `ghillie/estate/persistence.py`, the only estate module that imports
+  `sqlalchemy.exc`. `ghillie/estate/translation.py` holds only the pure
+  catalogue-validation translation: a `CatalogueValidationError` becomes a
+  `CatalogueRejectedError` with one `catalogue_schema` `Issue` per message.
+  Neither module logs, so the service keeps ownership of the D21 record that
+  accompanies the outcome. An `IntegrityError` raised by an import or by a
+  registry projection becomes `EstateConflictError`. Any other SQLAlchemy
+  failure from a catalogue read or write becomes `StorageUnavailableError`, and
+  a non-integrity SQLAlchemy failure raised by the registry projection becomes
+  `RegistrySyncFailedError`. An ingestion toggle maps only
+  `RepositoryNotFoundError` and a storage outage, so an `IntegrityError` there
+  becomes `StorageUnavailableError` like any other SQLAlchemy failure. A
+  registry projection failure is classified through
+  `RegistrySyncError.__cause__`: an `IntegrityError` cause is a conflict, and
+  `OperationalError` or `InterfaceError` causes are storage outages. The
+  registry's `ESTATE_NOT_FOUND_REASON` becomes `EstateNotFoundError`; anything
+  else becomes `RegistrySyncFailedError`. The adapter raises these errors
+  directly, so the service contains no `SQLAlchemyError` handling.
+- **Right database for Silver.** `list_repositories` lists through the
+  registry's own session factory rather than the catalogue factory, because the
+  two stores can be deployed separately.
+
+### Request value types
+
+`ghillie.estate.models` holds the frozen, slotted dataclasses that the port and
+its adapters pass. Hecate classifies it, with `ghillie.estate.errors` and
+`ghillie.estate.ports`, as `domain_ports`, so it imports only the standard
+library and estate-owned modules.
+
+- `CatalogueImportRequest` groups `catalogue_yaml`, `commit_sha`,
+  `estate_name`, and `dry_run`. The grouping keeps the port signature small and
+  lets an adapter pass one value through without re-listing each field;
+  `estate_name=None` keeps an existing name and names a new estate after its
+  key.
+- `PageRequest` carries `limit` and `offset`; `RepositoryQuery` adds the
+  optional `ingestion_enabled` filter. `Page[T]` and `RepositoryPage` return
+  the items with `limit`, `offset`, `has_more`, and `next_offset`.
+- The pagination bounds are module constants: `DEFAULT_PAGE_LIMIT` 50,
+  `MAX_PAGE_LIMIT` 500, and `MAX_PAGE_OFFSET` `2**31 - 1`. `MAX_PAGE_OFFSET` is
+  a domain-level ceiling in `ghillie/estate/models.py`;
+  `ghillie/catalogue/queries.py` enforces the same storage range before the
+  value is bound, because SQLite raises `OverflowError` beyond its signed
+  64-bit bind range and PostgreSQL rejects an out-of-range `OFFSET` as a
+  storage error.
+- `MAX_REQUEST_BODY_BYTES` is an HTTP transport limit of 1 MiB, defined in
+  `ghillie/api/estate/resources.py`; that adapter enforces it.
+- `validate_new_estate_key` applies `NEW_ESTATE_KEY_PATTERN` only when the
+  import creates an estate; `validate_estate_key_reference` accepts any key of
+  one to `MAX_ESTATE_KEY_LENGTH` (64) characters, so keys created earlier
+  through Python stay reachable (D16).
+
+### Error vocabulary
+
+`ghillie.estate.errors` is the whole vocabulary an adapter may handle: `Issue`,
+the `EstateError` base class, `EstateNotFoundError`, `InvalidEstateKeyError`,
+`InvalidPaginationError`, `CatalogueRejectedError`, `RepositoryNotFoundError`,
+`EstateConflictError`, `StorageUnavailableError`, and
+`RegistrySyncFailedError`. Each error carries the minimum data needed to render
+the contract: `estate_key` for a missing or invalid key, `field` and `reason`
+for pagination, `owner` and `name` for a repository, and `issues` for a
+rejected catalogue. `ghillie.api.errors` maps these types to a status and code;
+adapters must see only these types, never a catalogue, registry, or SQLAlchemy
+exception in their place.
+
+### HTTP adapter and composition
+
+The inbound adapter is `ghillie/api/estate/resources.py`. It defines
+`EstateCollectionResource`, `CatalogueImportResource`, `RegistrySyncResource`,
+`EstateRepositoryCollectionResource`, and `RepositoryIngestionResource`, each
+holding an `EstateManagement` port. The resources depend on no catalogue,
+registry, or SQLAlchemy module: every failure they can see is an estate error,
+mapped centrally by `ghillie.api.errors`. Request and response bodies are
+msgspec structs in `ghillie/api/estate/schemas.py`; request structs forbid
+unknown fields, so a malformed body becomes one `DecodeError` and a 400.
+
+`ghillie/api/factory.py` composes the service. `build_estate_service`
+constructs one `RepositoryRegistryService(session_factory, session_factory)`
+and passes it to `EstateManagementService(session_factory, registry=registry)`,
+so that wiring shares one session factory between the catalogue and Silver
+stores.
+
+The adapter's dependency direction is inward. The package docstring in
+`ghillie/api/estate/__init__.py` states that the resources depend only on
+`ghillie.estate.ports`, `ghillie.estate.models`, and `ghillie.estate.errors`;
+`resources.py` imports the `EstateManagement` port under `TYPE_CHECKING` and
+the request and result value types from `ghillie.estate.models`, while
+`schemas.py` imports only the standard library and msgspec. The resources also
+use `InvalidInputError` and `PayloadTooLargeError` from `ghillie.api.errors`,
+which is the adapter's own central error mapping, not a domain module. No
+module under `ghillie/api/estate/` imports catalogue, registry, or SQLAlchemy
+code.
+
+### Authentication and start-up middleware
+
+`BearerTokenMiddleware` in `ghillie/api/auth.py` enforces the optional token
+that `ghillie.runtime._read_api_token` supplies through
+`AppDependencies.api_token`. When a token is configured it requires
+`Authorization: Bearer <token>` on every route except `GET /health` and
+`GET /ready`, compares the supplied credential with `hmac.compare_digest`, and
+raises `falcon.HTTPUnauthorized` on failure; the app's Falcon HTTP error
+handler renders that as 401 `unauthorized` with a `WWW-Authenticate: Bearer`
+challenge. With no token it logs a warning and returns without checking.
+`AppDependencies.api_token` is declared with `repr=False`, so the secret cannot
+appear in a dataclass repr.
+
+`StorageBootstrapMiddleware` in `ghillie/storage_bootstrap.py` implements only
+the ASGI lifespan hook `process_startup`, which calls
+`init_all_storage(engine)` before the server accepts requests. It does no
+request or response work. `ghillie.runtime.create_app` supplies
+`bootstrap_engine` only when `GHILLIE_DATABASE_URL` is set and
+`GHILLIE_DB_BOOTSTRAP=create-all`, and `ghillie.api.app._build_middleware`
+appends the middleware to the Falcon stack.
+
+Running the DDL from the lifespan hook is deliberate. The lifespan start-up is
+the one point every ASGI driver, including Granian, awaits before it accepts
+its first request, so the tables exist before any request can read them. An
+explicit `init_all_storage` hook called from `create_app` would still have to
+be awaited by that same driver at that same moment, so it would add a wiring
+step without changing the ordering guarantee. The composition root keeps the
+decision of whether the DDL runs at all: the engine is supplied only for the
+`GHILLIE_DB_BOOTSTRAP=create-all` opt-in, so a managed deployment never
+bootstraps its schema here (D13).
+
+Both are composed in `ghillie/api/app.py`. `_build_middleware` appends the
+bearer check first so an unauthenticated request never opens a database
+session, then the SQLAlchemy session manager, and finally the bootstrap
+middleware because it implements only the lifespan hooks. Resources do not
+construct either middleware; `ghillie.runtime` and `ghillie.api.app` are the
+composition root for the middleware, and `ghillie.api.factory` is the
+composition root for the estate and reporting services.
+
+### Worker logging configuration
+
+Granian calls the application factory in a worker process, so the logging
+configuration that `main` performs in the parent process never reaches the
+worker. `ghillie.runtime.create_app` therefore applies `GHILLIE_LOG_LEVEL`
+through `configure_logging` before it delegates to `ghillie.api.app.create_app`
+to build the app. Without that call the worker's application logs, including
+the D21 mutation records, are discarded. `configure_logging` defaults to
+`force=False`, so it leaves an existing handler in place and in-process callers
+such as the unit tests are unaffected.
+
+The decision is recorded under
+[worker logging configuration](ghillie-design.md#worker-logging-configuration)
+in the design document's decision records.
+
+### Hecate group placement
+
+Hecate enforces the declared import direction through `[tool.hecate]` in
+`pyproject.toml`. The estate boundary spans four groups:
+
+- `ghillie.estate.errors`, `ghillie.estate.models`, and `ghillie.estate.ports`
+  are `domain_ports`; that group may import only `domain_ports`.
+- The remaining `ghillie.estate` modules — the service, translation,
+  observability, and collaborators code — fall under the generic
+  `ghillie.estate` prefix in the `application` group, which may import
+  `application`, `domain_ports`, and `outbound_adapter` modules.
+- `ghillie.estate.persistence` and `ghillie.catalogue.queries` are
+  `outbound_adapter` modules, the group allowed to import `application`,
+  `domain_ports`, and other `outbound_adapter` modules.
+- `ghillie.storage_bootstrap` is a `composition_root`, the group allowed to
+  import every other layer.
+
+Declaration order matters because Hecate uses first-match semantics. The leaf
+`ghillie.estate.errors`, `ghillie.estate.models`, `ghillie.estate.ports`, and
+`ghillie.estate.persistence` entries must precede the generic `ghillie.estate`
+prefix, or the application group would claim the domain ports and the
+persistence adapter. The composition-root group, which also holds
+`ghillie.api.app` and `ghillie.api.factory`, is declared before the
+inbound-adapter group so those modules are classified as composition roots
+rather than by the generic `ghillie.api` prefix. There is no generic
+`ghillie.catalogue` prefix, so the `ghillie.catalogue.queries` entry alone
+decides its group.
+
+The design rationale, including the component layout and the bootstrap and
+authentication decisions, is recorded in
+[HTTP API layer architecture](ghillie-design.md#84-http-api-layer-architecture).
+
+### Mutation records (D21)
+
+Import, sync, and ingestion-toggle attempts each emit one structured record,
+whether they succeed or fail. Rendering is owned by `MutationRecorder` in
+`ghillie/estate/observability.py`, which follows the shape that
+`ghillie/registry/observability.py` established: the module is the only place
+that renders these lines. The service decides which outcome applies and calls
+the recorder; it measures no duration itself.
+
+`ghillie/estate/collaborators.py` groups the three seams the service does not
+own: the importer factory, the catalogue parser, and the recorder. The service
+takes an `EstateCollaborators` value, defaulting to the production
+implementations, so a test can substitute one seam without the others. The
+recorder holds its clock, defaulting to `time.perf_counter`, so a test can pin
+the rendered `duration_ms` exactly.
+
+- Import records carry `operation=estate.import`, the estate key, the commit
+  SHA (`-` when absent), the dry-run flag, the per-family created, updated, and
+  deleted counts, the duration in milliseconds, and the outcome.
+- Sync records carry `operation=estate.registry-sync`, the estate key, `-` for
+  the absent commit, the dry-run flag, the created, updated, deactivated,
+  conflicted, and left-disabled counts, the duration, and the outcome.
+- Toggle records carry `operation=estate.set-ingestion`, the owner and name,
+  the requested flag, the previous state and whether the call changed it, the
+  duration, and the outcome.
+
+The outcome vocabulary is `succeeded`, `skipped`, `failed`, and `cancelled`:
+
+- `succeeded` is the normal terminal record.
+- `skipped` is an import whose commit was already imported.
+- `failed` records the error class and message, so an operator can tell a
+  client error from a storage outage. A toggle failure that has no translation
+  is re-raised unchanged after its record is written.
+- `cancelled` is recorded because `asyncio.CancelledError` derives from
+  `BaseException` and cannot be seen by an `except Exception` clause; the error
+  still propagates so the caller's task unwinds.
+
+Estate keys, repository identities, and failure messages are rendered with
+`%r`, so a newline in client-supplied text cannot forge a second record. Read
+operations emit no mutation record. The sync's own per-slug events
+(`SYNC_COMPLETED`, `SYNC_CONFLICTED`, and so on) are separate and described in
+[Registry sync events](#registry-sync-events); the transition table is in
+[Registry synchronization](#registry-synchronization).
+
+### HTTP outcome events (D27)
+
+Every request to one of the five estate endpoints records one metric-style
+event, whether it succeeds, is rejected, or fails:
+
+```plaintext
+estate.http.outcome operation=list_estates outcome=succeeded status_class=2xx
+```
+
+`ghillie/api/estate/observability.py` owns the vocabulary and rendering, and
+`EstateOutcomeMiddleware` in the same module emits the line. The middleware is
+registered first in the application's stack so its response hook runs last,
+after the session middleware has settled the final status; Falcon calls that
+hook even when an earlier request hook raised. A request rejected before
+routing, such as an unauthenticated one, is therefore counted against the
+endpoint its path names, matched through the same route shapes. The event
+carries only three bounded labels: the operation (the `EstateManagement` method
+name), the outcome (`succeeded`, `rejected`, or `failed`), and the status class
+(`2xx`, `4xx`, or `5xx`). No estate key, repository name, commit SHA, or error
+string is ever a label. A success logs at INFO, a rejection at WARNING, and a
+failure at ERROR.
+
+The one-event-per-request rule is a property of the middleware, not of the log
+sink. femtologging writes each record through a bounded queue with an overflow
+policy, so a queue that is full can drop a record, and the log can then hold
+fewer events than the server handled. Read the events as the stream to rate and
+trend, not as an exact request count; reconcile against a source that cannot
+drop when the count must be exact.
+
+When a new estate route is added, add it to `_ROUTE_OPERATIONS` in
+`ghillie/api/estate/observability.py`; the path patterns used before routing
+are derived from the same table.
+
 ## Dead-code detection
 
 `make lint` runs Skylos `4.33.2` as an isolated `uv tool` with Python 3.14
@@ -832,6 +1120,19 @@ disposable database and never a shared one. Run serially, as above: `make test`
 uses `pytest -n auto`, and parallel workers would each reset the same schema
 while other workers were using it. The fixture raises rather than run under
 `pytest-xdist`.
+
+### End-to-end tests only
+
+```bash
+uv run pytest tests/e2e -v
+```
+
+`tests/e2e` starts the packaged runtime as a real subprocess: it runs
+`python -m ghillie.runtime` against a fresh SQLite database with
+`GHILLIE_DB_BOOTSTRAP=create-all` and a configured bearer token, then drives
+the estate routes over HTTP. Each test gets its own server, database, and port,
+so the suite runs under `pytest-xdist` with the rest of `make test`. Deselect
+it with `-m "not e2e"`.
 
 ### Helm chart tests only
 

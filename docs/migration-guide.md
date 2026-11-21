@@ -67,6 +67,58 @@ its transaction, flushes so constraints are evaluated, and then rolls back. The
 returned counts describe what a real run would have done, and nothing is
 persisted.
 
+## Estate management HTTP API in 2.0.0
+
+The estate-management HTTP API is part of this release. Its clients
+authenticate with a bearer token and branch on a structured error `code` rather
+than on response prose.
+
+### Bearer authentication
+
+The 2.0.0 specification replaces the earlier `ApiKeyAuth` scheme with
+`BearerAuth`. `ApiKeyAuth` was an `apiKey` header declaration that the
+specification itself described as a placeholder for future endpoints, and no
+route enforced it, so nothing that only called the shipped routes changes
+behaviour by itself. Authentication is itself optional: with a token
+configured, every route except `GET /health` and `GET /ready` requires it,
+which includes the report route that already shipped as well as the new estate
+routes. Set `GHILLIE_API_TOKEN` and send `Authorization: Bearer <token>` with
+every request. A missing or wrong token returns 401 `unauthorized` with a
+`WWW-Authenticate: Bearer` challenge. When the variable is unset, the API stays
+open and start-up logs a warning; when it is set but blank, start-up fails.
+
+**Action after upgrading.** Provision `GHILLIE_API_TOKEN` as a secret and send
+the bearer header from every API client. Leave the variable unset only when the
+API is not exposed beyond a trusted local environment.
+
+### Structured error envelope
+
+Every failure uses one JSON envelope. `code`, `title`, and `description` are
+always present. `field` names the input that failed validation, `issues` lists
+catalogue or report validation problems, and `max_bytes` accompanies a 413.
+
+```json
+{
+  "title": "Invalid input",
+  "description": "must be an integer",
+  "code": "invalid_input",
+  "field": "limit"
+}
+```
+
+**Action after upgrading.** Read `code` for control flow and use `description`
+only for display. Do not match on prose, and treat an unknown `code` as an
+unexpected failure.
+
+### Route families
+
+`GHILLIE_DATABASE_URL` enables the estate routes. The report route additionally
+requires `GHILLIE_STATUS_MODEL_BACKEND`; without that variable the runtime does
+not build a reporting service and does not register the route.
+
+**Action after upgrading.** Set both variables for clients that call the report
+route, and leave both unset to run health-only.
+
 ## References
 
 - [Users' guide](users-guide.md) for the day-to-day sync workflow.

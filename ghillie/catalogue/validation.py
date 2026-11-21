@@ -1,4 +1,24 @@
-"""Validation rules for the estate catalogue."""
+"""Validation rules for the estate catalogue.
+
+The module validates a parsed :class:`~ghillie.catalogue.models.Catalogue`:
+slugs, references between programmes, projects, and components, and the storage
+limits of the tables the catalogue fills. :func:`validate_catalogue` collects
+every problem it finds, so one import reports all of its rejections at once,
+and :class:`CatalogueValidationError` carries that list to its caller.
+
+:data:`_MAX_STORED_TEXT_LENGTH` is the 255-character limit of the stored text
+columns. Project and component names are ``String(255)`` in
+:mod:`ghillie.catalogue.storage`. Repository owner and name segments, and
+default branches, are ``String(255)`` in both that module's
+``catalogue_repositories`` table and the Silver ``repositories`` table. Those
+values are measured against the limit here, so an over-length value is a
+validation rejection rather than a failed database write.
+
+:mod:`ghillie.catalogue.loader` and :mod:`ghillie.catalogue.importer` raise
+:class:`CatalogueValidationError`. :mod:`ghillie.estate.service` catches it, and
+:mod:`ghillie.estate.translation` translates it into the estate error vocabulary
+the HTTP API renders.
+"""
 
 from __future__ import annotations
 
@@ -39,6 +59,17 @@ class EdgeContext(typ.NamedTuple):
 
 _SLUG_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 _REPO_SEGMENT_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+_MAX_STORED_TEXT_LENGTH = 255
+"""Longest value the catalogue and Silver tables accept in a stored column.
+
+Project and component names are ``String(255)`` in
+:mod:`ghillie.catalogue.storage`. Repository owner and name segments, and
+default branches, are ``String(255)`` in both ``catalogue_repositories`` and
+the Silver ``repositories`` table. Checking the limit here keeps an
+over-length catalogue a rejected request (422) instead of a failed database
+write (503), and makes a dry run fail exactly as a real import would.
+"""
 
 
 class CatalogueValidationError(ValueError):
@@ -110,6 +141,7 @@ def _validate_project(
 
     if not project.name.strip():
         state.issues.append(f"project {project.key} is missing a name")
+    _validate_stored_length(project.name, f"project {project.key} name", state.issues)
 
     if project.programme and project.programme not in state.programme_index:
         state.issues.append(
@@ -138,6 +170,9 @@ def _validate_component(
 
     if not component.name.strip():
         state.issues.append(f"component {component.key} is missing a name")
+    _validate_stored_length(
+        component.name, f"component {component.key} name", state.issues
+    )
 
     if component.repository is not None:
         _validate_repository(component.key, component.repository, state.issues)
@@ -154,11 +189,19 @@ def _validate_repository(
                 f"component {component_key} repository {field_name} '{value}' "
                 "must contain only letters, digits, dots, underscores, or dashes"
             )
+        _validate_stored_length(
+            value, f"component {component_key} repository {field_name}", issues
+        )
 
     if not repository.default_branch.strip():
         issues.append(
             f"component {component_key} repository default_branch must not be empty"
         )
+    _validate_stored_length(
+        repository.default_branch,
+        f"component {component_key} repository default_branch",
+        issues,
+    )
 
 
 def _validate_relationships(
@@ -221,6 +264,20 @@ def _validate_programme_membership(
         issues.extend(
             f"programme {programme.key} references unknown project '{project_key}'"
             for project_key in missing_projects
+        )
+
+
+def _validate_stored_length(value: str, label: str, issues: list[str]) -> None:
+    """Record an issue when *value* does not fit its stored text column.
+
+    The value is deliberately not echoed: an over-length name can be as large
+    as the request itself, and repeating it in every issue would multiply the
+    rejection payload.
+    """
+    if len(value) > _MAX_STORED_TEXT_LENGTH:
+        issues.append(
+            f"{label} must be at most {_MAX_STORED_TEXT_LENGTH} characters "
+            f"(got {len(value)})"
         )
 
 

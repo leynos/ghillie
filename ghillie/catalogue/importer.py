@@ -63,6 +63,8 @@ from .storage import (
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
+    from sqlalchemy.ext.asyncio import AsyncSessionTransaction
+
     from .models import Catalogue, Component, ComponentLink
 
 SessionFactory = async_sessionmaker[AsyncSession]
@@ -147,7 +149,11 @@ class CatalogueImporter:
         self.estate_name = estate_name or estate_key
 
     async def import_path(
-        self, catalogue_path: Path, *, commit_sha: str | None = None
+        self,
+        catalogue_path: Path,
+        *,
+        commit_sha: str | None = None,
+        dry_run: bool = False,
     ) -> CatalogueImportResult:
         """Load and import a catalogue file from disk.
 
@@ -157,6 +163,9 @@ class CatalogueImporter:
             Path to the YAML catalogue.
         commit_sha:
             Optional commit SHA for idempotency tracking.
+        dry_run:
+            When true, run the reconciliation and roll it back, returning the
+            counts it would have produced.
 
         Returns
         -------
@@ -165,10 +174,16 @@ class CatalogueImporter:
 
         """
         catalogue = load_catalogue(catalogue_path)
-        return await self.import_catalogue(catalogue, commit_sha=commit_sha)
+        return await self.import_catalogue(
+            catalogue, commit_sha=commit_sha, dry_run=dry_run
+        )
 
     async def import_catalogue(
-        self, catalogue: Catalogue, *, commit_sha: str | None = None
+        self,
+        catalogue: Catalogue,
+        *,
+        commit_sha: str | None = None,
+        dry_run: bool = False,
     ) -> CatalogueImportResult:
         """Validate and reconcile an in-memory catalogue instance.
 
@@ -178,6 +193,9 @@ class CatalogueImporter:
             Parsed catalogue instance.
         commit_sha:
             Optional commit SHA for idempotency tracking.
+        dry_run:
+            When true, run the reconciliation and roll it back, returning the
+            counts it would have produced.
 
         Returns
         -------
@@ -199,7 +217,8 @@ class CatalogueImporter:
 
         validate_catalogue(catalogue)
 
-        async with self._session_factory() as session, session.begin():
+        async with self._session_factory() as session:
+            transaction = await session.begin()
             estate = await self._ensure_estate(session)
             existing_import = None
             if commit_sha:
@@ -211,6 +230,7 @@ class CatalogueImporter:
                 )
                 if existing_import:
                     result.skipped = True
+                    await self._finish(transaction, session, dry_run=dry_run)
                     return result
 
             project_index = await self._reconcile_projects(
@@ -229,7 +249,28 @@ class CatalogueImporter:
                     )
                 )
 
+            await self._finish(transaction, session, dry_run=dry_run)
+
         return result
+
+    async def _finish(
+        self,
+        transaction: AsyncSessionTransaction,
+        session: AsyncSession,
+        *,
+        dry_run: bool,
+    ) -> None:
+        """Commit the reconciliation, or flush and roll it back for a dry run.
+
+        A dry run flushes first so constraints (for example the unique
+        owner/name pair) are evaluated before the rollback. Without it a dry run
+        could report counts for an import that would fail.
+        """
+        if not dry_run:
+            await transaction.commit()
+            return
+        await session.flush()
+        await transaction.rollback()
 
     def run_sync(
         self, catalogue_path: Path, *, commit_sha: str | None = None
@@ -263,8 +304,9 @@ class CatalogueImporter:
             select(Estate).where(Estate.key == self.estate_key)
         )
         if estate:
-            if _set_if_changed(estate, "name", self.estate_name):
-                _set_if_changed(estate, "description", None)
+            # Catalogues carry no estate description, so a rename must not clear
+            # one maintained outside the catalogue.
+            _set_if_changed(estate, "name", self.estate_name)
             return estate
 
         estate = Estate(key=self.estate_key, name=self.estate_name)

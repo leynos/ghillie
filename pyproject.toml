@@ -166,6 +166,7 @@ timeout = 30
 addopts = "-p cmd_mox.pytest_plugin"
 markers = [
     "configuration: marks tests about configuration handling",
+    "e2e: marks tests that start the packaged runtime as a subprocess",
     "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
     "llm: marks tests that require LLM mock infrastructure",
     "status: marks tests about status reporting",
@@ -193,6 +194,48 @@ full_name = [
     "ghillie.bronze.storage.UTCDateTime.process_result_value.dialect",
 ]
 reason = "SQLAlchemy supplies the TypeDecorator dialect argument as part of its bind and result conversion protocol."
+
+[[tool.skylos.dead_code.entrypoints]]
+type = "parameter"
+full_name = [
+    "ghillie.api.auth.BearerTokenMiddleware.process_request.resp",
+    "ghillie.api.auth.BearerTokenMiddleware.process_response.req",
+    "ghillie.api.auth.BearerTokenMiddleware.process_response.resp",
+    "ghillie.api.auth.BearerTokenMiddleware.process_response.resource",
+    "ghillie.api.auth.BearerTokenMiddleware.process_response.req_succeeded",
+]
+reason = "Falcon passes these middleware hooks the request, response, resource, and success flag positionally; the bearer-token check only needs the request and must keep the names its protocol declares."
+
+[[tool.skylos.dead_code.entrypoints]]
+type = "parameter"
+full_name = [
+    "ghillie.api.estate.observability.EstateOutcomeMiddleware.process_response.resource",
+    "ghillie.api.estate.observability.EstateOutcomeMiddleware.process_response.req_succeeded",
+]
+reason = "Falcon passes the response hook the request, response, resource, and success flag positionally; the outcome recorder reads only the request and the response status and must keep the names its protocol declares."
+
+[[tool.skylos.dead_code.entrypoints]]
+type = "function"
+full_name = [
+    "ghillie.estate.service._estate_summary",
+    "ghillie.estate.service._import_summary",
+    "ghillie.estate.service._next_offset",
+    "ghillie.estate.service._sync_summary",
+    "ghillie.estate.service._validate_page",
+]
+reason = "Skylos's liveness graph does not resolve these module-private helpers from the async EstateManagementService methods that call them; every name has a verified runtime caller in that class."
+
+[[tool.skylos.dead_code.entrypoints]]
+type = "method"
+full_name = [
+    "ghillie.estate.observability.MutationRecorder._elapsed_ms",
+    "ghillie.estate.observability.MutationRecorder.begin_mutation",
+    "ghillie.estate.observability.MutationRecorder.begin_toggle",
+    "ghillie.estate.observability.MutationRecorder.record_mutation",
+    "ghillie.estate.observability.MutationRecorder.record_toggle",
+]
+reason = "Skylos's liveness graph does not follow the qualified instance-attribute calls the async EstateManagementService methods make through their injected MutationRecorder; every name has a verified runtime caller in that class, and _elapsed_ms is reached only by the recorder's own record methods."
+
 
 [[tool.skylos.dead_code.entrypoints]]
 type = "variable"
@@ -253,6 +296,7 @@ prefixes = [
     "ghillie.reporting.actor",
     "ghillie.runtime",
     "ghillie.status.factory",
+    "ghillie.storage_bootstrap",
 ]
 allowed = [
     "application",
@@ -268,6 +312,9 @@ name = "domain_ports"
 prefixes = [
     "ghillie.common",
     "ghillie.catalogue.models",
+    "ghillie.estate.errors",
+    "ghillie.estate.models",
+    "ghillie.estate.ports",
     "ghillie.evidence.models",
     "ghillie.registry.models",
     "ghillie.registry.policy",
@@ -277,6 +324,29 @@ prefixes = [
     "ghillie.status.protocol",
 ]
 allowed = ["domain_ports"]
+
+[[tool.hecate.groups]]
+name = "outbound_adapter"
+# This group must precede the application group. Hecate uses first-match
+# semantics, and an adapter leaf inside an application package
+# (ghillie.estate.persistence) would otherwise be classified as application.
+prefixes = [
+    "ghillie.bronze.storage",
+    "ghillie.catalogue.queries",
+    "ghillie.catalogue.storage",
+    "ghillie.estate.persistence",
+    "ghillie.github.client",
+    "ghillie.gold.storage",
+    "ghillie.reporting.filesystem_sink",
+    "ghillie.silver.storage",
+    "ghillie.status.mock",
+    "ghillie.status.openai_client",
+]
+allowed = [
+    "application",
+    "domain_ports",
+    "outbound_adapter",
+]
 
 [[tool.hecate.groups]]
 name = "application"
@@ -292,6 +362,7 @@ prefixes = [
     "ghillie.catalogue.watch",
     "ghillie.evidence.classification",
     "ghillie.evidence.event_targets",
+    "ghillie.estate",  # generic — domain_ports leaf prefixes must precede this
     "ghillie.evidence.project_service",
     "ghillie.evidence.service",
     "ghillie.github.errors",
@@ -339,24 +410,6 @@ allowed = [
     "inbound_adapter",
     "outbound_adapter",
     "package_facade",
-]
-
-[[tool.hecate.groups]]
-name = "outbound_adapter"
-prefixes = [
-    "ghillie.bronze.storage",
-    "ghillie.catalogue.storage",
-    "ghillie.github.client",
-    "ghillie.gold.storage",
-    "ghillie.reporting.filesystem_sink",
-    "ghillie.silver.storage",
-    "ghillie.status.mock",
-    "ghillie.status.openai_client",
-]
-allowed = [
-    "application",
-    "domain_ports",
-    "outbound_adapter",
 ]
 
 [[tool.hecate.groups]]
