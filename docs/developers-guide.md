@@ -1140,6 +1140,81 @@ it with `-m "not e2e"`.
 make helm-test
 ```
 
+## Mutation-testing workflow contract tests
+
+This repository runs scheduled, informational mutation testing through a thin
+caller workflow,
+[`.github/workflows/mutation-testing.yml`](../.github/workflows/mutation-testing.yml),
+which delegates to the shared reusable workflow
+`leynos/shared-actions/.github/workflows/mutation-mutmut.yml`. The heavy
+lifting — running `mutmut` and summarizing survivors — lives in
+`shared-actions`; this repository carries only declarative configuration. The
+run is **informational only**: the caller has no `pull_request` trigger, so it
+never gates a pull request. Survivors are reported through the job summary and
+downloadable artefacts so they can be triaged into tests, not enforced as a
+blocking check. The mutation targets and test selection are configured in
+`[tool.mutmut]` in `pyproject.toml` (`source_paths`,
+`pytest_add_cli_args_test_selection`, `also_copy`).
+
+The workflow runs on a **daily schedule** and can also be triggered by **manual
+dispatch** (the Actions "Run workflow" control); select a branch in that
+control to exercise a feature branch.
+
+The caller passes two configuration inputs:
+
+- `paths` — the change-detection globs (`ghillie/`) that decide whether a
+  scheduled run has anything to mutate, bounding the run to real source changes.
+- `module-prefix-strip` — left empty, because Ghillie uses a flat layout: the
+  package lives at the repository root rather than under a `src/` prefix, so no
+  module prefix needs stripping.
+
+Every other input — `python-version`, `window-hours`, `base-ref`,
+`timeout-minutes`, `mutmut-version` and `extra-args` — takes the reusable
+workflow's default. An unset `python-version` is the one default that can stop
+a run before it starts: the shared workflow's default is `3.13`, and a project
+whose `requires-python` floor is above it fails at `uv run` with an
+interpreter-incompatibility error before any mutant is generated. Ghillie's
+floor is `>=3.14`, so both inputs must be kept in step whenever either moves.
+
+The `uses:` reference pins the shared workflow to a full 40-character commit
+SHA rather than a branch or tag, so a force-push upstream cannot silently
+change what runs here. The pin is a *shape*, not a value: the contract test
+matches the reference against a 40-hex-digit pattern and deliberately does not
+assert which SHA is current, leaving every bump to Dependabot. See
+[Workflow pins and Dependabot](#workflow-pins-and-dependabot) for the policy
+that rule comes from.
+
+Because the caller is configuration rather than code, a contract test,
+[`tests/test_workflow_contract.py`](../tests/test_workflow_contract.py), pins
+the shape it must uphold, failing the pull request when the caller drifts in a
+guarded way — repointing the pin at a branch, widening the token scope, or
+dropping a configuration input — rather than letting the breakage surface only
+in a scheduled run. The trigger assertions are a lower bound rather than an
+exact match: they require the daily schedule and a plain `workflow_dispatch`,
+but do not reject triggers added alongside them, so adding `pull_request` —
+which would start a run on every pull request, without making the job a
+required check — passes the suite. The module is guarded by
+`pytest.mark.skipif` on the existence of the workflow file, so a working copy
+that does not carry the workflow skips the module instead of failing it. Run it
+locally with:
+
+```bash
+uv run pytest tests/test_workflow_contract.py -v
+```
+
+The tests assert that:
+
+- the `uses:` reference targets `mutation-mutmut.yml` at a full 40-character
+  lowercase hexadecimal commit SHA;
+- the `with:` block carries exactly the expected configuration (`paths` and
+  `module-prefix-strip` above);
+- the calling job grants only `contents: read` and `id-token: write`, and the
+  workflow-level default token scope is empty;
+- `concurrency` serializes runs per ref without cancelling one in progress;
+  and
+- the triggers keep the daily schedule and a plain `workflow_dispatch` that
+  declares no inputs.
+
 ## Documentation
 
 - Update `docs/users-guide.md` for user-facing feature documentation
