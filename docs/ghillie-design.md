@@ -899,11 +899,16 @@ guarantee covers calls that reach the same instance; separate instances, worker
 processes, and replicas share nothing. The MVP builds one service instance in
 one worker in one replica. Storage failures map per operation: an
 `IntegrityError` raised by an import or a registry projection becomes a `409`
-`conflict`; a connection-level `OperationalError` or `InterfaceError` becomes a
-`503` `storage_unavailable`; and any other `SQLAlchemyError`, including an
-integrity failure during an ingestion toggle, also becomes `503`
-`storage_unavailable`. Error descriptions never include SQL or driver detail;
-the original failure is chained as the cause rather than rendered.
+`conflict`; a catalogue read or import that fails with any other
+`SQLAlchemyError`, and any `SQLAlchemyError` from an ingestion toggle, becomes
+`503` `storage_unavailable`. Registry sync is the exception: a projection that
+fails with a non-integrity `SQLAlchemyError`, or a `RegistrySyncError` whose
+cause is neither an `IntegrityError` nor a connection-level `OperationalError`
+or `InterfaceError`, becomes `500` `registry_sync_failed`. An unexplained sync
+failure is a defect in the projection, not necessarily an outage, so reporting
+it as `503` would send operators to the database for a fault it does not own.
+Error descriptions never include SQL or driver detail; the original failure is
+chained as the cause rather than rendered.
 
 **Affected modules:** `ghillie/estate/service.py` holds the per-estate locks,
 `ghillie/estate/persistence.py` classifies the storage failures, and

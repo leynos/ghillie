@@ -679,6 +679,21 @@ methods, the two buffer recorders, `dialect_upsert_strategy`, and
 `_insert_values`, and `tests/unit/test_skylos_lint_contract.py` pins the same
 names so the contract cannot drift unnoticed.
 
+The estate boundary adds three further groups, each for a boundary the liveness
+graph cannot follow. `EstateManagementService` reaches the module-private
+helpers `_estate_summary`, `_import_summary`, `_next_offset`, `_sync_summary`,
+and `_validate_page` from its async methods, which Skylos does not resolve.
+Falcon passes every middleware hook its full positional contract, while
+`BearerTokenMiddleware.process_request`/`process_response` and
+`EstateOutcomeMiddleware.process_response` read only part of theirs, so the
+unused parameters need parameter rules rather than a signature that would stop
+implementing the protocol. The service calls `MutationRecorder` through an
+injected instance, so `_elapsed_ms`, `begin_mutation`, `begin_toggle`,
+`record_mutation`, and `record_toggle` are reached only through a qualified
+attribute chain. `pyproject.toml` therefore declares entry-point rules for
+those three groups, and `tests/unit/test_skylos_lint_contract.py` pins their
+names alongside the registry rules.
+
 The Skylos Makefile contract is parsed with pinned Makeutil in
 `tests/unit/test_skylos_lint_contract.py`; `make test` requires that parser.
 Only the Makeutil-dependent parser contract tests skip in isolated runs where

@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & Retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: APPROVED (2026-11-03)
+Status: COMPLETE (2026-11-21)
 
 This plan implements roadmap Task 2.5.b (tracked on the branch
 `2-5-2-estate-management-apis`). It was approved by a human on 2026-11-03 and
@@ -1518,6 +1518,33 @@ per pull request.
         five e2e tests green), `markdownlint` (59 files, 0 issues), `nixie`,
         and `spelling` (logs
         `/tmp/<gate>-ghillie-2-5-2-estate-management-apis-c-repair.out`).
+- [x] (2026-11-21) Hosted review reconciliation on PR-C after its restack onto
+      the merged PR-B landing `55a9a58`. Fourteen inline findings were
+      verified against the code: ten were valid and repaired, one was stale
+      (`httpx.codes` had already given way to `http.HTTPStatus` in
+      `tests/e2e/conftest.py`), and three were answered without the proposed
+      edit. The CLI now rejects a page whose `items` is missing, is not a
+      list, or holds a non-object, taking the `invalid_response` path with
+      exit `3` instead of raising `TypeError` or reporting a false empty
+      success (`test_estate_list_rejects_a_malformed_page`). Dot-only estate
+      keys are percent-encoded per segment, because `quote(..., safe="")`
+      leaves `.` and `..` to the HTTP client's normalization — a `..` key
+      turned `/estates/../repositories` into `/repositories`
+      (`test_repo_list_encodes_a_dot_only_estate_key`). The catalogue loader
+      now translates the `KeyError`, `TypeError`, and `OverflowError` that
+      ruamel's constructors raise for an invalid `!!bool`, an unhashable
+      mapping key, and a timestamp past year 9999, so a crafted upload to
+      C's import endpoint returns the documented `422` instead of a `500`
+      (`test_parse_catalogue_text_rejects_constructor_failures`). Test
+      hygiene: the e2e table probe closes its SQLite handle with
+      `contextlib.closing`, and the BDD fixture registers cleanup around
+      construction and tears down client, engine, and runner through nested
+      `finally` blocks. Documentation was corrected in four places: D22 now
+      says the service unpacks the request, the design document separates the
+      registry-sync `500` from the `503` outages, the CLI specification gives
+      the real `--estate-name` default, and the users' guide keeps the bearer
+      token out of argv, uses `mktemp`, aborts on a failed page, and no
+      longer claims the inactive listing recovers a capped preview.
 
 ## Surprises & discoveries
 
@@ -1638,6 +1665,16 @@ per pull request.
     landing afterwards (D29).
     `test_a_concurrent_enable_is_not_reflected_in_the_left_disabled_report`
     holds the contract on PostgreSQL.
+- Observation: three YAML documents pass the anchor and depth scan but still
+  fail inside ruamel's constructors. Evidence with ruamel.yaml 0.19.1:
+  `version: !!bool invalid` raises `KeyError: 'invalid'`, `? [[a]]` raises
+  `TypeError: cannot use 'tuple' as a dict key`, and
+  `9999-12-31T23:59:59.9999999Z` raises
+  `OverflowError: date value out of range`. Impact: `parse_catalogue_text` now
+  translates all three, and `tests/unit/test_estate_service.py` proves the
+  service turns one of them into the documented catalogue rejection. The event
+  scan cannot catch these, because they are properties of construction rather
+  than of the event stream.
 
 ## Decision log
 
@@ -1819,8 +1856,10 @@ expert-panel review.
   parameter limits without a suppression. The frozen, slotted dataclass lives in
   `ghillie.estate.models`, so the port stays free of transport types. The API
   layer constructs it from the decoded body and the `dry_run` query flag; the
-  service passes it through unchanged. Behaviour is identical to the positional
-  form.
+  service unpacks it — it resolves the estate name for the importer factory
+  (request value, else the stored estate's name) and hands the parsed catalogue,
+  `commit_sha`, and `dry_run` to the persistence port as separate arguments.
+  Behaviour is identical to the positional form.
 - D23, PR-B scope-tolerance exception. PR-B exceeds the per-PR tolerance in
   `Tolerances (exception triggers)`: the comparison against PR-A's head
   `5d7868f` reports 45 changed files, 8,298 additions, and 156 deletions: 8,142
@@ -2140,6 +2179,19 @@ expert-panel review.
   spans, which D27 defers to the telemetry platform decision tracked in #219;
   the fourth option is a check-owner waiver, which only the maintainer can
   issue.
+- D35, review dispositions on PR-C after the restack. Three findings were
+  answered without the proposed code change. (1) `persistence._sync_failure`
+  keeps `RegistrySyncFailedError` for a non-integrity `SQLAlchemyError`, and
+  `_sync_error` keeps it for a `RegistrySyncError` whose cause is neither an
+  integrity nor a connection-level failure. A projection that failed for an
+  unexplained reason is a defect in the sync rather than a storage outage; the
+  error contract above already records `500 registry_sync_failed` for this
+  case, so the sentence in `docs/ghillie-design.md` that said otherwise was the
+  stale artefact and is corrected rather than the code. (2) The `loader.py`
+  boundary widening was folded into this PR instead of deferred: the import
+  endpoint that makes the text untrusted is C's, so its error contract is C's
+  to keep. (3) `httpx.codes` appears nowhere in the tree; the e2e harness
+  already uses `http.HTTPStatus`.
 
 ## Outcomes & retrospective
 
