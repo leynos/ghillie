@@ -1509,7 +1509,9 @@ per pull request.
         CLI `GHILLIE_AUTH_TOKEN` so the CLI journey crosses the same
         authenticated boundary. C's CLI journey now lives in
         `tests/e2e/test_estate_cli_e2e.py`; its `_assert_wire_contract` was
-        dropped because PR-B's journey proves the same wire contract. The gates
+        dropped because PR-B's journey in
+        `tests/e2e/test_estate_management_e2e.py` proves the same wire
+        contract over raw `httpx`. The gates
         at `26889a2` found two replay artefacts, a surviving `# weave:` line
         and a missing trailing newline, repaired in `0adfb96`. All eight gates
         then passed sequentially at `0adfb96`: `check-fmt` (318 files, 59
@@ -2279,16 +2281,19 @@ repository listing, and the ingestion toggle, with a local refusal for
 error taxonomy and the D7 envelope reader, and `ghillie/cli/output.py` renders
 documents, collections, and failures for `table`, `json`, and `yaml`.
 Behavioural coverage runs the real CLI against an in-process ASGI app through
-`RunnerTransport`; the `e2e` test runs the packaged console script against a
-real server process and re-checks the wire contract with raw `httpx`.
-Documentation and the roadmap now describe the shipped behaviour.
+`RunnerTransport`. `tests/e2e/test_estate_cli_e2e.py` drives the CLI module
+entry point and the installed console script against a real server process,
+while `tests/e2e/test_estate_management_e2e.py` re-checks the same endpoints
+over raw `httpx`. Documentation and the roadmap now describe the shipped
+behaviour.
 
 Evidence: the CLI unit suite (119 tests, 10 snapshots), nine BDD scenarios, and
-one e2e test pass. The final eight-gate run on the complete working tree
-reported 1514 passed, 11 skipped, 12 snapshots in 131.59s, with formatting,
-architecture, types, lint, Markdown, Mermaid, and spelling all clean. Three
-CodeRabbit CLI milestone reviews were triaged; every valid finding was repaired
-with a failing test first.
+the CLI and HTTP e2e journeys pass. The eight-gate run on the replay-complete
+tree at `0adfb96` reported 1632 passed, 17 skipped, and 12 snapshots; the run at
+`abde60a`, after the hosted-review repairs, reported 1708 passed, 17 skipped,
+and 12 snapshots. Formatting, architecture, types, lint, Markdown, Mermaid, and
+spelling were clean in both. Three CodeRabbit CLI milestone reviews were
+triaged; every valid finding was repaired with a failing test first.
 
 Retrospective: the `--dry-run` gap appeared because the root option was
 threaded through the client but not checked by the one verb with no dry-run

@@ -847,9 +847,12 @@ adapters. Keep new estate work inside that shape.
   configuration on tests that only need the dataclasses. Import concrete
   modules explicitly.
 - **Duplicated CLI constants are deliberate.** The CLI re-declares
-  `MAX_REQUEST_BODY_BYTES` and `NEW_ESTATE_KEY_PATTERN` because O6 forbids
-  importing the server-side modules. The unit tests assert equality with the
-  originals, so a change on one side fails the suite until both are updated.
+  `MAX_REQUEST_BODY_BYTES`, `NEW_ESTATE_KEY_PATTERN`, and `MAX_PAGE_OFFSET`
+  because O6 forbids importing the server-side modules. The unit tests assert
+  equality with the originals, so a change on one side fails the suite until
+  both are updated. The offset ceiling is enforced by the `PageOffset`
+  validator as well as by the service, so an out-of-range page request costs no
+  request and exits `2` like every other local rejection.
 
 ### Behavioural and end-to-end coverage
 
@@ -862,10 +865,26 @@ client on an `asyncio.Runner`, which bridges the synchronous CLI to the ASGI
 app without a socket.
 
 `tests/e2e/test_estate_management_e2e.py` starts the packaged runtime as a
-subprocess on a free port, runs the installed console script against it over
-real HTTP, and then repeats the key calls with raw `httpx` to prove the wire
-contract. End-to-end tests carry the `e2e` marker and are part of `make test`;
-opt out with `-m "not e2e"` when a database-backed subprocess is not wanted.
+subprocess on a free port and drives the estate endpoints over real HTTP with
+raw `httpx`, which is where the wire contract is proved.
+`tests/e2e/test_estate_cli_e2e.py` starts the same runtime and drives the
+journey through both the CLI module entry point and the installed console
+script, checking the persisted state after each mutation. End-to-end tests
+carry the `e2e` marker and are part of `make test`; opt out with `-m "not e2e"`
+when a database-backed subprocess is not wanted.
+
+Three invariants are stated as Hypothesis properties rather than examples,
+because each quantifies over an open input space where a table of cases can
+only sample. `test_parse_catalogue_text` asserts that arbitrary text, and text
+wrapping a constructor-triggering fragment, either parses or raises
+`CatalogueValidationError` — no other exception may escape the untrusted-input
+boundary. `_quote_path` asserts that every segment decodes back to itself,
+carries no raw `/`, and never becomes a dot-only segment, so no value can move
+a request to another route. The import command's local key gate asserts that it
+accepts exactly the keys `validate_new_estate_key` accepts, which catches a
+matching change such as `fullmatch` giving way to `match` that comparing the
+pattern text alone would miss. The example-based cases for each remain as named
+regression examples.
 
 ## Helm chart for local and GitOps (Git-driven operations) previews
 

@@ -1071,10 +1071,13 @@ conflict/storage-unavailable mapping), D18 (estate identity on re-import), D19
 for the live-only toggle), and D21 (one structured log line per mutation).
 
 **Toggle semantics.** A registry sync never re-enables a linked repository of
-the estate, so an operator toggle survives later imports and syncs; a row that
-leaves and later re-enters the catalogue stays disabled until an operator
-re-enables it. A repository already linked to another estate is reported in
-`repositories_conflicted` instead of being moved. These rules are the subject of
+the estate. While the catalogue entry naming it is active, sync applies
+`PRESERVE` and the operator's flag survives later imports and syncs; when the
+entry is present but inactive, sync applies `DISABLE_INACTIVE` and disables the
+row. A row that leaves the catalogue is `DISABLE_REMOVED`, and one that later
+re-enters stays disabled until an operator re-enables it. A repository already
+linked to another estate is reported in `repositories_conflicted` instead of
+being moved. These rules are the subject of
 [ADR-005](adr-005-registry-sync-preserves-operator-ingestion-toggles.md).
 
 **Delivery.** D19 delivered the work as three stacked pull requests: PR-A (the

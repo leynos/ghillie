@@ -333,7 +333,7 @@ Options:
 - `--ingestion-enabled` / `--active` (select enabled rows)
 - `--ingestion-disabled` / `--inactive` (select disabled rows)
 - `--limit <n>` (1 to 500, default 50)
-- `--offset <n>` (0 or more, default 0)
+- `--offset <n>` (0 to 2147483647, default 0)
 
 Omitting both filter flags lists both states (D5). Request:
 `GET /estates/{estate_key}/repositories?ingestion_enabled?&limit&offset`.
