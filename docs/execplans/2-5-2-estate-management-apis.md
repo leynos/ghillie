@@ -2215,9 +2215,10 @@ expert-panel review.
   and `MAX_PAGE_OFFSET` moved to `ghillie.common.estate`, a module that imports
   nothing and sits in the `domain_ports` Hecate group. The domain models, the
   application service and the CLI now import the single definition; the
-  equality tests that policed the copies are gone. The CLI still cannot import
-  `ghillie.estate`, because that package's re-exports pull in the application
-  stack, and `tests/unit/cli/test_cli_import_closure.py` asserts both facts:
+  equality tests that policed the copies are gone. The CLI still does not import
+  `ghillie.estate` or any other server-side package, because O6 makes the CLI
+  a thin HTTP client and forbids that boundary crossing;
+  `tests/unit/cli/test_cli_import_closure.py` asserts both facts:
   `ghillie.common.estate` is loaded and no forbidden prefix is. The
   request-body limit stays duplicated because it is a transport limit owned by
   `ghillie.api.estate.resources`, with its equality test retained.

@@ -848,15 +848,17 @@ adapters. Keep new estate work inside that shape.
   modules explicitly.
 - **Estate contracts are shared, not copied.** `NEW_ESTATE_KEY_PATTERN` and
   `MAX_PAGE_OFFSET` live in `ghillie.common.estate`, a module that imports
-  nothing, so the CLI, the application service, and the domain models all read
-  one definition without any of them importing `ghillie.estate`.
-  `ghillie.common` is a `domain_ports` group, which Hecate lets every layer
-  import. The one remaining duplicate is `MAX_REQUEST_BODY_BYTES`: it is an
-  HTTP transport limit declared by `ghillie.api.estate.resources`, which the
-  CLI must not import (O6), so the unit tests assert the two values stay equal.
-  The offset ceiling and the key pattern have no such field; their equality
-  tests are gone because there is nothing left to compare. The ceiling is
-  enforced by the `PageOffset` validator as well as by the service, so an
+  nothing. The CLI reads the same definition as the application service and the
+  domain models while staying out of `ghillie.estate`, which the thin-client
+  rule (O6) forbids it to import; the initializer is docstring-only, but O6 is
+  an architectural boundary, not a consequence of what that one file happens to
+  import. `ghillie.common` is a `domain_ports` group, which Hecate lets every
+  layer import. The one remaining duplicate is `MAX_REQUEST_BODY_BYTES`: it is
+  an HTTP transport limit declared by `ghillie.api.estate.resources`, which the
+  CLI must not import either, so the unit tests assert the two values stay
+  equal. The offset ceiling and the key pattern have no such field; their
+  equality tests are gone because there is nothing left to compare. The ceiling
+  is enforced by the `PageOffset` validator as well as by the service, so an
   out-of-range page request costs no request and exits `2` like every other
   local rejection.
 
