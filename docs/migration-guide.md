@@ -119,6 +119,29 @@ not build a reporting service and does not register the route.
 **Action after upgrading.** Set both variables for clients that call the report
 route, and leave both unset to run health-only.
 
+### Estate management CLI in 2.0.0
+
+The `ghillie estate` verbs are live. See
+[Estate management through the CLI and API (Task 2.5.b)](users-guide.md#estate-management-through-the-cli-and-api-task-25b)
+for the commands, the exit codes and the error hints.
+
+The live verbs are `ghillie estate import`, `ghillie estate sync`,
+`ghillie estate list`, `ghillie estate repo list` and `ghillie estate repo set`.
+
+The placeholder flags are gone. `estate sync` no longer accepts `--wait`.
+`estate list` no longer accepts `--active` or `--inactive`, because estates
+have no lifecycle state. `estate repo list` replaces `--active` and
+`--inactive` with `--ingestion-enabled` and `--ingestion-disabled` (also spelled
+`--active` and `--inactive`), and `estate repo set` takes an explicit
+ingestion state.
+
+The CLI reads the bearer token from `GHILLIE_AUTH_TOKEN`. Prefer that variable:
+passing `--auth-token` puts the token in argv, where other local processes and
+shell history can see it.
+
+**Action after upgrading.** Update any script that passed the placeholder flags
+to use the verbs and flags above, and move the token into `GHILLIE_AUTH_TOKEN`.
+
 ## References
 
 - [Users' guide](users-guide.md) for the day-to-day sync workflow.

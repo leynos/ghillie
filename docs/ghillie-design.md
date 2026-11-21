@@ -140,7 +140,18 @@ The boundary is intentionally explicit:
   applying the documented precedence of flag, environment, profile file,
   persisted state, then fallback URL.
 - `ghillie/cli/control_plane.py` is the driven adapter seam for API-backed
-  commands. It owns `httpx` base URL, timeout, and bearer-token setup.
+  commands. It owns `httpx` base URL, timeout, and bearer-token setup, parses a
+  collection response into a validated page, and accepts an optional transport
+  for its owned client.
+- `ghillie/cli/commands/estate.py` holds the Cyclopts estate commands and their
+  parameter annotations only; each reads the invocation context once and
+  delegates. `ghillie/cli/estate_input.py` validates the estate key, reads the
+  catalogue and enforces the byte limit, `ghillie/cli/estate_view.py` renders a
+  validated page or import document, and `ghillie/cli/presentation.py` owns the
+  hint table, the stderr write and the exit codes. `ghillie/cli/errors.py`
+  carries `LocalInputError`. Commands obtain their client from
+  `CommandContext.client_factory`, which tests replace with a factory that
+  injects a transport.
 - `ghillie/cli/runtime_adapters.py` is the driven adapter seam for local stack
   integration. Task 2.5.a validates selector names (`cuprum`, `python-api`) and
   leaves concrete orchestration work to later tasks.
@@ -886,10 +897,14 @@ Creating an estate, which happens on import, requires a key matching
 one to 64 characters, so keys created earlier through Python stay reachable.
 Keys containing `/` cannot be routed and surface as `not_found`.
 
-**Affected modules:** `ghillie/estate/models.py` defines
-`NEW_ESTATE_KEY_PATTERN`, `validate_new_estate_key`, and
-`validate_estate_key_reference`; `ghillie/estate/service.py` applies the
-creation rule only when an import creates an estate.
+**Affected modules:** `ghillie/common/estate.py` defines
+`NEW_ESTATE_KEY_PATTERN` and `MAX_PAGE_OFFSET`, because the CLI, the
+application service, and the domain models all need them and the CLI must not
+import `ghillie.estate` (O6). `ghillie/estate/models.py` imports the pattern
+and defines `validate_new_estate_key` and `validate_estate_key_reference`;
+`ghillie/estate/service.py` imports `MAX_PAGE_OFFSET` from
+`ghillie/common/estate.py` and applies the creation rule only when an import
+creates an estate.
 
 #### Concurrency and storage failures
 
@@ -1045,8 +1060,14 @@ toggle ingestion without writing Python.
 `ghillie/api/estate/resources.py` are the server adapter and call the port. The
 CLI in `ghillie/cli/commands/estate.py` is a separate client adapter: it calls
 the HTTP API and never the Python port, so the thin-client boundary stays
-intact. Errors are defined in `ghillie.estate.errors`, so neither adapter
-imports catalogue or registry exceptions.
+intact. The command module holds only the Cyclopts commands; validation and
+catalogue reading live in `ghillie/cli/estate_input.py`, rendering in
+`ghillie/cli/estate_view.py`, and hints and exit codes in
+`ghillie/cli/presentation.py`. `ghillie/cli/control_plane.py` validates a
+collection response before any renderer sees it, and commands obtain their
+client from `CommandContext.client_factory` so tests can inject a transport.
+Errors are defined in `ghillie.estate.errors`, so neither adapter imports
+catalogue or registry exceptions.
 
 **Endpoints.** The five paths in §8.4 accept and return the msgspec structs in
 `ghillie/api/estate/schemas.py` (D8). Import and sync accept an optional
@@ -1068,7 +1089,11 @@ token is never logged), D15 (runtime profile hand-off to Task 2.5.e), D16
 (estate key creation pattern), D17 (per-estate serialization and the
 conflict/storage-unavailable mapping), D18 (estate identity on re-import), D19
 (three stacked pull requests), D20 (dry runs for import and sync; local refusal
-for the live-only toggle), and D21 (one structured log line per mutation).
+for the live-only toggle), and D21 (one structured log line per mutation). PR-C
+added D36 (one dependency-free shared estate contract in
+`ghillie/common/estate.py`) and D37 (one job per CLI unit, with the client
+injected through `CommandContext.client_factory`); both are recorded in the
+ExecPlan's decision log.
 
 **Toggle semantics.** A registry sync never re-enables a linked repository of
 the estate. While the catalogue entry naming it is active, sync applies
