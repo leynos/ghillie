@@ -33,8 +33,8 @@ WORKFLOW_PATH = (
 pytestmark = pytest.mark.skipif(
     not WORKFLOW_PATH.exists(),
     reason=(
-        "workflow file not present in this working copy (for example "
-        "inside mutmut's mutants/ sandbox, which does not copy .github/)"
+        "workflow file not present in this working copy; there is no "
+        "caller to hold to the contract"
     ),
 )
 
