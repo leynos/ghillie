@@ -224,7 +224,11 @@ A toggle survives later catalogue imports and syncs:
 To re-enable every repository that is currently disabled, collect the whole set
 first and only then apply the toggles. Enabling a repository removes it from the
 `--inactive` filter, so paging and mutating in the same pass would shrink the
-collection and skip rows:
+collection and skip rows. The pages also share no snapshot: if another operator
+enables a repository that sorts before the current offset while the pages are
+being read, the remaining rows shift left and the next page can skip one. Pause
+other repository toggles for the duration of the collection, or restart the
+collection after anyone else toggles a repository, before applying the toggles:
 
 ```bash
 # 1. Collect every disabled repository across all pages.

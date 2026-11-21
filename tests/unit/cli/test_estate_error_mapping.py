@@ -7,6 +7,7 @@ carries its per-issue details.
 
 from __future__ import annotations
 
+import http
 import typing as typ
 
 import httpx
@@ -250,8 +251,7 @@ def test_http_error_maps_to_exit_3(
     [
         pytest.param(199, False, id="below-the-2xx-band"),
         pytest.param(200, True, id="first-success"),
-        pytest.param(201, True, id="created"),
-        pytest.param(204, True, id="no-content"),
+        pytest.param(201, True, id="created-with-a-document"),
         pytest.param(299, True, id="last-success"),
         pytest.param(300, False, id="first-non-success"),
     ],
@@ -265,11 +265,11 @@ def test_only_the_2xx_band_counts_as_success(
 ) -> None:
     """Success is exactly 2xx, so an off-by-one cannot ship a redirect as work.
 
-    ``204`` carries no body, which exercises the same success path a document
-    response takes; the caller's rendering then decides what an empty document
-    means. A ``199`` or ``300`` must take the error path with a stable code
-    derived from the status, because reporting otherwise would claim work the
-    service did not perform.
+    Every case here answers with a JSON document, so the assertion isolates the
+    status rule: a ``199`` or ``300`` must take the error path with a stable
+    code derived from the status, because reporting otherwise would claim work
+    the service did not perform. The body contract for a 2xx status is a
+    separate question, covered by the bodyless ``204`` case below.
     """
     client = harness(output="json")
     client.queue_json({"state": "succeeded"}, status=status)
@@ -283,6 +283,30 @@ def test_only_the_2xx_band_counts_as_success(
     error = error_document(capsys.readouterr().err)["error"]
     assert error["code"] == f"http_{status}"
     assert error["status"] == status
+
+
+def test_a_bodyless_success_is_not_a_document(
+    harness: typ.Callable[..., CliHarness],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A 204 is a successful status, but not the JSON object the client returns.
+
+    The commands render a document, so an empty body cannot be reported as
+    work done. The client states that contract as ``invalid_response`` rather
+    than handing the renderer ``None``.
+    """
+    client = harness(output="json")
+    client.queue_raw("", status=http.HTTPStatus.NO_CONTENT)
+
+    result = client.invoke(sync, estate_key="demo")
+
+    assert result == 3
+    error = error_document(capsys.readouterr().err)["error"]
+    assert error["code"] == "invalid_response"
+    # The status is not part of this error: the response was accepted as a
+    # success and failed the body contract afterwards, so the envelope omits
+    # the optional field rather than reporting a status that was never an error.
+    assert "status" not in error
 
 
 def test_http_error_renders_catalogue_issues(
