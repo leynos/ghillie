@@ -882,14 +882,14 @@ creation rule only when an import creates an estate.
 `EstateManagementService` serializes import and sync per estate with an
 `asyncio.Lock`. The lock table belongs to one service instance, so the
 guarantee covers calls that reach the same instance; separate instances, worker
-processes, and replicas share nothing. The MVP builds one instance in a single
-replica. Storage failures map per operation: an `IntegrityError` raised by an
-import or a registry projection becomes a `409` `conflict`; a connection-level
-`OperationalError` or `InterfaceError` becomes a `503` `storage_unavailable`;
-and any other `SQLAlchemyError`, including an integrity failure during an
-ingestion toggle, also becomes `503` `storage_unavailable`. Error descriptions
-never include SQL or driver detail; the original failure is chained as the
-cause rather than rendered.
+processes, and replicas share nothing. The MVP builds one service instance in
+one worker in one replica. Storage failures map per operation: an
+`IntegrityError` raised by an import or a registry projection becomes a `409`
+`conflict`; a connection-level `OperationalError` or `InterfaceError` becomes a
+`503` `storage_unavailable`; and any other `SQLAlchemyError`, including an
+integrity failure during an ingestion toggle, also becomes `503`
+`storage_unavailable`. Error descriptions never include SQL or driver detail;
+the original failure is chained as the cause rather than rendered.
 
 **Affected modules:** `ghillie/estate/service.py` holds the per-estate locks,
 `ghillie/estate/persistence.py` classifies the storage failures, and

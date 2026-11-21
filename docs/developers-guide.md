@@ -376,7 +376,7 @@ error vocabulary.
   only between calls that reach the same instance: two instances in one process
   do not share it, and neither do worker processes or replicas. Serializing
   imports therefore relies on the application building one service instance in
-  one worker or replica, which is the MVP deployment. The locks live in a
+  one worker in one replica, which is the MVP deployment. The locks live in a
   `weakref.WeakValueDictionary`, so a coroutine inside `async with` holds the
   only strong reference and an idle estate retains no lock. Two concurrent
   requests for one estate through that instance cannot interleave their

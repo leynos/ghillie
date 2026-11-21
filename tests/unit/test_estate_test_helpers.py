@@ -10,7 +10,7 @@ import string
 from hypothesis import given
 from hypothesis import strategies as st
 
-from tests.unit.estate_test_helpers import data_writes
+from tests.unit.estate_test_helpers import _READ_PRAGMA_NAMES, data_writes
 
 _WRITE_STATEMENTS = (
     "INSERT INTO estates (key) VALUES ('a')",
@@ -31,13 +31,25 @@ _LEADING_NOISE = st.lists(
     ),
     max_size=3,
 ).map("".join)
-_PRAGMA_NAMES = st.text(
-    alphabet=string.ascii_lowercase + string.digits + "_", min_size=1, max_size=12
+# SQLite documents these as getters. Pinned here independently of the filter's
+# own list, so a change to that list fails the guard test below instead of
+# silently redefining what the properties treat as verified.
+_VERIFIED_GETTERS = (
+    "database_list",
+    "foreign_key_list",
+    "index_info",
+    "index_list",
+    "index_xinfo",
+    "table_info",
+    "table_xinfo",
 )
-_SCHEMA_PREFIXES = st.sampled_from(("", "main.", "temp."))
+_PRAGMA_NAME_ALPHABET = string.ascii_lowercase + string.digits + "_"
+_PRAGMA_NAMES = st.text(alphabet=_PRAGMA_NAME_ALPHABET, min_size=1, max_size=12)
+_KNOWN_GETTERS = st.sampled_from(_VERIFIED_GETTERS)
 _UNVERIFIED_PRAGMA_NAMES = st.text(
-    alphabet=string.ascii_lowercase + string.digits, max_size=8
-).map("zz_{}".format)
+    alphabet=_PRAGMA_NAME_ALPHABET, min_size=1, max_size=12
+).filter(lambda name: name.lower() not in _VERIFIED_GETTERS)
+_SCHEMA_PREFIXES = st.sampled_from(("", "main.", "temp."))
 
 
 def _assert_reported(statement: str) -> None:
@@ -216,17 +228,36 @@ def test_property_a_pragma_call_form_is_accepted_only_for_a_verified_getter(
     assert call_is_read == bare_is_read, (bare, call)
 
 
-@given(name=_UNVERIFIED_PRAGMA_NAMES, prefix=_SCHEMA_PREFIXES)
-def test_property_a_pragma_call_form_outside_the_verified_list_is_reported(
+def test_the_verified_getter_list_matches_the_filter() -> None:
+    """The property's independent getter list is the one the filter accepts."""
+    assert frozenset(_VERIFIED_GETTERS) == _READ_PRAGMA_NAMES, (
+        "the filter's verified pragma list changed; update this test's list"
+    )
+
+
+@given(name=_KNOWN_GETTERS, prefix=_SCHEMA_PREFIXES)
+def test_property_a_verified_getter_is_read_in_both_forms(
     name: str, prefix: str
 ) -> None:
-    """Invariant: an unverified pragma name is reported in either form.
-
-    The generated names cannot appear on the verified getter list, so neither
-    spelling of them may pass the filter.
-    """
-    call = f"PRAGMA {prefix}{name}(x)"
+    """Invariant: a documented getter passes the filter with or without a call."""
     bare = f"PRAGMA {prefix}{name}"
+    call = f"PRAGMA {prefix}{name}(x)"
 
-    _assert_reported(call)
+    assert data_writes([bare]) == [], bare
+    assert data_writes([call]) == [], call
+
+
+@given(name=_UNVERIFIED_PRAGMA_NAMES, prefix=_SCHEMA_PREFIXES)
+def test_property_an_unverified_pragma_name_is_reported_in_both_forms(
+    name: str, prefix: str
+) -> None:
+    """Invariant: a name outside the documented getters is reported either way.
+
+    The generated names cannot appear on the verified getter list, in any
+    letter case, so neither spelling of them may pass the filter.
+    """
+    bare = f"PRAGMA {prefix}{name}"
+    call = f"PRAGMA {prefix}{name}(x)"
+
     _assert_reported(bare)
+    _assert_reported(call)

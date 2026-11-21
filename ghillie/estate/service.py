@@ -83,7 +83,7 @@ class EstateManagementService:
     two concurrent requests cannot interleave their catalogue writes. The lock
     table belongs to this instance: calls that reach separate instances, worker
     processes, or replicas share no lock (D17), so the application builds one
-    instance in a single replica.
+    service instance in one worker in one replica.
 
     """
 
@@ -475,8 +475,8 @@ class EstateManagementService:
         The lock table belongs to this instance only, so it serializes calls
         that reach the same service object. Separate instances, worker
         processes, and replicas share no lock and may run operations for one
-        estate concurrently (D17), which is why the runtime builds a single
-        instance.
+        estate concurrently (D17), which is why the runtime builds one service
+        instance in one worker in one replica.
         """
         lock = self._locks.get(estate_key)
         if lock is None:

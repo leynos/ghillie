@@ -2,13 +2,16 @@
 
 The module validates a parsed :class:`~ghillie.catalogue.models.Catalogue`:
 slugs, references between programmes, projects, and components, and the storage
-limits the Silver tables impose. :func:`validate_catalogue` collects every
-problem it finds, so one import reports all of its rejections at once, and
-:class:`CatalogueValidationError` carries that list to its caller.
+limits of the tables the catalogue fills. :func:`validate_catalogue` collects
+every problem it finds, so one import reports all of its rejections at once,
+and :class:`CatalogueValidationError` carries that list to its caller.
 
 :data:`_MAX_STORED_TEXT_LENGTH` is the 255-character limit of the stored text
-columns. Project and component names, repository owner and name segments, and
-default branches are measured against it, so an over-length value is a
+columns. Project and component names are ``String(255)`` in
+:mod:`ghillie.catalogue.storage`. Repository owner and name segments, and
+default branches, are ``String(255)`` in both that module's
+``catalogue_repositories`` table and the Silver ``repositories`` table. Those
+values are measured against the limit here, so an over-length value is a
 validation rejection rather than a failed database write.
 
 :mod:`ghillie.catalogue.loader` and :mod:`ghillie.catalogue.importer` raise
@@ -58,12 +61,14 @@ _SLUG_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 _REPO_SEGMENT_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 _MAX_STORED_TEXT_LENGTH = 255
-"""Longest value the catalogue tables accept in a text column.
+"""Longest value the catalogue and Silver tables accept in a stored column.
 
-Names and repository segments are declared as ``String(255)``. Checking the
-limit here keeps an over-length catalogue a rejected request (422) instead of
-a failed database write (503), and makes a dry run fail exactly as a real
-import would.
+Project and component names are ``String(255)`` in
+:mod:`ghillie.catalogue.storage`. Repository owner and name segments, and
+default branches, are ``String(255)`` in both ``catalogue_repositories`` and
+the Silver ``repositories`` table. Checking the limit here keeps an
+over-length catalogue a rejected request (422) instead of a failed database
+write (503), and makes a dry run fail exactly as a real import would.
 """
 
 

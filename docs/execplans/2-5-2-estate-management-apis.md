@@ -1238,6 +1238,22 @@ per pull request.
       PR-C builds on, so it is proposed as issue #233; the Observability
       remainder (spans) stays with D27 and #219. Both rows are dispositioned
       with that evidence in the reconciliation comment.
+- [x] (2026-11-21) Strengthened the property tests and corrected wording after
+      the review's own assessment of `91fe39e`. `ghillie/catalogue/storage.py`
+      declares project and component names as `String(255)`, so the
+      `validation.py` docstring now attributes those limits to the catalogue
+      tables and the repository segment and branch limits to both
+      `catalogue_repositories` and the Silver `repositories` table. The depth
+      boundary is pinned to literal 64 and 65, with a guard test that fails if
+      `_MAX_YAML_DEPTH` moves, and the properties now cover flow sequences,
+      flow mappings, and mixed forms. The pragma properties use an
+      independently listed verified-getter set, plus an unverified generator
+      over the whole name alphabet rather than a `zz_` prefix. The lock wording
+      in `docs/developers-guide.md`, `docs/ghillie-design.md`, and
+      `ghillie/estate/service.py` now says one service instance in one worker
+      in one replica. The Domain Architecture deferral to #233 and the
+      Observability deferral to #219 stand, with the waiver left to the
+      maintainer.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.

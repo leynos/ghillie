@@ -149,6 +149,11 @@ def test_parse_catalogue_text_rejects_a_schema_failure() -> None:
         parse_catalogue_text("projects: []\n")
 
 
+# Pinned independently of ``_MAX_YAML_DEPTH``, so a change to the loader's
+# limit fails the guard test below instead of silently moving the boundary.
+_PINNED_MAX_YAML_DEPTH = 64
+
+
 def _nested_flow_document(depth: int) -> str:
     """Return a document of *depth* nested flow sequences.
 
@@ -158,45 +163,92 @@ def _nested_flow_document(depth: int) -> str:
     return "[" * depth + "]" * depth
 
 
+def _nested_mapping_document(depth: int) -> str:
+    """Return a document of *depth* nested flow mappings with distinct keys."""
+    document = "value"
+    for level in range(depth):
+        document = f"{{key{level}: {document}}}"
+    return document
+
+
+def _nested_mixed_document(depth: int) -> str:
+    """Return a document alternating nested sequences and mappings."""
+    document = "value"
+    for level in range(depth):
+        document = f"[{document}]" if level % 2 == 0 else f"{{key{level}: {document}}}"
+    return document
+
+
+_DOCUMENT_BUILDERS = (
+    _nested_flow_document,
+    _nested_mapping_document,
+    _nested_mixed_document,
+)
+
+
 def _assert_depth_guard_admits(document: str) -> None:
     """Fail if the nesting guard, rather than the schema, rejected *document*.
 
-    A nested flow sequence is never a valid catalogue, so the schema rejection
-    is the expected outcome; reaching it proves the depth guard admitted the
-    document first.
+    A nested flow collection is never a valid catalogue, so the schema
+    rejection is the expected outcome; reaching it proves the depth guard
+    admitted the document first.
     """
     with pytest.raises(CatalogueValidationError, match="schema validation failed"):
         parse_catalogue_text(document)
 
 
-@given(depth=st.integers(min_value=1, max_value=_MAX_YAML_DEPTH))
-def test_property_documents_within_the_depth_limit_pass_the_guard(depth: int) -> None:
+def test_the_pinned_depth_matches_the_loader_limit() -> None:
+    """The literal boundary below is the loader's limit, not a copy of it.
+
+    Pinning the number here means a change to ``_MAX_YAML_DEPTH`` fails this
+    test instead of silently moving every boundary case with the constant.
+    """
+    assert _MAX_YAML_DEPTH == _PINNED_MAX_YAML_DEPTH, (
+        "the loader's depth limit changed; re-pin the boundary cases"
+    )
+
+
+@given(
+    depth=st.integers(min_value=1, max_value=_PINNED_MAX_YAML_DEPTH),
+    build=st.sampled_from(_DOCUMENT_BUILDERS),
+)
+def test_property_documents_within_the_depth_limit_pass_the_guard(
+    depth: int, build: typ.Callable[[int], str]
+) -> None:
     """Invariant: nesting of at most 64 levels never trips the depth guard.
 
-    A document is rejected for depth if and only if it nests more than
-    ``_MAX_YAML_DEPTH`` collections, so every depth up to the limit must reach
-    the schema check instead.
+    A document is rejected for depth if and only if it nests more than 64
+    collections, so every depth up to the limit must reach the schema check
+    instead, in each collection form the event scan counts.
     """
-    _assert_depth_guard_admits(_nested_flow_document(depth))
+    _assert_depth_guard_admits(build(depth))
 
 
-@given(depth=st.integers(min_value=_MAX_YAML_DEPTH + 1, max_value=500))
-def test_property_documents_beyond_the_depth_limit_are_rejected(depth: int) -> None:
+@given(
+    depth=st.integers(min_value=_PINNED_MAX_YAML_DEPTH + 1, max_value=500),
+    build=st.sampled_from(_DOCUMENT_BUILDERS),
+)
+def test_property_documents_beyond_the_depth_limit_are_rejected(
+    depth: int, build: typ.Callable[[int], str]
+) -> None:
     """Invariant: nesting beyond 64 levels is always a validation failure."""
     with pytest.raises(CatalogueValidationError, match="deeper than"):
-        parse_catalogue_text(_nested_flow_document(depth))
+        parse_catalogue_text(build(depth))
 
 
+@pytest.mark.parametrize("build", _DOCUMENT_BUILDERS, ids=lambda b: b.__name__)
 @pytest.mark.parametrize(
     ("depth", "expected_message"),
     [
-        pytest.param(_MAX_YAML_DEPTH, None, id="at-the-limit"),
-        pytest.param(_MAX_YAML_DEPTH + 1, "deeper than", id="one-past-the-limit"),
+        pytest.param(_PINNED_MAX_YAML_DEPTH, None, id="at-the-limit"),
+        pytest.param(_PINNED_MAX_YAML_DEPTH + 1, "deeper than", id="one-past"),
     ],
 )
-def test_depth_guard_boundary(depth: int, expected_message: str | None) -> None:
+def test_depth_guard_boundary(
+    build: typ.Callable[[int], str], depth: int, expected_message: str | None
+) -> None:
     """The guard admits exactly 64 levels and rejects the sixty-fifth."""
-    document = _nested_flow_document(depth)
+    document = build(depth)
 
     if expected_message is None:
         _assert_depth_guard_admits(document)
