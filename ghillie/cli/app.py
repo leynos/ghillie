@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+import typing as typ
 
 from cyclopts import App
 from cyclopts.exceptions import CycloptsError
@@ -16,6 +17,9 @@ from ghillie.cli.commands.report import report_app
 from ghillie.cli.commands.stack import stack_app
 from ghillie.cli.config import GlobalOptions, resolve_cli_config
 from ghillie.cli.context import CommandContext, use_context
+
+if typ.TYPE_CHECKING:
+    from ghillie.cli.context import ClientFactory
 
 _OPTION_REQUIRES_VALUE = {
     "--api-base-url": "api_base_url",
@@ -114,8 +118,17 @@ def parse_global_options(
     return GlobalOptions(**state), []  # type: ignore[arg-type]  # safe: state values are validated/normalized to match GlobalOptions fields
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Run the packaged CLI."""
+def main(
+    argv: list[str] | None = None,
+    *,
+    client_factory: ClientFactory | None = None,
+) -> int:
+    """Run the packaged CLI.
+
+    ``client_factory`` is the substitution point for embedding and for tests
+    that need to drive the real parser without a live control plane. Production
+    leaves it unset and the context's default builds the real client.
+    """
     tokens = list(sys.argv[1:] if argv is None else argv)
     try:
         global_options, remaining = parse_global_options(tokens)
@@ -124,8 +137,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
 
+    context = (
+        CommandContext(config=config)
+        if client_factory is None
+        else CommandContext(config=config, client_factory=client_factory)
+    )
     try:
-        with use_context(CommandContext(config=config)):
+        with use_context(context):
             result = app(
                 remaining or ["--help"],
                 exit_on_error=False,

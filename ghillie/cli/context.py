@@ -7,10 +7,14 @@ import contextvars
 import dataclasses
 import typing as typ
 
+from ghillie.cli.control_plane import ControlPlaneClient
+
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
     from .config import ResolvedCliConfig
+
+    ClientFactory = cabc.Callable[[ResolvedCliConfig], ControlPlaneClient]
 
 _CURRENT_CONTEXT: contextvars.ContextVar[CommandContext | None] = (
     contextvars.ContextVar("ghillie_cli_context", default=None)
@@ -19,9 +23,16 @@ _CURRENT_CONTEXT: contextvars.ContextVar[CommandContext | None] = (
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class CommandContext:
-    """Shared resolved state for one CLI invocation."""
+    """Shared resolved state for one CLI invocation.
+
+    ``client_factory`` is the substitution point for the control-plane client.
+    Production leaves the default; tests pass a factory that returns a client
+    with a mock transport, so the command boundary is replaced rather than the
+    ``httpx`` module the client happens to use.
+    """
 
     config: ResolvedCliConfig
+    client_factory: ClientFactory = ControlPlaneClient
 
 
 def get_current_context() -> CommandContext:

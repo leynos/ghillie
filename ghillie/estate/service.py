@@ -19,6 +19,7 @@ import typing as typ
 import weakref
 
 from ghillie.catalogue.validation import CatalogueValidationError
+from ghillie.common.estate import MAX_PAGE_OFFSET
 from ghillie.estate import persistence, translation
 from ghillie.estate.collaborators import (
     CatalogueParser,
@@ -31,7 +32,6 @@ from ghillie.estate.errors import (
 )
 from ghillie.estate.models import (
     MAX_PAGE_LIMIT,
-    MAX_PAGE_OFFSET,
     CatalogueImportRequest,
     CatalogueImportSummary,
     CountSummary,
