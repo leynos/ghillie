@@ -1564,6 +1564,15 @@ per pull request.
       page. D36 then moved `NEW_ESTATE_KEY_PATTERN` and `MAX_PAGE_OFFSET` into
       `ghillie.common.estate` so the CLI, service and models share one
       definition without the CLI importing `ghillie.estate`.
+- [x] (2026-11-21) Split the CLI command unit after the Unit Architecture
+      pre-merge row. `commands/estate.py` now holds only the Cyclopts commands
+      and their parameter annotations; `estate_input`, `estate_view` and
+      `presentation` hold the validation and file I/O, the rendering, and the
+      hint and exit-code policy (D37). `control_plane.parse_page` validates a
+      collection response before rendering, `CommandContext.client_factory`
+      and `main(client_factory=...)` replace the module-level `httpx.Client`
+      patch in the unit harness and the BDD fixture, and each new unit has its
+      own focused tests.
 
 ## Surprises & discoveries
 
@@ -2222,6 +2231,19 @@ expert-panel review.
   `ghillie.common.estate` is loaded and no forbidden prefix is. The
   request-body limit stays duplicated because it is a transport limit owned by
   `ghillie.api.estate.resources`, with its equality test retained.
+- D37, one job per CLI unit. The Unit Architecture pre-merge row found
+  `commands/estate.py` carrying validation, file I/O, body policy, transport
+  orchestration, rendering, hints and exit codes. It now holds the Cyclopts
+  commands and parameter annotations only. `estate_input` validates the key,
+  reads the catalogue and enforces the byte limit, raising `LocalInputError`;
+  `estate_view` renders a validated page or import document; `presentation`
+  owns the hint table, the stderr write and the exit codes, filling a missing
+  hint onto a copy rather than mutating the caller's error; and
+  `control_plane.parse_page` checks the page shape before any renderer sees it.
+  Commands read `get_current_context()` once and pass `output`, `dry_run` and
+  the client through explicit values. `CommandContext.client_factory` and
+  `main(client_factory=...)` are the substitution seams, so tests inject a
+  transport instead of replacing `control_plane.httpx.Client`.
 
 ## Outcomes & retrospective
 

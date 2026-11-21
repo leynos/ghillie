@@ -1,93 +1,43 @@
 """Estate noun commands for the packaged operator CLI.
 
-Every verb is a thin HTTP call. Local validation rejects bad input before a
-request is sent (D5, D16, O5); every control-plane failure is rendered with a
-stable code, a message, and a next-step hint, then exits ``3`` (D7, O4).
+Each command reads the invocation context once, delegates the work, and hands
+any failure to :mod:`ghillie.cli.presentation`. Local validation lives in
+:mod:`ghillie.cli.estate_input`, rendering in :mod:`ghillie.cli.estate_view`,
+and the page shape check in :mod:`ghillie.cli.control_plane` (D5, D16, O4,
+O5).
 """
 
 from __future__ import annotations
 
 import http
-import re
-import sys
 import typing as typ
 from pathlib import Path  # noqa: TC003 - Cyclopts resolves the annotation at runtime.
 
 from cyclopts import App, Parameter, validators
 
-from ghillie.cli.context import get_current_context
+from ghillie.cli.context import CommandContext, get_current_context
 from ghillie.cli.control_plane import (
-    ControlPlaneClient,
     ControlPlaneError,
-    encode_json_body,
+    ControlPlanePage,
+    ControlPlaneRequest,
 )
-from ghillie.cli.output import (
-    Column,
-    render_collection,
-    render_document,
-    render_error,
+from ghillie.cli.errors import LocalInputError
+from ghillie.cli.estate_input import import_body
+from ghillie.cli.estate_view import (
+    ESTATE_COLUMNS,
+    REPOSITORY_COLUMNS,
+    render_import,
+    render_page,
 )
-from ghillie.common.estate import MAX_PAGE_OFFSET, NEW_ESTATE_KEY_PATTERN
+from ghillie.cli.output import render_document
+from ghillie.cli.presentation import api_failure, local_failure
+from ghillie.common.estate import MAX_PAGE_OFFSET
+
+if typ.TYPE_CHECKING:
+    from ghillie.cli.config import ResolvedCliConfig
 
 estate_app = App(name="estate", help="Manage estate configuration operations.")
 repo_app = App(name="repo", help="Manage estate repository configuration.")
-
-MAX_REQUEST_BODY_BYTES = 1024 * 1024
-"""Largest request body the service accepts (O5).
-
-Duplicated from :mod:`ghillie.api.estate.resources` because the CLI must not
-import the server package (O6); :mod:`tests.unit.cli.test_estate_import_commands`
-asserts the two values stay equal. The estate-key pattern and the offset
-ceiling are shared contracts rather than transport limits, so they live in
-:mod:`ghillie.common.estate` and are imported here.
-"""
-
-_NEW_ESTATE_KEY_RE = re.compile(NEW_ESTATE_KEY_PATTERN)
-
-_EXIT_LOCAL_INPUT = 2
-_EXIT_CONTROL_PLANE = 3
-
-_HINTS = {
-    "estate_not_found": (
-        "Run `ghillie estate list` to see the estates this service knows about."
-    ),
-    "repository_not_found": (
-        "Run `ghillie estate repo list --estate-key <key>` to see the "
-        "registered repositories."
-    ),
-    "catalogue_invalid": (
-        "Fix the listed catalogue issues and import the catalogue again."
-    ),
-    "not_found": (
-        "The endpoint is unavailable; the service may be running in health-only "
-        "mode. Check that GHILLIE_DATABASE_URL is set."
-    ),
-    "transport": "Check --api-base-url and that the Ghillie service is running.",
-    "timeout": "The operation may have completed; re-running it is safe.",
-    "unauthorized": "Set --auth-token or GHILLIE_AUTH_TOKEN.",
-    "payload_too_large": (
-        "The request body exceeds the service limit in bytes; shorten the "
-        "catalogue and retry."
-    ),
-    "invalid_response": (
-        "The service returned a body that is not the documented JSON shape; "
-        "check the service logs."
-    ),
-    "conflict": "Retry the operation; if it persists, see the service logs.",
-    "storage_unavailable": "The catalogue store is unavailable; see the service logs.",
-    "catalogue_file_unreadable": (
-        "Check that --catalogue-path names a readable UTF-8 file."
-    ),
-    "invalid_estate_key": f"Estate keys must match {NEW_ESTATE_KEY_PATTERN}.",
-    "dry_run_unsupported": (
-        "Remove --dry-run (or GHILLIE_DRY_RUN) to apply this change."
-    ),
-    "request_too_large": (
-        f"The serialized request must be at most {MAX_REQUEST_BODY_BYTES} bytes; "
-        "shorten the catalogue."
-    ),
-}
-_DEFAULT_HINT = "See the service logs for details."
 
 IngestionFilter = typ.Annotated[
     bool | None,
@@ -109,177 +59,42 @@ ToggleFlag = typ.Annotated[
 ]
 """D6: a required toggle with both spellings."""
 
-_ESTATE_COLUMNS: tuple[Column, ...] = (
-    ("key", "KEY"),
-    ("name", "NAME"),
-    ("description", "DESCRIPTION"),
-    ("last_import.commit_sha", "COMMIT"),
-    ("last_import.imported_at", "IMPORTED"),
-)
-_REPOSITORY_COLUMNS: tuple[Column, ...] = (
-    ("owner", "OWNER"),
-    ("name", "NAME"),
-    ("default_branch", "BRANCH"),
-    ("ingestion_enabled", "INGESTION"),
-)
 
-
-def _hint_for(code: str) -> str:
-    """Return the operator hint for *code*, or the generic fallback."""
-    return _HINTS.get(code, _DEFAULT_HINT)
-
-
-def _local_failure(code: str, message: str) -> int:
-    """Print a local-input error and return exit code ``2``."""
-    output = get_current_context().config.output
-    error = ControlPlaneError(code, message, hint=_hint_for(code))
-    print(render_error(error, output=output), file=sys.stderr)
-    return _EXIT_LOCAL_INPUT
-
-
-def _api_failure(error: ControlPlaneError) -> int:
-    """Print a control-plane error and return exit code ``3``."""
-    if not error.hint:
-        error.hint = _hint_for(error.code)
-    output = get_current_context().config.output
-    print(render_error(error, output=output), file=sys.stderr)
-    return _EXIT_CONTROL_PLANE
-
-
-def _dry_run_params() -> dict[str, str] | None:
+def _dry_run_params(config: ResolvedCliConfig) -> dict[str, str] | None:
     """Return the D20 query parameter, or ``None`` to leave the URL clean."""
-    return {"dry_run": "true"} if get_current_context().config.dry_run else None
+    return {"dry_run": "true"} if config.dry_run else None
 
 
 def _call(
-    method: http.HTTPMethod,
-    path_segments: typ.Sequence[str],
-    *,
-    params: typ.Mapping[str, str] | None = None,
-    body: typ.Mapping[str, object] | bytes | None = None,
-) -> tuple[dict[str, object] | None, int | None]:
-    """Perform one request, returning ``(document, failure_exit_code)``."""
-    context = get_current_context()
-    try:
-        with ControlPlaneClient(context.config) as client:
-            document = client.request_json(
-                method, path_segments, params=params, body=body
-            )
-    except ControlPlaneError as error:
-        return None, _api_failure(error)
-    return document, None
+    context: CommandContext,
+    request: ControlPlaneRequest,
+) -> dict[str, object]:
+    """Perform one request through the context's client factory.
 
+    Raises
+    ------
+    ControlPlaneError
+        If the call fails or the response is not a JSON object.
 
-def _render_page(
-    document: typ.Mapping[str, object],
-    *,
-    columns: typ.Sequence[Column],
-) -> int | str:
-    """Render a paginated document, rejecting a page that is not one.
-
-    A 200 whose ``items`` is missing, is not a list, or holds a non-object is
-    a malformed success, not an empty page: rendering it would either raise
-    ``TypeError`` outside this module's error handling or report rows that do
-    not exist. Both cases take the control-plane error path instead (O4).
     """
-    raw_items = document.get("items")
-    if not isinstance(raw_items, list) or not all(
-        isinstance(item, typ.Mapping) for item in raw_items
-    ):
-        return _api_failure(
-            ControlPlaneError(
-                "invalid_response",
-                "the control plane returned a page whose items are not objects",
-            )
-        )
-    items = [typ.cast("typ.Mapping[str, object]", item) for item in raw_items]
-    meta = {key: value for key, value in document.items() if key != "items"}
-    return render_collection(
-        items,
-        columns=columns,
-        output=get_current_context().config.output,
-        meta=meta,
-    )
-
-
-def _read_catalogue(catalogue_path: Path) -> tuple[str | None, int | None]:
-    """Read the catalogue as ``utf-8-sig``, or report the local failure."""
-    try:
-        return catalogue_path.read_text(encoding="utf-8-sig"), None
-    except (OSError, UnicodeDecodeError) as exc:
-        return None, _local_failure(
-            "catalogue_file_unreadable",
-            f"cannot read catalogue file '{catalogue_path}': {exc}",
+    with context.client_factory(context.config) as client:
+        return client.request_json(
+            request.method,
+            request.path_segments,
+            params=request.params,
+            body=request.body,
         )
 
 
-def _encode_import_body(
-    catalogue_yaml: str,
-    *,
-    commit_sha: str,
-    estate_name: str | None,
-) -> tuple[bytes | None, int | None]:
-    """Serialize the import request and enforce the service's byte limit (O5)."""
-    body: dict[str, object] = {
-        "commit_sha": commit_sha,
-        "catalogue_yaml": catalogue_yaml,
-    }
-    if estate_name is not None:
-        body["estate_name"] = estate_name
-    encoded = encode_json_body(body)
-    if len(encoded) > MAX_REQUEST_BODY_BYTES:
-        return None, _local_failure(
-            "request_too_large",
-            f"the request body is {len(encoded)} bytes; the limit is "
-            f"{MAX_REQUEST_BODY_BYTES}",
+def _page(
+    context: CommandContext,
+    request: ControlPlaneRequest,
+) -> ControlPlanePage:
+    """Fetch and validate one page through the context's client factory."""
+    with context.client_factory(context.config) as client:
+        return client.request_page(
+            request.method, request.path_segments, params=request.params
         )
-    return encoded, None
-
-
-def _import_body(
-    estate_key: str,
-    catalogue_path: Path,
-    *,
-    commit_sha: str,
-    estate_name: str | None,
-) -> tuple[bytes | None, int | None]:
-    """Validate the local import inputs and return the encoded request body."""
-    if not _NEW_ESTATE_KEY_RE.fullmatch(estate_key):
-        return None, _local_failure(
-            "invalid_estate_key",
-            f"estate key '{estate_key}' must match {NEW_ESTATE_KEY_PATTERN}",
-        )
-    catalogue_yaml, failure = _read_catalogue(catalogue_path)
-    if failure is not None:
-        return None, failure
-    return _encode_import_body(
-        typ.cast("str", catalogue_yaml),
-        commit_sha=commit_sha,
-        estate_name=estate_name,
-    )
-
-
-def _skipped_reason(document: dict[str, object] | None) -> str | None:
-    """Return why the server skipped the import, or ``None`` when it did not."""
-    if document is None or document.get("skipped") is not True:
-        return None
-    return str(document.get("skipped_reason") or "already imported")
-
-
-def _render_import(
-    document: dict[str, object] | None,
-    *,
-    commit_sha: str,
-) -> str:
-    """Render the import document, announcing a skipped commit in table mode."""
-    output = get_current_context().config.output
-    rendered = render_document(typ.cast("dict[str, object]", document), output=output)
-    reason = _skipped_reason(document)
-    if output == "table" and reason is not None:
-        return (
-            f"SKIPPED: commit {commit_sha} was not imported ({reason}).\n\n{rendered}"
-        )
-    return rendered
 
 
 @estate_app.command(name="import")
@@ -296,51 +111,60 @@ def import_catalogue(
     estate key, the file, and the serialized size are all checked before the
     request is sent, so a bad invocation never reaches the service.
     """
-    encoded, failure = _import_body(
-        estate_key,
-        catalogue_path,
-        commit_sha=commit_sha,
-        estate_name=estate_name,
-    )
-    if failure is not None:
-        return failure
-
-    document, failure = _call(
-        http.HTTPMethod.POST,
-        ["estates", estate_key, "catalogue-import"],
-        params=_dry_run_params(),
-        body=encoded,
-    )
-    if failure is not None:
-        return failure
-    return _render_import(document, commit_sha=commit_sha)
+    context = get_current_context()
+    output = context.config.output
+    try:
+        encoded = import_body(
+            estate_key,
+            catalogue_path,
+            commit_sha=commit_sha,
+            estate_name=estate_name,
+        )
+        document = _call(
+            context,
+            ControlPlaneRequest(
+                http.HTTPMethod.POST,
+                ("estates", estate_key, "catalogue-import"),
+                params=_dry_run_params(context.config),
+                body=encoded,
+            ),
+        )
+    except LocalInputError as error:
+        return local_failure(error, output=output)
+    except ControlPlaneError as error:
+        return api_failure(error, output=output)
+    return render_import(document, commit_sha=commit_sha, output=output)
 
 
 @estate_app.command
 def sync(*, estate_key: str) -> int | str:
     """Sync imported catalogue repositories into the registry (D2)."""
-    document, failure = _call(
-        http.HTTPMethod.POST,
-        ["estates", estate_key, "registry-sync"],
-        params=_dry_run_params(),
-    )
-    if failure is not None:
-        return failure
-    return render_document(
-        typ.cast("dict[str, object]", document),
-        output=get_current_context().config.output,
-    )
+    context = get_current_context()
+    output = context.config.output
+    try:
+        document = _call(
+            context,
+            ControlPlaneRequest(
+                http.HTTPMethod.POST,
+                ("estates", estate_key, "registry-sync"),
+                params=_dry_run_params(context.config),
+            ),
+        )
+    except ControlPlaneError as error:
+        return api_failure(error, output=output)
+    return render_document(document, output=output)
 
 
 @estate_app.command(name="list")
 def list_estates() -> int | str:
     """List estates known to the control plane (D4)."""
-    document, failure = _call(http.HTTPMethod.GET, ["estates"])
-    if failure is not None:
-        return failure
-    return _render_page(
-        typ.cast("dict[str, object]", document), columns=_ESTATE_COLUMNS
-    )
+    context = get_current_context()
+    output = context.config.output
+    try:
+        page = _page(context, ControlPlaneRequest(http.HTTPMethod.GET, ("estates",)))
+    except ControlPlaneError as error:
+        return api_failure(error, output=output)
+    return render_page(page, columns=ESTATE_COLUMNS, output=output)
 
 
 @repo_app.command(name="list")
@@ -352,19 +176,23 @@ def list_repositories(
     offset: PageOffset = 0,
 ) -> int | str:
     """List repositories for one estate (D5)."""
+    context = get_current_context()
+    output = context.config.output
     params = {"limit": str(limit), "offset": str(offset)}
     if ingestion_enabled is not None:
         params["ingestion_enabled"] = "true" if ingestion_enabled else "false"
-    document, failure = _call(
-        http.HTTPMethod.GET,
-        ["estates", estate_key, "repositories"],
-        params=params,
-    )
-    if failure is not None:
-        return failure
-    return _render_page(
-        typ.cast("dict[str, object]", document), columns=_REPOSITORY_COLUMNS
-    )
+    try:
+        page = _page(
+            context,
+            ControlPlaneRequest(
+                http.HTTPMethod.GET,
+                ("estates", estate_key, "repositories"),
+                params=params,
+            ),
+        )
+    except ControlPlaneError as error:
+        return api_failure(error, output=output)
+    return render_page(page, columns=REPOSITORY_COLUMNS, output=output)
 
 
 @repo_app.command(name="set")
@@ -380,23 +208,29 @@ def set_repository(
     only), and a global ``--dry-run`` must never become a live mutation. The
     command therefore refuses locally rather than quietly applying the toggle.
     """
-    if get_current_context().config.dry_run:
-        return _local_failure(
-            "dry_run_unsupported",
-            "`estate repo set` has no dry-run mode; re-run without --dry-run "
-            "to apply the toggle",
+    context = get_current_context()
+    output = context.config.output
+    if context.config.dry_run:
+        return local_failure(
+            LocalInputError(
+                "dry_run_unsupported",
+                "`estate repo set` has no dry-run mode; re-run without --dry-run "
+                "to apply the toggle",
+            ),
+            output=output,
         )
-    document, failure = _call(
-        http.HTTPMethod.PATCH,
-        ["repositories", owner, name, "ingestion"],
-        body={"ingestion_enabled": ingestion_enabled},
-    )
-    if failure is not None:
-        return failure
-    return render_document(
-        typ.cast("dict[str, object]", document),
-        output=get_current_context().config.output,
-    )
+    try:
+        document = _call(
+            context,
+            ControlPlaneRequest(
+                http.HTTPMethod.PATCH,
+                ("repositories", owner, name, "ingestion"),
+                body={"ingestion_enabled": ingestion_enabled},
+            ),
+        )
+    except ControlPlaneError as error:
+        return api_failure(error, output=output)
+    return render_document(document, output=output)
 
 
 estate_app.command(repo_app)

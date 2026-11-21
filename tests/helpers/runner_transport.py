@@ -1,12 +1,12 @@
 """Bridge the synchronous operator CLI onto the in-process ASGI app.
 
-The CLI builds its own :class:`httpx.Client`, so behaviour tests replace the
-class with a factory that adds a :class:`RunnerTransport`. The client's own
-header, timeout, and base-URL construction still runs, but every request is
-sent in-process to the Falcon app. The app, its SQLAlchemy engine, and its
-sessions all belong to the single event loop owned by the scenario's
-:class:`asyncio.Runner`, and this transport is the only place that hops onto
-that loop.
+The CLI builds its client through ``CommandContext.client_factory``, so
+behaviour tests pass a factory that gives the client a
+:class:`RunnerTransport`. The client's own header, timeout, and base-URL
+construction still runs, but every request is sent in-process to the Falcon
+app. The app, its SQLAlchemy engine, and its sessions all belong to the single
+event loop owned by the scenario's :class:`asyncio.Runner`, and this transport
+is the only place that hops onto that loop.
 """
 
 from __future__ import annotations

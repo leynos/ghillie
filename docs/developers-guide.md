@@ -864,13 +864,33 @@ adapters. Keep new estate work inside that shape.
   change to one cannot leave the other behind. The ceiling is enforced by the
   `PageOffset` validator as well as by the service, so an out-of-range page
   request costs no request and exits `2` like every other local rejection.
+- **One job per CLI unit.** `ghillie/cli/commands/estate.py` holds the Cyclopts
+  commands and the parameter annotations, and nothing else: each command reads
+  `get_current_context()` once, delegates, and hands failures to
+  `ghillie.cli.presentation`. The work lives in units with one reason to change.
+  `ghillie.cli.estate_input` validates the key, reads the catalogue as
+  `utf-8-sig`, and enforces the serialized byte limit, raising `LocalInputError`
+  (`ghillie/cli/errors.py`). `ghillie.cli.estate_view` turns a validated page
+  or import document into output and takes the format explicitly.
+  `ghillie.cli.presentation` owns the hint table, the stderr write, and the
+  exit codes; it fills a missing hint onto a copy, so a caller's
+  `ControlPlaneError` is never mutated. `ghillie.cli.control_plane` parses a
+  collection response with `parse_page`, so a malformed page fails as
+  `invalid_response` before any renderer sees it.
+- **The client is injected at the command boundary.**
+  `CommandContext.client_factory` defaults to `ControlPlaneClient`, and
+  `ControlPlaneClient` accepts a `transport` for its owned client. Tests supply
+  a factory that passes a `MockTransport` or `RunnerTransport`, so command
+  tests replace the boundary rather than the `httpx` module. `main()` also
+  accepts `client_factory` for tests that must drive the real parser;
+  production leaves it unset.
 
 ### Behavioural and end-to-end coverage
 
 The estate feature file (`tests/features/estate_management.feature`) drives the
 real CLI against an in-process ASGI app. The `estate_state` fixture builds the
-SQLite engine, the application service, and the Falcon app, then patches
-`ghillie.cli.control_plane.httpx.Client` to send through
+SQLite engine, the application service, and the Falcon app, then passes `main` a
+`client_factory` that gives the client a
 `tests/helpers/runner_transport.RunnerTransport`. That transport runs the async
 client on an `asyncio.Runner`, which bridges the synchronous CLI to the ASGI
 app without a socket.

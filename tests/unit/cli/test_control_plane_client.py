@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http
 import urllib.parse
 
 import httpx
@@ -10,7 +11,74 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from ghillie.cli.config import ResolvedCliConfig
-from ghillie.cli.control_plane import ControlPlaneClient, _quote_path
+from ghillie.cli.control_plane import (
+    ControlPlaneClient,
+    ControlPlaneError,
+    _quote_path,
+    parse_page,
+)
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        pytest.param({}, id="items-missing"),
+        pytest.param({"items": "not-a-list"}, id="items-not-a-list"),
+        pytest.param({"items": [None]}, id="item-not-an-object"),
+        pytest.param({"items": [42]}, id="item-not-a-mapping"),
+    ],
+)
+def test_parse_page_rejects_a_malformed_page(
+    document: dict[str, object],
+) -> None:
+    """A page that is not a list of objects is a malformed success (O4)."""
+    with pytest.raises(ControlPlaneError) as caught:
+        parse_page(document)
+
+    assert caught.value.code == "invalid_response"
+
+
+def test_parse_page_separates_items_from_pagination_metadata() -> None:
+    """The renderer receives validated rows and the page metadata apart."""
+    page = parse_page(
+        {
+            "items": [{"key": "demo"}],
+            "limit": 50,
+            "offset": 0,
+            "has_more": False,
+            "next_offset": None,
+        }
+    )
+
+    assert page.items == ({"key": "demo"},)
+    assert page.meta == {
+        "limit": 50,
+        "offset": 0,
+        "has_more": False,
+        "next_offset": None,
+    }
+
+
+def test_request_page_reads_the_page_through_the_client() -> None:
+    """The client parses a collection response before returning it."""
+    config = ResolvedCliConfig(
+        api_base_url="http://127.0.0.1:9999",
+        api_base_url_source="flag",
+        auth_token=None,
+        output="json",
+        log_level="info",
+        request_timeout_s=5.0,
+        non_interactive=True,
+        dry_run=False,
+    )
+    transport = httpx.MockTransport(
+        lambda _request: httpx.Response(200, json={"items": [{"key": "demo"}]})
+    )
+
+    with ControlPlaneClient(config, transport=transport) as client:
+        page = client.request_page(http.HTTPMethod.GET, ["estates"])
+
+    assert page.items == ({"key": "demo"},)
 
 
 @pytest.mark.parametrize(

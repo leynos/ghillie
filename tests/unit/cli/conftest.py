@@ -13,7 +13,7 @@ if typ.TYPE_CHECKING:
 
 
 @pytest.fixture
-def harness(monkeypatch: pytest.MonkeyPatch) -> typ.Callable[..., CliHarness]:
+def harness() -> typ.Callable[..., CliHarness]:
     """Return a factory that builds a harness with the given options."""
 
     def build(
@@ -25,7 +25,6 @@ def harness(monkeypatch: pytest.MonkeyPatch) -> typ.Callable[..., CliHarness]:
     ) -> CliHarness:
         """Build a harness whose config carries the supplied options."""
         return CliHarness(
-            monkeypatch,
             make_config(
                 output=output,
                 dry_run=dry_run,
