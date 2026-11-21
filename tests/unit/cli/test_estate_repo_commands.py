@@ -104,20 +104,34 @@ def test_repo_list_rejects_out_of_range_pagination(
 
 def test_repo_list_accepts_the_largest_offset(
     harness: typ.Callable[..., CliHarness],
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """The ceiling itself is valid, so the bound cannot be off by one."""
+    """The ceiling itself is valid, so the bound cannot be off by one.
+
+    The value must reach the command through the parser: calling the command
+    directly would bypass the Cyclopts validator the bound lives in, and the
+    test would pass even if the ceiling were missing.
+    """
     client = harness(output="json")
     client.queue_json({**REPOSITORY_LIST_PAYLOAD, "items": []})
 
-    result = client.invoke(
-        list_repositories,
-        estate_key="demo",
-        ingestion_enabled=None,
-        limit=50,
-        offset=MAX_PAGE_OFFSET,
+    exit_code = cli_main(
+        [
+            "--api-base-url",
+            BASE_URL,
+            "--output",
+            "json",
+            "estate",
+            "repo",
+            "list",
+            "--estate-key",
+            "demo",
+            "--offset",
+            str(MAX_PAGE_OFFSET),
+        ]
     )
 
-    assert isinstance(result, str), result
+    assert exit_code == 0, capsys.readouterr().err
     assert client.requests[0].url.params["offset"] == str(MAX_PAGE_OFFSET)
 
 
