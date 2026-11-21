@@ -71,7 +71,8 @@ _HINTS = {
         "catalogue and retry."
     ),
     "invalid_response": (
-        "The service returned a body that is not JSON; check the service logs."
+        "The service returned a body that is not the documented JSON shape; "
+        "check the service logs."
     ),
     "conflict": "Retry the operation; if it persists, see the service logs.",
     "storage_unavailable": "The catalogue store is unavailable; see the service logs.",
@@ -172,14 +173,25 @@ def _render_page(
     document: typ.Mapping[str, object],
     *,
     columns: typ.Sequence[Column],
-) -> str:
-    """Render a paginated document through :func:`render_collection`."""
+) -> int | str:
+    """Render a paginated document, rejecting a page that is not one.
+
+    A 200 whose ``items`` is missing, is not a list, or holds a non-object is
+    a malformed success, not an empty page: rendering it would either raise
+    ``TypeError`` outside this module's error handling or report rows that do
+    not exist. Both cases take the control-plane error path instead (O4).
+    """
     raw_items = document.get("items")
-    items = (
-        [typ.cast("typ.Mapping[str, object]", item) for item in raw_items]
-        if isinstance(raw_items, list)
-        else []
-    )
+    if not isinstance(raw_items, list) or not all(
+        isinstance(item, typ.Mapping) for item in raw_items
+    ):
+        return _api_failure(
+            ControlPlaneError(
+                "invalid_response",
+                "the control plane returned a page whose items are not objects",
+            )
+        )
+    items = [typ.cast("typ.Mapping[str, object]", item) for item in raw_items]
     meta = {key: value for key, value in document.items() if key != "items"}
     return render_collection(
         items,
