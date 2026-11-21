@@ -1186,12 +1186,16 @@ that rule comes from.
 
 Because the caller is configuration rather than code, a contract test,
 [`tests/test_workflow_contract.py`](../tests/test_workflow_contract.py), pins
-the shape it must uphold, failing the pull request when the caller drifts —
-repointing the pin at a branch, widening the token scope, or dropping a
-configuration input — rather than letting the breakage surface only in a
-scheduled run. The module is guarded by `pytest.mark.skipif` on the existence
-of the workflow file, so a working copy that does not carry the workflow skips
-the module instead of failing it. Run it locally with:
+the shape it must uphold, failing the pull request when the caller drifts in a
+guarded way — repointing the pin at a branch, widening the token scope, or
+dropping a configuration input — rather than letting the breakage surface only
+in a scheduled run. The trigger assertions are a lower bound rather than an
+exact match: they require the daily schedule and a plain `workflow_dispatch`,
+but do not reject triggers added alongside them, so adding `pull_request` —
+which would make the run gate pull requests — passes the suite. The module is
+guarded by `pytest.mark.skipif` on the existence of the workflow file, so a
+working copy that does not carry the workflow skips the module instead of
+failing it. Run it locally with:
 
 ```bash
 uv run pytest tests/test_workflow_contract.py -v
