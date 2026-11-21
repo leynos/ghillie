@@ -355,12 +355,20 @@ async def test_import_rejects_an_explicitly_empty_document(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "document",
+    [
+        pytest.param("version: [unclosed", id="malformed-yaml"),
+        pytest.param("version: !!bool invalid\n", id="constructor-failure"),
+    ],
+)
 async def test_import_reports_catalogue_issues(
     service: EstateManagementService,
+    document: str,
 ) -> None:
     """Invalid upload text becomes a catalogue rejection with issue codes."""
     with pytest.raises(CatalogueRejectedError) as raised:
-        await import_catalogue(service, catalogue_yaml="version: [unclosed")
+        await import_catalogue(service, catalogue_yaml=document)
 
     assert raised.value.issues, "rejection should report issues"
     assert all(issue.code == "catalogue_schema" for issue in raised.value.issues), (

@@ -103,6 +103,31 @@ def test_parse_catalogue_text_rejects_an_impossible_yaml_timestamp() -> None:
 @pytest.mark.parametrize(
     "document",
     [
+        pytest.param("version: !!bool invalid\n", id="invalid-boolean"),
+        pytest.param("? [[nested]]\n: 1\n", id="unhashable-mapping-key"),
+        pytest.param(
+            "version: 9999-12-31T23:59:59.9999999Z\n",
+            id="overflowing-timestamp",
+        ),
+    ],
+)
+def test_parse_catalogue_text_rejects_constructor_failures(document: str) -> None:
+    """A scalar or key the constructor cannot build is a validation failure.
+
+    ruamel reports these as ``KeyError``, ``TypeError`` and ``OverflowError``
+    rather than a ``YAMLError``: an invalid ``!!bool`` has no lookup entry, a
+    nested sequence cannot be hashed as a mapping key, and a timestamp that
+    rounds past year 9999 overflows ``datetime``. Each document passes the
+    anchor and depth scan, so without this boundary one crafted upload would
+    escape the import endpoint as a 500 instead of the documented 422.
+    """
+    with pytest.raises(CatalogueValidationError, match="failed to parse YAML"):
+        parse_catalogue_text(document)
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
         pytest.param(
             "version: 1\nprojects: &projects []\n",
             id="defines-an-anchor",
