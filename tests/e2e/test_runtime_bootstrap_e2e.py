@@ -9,6 +9,7 @@ storage tables, so their presence, together with the two log lines emitted by
 
 from __future__ import annotations
 
+import contextlib
 import sqlite3
 import typing as typ
 
@@ -31,8 +32,13 @@ _EXPECTED_TABLES = frozenset(
 
 
 def _table_names(database: str) -> set[str]:
-    """Return the table names stored in *database*."""
-    with sqlite3.connect(database) as connection:
+    """Return the table names stored in *database*.
+
+    ``sqlite3.Connection`` is a transaction manager, not a closer: its context
+    manager commits or rolls back but leaves the handle open. ``closing`` is
+    what releases the file descriptor.
+    """
+    with contextlib.closing(sqlite3.connect(database)) as connection:
         rows = connection.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table'"
         ).fetchall()

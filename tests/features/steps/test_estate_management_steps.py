@@ -175,6 +175,28 @@ def _build_engine(tmp_path: Path) -> AsyncEngine:
     )
 
 
+def _close_scenario(
+    runner: asyncio.Runner,
+    async_client: httpx.AsyncClient | None,
+    engine: AsyncEngine,
+) -> None:
+    """Close the client, engine and runner in creation order, whatever fails.
+
+    A teardown that stopped at the first failure would leak the rest: the
+    runner must still close, or the scenario's event loop stays open for the
+    whole session. ``async_client`` is optional because construction can fail
+    after the runner and engine already exist.
+    """
+    try:
+        if async_client is not None:
+            runner.run(async_client.aclose())
+    finally:
+        try:
+            runner.run(engine.dispose())
+        finally:
+            runner.close()
+
+
 @pytest.fixture
 def estate_state(
     tmp_path: Path,
@@ -189,33 +211,33 @@ def estate_state(
 
     runner = asyncio.Runner()
     engine = _build_engine(tmp_path)
-    runner.run(init_all_storage(engine))
-    session_factory = async_sessionmaker(engine, expire_on_commit=False)
-    registry = RepositoryRegistryService(session_factory, session_factory)
-    service = EstateManagementService(session_factory, registry=registry)
-    app = create_app(AppDependencies(estate_service=service))
-    async_client = httpx.AsyncClient(
-        # Falcon types the scope as a MutableMapping; the ASGI transport
-        # annotates the narrower ``dict`` and accepts the app at runtime.
-        transport=httpx.ASGITransport(app=typ.cast("typ.Any", app)),
-        base_url="http://ghillie.test",
-    )
-    transport = RunnerTransport(runner, async_client)
-
-    real_client = httpx.Client
-    monkeypatch.setattr(
-        control_plane.httpx,
-        "Client",
-        functools.partial(real_client, transport=transport),
-    )
-
-    state = ScenarioState(transport=transport)
+    async_client: httpx.AsyncClient | None = None
+    # Everything below may fail, so the cleanup covers construction as well as
+    # the scenario itself rather than only the yield.
     try:
-        yield state
+        runner.run(init_all_storage(engine))
+        session_factory = async_sessionmaker(engine, expire_on_commit=False)
+        registry = RepositoryRegistryService(session_factory, session_factory)
+        service = EstateManagementService(session_factory, registry=registry)
+        app = create_app(AppDependencies(estate_service=service))
+        async_client = httpx.AsyncClient(
+            # Falcon types the scope as a MutableMapping; the ASGI transport
+            # annotates the narrower ``dict`` and accepts the app at runtime.
+            transport=httpx.ASGITransport(app=typ.cast("typ.Any", app)),
+            base_url="http://ghillie.test",
+        )
+        transport = RunnerTransport(runner, async_client)
+
+        real_client = httpx.Client
+        monkeypatch.setattr(
+            control_plane.httpx,
+            "Client",
+            functools.partial(real_client, transport=transport),
+        )
+
+        yield ScenarioState(transport=transport)
     finally:
-        runner.run(async_client.aclose())
-        runner.run(engine.dispose())
-        runner.close()
+        _close_scenario(runner, async_client, engine)
 
 
 # ---------------------------------------------------------------------------
