@@ -43,6 +43,15 @@ the two key patterns stay equal.
 NEW_ESTATE_KEY_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
 """Pattern a new estate key must match (D16), duplicated for the same reason."""
 
+MAX_PAGE_OFFSET = 2**31 - 1
+"""Largest offset the service accepts, duplicated for the same reason (D5).
+
+The server answers an offset above this ceiling with a rejection, so a CLI
+that passed the value through would spend a request to learn something it can
+refuse locally. Both values are asserted equal in
+:mod:`tests.unit.cli.test_estate_repo_commands`.
+"""
+
 _NEW_ESTATE_KEY_RE = re.compile(NEW_ESTATE_KEY_PATTERN)
 
 _EXIT_LOCAL_INPUT = 2
@@ -100,7 +109,9 @@ IngestionFilter = typ.Annotated[
 """D5: one tri-state filter; neither flag lists both states."""
 
 PageLimit = typ.Annotated[int, Parameter(validator=validators.Number(gte=1, lte=500))]
-PageOffset = typ.Annotated[int, Parameter(validator=validators.Number(gte=0))]
+PageOffset = typ.Annotated[
+    int, Parameter(validator=validators.Number(gte=0, lte=MAX_PAGE_OFFSET))
+]
 
 ToggleFlag = typ.Annotated[
     bool,
