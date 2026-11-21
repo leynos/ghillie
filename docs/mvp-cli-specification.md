@@ -278,7 +278,8 @@ Options:
   `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 - `--catalogue-path <path>` (required; read as UTF-8 with any BOM stripped)
 - `--commit-sha <sha>` (required)
-- `--estate-name <name>` (optional; defaults to the estate key)
+- `--estate-name <name>` (optional; defaults to the existing estate's stored
+  name, or to the estate key when the estate is new)
 - root `--dry-run` maps to `?dry_run=true`
 
 Request: `POST /estates/{estate_key}/catalogue-import` with

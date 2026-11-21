@@ -50,11 +50,13 @@ This proves the shared root options are accepted before the noun command.
 The estate verbs are live. Every verb is a thin HTTP call to the control plane:
 local validation rejects bad input before any request is sent, and any
 control-plane failure exits `3` with a stable code, a message, and an operator
-hint. Shared root options come before the noun:
+hint. Shared root options come before the noun. Pass the bearer token in
+`GHILLIE_AUTH_TOKEN` rather than `--auth-token`: a value in argv is visible to
+every local process and is kept in shell history.
 
 ```bash
-ghillie --api-base-url http://127.0.0.1:8080 \
-        --auth-token "$GHILLIE_API_TOKEN" \
+GHILLIE_AUTH_TOKEN="$GHILLIE_API_TOKEN" \
+  ghillie --api-base-url http://127.0.0.1:8080 \
         --output json \
         estate list
 ```
@@ -226,12 +228,21 @@ collection and skip rows:
 
 ```bash
 # 1. Collect every disabled repository across all pages.
+disabled=$(mktemp)
+trap 'rm -f "$disabled"' EXIT
 offset=0
-: > /tmp/wildside-disabled.txt
 while :; do
-  page=$(ghillie --output json estate repo list --estate-key wildside \
-    --inactive --limit 500 --offset "$offset")
-  jq -r '.items[] | "\(.owner)/\(.name)"' <<<"$page" >> /tmp/wildside-disabled.txt
+  # A failed page or an unparseable one must abort: continuing would truncate
+  # the captured set and quietly leave repositories disabled.
+  if ! page=$(ghillie --output json estate repo list --estate-key wildside \
+    --inactive --limit 500 --offset "$offset"); then
+    echo "listing failed; aborting so the set is not truncated" >&2
+    exit 1
+  fi
+  if ! jq -r '.items[] | "\(.owner)/\(.name)"' <<<"$page" >>"$disabled"; then
+    echo "could not parse the listing; aborting" >&2
+    exit 1
+  fi
   jq -e '.has_more' <<<"$page" >/dev/null || break
   offset=$(jq -r '.next_offset' <<<"$page")
 done
@@ -239,14 +250,25 @@ done
 # 2. Apply the toggles to the captured set.
 while IFS=/ read -r owner name; do
   ghillie estate repo set --owner "$owner" --name "$name" --ingestion-enabled
-done < /tmp/wildside-disabled.txt
+done <"$disabled"
 ```
 
+The temporary file has an unpredictable name and is removed on exit, so a
+second operator on the same host cannot read or truncate it.
+
 This recipe targets every repository that is disabled now. If the intent is
-instead to re-enable exactly the set the last sync left disabled, read
-`repositories_left_disabled` from that sync's result. That list is capped at
-the first 100 slugs, so compare it with `repositories_left_disabled_count` and
-page the listing for the remainder.
+instead to re-enable the set the last sync left disabled, read
+`repositories_left_disabled` from that sync's result. That list is a preview of
+the first 100 slugs and `repositories_left_disabled_count` is the exact total;
+the response does not retain the remaining identities, so a set larger than the
+preview cannot be recovered from it alone.
+
+To act on the whole set as it stands now, intersect two current sources: page
+the `--inactive` listing and keep only the slugs this estate's catalogue marks
+active. The inactive listing alone is not the answer, because it also contains
+ad hoc rows and repositories that left the catalogue, which the sync's preview
+excludes. The intersection matches the historical set only while neither the
+catalogue nor the toggles have changed since that sync ran.
 
 ### Error codes
 
@@ -1025,19 +1047,19 @@ Every failure uses one JSON envelope:
 
 The documented statuses are:
 
-| Status | Code                     | Declared by                 | Meaning                                                             |
-| ------ | ------------------------ | --------------------------- | ------------------------------------------------------------------- |
-| 400    | `invalid_input`          | all five operations         | Malformed body or query parameter, or pagination outside its range. |
-| 401    | `unauthorized`           | all five operations         | Missing or wrong bearer token when authentication is enabled.       |
-| 404    | `estate_not_found`       | sync and repository listing | No estate has the supplied key.                                     |
-| 404    | `repository_not_found`   | ingestion toggle            | No registered repository has that owner and name.                   |
-| 409    | `conflict`               | import and sync             | The write conflicts with an existing record.                        |
-| 413    | `payload_too_large`      | import and ingestion toggle | The request body exceeds the accepted size.                         |
-| 415    | `unsupported_media_type` | import and ingestion toggle | The request media type is not accepted.                             |
-| 422    | `catalogue_invalid`      | import                      | The uploaded document failed catalogue validation.                  |
-| 500    | `internal_error`         | all five operations         | An unexpected server failure.                                       |
-| 500    | `registry_sync_failed`   | sync                        | The registry reported a failure that is not storage-related.        |
-| 503    | `storage_unavailable`    | all five operations         | The database cannot be reached.                                     |
+| Status | Code                     | Declared by                 | Meaning                                                                |
+| ------ | ------------------------ | --------------------------- | ---------------------------------------------------------------------- |
+| 400    | `invalid_input`          | all five operations         | Malformed body or query parameter, or pagination outside its range.    |
+| 401    | `unauthorized`           | all five operations         | Missing or wrong bearer token when authentication is enabled.          |
+| 404    | `estate_not_found`       | sync and repository listing | No estate has the supplied key.                                        |
+| 404    | `repository_not_found`   | ingestion toggle            | No registered repository has that owner and name.                      |
+| 409    | `conflict`               | import and sync             | The write conflicts with an existing record.                           |
+| 413    | `payload_too_large`      | import and ingestion toggle | The request body exceeds the accepted size.                            |
+| 415    | `unsupported_media_type` | import and ingestion toggle | The request media type is not accepted.                                |
+| 422    | `catalogue_invalid`      | import                      | The uploaded document failed catalogue validation.                     |
+| 500    | `internal_error`         | all five operations         | An unexpected server failure.                                          |
+| 500    | `registry_sync_failed`   | sync                        | The sync failed for a reason that is neither a conflict nor an outage. |
+| 503    | `storage_unavailable`    | all five operations         | The database cannot be reached.                                        |
 
 ### Request outcome events
 
