@@ -8,7 +8,7 @@ serialized form is under the 1 MiB request limit.
 import typing as typ
 
 import pytest
-from hypothesis import given
+from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from ghillie.catalogue import CatalogueValidationError
@@ -168,6 +168,57 @@ def test_parse_catalogue_text_accepts_a_byte_order_mark() -> None:
     assert catalogue.version == 1, "BOM should be stripped"
 
 
+_CONSTRUCTOR_PROBES = st.sampled_from(
+    [
+        "version: !!bool invalid\n",
+        "version: !!int not-a-number\n",
+        "version: !!float not-a-number\n",
+        "version: !!timestamp 2026-13-45\n",
+        "version: 9999-12-31T23:59:59.9999999Z\n",
+        "? [[nested]]\n: 1\n",
+        "version: &a [*a]\n",
+        "version: *missing\n",
+    ]
+)
+"""Fragments that reach a constructor rather than failing the YAML scanner."""
+
+
+@st.composite
+def _catalogue_documents(
+    draw: st.DrawFn,
+) -> str:
+    """Draw arbitrary text, or a constructor-triggering fragment in context."""
+    if draw(st.booleans()):
+        return draw(st.text(max_size=512))
+    prefix = draw(st.text(max_size=128))
+    probe = draw(_CONSTRUCTOR_PROBES)
+    suffix = draw(st.text(max_size=128))
+    return f"{prefix}\n{probe}{suffix}"
+
+
+# Every property here parses YAML, so its runtime grows with the generated
+# document and with host load. The deadline measures wall-clock time, not
+# correctness, and a busy machine would otherwise report a flake.
+_NO_DEADLINE = settings(deadline=None)
+
+
+@given(document=_catalogue_documents())
+@_NO_DEADLINE
+def test_property_parse_raises_only_validation_errors(document: str) -> None:
+    """Invariant: any text either parses or fails validation, never another way.
+
+    The endpoint receives untrusted text, so every way the loader can refuse a
+    document -- a YAML error, a constructor rejection, a depth or schema
+    failure -- must leave as :class:`CatalogueValidationError`. Any other
+    exception escapes as a 500 and tells the caller nothing it can act on.
+    """
+    try:
+        catalogue = parse_catalogue_text(document)
+    except CatalogueValidationError:
+        return
+    assert catalogue.version >= 1, catalogue
+
+
 def test_parse_catalogue_text_rejects_a_schema_failure() -> None:
     """A structurally invalid document is a schema failure."""
     with pytest.raises(CatalogueValidationError, match="schema validation failed"):
@@ -237,6 +288,7 @@ def test_the_pinned_depth_matches_the_loader_limit() -> None:
     depth=st.integers(min_value=1, max_value=_PINNED_MAX_YAML_DEPTH),
     build=st.sampled_from(_DOCUMENT_BUILDERS),
 )
+@_NO_DEADLINE
 def test_property_documents_within_the_depth_limit_pass_the_guard(
     depth: int, build: typ.Callable[[int], str]
 ) -> None:
@@ -253,6 +305,7 @@ def test_property_documents_within_the_depth_limit_pass_the_guard(
     depth=st.integers(min_value=_PINNED_MAX_YAML_DEPTH + 1, max_value=500),
     build=st.sampled_from(_DOCUMENT_BUILDERS),
 )
+@_NO_DEADLINE
 def test_property_documents_beyond_the_depth_limit_are_rejected(
     depth: int, build: typ.Callable[[int], str]
 ) -> None:

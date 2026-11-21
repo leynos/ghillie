@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import urllib.parse
+
 import httpx
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from ghillie.cli.config import ResolvedCliConfig
 from ghillie.cli.control_plane import ControlPlaneClient, _quote_path
@@ -38,6 +42,57 @@ def test_quote_path_keeps_each_segment_in_place(
     ``quote(..., safe="")`` leaves dots alone, so a segment made up only of
     dots needs encoding; an ordinary dotted segment must stay readable.
     """
+    assert _quote_path(segments) == expected
+
+
+_PATH_SEGMENT = st.one_of(
+    st.text(
+        max_size=32,
+        # A lone surrogate cannot survive UTF-8 encoding, so no argv can carry one.
+        alphabet=st.characters(blacklist_categories=("Cs",)),
+    ),
+    # Uniform text almost never draws a dot-only segment, so draw that shape
+    # directly; it is the case the encoding exists for.
+    st.text(alphabet=".", min_size=1, max_size=6),
+    st.sampled_from(["..", "./..", "...", "%2E", "a/b", "a b", "", "wildside.v2"]),
+)
+
+
+@given(segments=st.lists(_PATH_SEGMENT, min_size=1, max_size=4))
+def test_property_quote_path_cannot_change_the_route(
+    segments: list[str],
+) -> None:
+    """Invariant: quoting preserves each segment and confines it to one place.
+
+    A segment reaches the server in the same position it left in, so no value
+    can address a different resource. Three consequences follow, and each is
+    checked separately because they fail for different reasons: decoding
+    restores the original, no raw ``/`` survives to split the path, and no
+    encoded segment can be read as a relative-path marker.
+    """
+    quoted = _quote_path(segments)
+    encoded = quoted.split("/")[1:]
+
+    assert len(encoded) == len(segments), quoted
+    for original, segment in zip(segments, encoded, strict=True):
+        assert "/" not in segment, quoted
+        assert not (segment and set(segment) == {"."}), quoted
+        assert urllib.parse.unquote(segment) == original, quoted
+
+
+@pytest.mark.parametrize(
+    ("segments", "expected"),
+    [
+        pytest.param([], "/", id="no-segments"),
+        pytest.param([""], "/", id="one-empty-segment"),
+        pytest.param(["", ""], "//", id="two-empty-segments"),
+    ],
+)
+def test_quote_path_keeps_empty_segments_empty(
+    segments: list[str],
+    expected: str,
+) -> None:
+    """An empty segment adds no character, so the path gains no new component."""
     assert _quote_path(segments) == expected
 
 
