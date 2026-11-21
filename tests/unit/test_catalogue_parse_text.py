@@ -8,9 +8,15 @@ serialized form is under the 1 MiB request limit.
 import typing as typ
 
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from ghillie.catalogue import CatalogueValidationError
-from ghillie.catalogue.loader import load_catalogue, parse_catalogue_text
+from ghillie.catalogue.loader import (
+    _MAX_YAML_DEPTH,
+    load_catalogue,
+    parse_catalogue_text,
+)
 
 if typ.TYPE_CHECKING:
     from pathlib import Path
@@ -141,3 +147,59 @@ def test_parse_catalogue_text_rejects_a_schema_failure() -> None:
     """A structurally invalid document is a schema failure."""
     with pytest.raises(CatalogueValidationError, match="schema validation failed"):
         parse_catalogue_text("projects: []\n")
+
+
+def _nested_flow_document(depth: int) -> str:
+    """Return a document of *depth* nested flow sequences.
+
+    Flow collections never repeat a mapping key, so the only reason the parser
+    may reject one of these is the nesting guard or the catalogue schema.
+    """
+    return "[" * depth + "]" * depth
+
+
+def _assert_depth_guard_admits(document: str) -> None:
+    """Fail if the nesting guard, rather than the schema, rejected *document*.
+
+    A nested flow sequence is never a valid catalogue, so the schema rejection
+    is the expected outcome; reaching it proves the depth guard admitted the
+    document first.
+    """
+    with pytest.raises(CatalogueValidationError, match="schema validation failed"):
+        parse_catalogue_text(document)
+
+
+@given(depth=st.integers(min_value=1, max_value=_MAX_YAML_DEPTH))
+def test_property_documents_within_the_depth_limit_pass_the_guard(depth: int) -> None:
+    """Invariant: nesting of at most 64 levels never trips the depth guard.
+
+    A document is rejected for depth if and only if it nests more than
+    ``_MAX_YAML_DEPTH`` collections, so every depth up to the limit must reach
+    the schema check instead.
+    """
+    _assert_depth_guard_admits(_nested_flow_document(depth))
+
+
+@given(depth=st.integers(min_value=_MAX_YAML_DEPTH + 1, max_value=500))
+def test_property_documents_beyond_the_depth_limit_are_rejected(depth: int) -> None:
+    """Invariant: nesting beyond 64 levels is always a validation failure."""
+    with pytest.raises(CatalogueValidationError, match="deeper than"):
+        parse_catalogue_text(_nested_flow_document(depth))
+
+
+@pytest.mark.parametrize(
+    ("depth", "expected_message"),
+    [
+        pytest.param(_MAX_YAML_DEPTH, None, id="at-the-limit"),
+        pytest.param(_MAX_YAML_DEPTH + 1, "deeper than", id="one-past-the-limit"),
+    ],
+)
+def test_depth_guard_boundary(depth: int, expected_message: str | None) -> None:
+    """The guard admits exactly 64 levels and rejects the sixty-fifth."""
+    document = _nested_flow_document(depth)
+
+    if expected_message is None:
+        _assert_depth_guard_admits(document)
+        return
+    with pytest.raises(CatalogueValidationError, match=expected_message):
+        parse_catalogue_text(document)

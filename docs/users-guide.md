@@ -774,8 +774,8 @@ The documented statuses are:
 
 ### Request outcome events
 
-Every estate API request writes exactly one structured outcome event to the
-application log, whatever the response:
+Every estate API request writes one structured outcome event to the application
+log, whatever the response:
 
 ```plaintext
 estate.http.outcome operation=import_catalogue outcome=rejected status_class=4xx
@@ -794,6 +794,12 @@ are recorded against the endpoint the path names.
 A success logs at INFO, a rejection at WARNING, and a failure at ERROR. An
 operator can count failures per operation from the log, and an alert can watch
 for `estate.http.outcome` lines with `outcome=failed`.
+
+Two limits apply to that alert. It needs `GHILLIE_LOG_LEVEL` to admit ERROR
+records: the default `INFO` does, but `CRITICAL` filters out every failure
+event, so the alert would never fire. And the handler writes through a bounded
+queue whose overflow policy can drop a record, so the events give rates and
+trends rather than an exact request count.
 
 ## Incremental GitHub ingestion (Phase 1.3.b)
 

@@ -1,4 +1,21 @@
-"""Validation rules for the estate catalogue."""
+"""Validation rules for the estate catalogue.
+
+The module validates a parsed :class:`~ghillie.catalogue.models.Catalogue`:
+slugs, references between programmes, projects, and components, and the storage
+limits the Silver tables impose. :func:`validate_catalogue` collects every
+problem it finds, so one import reports all of its rejections at once, and
+:class:`CatalogueValidationError` carries that list to its caller.
+
+:data:`_MAX_STORED_TEXT_LENGTH` is the 255-character limit of the stored text
+columns. Project and component names, repository owner and name segments, and
+default branches are measured against it, so an over-length value is a
+validation rejection rather than a failed database write.
+
+:mod:`ghillie.catalogue.loader` and :mod:`ghillie.catalogue.importer` raise
+:class:`CatalogueValidationError`. :mod:`ghillie.estate.service` catches it, and
+:mod:`ghillie.estate.translation` translates it into the estate error vocabulary
+the HTTP API renders.
+"""
 
 from __future__ import annotations
 

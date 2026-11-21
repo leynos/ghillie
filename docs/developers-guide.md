@@ -606,8 +606,8 @@ operations emit no mutation record. The sync's own per-slug events
 
 ### HTTP outcome events (D27)
 
-Every request to one of the five estate endpoints records exactly one
-metric-style event, whether it succeeds, is rejected, or fails:
+Every request to one of the five estate endpoints records one metric-style
+event, whether it succeeds, is rejected, or fails:
 
 ```plaintext
 estate.http.outcome operation=list_estates outcome=succeeded status_class=2xx
@@ -625,6 +625,13 @@ name), the outcome (`succeeded`, `rejected`, or `failed`), and the status class
 (`2xx`, `4xx`, or `5xx`). No estate key, repository name, commit SHA, or error
 string is ever a label. A success logs at INFO, a rejection at WARNING, and a
 failure at ERROR.
+
+The one-event-per-request rule is a property of the middleware, not of the log
+sink. femtologging writes each record through a bounded queue with an overflow
+policy, so a queue that is full can drop a record, and the log can then hold
+fewer events than the server handled. Read the events as the stream to rate and
+trend, not as an exact request count; reconcile against a source that cannot
+drop when the count must be exact.
 
 When a new estate route is added, add it to `_ROUTE_OPERATIONS` in
 `ghillie/api/estate/observability.py`; the path patterns used before routing

@@ -157,6 +157,11 @@ def operation_for(
     the same route shapes instead. That keeps the event count equal to the
     request count for the endpoint the client addressed.
 
+    Falcon collapses repeated leading slashes before it matches routes, so
+    ``//estates`` is served by the estate list route. A request refused before
+    routing never reaches that step, so the same collapse is applied here; the
+    fallback then attributes both forms to one operation.
+
     Parameters
     ----------
     uri_template:
@@ -172,8 +177,9 @@ def operation_for(
     """
     if uri_template is not None:
         return _ROUTE_OPERATIONS.get(uri_template)
+    routed_path = "/" + path.lstrip("/")
     for pattern, operation in _PATH_OPERATIONS:
-        if pattern.match(path):
+        if pattern.match(routed_path):
             return operation
     return None
 

@@ -80,7 +80,10 @@ class EstateManagementService:
     Notes
     -----
     Imports and syncs for one estate are serialized by an in-process lock, so
-    two concurrent requests cannot interleave their catalogue writes.
+    two concurrent requests cannot interleave their catalogue writes. The lock
+    table belongs to this instance: calls that reach separate instances, worker
+    processes, or replicas share no lock (D17), so the application builds one
+    instance in a single replica.
 
     """
 
@@ -467,7 +470,14 @@ class EstateManagementService:
         return row
 
     def _lock_for(self, estate_key: str) -> asyncio.Lock:
-        """Return the per-estate lock, creating it on first use."""
+        """Return the per-estate lock, creating it on first use.
+
+        The lock table belongs to this instance only, so it serializes calls
+        that reach the same service object. Separate instances, worker
+        processes, and replicas share no lock and may run operations for one
+        estate concurrently (D17), which is why the runtime builds a single
+        instance.
+        """
         lock = self._locks.get(estate_key)
         if lock is None:
             lock = asyncio.Lock()

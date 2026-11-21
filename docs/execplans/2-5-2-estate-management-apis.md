@@ -1218,6 +1218,26 @@ per pull request.
       duration histogram, and spans, and the users' and developers' guides
       document the event. Spans and an external metrics pipeline stay with
       #219.
+- [x] (2026-11-21) Reconciled the round-four review of `f95f0d1` and the four
+      failed pre-merge rows. Three inline findings were valid and are fixed:
+      the pre-routing fallback in `operation_for` now collapses repeated
+      leading slashes the way Falcon's router does, so an unauthenticated
+      `//estates` is attributed to `list_estates` instead of emitting no
+      event; the developers' guide and the users' guide now state that
+      femtologging's bounded queue can drop a record, and that the failure
+      alert needs `GHILLIE_LOG_LEVEL` to admit ERROR records. The module
+      docstrings for `ghillie/catalogue/validation.py` and
+      `ghillie/registry/errors.py` now name their callers, closing the
+      Module-Level Documentation row. The Testing row's property ask is met by
+      Hypothesis tests over `data_writes` (a statement that passes the filter
+      cannot write, and a pragma call form tracks its bare getter) and the
+      64-level YAML depth guard (every depth up to the limit reaches the schema
+      check, every depth beyond it is rejected). The Domain Architecture row's
+      port decomposition contradicts the composition recorded in
+      `docs/ghillie-design.md` and EP-M2, and it changes the port contract
+      PR-C builds on, so it is proposed as issue #233; the Observability
+      remainder (spans) stays with D27 and #219. Both rows are dispositioned
+      with that evidence in the reconciliation comment.
 - [ ] PR-C, EP-M4: CLI commands, rendering, and error mapping.
 - [ ] PR-C, EP-M5: behavioural, snapshot, and end-to-end coverage.
 - [ ] PR-C, EP-M6: documentation, roadmap, and final gates.
@@ -1790,6 +1810,25 @@ expert-panel review.
   bootstrap, the bearer-token boundary, and the full import, sync and toggle
   journey over HTTP; PR-C keeps the CLI journey, which needs EP-M4's commands.
   D19's plateau boundary is otherwise unchanged.
+- D34, round-four review reconciliation. The review of `f95f0d1` raised three
+  inline findings and four failed pre-merge rows. The leading-slash fix is a
+  behaviour decision: `operation_for`'s pre-routing fallback strips leading
+  slashes before matching `_PATH_OPERATIONS`, because Falcon's router collapses
+  repeated slashes before routing, so `//estates` and `/estates` are the same
+  endpoint and a refused request must be attributed to it. The femtologging
+  caveat is documentation, not a code change: the middleware emits one event
+  per request, but the handler's bounded queue may drop a record, so the events
+  are a stream to rate and trend rather than an exact request count. The Domain
+  Architecture row asks the estate service to take read and registry ports and
+  to leave YAML parsing to the adapter. That decomposition is coherent but
+  contradicts the composition recorded in `docs/ghillie-design.md` (the estate
+  application layer bullet, and `persistence.py` as the only `sqlalchemy.exc`
+  importer) and EP-M2, and it changes the port contract that PR-C's CLI work
+  builds on, so it is proposed as a follow-up in issue #233 rather than folded
+  into this stacked PR. The Observability row's remaining option is tracing
+  spans, which D27 defers to the telemetry platform decision tracked in #219;
+  the fourth option is a check-owner waiver, which only the maintainer can
+  issue.
 
 ## Outcomes & retrospective
 

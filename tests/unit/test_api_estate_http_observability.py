@@ -189,6 +189,8 @@ def test_operation_for_uses_the_route_template() -> None:
             "/repositories/org/alpha/ingestion",
             EstateOperation.SET_INGESTION,
         ),
+        ("//estates", EstateOperation.LIST_ESTATES),
+        ("///estates/demo/registry-sync", EstateOperation.SYNC_REGISTRY),
     ],
 )
 def test_operation_for_falls_back_to_the_path_before_routing(
@@ -294,7 +296,9 @@ class _OutcomeCase:
     expected_status: int
     expected_fields: dict[str, str]
     api_token: str | None = None
+    path: str = "/estates"
     params: dict[str, str] | None = None
+    authorize: bool = False
 
 
 @pytest.mark.parametrize(
@@ -338,6 +342,35 @@ class _OutcomeCase:
             ),
             id="unauthenticated-401",
         ),
+        pytest.param(
+            _OutcomeCase(
+                service_type=FakeEstateManagement,
+                expected_status=200,
+                expected_fields={
+                    "operation": "list_estates",
+                    "outcome": "succeeded",
+                    "status_class": "2xx",
+                },
+                api_token=_TOKEN,
+                path="//estates",
+                authorize=True,
+            ),
+            id="authenticated-doubled-slash",
+        ),
+        pytest.param(
+            _OutcomeCase(
+                service_type=FakeEstateManagement,
+                expected_status=401,
+                expected_fields={
+                    "operation": "list_estates",
+                    "outcome": "rejected",
+                    "status_class": "4xx",
+                },
+                api_token=_TOKEN,
+                path="//estates",
+            ),
+            id="unauthenticated-doubled-slash",
+        ),
     ],
 )
 def test_estate_request_records_the_outcome_the_client_receives(
@@ -346,8 +379,9 @@ def test_estate_request_records_the_outcome_the_client_receives(
     """Each client-visible status is recorded once against its endpoint.
 
     The cases cover a page request the endpoint rejects, a storage failure,
-    and an unauthenticated request that is refused before routing: the last
-    still names the endpoint the client addressed.
+    and unauthenticated requests that are refused before routing: those still
+    name the endpoint the client addressed, including when the path repeats its
+    leading slash and only Falcon's own normalisation would have matched it.
     """
     client = falcon.testing.TestClient(
         create_app(
@@ -356,9 +390,10 @@ def test_estate_request_records_the_outcome_the_client_receives(
             )
         )
     )
+    headers = {"Authorization": f"Bearer {_TOKEN}"} if case.authorize else None
 
     with capture_femto_logs(_LOGGER_NAME) as logs:
-        response = client.simulate_get("/estates", params=case.params)
+        response = client.simulate_get(case.path, params=case.params, headers=headers)
         captured = _captured(logs)
 
     assert response.status_code == case.expected_status, response.text

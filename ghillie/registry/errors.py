@@ -1,4 +1,12 @@
-"""Errors specific to the repository registry."""
+"""Errors specific to the repository registry.
+
+:data:`ESTATE_NOT_FOUND_REASON` is the reason :class:`RegistrySyncError`
+carries when a sync targets an estate that does not exist.
+:mod:`ghillie.registry.sync` produces it. Callers compare
+``RegistrySyncError.reason`` to the constant rather than to a repeated string
+literal; :mod:`ghillie.estate.persistence` consumes it and maps it to
+:class:`ghillie.estate.errors.EstateNotFoundError`.
+"""
 
 ESTATE_NOT_FOUND_REASON = "Estate not found"
 """Reason reported when a sync targets an estate that does not exist.

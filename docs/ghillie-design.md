@@ -729,7 +729,10 @@ The following components are implemented:
   belongs to one `EstateManagementService` instance; calls that reach different
   instances, worker processes, or replicas share no lock and can run operations
   for the same estate concurrently (D17). Each mutation emits one D21 record
-  through `MutationRecorder` in `ghillie/estate/observability.py`.
+  through `MutationRecorder` in `ghillie/estate/observability.py`. The
+  collaborators are concrete types rather than additional ports; a
+  decomposition into a read port and a registry port is proposed in
+  [issue #233](https://github.com/leynos/ghillie/issues/233).
 - **On-demand report generation**
   (`POST /reports/repositories/{owner}/{name}`): Triggers report generation for
   a specific repository, using the same pipeline as scheduled reports. Returns
@@ -942,7 +945,11 @@ records is the one the client receives. Falcon calls a response hook even when
 an earlier request hook raised, so a request rejected before routing -- an
 unauthenticated request, for example -- is counted against the endpoint it
 addressed; the path is matched against the five route shapes when routing never
-supplied a template. Each estate request therefore records exactly one event:
+supplied a template. Falcon collapses repeated leading slashes before it
+matches routes, so `//estates` is served by the estate list route; the fallback
+applies the same collapse, which keeps a refused `//estates` attributed to
+`list_estates` rather than dropping it. Each estate request therefore records
+one event:
 
 ```plaintext
 estate.http.outcome operation=import_catalogue outcome=rejected status_class=4xx
@@ -956,6 +963,12 @@ cardinality cannot grow with the data. A 2xx logs at INFO, a 4xx at WARNING,
 and anything else at ERROR: an unexpected 3xx, which this API never issues,
 counts as a failure. Spans would exclude catalogue payloads and bearer tokens
 for the same reason.
+
+The one-event-per-request rule belongs to the middleware, not to the log sink.
+femtologging hands each record to a bounded queue with an overflow policy, so a
+full queue can drop a record and the log may hold fewer events than the server
+handled. The events are the stream to rate and trend; an exact request count
+needs a source that cannot drop.
 
 This subsection is the record the hosted **Observability** pre-merge check asks
 for. That check's first remediation option -- bounded-cardinality metric events
