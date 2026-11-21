@@ -226,9 +226,12 @@ first and only then apply the toggles. Enabling a repository removes it from the
 `--inactive` filter, so paging and mutating in the same pass would shrink the
 collection and skip rows. The pages also share no snapshot: if another operator
 enables a repository that sorts before the current offset while the pages are
-being read, the remaining rows shift left and the next page can skip one. Pause
-other repository toggles for the duration of the collection, or restart the
-collection after anyone else toggles a repository, before applying the toggles:
+being read, the remaining rows shift left and the next page can skip one. A
+registry sync changes the listing the same way, by disabling a row whose
+catalogue entry was removed or by adding a newly registered one. Pause other
+repository toggles and registry syncs for the duration of the collection, and
+wait for any in-flight sync to finish first; restart the collection if a toggle
+or a sync changes the listing, before applying the toggles:
 
 ```bash
 # 1. Collect every disabled repository across all pages.
