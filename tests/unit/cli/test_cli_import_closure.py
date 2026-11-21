@@ -66,6 +66,11 @@ def test_importing_the_cli_loads_no_server_package() -> None:
     assert "ghillie.cli.commands.estate" in loaded, (
         "the estate commands must be imported for this test to mean anything"
     )
+    # The shared estate constants are the one estate-facing module the CLI may
+    # load; the forbidden prefixes below keep the server side out.
+    assert "ghillie.common.estate" in loaded, (
+        "the shared contract module must be the CLI's only estate source"
+    )
     leaked = sorted(
         name
         for name in loaded

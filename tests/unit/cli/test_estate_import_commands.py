@@ -18,19 +18,13 @@ from hypothesis import strategies as st
 from ghillie.api.estate.resources import MAX_REQUEST_BODY_BYTES as SERVICE_BODY_LIMIT
 from ghillie.cli.commands.estate import (
     MAX_REQUEST_BODY_BYTES,
-    NEW_ESTATE_KEY_PATTERN,
     _import_body,
     import_catalogue,
 )
 from ghillie.cli.context import CommandContext, use_context
 from ghillie.cli.control_plane import encode_json_body
-from ghillie.estate.models import (
-    NEW_ESTATE_KEY_PATTERN as SERVICE_KEY_PATTERN,
-)
-from ghillie.estate.models import (
-    InvalidEstateKeyError,
-    validate_new_estate_key,
-)
+from ghillie.common.estate import NEW_ESTATE_KEY_PATTERN
+from ghillie.estate.models import InvalidEstateKeyError, validate_new_estate_key
 from tests.unit.cli.harness import make_config
 from tests.unit.cli.payloads import IMPORT_PAYLOAD, error_document
 
@@ -219,10 +213,9 @@ def test_import_rejects_an_invalid_estate_key(
     assert NEW_ESTATE_KEY_PATTERN in error["hint"]
 
 
-def test_local_constants_match_the_service() -> None:
-    """The duplicated limit and pattern must not drift from the service."""
+def test_local_body_limit_matches_the_service() -> None:
+    """The one duplicated transport limit must not drift from the service."""
     assert MAX_REQUEST_BODY_BYTES == SERVICE_BODY_LIMIT
-    assert NEW_ESTATE_KEY_PATTERN == SERVICE_KEY_PATTERN
 
 
 @st.composite
