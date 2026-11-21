@@ -12,15 +12,26 @@ import typing as typ
 
 import httpx
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from ghillie.api.estate.resources import MAX_REQUEST_BODY_BYTES as SERVICE_BODY_LIMIT
 from ghillie.cli.commands.estate import (
     MAX_REQUEST_BODY_BYTES,
     NEW_ESTATE_KEY_PATTERN,
+    _import_body,
     import_catalogue,
 )
+from ghillie.cli.context import CommandContext, use_context
 from ghillie.cli.control_plane import encode_json_body
-from ghillie.estate.models import NEW_ESTATE_KEY_PATTERN as SERVICE_KEY_PATTERN
+from ghillie.estate.models import (
+    NEW_ESTATE_KEY_PATTERN as SERVICE_KEY_PATTERN,
+)
+from ghillie.estate.models import (
+    InvalidEstateKeyError,
+    validate_new_estate_key,
+)
+from tests.unit.cli.harness import make_config
 from tests.unit.cli.payloads import IMPORT_PAYLOAD, error_document
 
 if typ.TYPE_CHECKING:
@@ -212,6 +223,61 @@ def test_local_constants_match_the_service() -> None:
     """The duplicated limit and pattern must not drift from the service."""
     assert MAX_REQUEST_BODY_BYTES == SERVICE_BODY_LIMIT
     assert NEW_ESTATE_KEY_PATTERN == SERVICE_KEY_PATTERN
+
+
+@st.composite
+def _estate_key_candidates(draw: st.DrawFn) -> str:
+    r"""Draw a key-like string, optionally with trailing whitespace.
+
+    ``st.text`` alone almost never produces a valid key followed by a newline,
+    and that shape is exactly what separates ``fullmatch`` from ``match``: the
+    pattern's ``$`` admits a trailing newline, so ``match`` would accept a key
+    with ``\n`` appended while the service refuses it. Drawing that shape
+    explicitly keeps the property able to detect the difference.
+    """
+    if draw(st.booleans()):
+        return draw(st.text(max_size=80))
+    stem = draw(st.text(alphabet="ab.-_09", max_size=70))
+    return stem + draw(st.sampled_from(["\n", "\n\n", " \n", "\r\n", ""]))
+
+
+@pytest.fixture(scope="module")
+def valid_catalogue(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Write one valid catalogue the property can reuse for every example."""
+    path = tmp_path_factory.mktemp("catalogue") / "catalogue.yaml"
+    path.write_text("version: 1\nprojects: []\n", encoding="utf-8")
+    return path
+
+
+@pytest.mark.usefixtures("valid_catalogue")
+@given(estate_key=_estate_key_candidates())
+def test_property_the_cli_accepts_exactly_the_service_keys(
+    estate_key: str,
+    valid_catalogue: Path,
+) -> None:
+    """Invariant: the CLI's local gate and the service agree on every key.
+
+    The CLI validates locally so a bad key costs no request (D16), but the
+    service is the authority. The property drives the command's own gate, so a
+    change to how it matches the pattern is caught, not merely a change to the
+    pattern text.
+    """
+    with use_context(CommandContext(config=make_config())):
+        _, failure = _import_body(
+            estate_key,
+            valid_catalogue,
+            commit_sha="c1",
+            estate_name=None,
+        )
+    cli_accepts = failure is None
+    try:
+        validate_new_estate_key(estate_key)
+    except InvalidEstateKeyError:
+        service_accepts = False
+    else:
+        service_accepts = True
+
+    assert cli_accepts == service_accepts, estate_key
 
 
 class _BodyLimitCase(typ.NamedTuple):
