@@ -245,6 +245,46 @@ def test_http_error_maps_to_exit_3(
     assert error["status"] == status
 
 
+@pytest.mark.parametrize(
+    ("status", "is_success"),
+    [
+        pytest.param(199, False, id="below-the-2xx-band"),
+        pytest.param(200, True, id="first-success"),
+        pytest.param(201, True, id="created"),
+        pytest.param(204, True, id="no-content"),
+        pytest.param(299, True, id="last-success"),
+        pytest.param(300, False, id="first-non-success"),
+    ],
+)
+def test_only_the_2xx_band_counts_as_success(
+    harness: typ.Callable[..., CliHarness],
+    capsys: pytest.CaptureFixture[str],
+    status: int,
+    *,
+    is_success: bool,
+) -> None:
+    """Success is exactly 2xx, so an off-by-one cannot ship a redirect as work.
+
+    ``204`` carries no body, which exercises the same success path a document
+    response takes; the caller's rendering then decides what an empty document
+    means. A ``199`` or ``300`` must take the error path with a stable code
+    derived from the status, because reporting otherwise would claim work the
+    service did not perform.
+    """
+    client = harness(output="json")
+    client.queue_json({"state": "succeeded"}, status=status)
+
+    result = client.invoke(sync, estate_key="demo")
+
+    if is_success:
+        assert isinstance(result, str), f"status {status} should be a success"
+        return
+    assert result == 3
+    error = error_document(capsys.readouterr().err)["error"]
+    assert error["code"] == f"http_{status}"
+    assert error["status"] == status
+
+
 def test_http_error_renders_catalogue_issues(
     harness: typ.Callable[..., CliHarness],
     capsys: pytest.CaptureFixture[str],

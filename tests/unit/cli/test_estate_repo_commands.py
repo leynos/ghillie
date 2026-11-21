@@ -15,7 +15,12 @@ import httpx
 import pytest
 
 from ghillie.cli.app import main as cli_main
-from ghillie.cli.commands.estate import list_repositories, set_repository
+from ghillie.cli.commands.estate import (
+    MAX_PAGE_OFFSET,
+    list_repositories,
+    set_repository,
+)
+from ghillie.estate.models import MAX_PAGE_OFFSET as SERVICE_MAX_PAGE_OFFSET
 from tests.unit.cli.harness import BASE_URL, CliHarness
 from tests.unit.cli.payloads import (
     REPOSITORY_LIST_PAYLOAD,
@@ -87,11 +92,38 @@ def test_repo_list_rejects_out_of_range_pagination(
     assert cli_main([*base, "--limit", "0"]) == 2
     assert cli_main([*base, "--limit", "501"]) == 2
     assert cli_main([*base, "--offset", "-1"]) == 2
+    # The service rejects an offset above its signed-32-bit ceiling; the CLI
+    # must not spend a request learning what it can reject locally (D16, O5).
+    assert cli_main([*base, "--offset", str(MAX_PAGE_OFFSET + 1)]) == 2
 
     assert client.requests == [], "no request may be sent"
     captured = capsys.readouterr()
     assert captured.out == "", "validation errors go to standard error"
     assert captured.err
+
+
+def test_repo_list_accepts_the_largest_offset(
+    harness: typ.Callable[..., CliHarness],
+) -> None:
+    """The ceiling itself is valid, so the bound cannot be off by one."""
+    client = harness(output="json")
+    client.queue_json({**REPOSITORY_LIST_PAYLOAD, "items": []})
+
+    result = client.invoke(
+        list_repositories,
+        estate_key="demo",
+        ingestion_enabled=None,
+        limit=50,
+        offset=MAX_PAGE_OFFSET,
+    )
+
+    assert isinstance(result, str), result
+    assert client.requests[0].url.params["offset"] == str(MAX_PAGE_OFFSET)
+
+
+def test_repo_list_offset_ceiling_matches_the_service() -> None:
+    """The CLI duplicates the service ceiling, so the pair must stay equal."""
+    assert MAX_PAGE_OFFSET == SERVICE_MAX_PAGE_OFFSET
 
 
 def test_repo_list_table_names_each_repository(
