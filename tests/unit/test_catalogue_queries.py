@@ -15,6 +15,7 @@ from ghillie.catalogue.queries import (
     list_estates,
 )
 from ghillie.catalogue.storage import CatalogueImportRecord, Estate
+from ghillie.common.estate import MAX_PAGE_OFFSET
 from ghillie.estate.errors import InvalidPaginationError
 from tests.helpers.femtologging_capture import capture_femto_logs
 from tests.unit.estate_test_helpers import (
@@ -259,6 +260,17 @@ async def test_get_estate_by_key_returns_none_for_unknown_keys(
     assert await get_estate_by_key(session_factory, "missing") is None, (
         "unknown key should resolve to nothing"
     )
+
+
+def test_the_bindable_offset_matches_the_estate_ceiling() -> None:
+    """The adapter's deliberate copy must not drift from the shared ceiling.
+
+    ``ghillie.catalogue.queries`` keeps its own constant so the adapter does
+    not depend on the port's policy, and nothing else connects the two. The
+    service would otherwise accept an offset the storage layer rejects, or
+    refuse one it could bind.
+    """
+    assert MAXIMUM_OFFSET == MAX_PAGE_OFFSET
 
 
 @pytest.mark.asyncio
