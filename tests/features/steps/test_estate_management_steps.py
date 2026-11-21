@@ -26,7 +26,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async
 from sqlalchemy.pool import StaticPool
 
 from ghillie.api.app import AppDependencies, create_app
-from ghillie.cli import control_plane, main
+from ghillie.cli import main
+from ghillie.cli.control_plane import ControlPlaneClient
 from ghillie.estate.service import EstateManagementService
 from ghillie.registry.service import RepositoryRegistryService
 from ghillie.storage_bootstrap import init_all_storage
@@ -228,13 +229,6 @@ def estate_state(
         )
         transport = RunnerTransport(runner, async_client)
 
-        real_client = httpx.Client
-        monkeypatch.setattr(
-            control_plane.httpx,
-            "Client",
-            functools.partial(real_client, transport=transport),
-        )
-
         yield ScenarioState(transport=transport)
     finally:
         _close_scenario(runner, async_client, engine)
@@ -253,7 +247,12 @@ def _run_argv(state: ScenarioState, argv: typ.Sequence[str]) -> None:
         contextlib.redirect_stdout(stdout),
         contextlib.redirect_stderr(stderr),
     ):
-        state.exit_code = main(list(argv))
+        state.exit_code = main(
+            list(argv),
+            client_factory=functools.partial(
+                ControlPlaneClient, transport=state.transport
+            ),
+        )
     state.stdout = stdout.getvalue()
     state.stderr = stderr.getvalue()
     state.last_document = _maybe_document(state.stdout)

@@ -38,6 +38,49 @@ class ControlPlaneResponse:
     issues: tuple[ControlPlaneIssue, ...] = ()
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class ControlPlanePage:
+    """A collection response split into validated rows and its metadata."""
+
+    items: tuple[typ.Mapping[str, object], ...]
+    meta: dict[str, object]
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class ControlPlaneRequest:
+    """One request the CLI wants the control plane to perform."""
+
+    method: http.HTTPMethod
+    path_segments: tuple[str, ...]
+    params: typ.Mapping[str, str] | None = None
+    body: typ.Mapping[str, object] | bytes | None = None
+
+
+def parse_page(document: typ.Mapping[str, object]) -> ControlPlanePage:
+    """Split a collection document into its rows and pagination metadata.
+
+    A 200 whose ``items`` is missing, is not a list, or holds a non-object is
+    a malformed success, not an empty page: rendering it would either raise
+    ``TypeError`` outside the client's error handling or report rows that do
+    not exist. Both take the control-plane error path instead (O4).
+
+    Raises
+    ------
+    ControlPlaneError
+        If ``items`` is missing, is not a list, or holds a non-object.
+
+    """
+    raw_items = document.get("items")
+    if not isinstance(raw_items, list) or not all(
+        isinstance(item, typ.Mapping) for item in raw_items
+    ):
+        message = "the control plane returned a page whose items are not objects"
+        raise ControlPlaneError("invalid_response", message)
+    items = tuple(typ.cast("typ.Mapping[str, object]", item) for item in raw_items)
+    meta = {key: value for key, value in document.items() if key != "items"}
+    return ControlPlanePage(items=items, meta=meta)
+
+
 class ControlPlaneError(Exception):
     """A control-plane call failed in a way the operator must see.
 
@@ -218,6 +261,7 @@ class ControlPlaneClient:
         config: ResolvedCliConfig,
         *,
         http_client: httpx.Client | None = None,
+        transport: httpx.BaseTransport | None = None,
     ) -> None:
         """Build a control-plane client from resolved CLI configuration.
 
@@ -229,6 +273,11 @@ class ControlPlaneClient:
             Optional pre-configured httpx.Client. If provided, it must already
             include appropriate ``User-Agent`` and ``Authorization`` headers.
             If not provided, a new client will be created with these headers.
+        transport
+            Optional transport for the owned client. Tests pass an
+            :class:`httpx.MockTransport` here, so the real base URL, timeout
+            and header construction still run. Ignored when ``http_client`` is
+            supplied, because that client owns its own transport.
 
         """
         self._owns_client = http_client is None
@@ -236,6 +285,7 @@ class ControlPlaneClient:
             base_url=config.api_base_url,
             timeout=config.request_timeout_s,
             headers=_headers_for(config),
+            transport=transport,
         )
 
     @property
@@ -311,6 +361,31 @@ class ControlPlaneClient:
         if not _HTTP_SUCCESS_MIN <= response.status_code < _HTTP_SUCCESS_MAX_EXCLUSIVE:
             raise _http_error(response)
         return _success_document(response)
+
+    def request_page(
+        self,
+        method: http.HTTPMethod,
+        path_segments: typ.Sequence[str],
+        *,
+        params: typ.Mapping[str, str] | None = None,
+    ) -> ControlPlanePage:
+        """Call one collection endpoint and return its validated page.
+
+        Raises
+        ------
+        ControlPlaneHTTPError
+            If the service answers with a non-2xx status.
+        ControlPlaneTransportError
+            If no response could be obtained.
+        ControlPlaneTimeoutError
+            If the request exceeded the configured timeout.
+        ControlPlaneError
+            If a successful response is not a JSON object or not a page.
+
+        """
+        return parse_page(
+            self.request_json(method, path_segments, params=params),
+        )
 
     def close(self) -> None:
         """Close the owned HTTP client."""

@@ -16,13 +16,11 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from ghillie.api.estate.resources import MAX_REQUEST_BODY_BYTES as SERVICE_BODY_LIMIT
-from ghillie.cli.commands.estate import (
-    MAX_REQUEST_BODY_BYTES,
-    _import_body,
-    import_catalogue,
-)
+from ghillie.cli.commands.estate import import_catalogue
 from ghillie.cli.context import CommandContext, use_context
 from ghillie.cli.control_plane import encode_json_body
+from ghillie.cli.errors import LocalInputError
+from ghillie.cli.estate_input import MAX_REQUEST_BODY_BYTES, import_body
 from ghillie.common.estate import NEW_ESTATE_KEY_PATTERN
 from ghillie.estate.models import InvalidEstateKeyError, validate_new_estate_key
 from tests.unit.cli.harness import make_config
@@ -256,13 +254,17 @@ def test_property_the_cli_accepts_exactly_the_service_keys(
     pattern text.
     """
     with use_context(CommandContext(config=make_config())):
-        _, failure = _import_body(
-            estate_key,
-            valid_catalogue,
-            commit_sha="c1",
-            estate_name=None,
-        )
-    cli_accepts = failure is None
+        try:
+            import_body(
+                estate_key,
+                valid_catalogue,
+                commit_sha="c1",
+                estate_name=None,
+            )
+        except LocalInputError:
+            cli_accepts = False
+        else:
+            cli_accepts = True
     try:
         validate_new_estate_key(estate_key)
     except InvalidEstateKeyError:

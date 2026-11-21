@@ -124,7 +124,8 @@ def test_repo_list_accepts_the_largest_offset(
             "demo",
             "--offset",
             str(MAX_PAGE_OFFSET),
-        ]
+        ],
+        client_factory=client.factory,
     )
 
     assert exit_code == 0, capsys.readouterr().err
