@@ -27,6 +27,7 @@ from ghillie.cli.output import (
     render_document,
     render_error,
 )
+from ghillie.common.estate import MAX_PAGE_OFFSET, NEW_ESTATE_KEY_PATTERN
 
 estate_app = App(name="estate", help="Manage estate configuration operations.")
 repo_app = App(name="repo", help="Manage estate repository configuration.")
@@ -35,21 +36,10 @@ MAX_REQUEST_BODY_BYTES = 1024 * 1024
 """Largest request body the service accepts (O5).
 
 Duplicated from :mod:`ghillie.api.estate.resources` because the CLI must not
-import the server package (O6);
-:mod:`tests.unit.cli.test_estate_import_commands` asserts the two values and
-the two key patterns stay equal.
-"""
-
-NEW_ESTATE_KEY_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
-"""Pattern a new estate key must match (D16), duplicated for the same reason."""
-
-MAX_PAGE_OFFSET = 2**31 - 1
-"""Largest offset the service accepts, duplicated for the same reason (D5).
-
-The server answers an offset above this ceiling with a rejection, so a CLI
-that passed the value through would spend a request to learn something it can
-refuse locally. Both values are asserted equal in
-:mod:`tests.unit.cli.test_estate_repo_commands`.
+import the server package (O6); :mod:`tests.unit.cli.test_estate_import_commands`
+asserts the two values stay equal. The estate-key pattern and the offset
+ceiling are shared contracts rather than transport limits, so they live in
+:mod:`ghillie.common.estate` and are imported here.
 """
 
 _NEW_ESTATE_KEY_RE = re.compile(NEW_ESTATE_KEY_PATTERN)

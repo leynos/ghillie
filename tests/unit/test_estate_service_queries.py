@@ -12,6 +12,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 
 from ghillie.catalogue.storage import CatalogueImportRecord, Estate, ProjectRecord
+from ghillie.common.estate import MAX_PAGE_OFFSET
 from ghillie.estate import persistence
 from ghillie.estate.errors import (
     EstateConflictError,
@@ -21,7 +22,7 @@ from ghillie.estate.errors import (
     RepositoryNotFoundError,
     StorageUnavailableError,
 )
-from ghillie.estate.models import MAX_PAGE_OFFSET, PageRequest, RepositoryQuery
+from ghillie.estate.models import PageRequest, RepositoryQuery
 from ghillie.registry.errors import ESTATE_NOT_FOUND_REASON, RegistrySyncError
 from ghillie.registry.service import RepositoryRegistryService
 from ghillie.silver.storage import Repository as SilverRepository

@@ -1547,6 +1547,23 @@ per pull request.
       the real `--estate-name` default, and the users' guide keeps the bearer
       token out of argv, uses `mktemp`, aborts on a failed page, and no
       longer claims the inactive listing recovers a capped preview.
+- [x] (2026-11-21) Closed the round-five review and its pre-merge rows. The
+      CLI now rejects an offset above the service's `MAX_PAGE_OFFSET` locally
+      with exit `2`, and the acceptance test drives the parser so the bound
+      cannot be bypassed; mutants at the ceiling minus one and plus one each
+      fail a test. The success rule is pinned as exactly 2xx, and a bodyless
+      `204` is a separate case that reports `invalid_response` rather than an
+      empty document. Three invariants are Hypothesis properties: catalogue
+      text either parses or raises `CatalogueValidationError`; a quoted path
+      segment decodes back to itself, carries no raw slash, and is never
+      dot-only; and the CLI key gate accepts exactly what
+      `validate_new_estate_key` accepts. The e2e references and gate evidence
+      name the run that produced them, the design document states
+      `PRESERVE`/`DISABLE_INACTIVE`/`DISABLE_REMOVED`, and the re-enable recipe
+      stops on failure and warns that concurrent toggles or syncs can shift a
+      page. D36 then moved `NEW_ESTATE_KEY_PATTERN` and `MAX_PAGE_OFFSET` into
+      `ghillie.common.estate` so the CLI, service and models share one
+      definition without the CLI importing `ghillie.estate`.
 
 ## Surprises & discoveries
 
@@ -2194,6 +2211,16 @@ expert-panel review.
   endpoint that makes the text untrusted is C's, so its error contract is C's
   to keep. (3) `httpx.codes` appears nowhere in the tree; the e2e harness
   already uses `http.HTTPStatus`.
+- D36, one estate contract instead of copied constants. `NEW_ESTATE_KEY_PATTERN`
+  and `MAX_PAGE_OFFSET` moved to `ghillie.common.estate`, a module that imports
+  nothing and sits in the `domain_ports` Hecate group. The domain models, the
+  application service and the CLI now import the single definition; the
+  equality tests that policed the copies are gone. The CLI still cannot import
+  `ghillie.estate`, because that package's re-exports pull in the application
+  stack, and `tests/unit/cli/test_cli_import_closure.py` asserts both facts:
+  `ghillie.common.estate` is loaded and no forbidden prefix is. The
+  request-body limit stays duplicated because it is a transport limit owned by
+  `ghillie.api.estate.resources`, with its equality test retained.
 
 ## Outcomes & retrospective
 

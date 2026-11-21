@@ -15,12 +15,8 @@ import httpx
 import pytest
 
 from ghillie.cli.app import main as cli_main
-from ghillie.cli.commands.estate import (
-    MAX_PAGE_OFFSET,
-    list_repositories,
-    set_repository,
-)
-from ghillie.estate.models import MAX_PAGE_OFFSET as SERVICE_MAX_PAGE_OFFSET
+from ghillie.cli.commands.estate import list_repositories, set_repository
+from ghillie.common.estate import MAX_PAGE_OFFSET
 from tests.unit.cli.harness import BASE_URL, CliHarness
 from tests.unit.cli.payloads import (
     REPOSITORY_LIST_PAYLOAD,
@@ -133,11 +129,6 @@ def test_repo_list_accepts_the_largest_offset(
 
     assert exit_code == 0, capsys.readouterr().err
     assert client.requests[0].url.params["offset"] == str(MAX_PAGE_OFFSET)
-
-
-def test_repo_list_offset_ceiling_matches_the_service() -> None:
-    """The CLI duplicates the service ceiling, so the pair must stay equal."""
-    assert MAX_PAGE_OFFSET == SERVICE_MAX_PAGE_OFFSET
 
 
 def test_repo_list_table_names_each_repository(

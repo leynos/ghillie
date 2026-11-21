@@ -846,13 +846,19 @@ adapters. Keep new estate work inside that shape.
   every consumer of the pure models, breaking O6 for the CLI and forcing broker
   configuration on tests that only need the dataclasses. Import concrete
   modules explicitly.
-- **Duplicated CLI constants are deliberate.** The CLI re-declares
-  `MAX_REQUEST_BODY_BYTES`, `NEW_ESTATE_KEY_PATTERN`, and `MAX_PAGE_OFFSET`
-  because O6 forbids importing the server-side modules. The unit tests assert
-  equality with the originals, so a change on one side fails the suite until
-  both are updated. The offset ceiling is enforced by the `PageOffset`
-  validator as well as by the service, so an out-of-range page request costs no
-  request and exits `2` like every other local rejection.
+- **Estate contracts are shared, not copied.** `NEW_ESTATE_KEY_PATTERN` and
+  `MAX_PAGE_OFFSET` live in `ghillie.common.estate`, a module that imports
+  nothing, so the CLI, the application service, and the domain models all read
+  one definition without any of them importing `ghillie.estate`.
+  `ghillie.common` is a `domain_ports` group, which Hecate lets every layer
+  import. The one remaining duplicate is `MAX_REQUEST_BODY_BYTES`: it is an
+  HTTP transport limit declared by `ghillie.api.estate.resources`, which the
+  CLI must not import (O6), so the unit tests assert the two values stay equal.
+  The offset ceiling and the key pattern have no such field; their equality
+  tests are gone because there is nothing left to compare. The ceiling is
+  enforced by the `PageOffset` validator as well as by the service, so an
+  out-of-range page request costs no request and exits `2` like every other
+  local rejection.
 
 ### Behavioural and end-to-end coverage
 
