@@ -177,9 +177,9 @@ ghillie estate repo list --estate-key wildside --inactive --limit 50 --offset 0
 ```
 
 Estates have no lifecycle state, so `estate list` accepts no active or inactive
-flag. Repository listing is paginated (`limit` 1 to 500, default 50; `offset`
-at least 0) and ordered by owner and name. `--active` and `--inactive` select
-one ingestion state; omitting both lists both.
+flag. Repository listing is paginated (`limit` 1 to 500, default 50; `offset` 0
+to 2147483647) and ordered by owner and name. `--active` and `--inactive`
+select one ingestion state; omitting both lists both.
 
 ### Enable or disable ingestion
 
@@ -247,14 +247,20 @@ while :; do
   offset=$(jq -r '.next_offset' <<<"$page")
 done
 
-# 2. Apply the toggles to the captured set.
+# 2. Apply the toggles to the captured set, stopping at the first failure.
 while IFS=/ read -r owner name; do
-  ghillie estate repo set --owner "$owner" --name "$name" --ingestion-enabled
+  if ! ghillie estate repo set --owner "$owner" --name "$name" --ingestion-enabled; then
+    echo "toggle failed for $owner/$name; earlier toggles remain applied" >&2
+    exit 1
+  fi
 done <"$disabled"
 ```
 
 The temporary file has an unpredictable name and is removed on exit, so a
-second operator on the same host cannot read or truncate it.
+second operator on the same host cannot read or truncate it. A failed toggle
+stops the recipe with a non-zero status. Toggles that already succeeded stay
+applied, and a later run collects the repositories that are still disabled, so
+it picks up from the failure rather than starting over.
 
 This recipe targets every repository that is disabled now. If the intent is
 instead to re-enable the set the last sync left disabled, read
