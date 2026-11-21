@@ -3,9 +3,42 @@
 from __future__ import annotations
 
 import httpx
+import pytest
 
 from ghillie.cli.config import ResolvedCliConfig
-from ghillie.cli.control_plane import ControlPlaneClient
+from ghillie.cli.control_plane import ControlPlaneClient, _quote_path
+
+
+@pytest.mark.parametrize(
+    ("segments", "expected"),
+    [
+        pytest.param(
+            ("estates", "demo", "repositories"),
+            "/estates/demo/repositories",
+            id="ordinary",
+        ),
+        pytest.param(
+            ("estates", "..", "repositories"),
+            "/estates/%2E%2E/repositories",
+            id="two-dots",
+        ),
+        pytest.param(
+            ("estates", ".", "repositories"), "/estates/%2E/repositories", id="dot"
+        ),
+        pytest.param(("a b", "c/d"), "/a%20b/c%2Fd", id="reserved-characters"),
+        pytest.param(("wildside.v2",), "/wildside.v2", id="ordinary-dotted"),
+    ],
+)
+def test_quote_path_keeps_each_segment_in_place(
+    segments: tuple[str, ...],
+    expected: str,
+) -> None:
+    """A segment can neither become a relative-path marker nor change the route.
+
+    ``quote(..., safe="")`` leaves dots alone, so a segment made up only of
+    dots needs encoding; an ordinary dotted segment must stay readable.
+    """
+    assert _quote_path(segments) == expected
 
 
 def test_control_plane_client_uses_base_url_timeout_and_auth_header() -> None:
