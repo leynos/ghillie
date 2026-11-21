@@ -6,7 +6,9 @@ pin the invariant the filter exists for: a statement that passes
 """
 
 import string
+import typing as typ
 
+import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -43,7 +45,9 @@ _VERIFIED_GETTERS = (
     "table_info",
     "table_xinfo",
 )
-_PRAGMA_NAME_ALPHABET = string.ascii_lowercase + string.digits + "_"
+# SQLite pragma names are case-insensitive, so the alphabet carries both cases.
+# Drawing only lowercase names would leave the filter's lowercasing untested.
+_PRAGMA_NAME_ALPHABET = string.ascii_letters + string.digits + "_"
 _PRAGMA_NAMES = st.text(alphabet=_PRAGMA_NAME_ALPHABET, min_size=1, max_size=12)
 _KNOWN_GETTERS = st.sampled_from(_VERIFIED_GETTERS)
 _UNVERIFIED_PRAGMA_NAMES = st.text(
@@ -233,6 +237,25 @@ def test_the_verified_getter_list_matches_the_filter() -> None:
     assert frozenset(_VERIFIED_GETTERS) == _READ_PRAGMA_NAMES, (
         "the filter's verified pragma list changed; update this test's list"
     )
+
+
+@pytest.mark.parametrize(
+    "spelling", [str.upper, str.title, str.swapcase], ids=lambda fn: fn.__name__
+)
+def test_a_verified_getter_is_read_in_any_letter_case(
+    spelling: typ.Callable[[str], str],
+) -> None:
+    """A getter keeps its read verdict when its name changes case.
+
+    SQLite matches pragma names without regard to case, so ``PRAGMA
+    TABLE_INFO('estates')`` is the same getter. The mixed-case names the
+    property draws only prove the filter agrees if the filter really folds
+    case, which this pins on one known name.
+    """
+    name = spelling("table_info")
+
+    assert data_writes([f"PRAGMA {name}"]) == [], name
+    assert data_writes([f"PRAGMA main.{name}('estates')"]) == [], name
 
 
 @given(name=_KNOWN_GETTERS, prefix=_SCHEMA_PREFIXES)
