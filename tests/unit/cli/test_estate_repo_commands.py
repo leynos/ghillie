@@ -75,6 +75,9 @@ def test_repo_list_rejects_out_of_range_pagination(
 ) -> None:
     """D5: pagination is validated locally and no request is sent."""
     client = harness()
+    # If a validator ever let the call through, the request would be answered
+    # rather than raising, so the exit-code assertion reports the real defect.
+    client.queue_json(REPOSITORY_LIST_PAYLOAD)
     base = [
         "--api-base-url",
         BASE_URL,
@@ -85,12 +88,21 @@ def test_repo_list_rejects_out_of_range_pagination(
         "demo",
     ]
 
-    assert cli_main([*base, "--limit", "0"]) == 2
-    assert cli_main([*base, "--limit", "501"]) == 2
-    assert cli_main([*base, "--offset", "-1"]) == 2
+    # The factory makes the "no request" claim observable: without it the
+    # command would build a real client and this list would stay empty
+    # whatever the command did.
+    assert cli_main([*base, "--limit", "0"], client_factory=client.factory) == 2
+    assert cli_main([*base, "--limit", "501"], client_factory=client.factory) == 2
+    assert cli_main([*base, "--offset", "-1"], client_factory=client.factory) == 2
     # The service rejects an offset above its signed-32-bit ceiling; the CLI
     # must not spend a request learning what it can reject locally (D16, O5).
-    assert cli_main([*base, "--offset", str(MAX_PAGE_OFFSET + 1)]) == 2
+    assert (
+        cli_main(
+            [*base, "--offset", str(MAX_PAGE_OFFSET + 1)],
+            client_factory=client.factory,
+        )
+        == 2
+    )
 
     assert client.requests == [], "no request may be sent"
     captured = capsys.readouterr()

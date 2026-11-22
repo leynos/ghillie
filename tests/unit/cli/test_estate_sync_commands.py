@@ -55,9 +55,18 @@ def test_sync_rejects_the_removed_wait_flag(
     client = harness()
 
     result = cli_main(
-        ["--api-base-url", BASE_URL, "estate", "sync", "--estate-key", "demo", "--wait"]
+        [
+            "--api-base-url",
+            BASE_URL,
+            "estate",
+            "sync",
+            "--estate-key",
+            "demo",
+            "--wait",
+        ],
+        client_factory=client.factory,
     )
 
     assert result == 2
-    assert client.requests == []
+    assert client.requests == [], "no request may be sent"
     assert capsys.readouterr().err

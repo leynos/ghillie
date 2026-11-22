@@ -40,10 +40,13 @@ def test_estate_list_rejects_lifecycle_flags(
     """D4: the removed ``--active/--inactive`` options are unknown, not ignored."""
     client = harness()
 
-    result = cli_main(["--api-base-url", BASE_URL, "estate", "list", "--active"])
+    result = cli_main(
+        ["--api-base-url", BASE_URL, "estate", "list", "--active"],
+        client_factory=client.factory,
+    )
 
     assert result == 2
-    assert client.requests == []
+    assert client.requests == [], "no request may be sent"
     assert capsys.readouterr().err
 
 
