@@ -95,11 +95,13 @@ def parse_catalogue_text(text: str) -> Catalogue:
     yaml = _yaml()
     try:
         loaded = yaml.load(text)
-    except (YAMLError, ValueError) as exc:
-        # ``ValueError`` comes from a scalar whose constructor rejects its own
-        # text — an impossible calendar date such as ``2026-13-01``. Like
-        # malformed YAML, that is a property of the untrusted document rather
-        # than a defect in this service, so it must not escape as a 500.
+    except (YAMLError, ValueError, KeyError, TypeError, OverflowError) as exc:
+        # Every branch here is a constructor rejecting the untrusted document:
+        # ``ValueError`` for an impossible calendar date such as ``2026-13-01``,
+        # ``OverflowError`` when a timestamp rounds past year 9999, ``KeyError``
+        # for an unknown ``!!bool`` spelling, and ``TypeError`` when a nested
+        # sequence is used as a mapping key and cannot be hashed. None of them
+        # is a defect in this service, so none may escape as a 500.
         raise CatalogueValidationError([f"failed to parse YAML: {exc}"]) from exc
 
     if loaded is None:

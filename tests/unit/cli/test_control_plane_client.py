@@ -2,10 +2,166 @@
 
 from __future__ import annotations
 
+import http
+import urllib.parse
+
 import httpx
+import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from ghillie.cli.config import ResolvedCliConfig
-from ghillie.cli.control_plane import ControlPlaneClient
+from ghillie.cli.control_plane import (
+    ControlPlaneClient,
+    ControlPlaneError,
+    _quote_path,
+    parse_page,
+)
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        pytest.param({}, id="items-missing"),
+        pytest.param({"items": "not-a-list"}, id="items-not-a-list"),
+        pytest.param({"items": [None]}, id="item-not-an-object"),
+        pytest.param({"items": [42]}, id="item-not-a-mapping"),
+    ],
+)
+def test_parse_page_rejects_a_malformed_page(
+    document: dict[str, object],
+) -> None:
+    """A page that is not a list of objects is a malformed success (O4)."""
+    with pytest.raises(ControlPlaneError) as caught:
+        parse_page(document)
+
+    assert caught.value.code == "invalid_response"
+
+
+def test_parse_page_separates_items_from_pagination_metadata() -> None:
+    """The renderer receives validated rows and the page metadata apart."""
+    page = parse_page(
+        {
+            "items": [{"key": "demo"}],
+            "limit": 50,
+            "offset": 0,
+            "has_more": False,
+            "next_offset": None,
+        }
+    )
+
+    assert page.items == ({"key": "demo"},)
+    assert page.meta == {
+        "limit": 50,
+        "offset": 0,
+        "has_more": False,
+        "next_offset": None,
+    }
+
+
+def test_request_page_reads_the_page_through_the_client() -> None:
+    """The client parses a collection response before returning it."""
+    config = ResolvedCliConfig(
+        api_base_url="http://127.0.0.1:9999",
+        api_base_url_source="flag",
+        auth_token=None,
+        output="json",
+        log_level="info",
+        request_timeout_s=5.0,
+        non_interactive=True,
+        dry_run=False,
+    )
+    transport = httpx.MockTransport(
+        lambda _request: httpx.Response(200, json={"items": [{"key": "demo"}]})
+    )
+
+    with ControlPlaneClient(config, transport=transport) as client:
+        page = client.request_page(http.HTTPMethod.GET, ["estates"])
+
+    assert page.items == ({"key": "demo"},)
+
+
+@pytest.mark.parametrize(
+    ("segments", "expected"),
+    [
+        pytest.param(
+            ("estates", "demo", "repositories"),
+            "/estates/demo/repositories",
+            id="ordinary",
+        ),
+        pytest.param(
+            ("estates", "..", "repositories"),
+            "/estates/%2E%2E/repositories",
+            id="two-dots",
+        ),
+        pytest.param(
+            ("estates", ".", "repositories"), "/estates/%2E/repositories", id="dot"
+        ),
+        pytest.param(("a b", "c/d"), "/a%20b/c%2Fd", id="reserved-characters"),
+        pytest.param(("wildside.v2",), "/wildside.v2", id="ordinary-dotted"),
+    ],
+)
+def test_quote_path_keeps_each_segment_in_place(
+    segments: tuple[str, ...],
+    expected: str,
+) -> None:
+    """A segment can neither become a relative-path marker nor change the route.
+
+    ``quote(..., safe="")`` leaves dots alone, so a segment made up only of
+    dots needs encoding; an ordinary dotted segment must stay readable.
+    """
+    assert _quote_path(segments) == expected
+
+
+_PATH_SEGMENT = st.one_of(
+    st.text(
+        max_size=32,
+        # A lone surrogate cannot survive UTF-8 encoding, so no argv can carry one.
+        alphabet=st.characters(blacklist_categories=("Cs",)),
+    ),
+    # Uniform text almost never draws a dot-only segment, so draw that shape
+    # directly; it is the case the encoding exists for.
+    st.text(alphabet=".", min_size=1, max_size=6),
+    st.sampled_from(["..", "./..", "...", "%2E", "a/b", "a b", "", "wildside.v2"]),
+)
+
+
+@given(segments=st.lists(_PATH_SEGMENT, min_size=1, max_size=4))
+def test_property_quote_path_cannot_change_the_route(
+    segments: list[str],
+) -> None:
+    """Invariant: quoting preserves each segment and confines it to one place.
+
+    A segment reaches the server in the same position it left in, so no value
+    can address a different resource. Three consequences follow, and each is
+    checked separately because they fail for different reasons: decoding
+    restores the original, no raw ``/`` survives to split the path, and no
+    encoded segment can be read as a relative-path marker.
+    """
+    quoted = _quote_path(segments)
+    encoded = quoted.split("/")[1:]
+
+    assert len(encoded) == len(segments), quoted
+    for original, segment in zip(segments, encoded, strict=True):
+        assert "/" not in segment, quoted
+        assert not (segment and set(segment) == {"."}), quoted
+        assert urllib.parse.unquote(segment) == original, quoted
+
+
+@pytest.mark.parametrize(
+    ("segments", "expected"),
+    [
+        pytest.param([], "/", id="no-segments"),
+        pytest.param([""], "/", id="one-empty-segment"),
+        pytest.param(["", ""], "//", id="two-empty-segments"),
+    ],
+)
+def test_quote_path_keeps_empty_segments_empty(
+    segments: list[str],
+    expected: str,
+) -> None:
+    """An empty segment adds no character, so the path gains no new component."""
+    assert _quote_path(segments) == expected
 
 
 def test_control_plane_client_uses_base_url_timeout_and_auth_header() -> None:

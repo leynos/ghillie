@@ -8,6 +8,7 @@ import dataclasses
 import re
 import typing as typ
 
+from ghillie.common.estate import NEW_ESTATE_KEY_PATTERN
 from ghillie.estate.errors import InvalidEstateKeyError
 
 if typ.TYPE_CHECKING:
@@ -17,24 +18,7 @@ if typ.TYPE_CHECKING:
 
 MAX_ESTATE_KEY_LENGTH = 64
 MAX_PAGE_LIMIT = 500
-MAX_PAGE_OFFSET = 2**31 - 1
-"""Largest offset any estate listing accepts.
-
-A signed 32-bit ceiling is far beyond any real estate listing and stays within
-the native integer range of every store the project supports. The persistence
-adapter enforces the same bound before it binds the value, so an offset that
-reaches it despite this check is rejected as invalid pagination rather than
-failing in the driver.
-"""
-
 DEFAULT_PAGE_LIMIT = 50
-
-NEW_ESTATE_KEY_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
-"""Pattern a *new* estate key must match.
-
-Other endpoints accept any key of one to :data:`MAX_ESTATE_KEY_LENGTH`
-characters so that keys created earlier through Python stay reachable.
-"""
 
 _NEW_ESTATE_KEY_RE = re.compile(NEW_ESTATE_KEY_PATTERN)
 

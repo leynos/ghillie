@@ -420,12 +420,12 @@ library and estate-owned modules.
   optional `ingestion_enabled` filter. `Page[T]` and `RepositoryPage` return
   the items with `limit`, `offset`, `has_more`, and `next_offset`.
 - The pagination bounds are module constants: `DEFAULT_PAGE_LIMIT` 50,
-  `MAX_PAGE_LIMIT` 500, and `MAX_PAGE_OFFSET` `2**31 - 1`. `MAX_PAGE_OFFSET` is
-  a domain-level ceiling in `ghillie/estate/models.py`;
-  `ghillie/catalogue/queries.py` enforces the same storage range before the
-  value is bound, because SQLite raises `OverflowError` beyond its signed
-  64-bit bind range and PostgreSQL rejects an out-of-range `OFFSET` as a
-  storage error.
+  `MAX_PAGE_LIMIT` 500 in `ghillie/estate/models.py`, and `MAX_PAGE_OFFSET`
+  `2**31 - 1` in `ghillie/common/estate.py`, shared with the CLI so it can
+  reject the value locally. `ghillie/catalogue/queries.py` enforces the same
+  storage range before the value is bound, because SQLite raises
+  `OverflowError` beyond its signed 64-bit bind range and PostgreSQL rejects an
+  out-of-range `OFFSET` as a storage error.
 - `MAX_REQUEST_BODY_BYTES` is an HTTP transport limit of 1 MiB, defined in
   `ghillie/api/estate/resources.py`; that adapter enforces it.
 - `validate_new_estate_key` applies `NEW_ESTATE_KEY_PATTERN` only when the
@@ -679,6 +679,21 @@ methods, the two buffer recorders, `dialect_upsert_strategy`, and
 `_insert_values`, and `tests/unit/test_skylos_lint_contract.py` pins the same
 names so the contract cannot drift unnoticed.
 
+The estate boundary adds three further groups, each for a boundary the liveness
+graph cannot follow. `EstateManagementService` reaches the module-private
+helpers `_estate_summary`, `_import_summary`, `_next_offset`, `_sync_summary`,
+and `_validate_page` from its async methods, which Skylos does not resolve.
+Falcon passes every middleware hook its full positional contract, while
+`BearerTokenMiddleware.process_request`/`process_response` and
+`EstateOutcomeMiddleware.process_response` read only part of theirs, so the
+unused parameters need parameter rules rather than a signature that would stop
+implementing the protocol. The service calls `MutationRecorder` through an
+injected instance, so `_elapsed_ms`, `begin_mutation`, `begin_toggle`,
+`record_mutation`, and `record_toggle` are reached only through a qualified
+attribute chain. `pyproject.toml` therefore declares entry-point rules for
+those three groups, and `tests/unit/test_skylos_lint_contract.py` pins their
+names alongside the registry rules.
+
 The Skylos Makefile contract is parsed with pinned Makeutil in
 `tests/unit/test_skylos_lint_contract.py`; `make test` requires that parser.
 Only the Makeutil-dependent parser contract tests skip in isolated runs where
@@ -795,6 +810,112 @@ transaction ends.
 
 Metrics and tracing are not part of this module: the repository has no metrics
 or tracing infrastructure, and issue #219 tracks that remainder.
+
+## Estate control-plane adapters
+
+Task 2.5.b exposes estate configuration through one application service and two
+adapters. Keep new estate work inside that shape.
+
+- **Port first.** Add a method to
+  `ghillie.estate.ports.EstateManagement` (D9) and implement it in
+  `ghillie.estate.service.EstateManagementService`. The HTTP resources in
+  `ghillie/api/estate/resources.py` call the port and import neither
+  `ghillie.catalogue` nor `ghillie.registry` directly. The CLI verbs in
+  `ghillie/cli/commands/estate.py` are a separate adapter: they call the HTTP
+  API, never the Python port, and may import neither the port nor those
+  packages. Hecate enforces the boundaries, and O6 requires that importing
+  `ghillie.cli.app` loads nothing under those packages or `sqlalchemy`.
+- **One error vocabulary.** Raise the exceptions in
+  `ghillie.estate.errors`; the API maps them to statuses and D7 codes, and the
+  CLI maps the same codes to operator hints. Do not introduce a second error
+  type per adapter.
+- **msgspec at the wire.** Request and response bodies are msgspec `Struct`s in
+  `ghillie/api/estate/schemas.py` (D8). Decode with
+  `msgspec.json.decode(..., type=Struct)` and let `msgspec.ValidationError`
+  become the documented `invalid_input` response. Add new fields to the structs
+  rather than hand-building dictionaries.
+- **One envelope.** Every failure uses `{"title", "description", "code"}` plus
+  the optional `field`, `issues`, and `max_bytes` members (D7). The CLI's
+  `ControlPlaneError` retains the `code`, the description, and the `issues`
+  list; it does not read `field` or `max_bytes`. An unknown server code still
+  reaches the operator unchanged and gets a fallback hint, so a new code needs
+  no client change.
+- **Keep port package initializers docstring-only.**
+  `ghillie/estate/__init__.py` re-exports nothing. Importing the service from
+  it would pull `ghillie.catalogue` — and its Dramatiq broker guard — into
+  every consumer of the pure models, breaking O6 for the CLI and forcing broker
+  configuration on tests that only need the dataclasses. Import concrete
+  modules explicitly.
+- **Estate contracts are shared, not copied.** `NEW_ESTATE_KEY_PATTERN` and
+  `MAX_PAGE_OFFSET` live in `ghillie.common.estate`, a module that imports
+  nothing. The CLI reads the same definition as the application service and the
+  domain models while staying out of `ghillie.estate`, which the thin-client
+  rule (O6) forbids it to import; the initializer is docstring-only, but O6 is
+  an architectural boundary, not a consequence of what that one file happens to
+  import. `ghillie.common` is a `domain_ports` group, which Hecate lets every
+  layer import. The one remaining duplicate is `MAX_REQUEST_BODY_BYTES`: it is
+  an HTTP transport limit declared by `ghillie.api.estate.resources`, which the
+  CLI must not import either, so the unit tests assert the two values stay
+  equal. The key pattern has no such field, so its equality test is gone
+  because there is nothing left to compare. The offset ceiling has one more
+  deliberate copy: `MAXIMUM_OFFSET` in `ghillie/catalogue/queries.py` keeps the
+  storage adapter independent of the port's policy, and
+  `tests/unit/test_catalogue_queries.py` asserts the two values match so a
+  change to one cannot leave the other behind. The ceiling is enforced by the
+  `PageOffset` validator as well as by the service, so an out-of-range page
+  request costs no request and exits `2` like every other local rejection.
+- **One job per CLI unit.** `ghillie/cli/commands/estate.py` holds the Cyclopts
+  commands and the parameter annotations, and nothing else: each command reads
+  `get_current_context()` once, delegates, and hands failures to
+  `ghillie.cli.presentation`. The work lives in units with one reason to change.
+  `ghillie.cli.estate_input` validates the key, reads the catalogue as
+  `utf-8-sig`, and enforces the serialized byte limit, raising `LocalInputError`
+  (`ghillie/cli/errors.py`). `ghillie.cli.estate_view` turns a validated page
+  or import document into output and takes the format explicitly.
+  `ghillie.cli.presentation` owns the hint table, the stderr write, and the
+  exit codes; it fills a missing hint onto a copy, so a caller's
+  `ControlPlaneError` is never mutated. `ghillie.cli.control_plane` parses a
+  collection response with `parse_page`, so a malformed page fails as
+  `invalid_response` before any renderer sees it.
+- **The client is injected at the command boundary.**
+  `CommandContext.client_factory` defaults to `ControlPlaneClient`, and
+  `ControlPlaneClient` accepts a `transport` for its owned client. Tests supply
+  a factory that passes a `MockTransport` or `RunnerTransport`, so command
+  tests replace the boundary rather than the `httpx` module. `main()` also
+  accepts `client_factory` for tests that must drive the real parser;
+  production leaves it unset.
+
+### Behavioural and end-to-end coverage
+
+The estate feature file (`tests/features/estate_management.feature`) drives the
+real CLI against an in-process ASGI app. The `estate_state` fixture builds the
+SQLite engine, the application service, and the Falcon app, then passes `main` a
+`client_factory` that gives the client a
+`tests/helpers/runner_transport.RunnerTransport`. That transport runs the async
+client on an `asyncio.Runner`, which bridges the synchronous CLI to the ASGI
+app without a socket.
+
+`tests/e2e/test_estate_management_e2e.py` starts the packaged runtime as a
+subprocess on a free port and drives the estate endpoints over real HTTP with
+raw `httpx`, which is where the wire contract is proved.
+`tests/e2e/test_estate_cli_e2e.py` starts the same runtime and drives the
+journey through both the CLI module entry point and the installed console
+script, checking the persisted state after each mutation. End-to-end tests
+carry the `e2e` marker and are part of `make test`; opt out with `-m "not e2e"`
+when a database-backed subprocess is not wanted.
+
+Three invariants are stated as Hypothesis properties rather than examples,
+because each quantifies over an open input space where a table of cases can
+only sample. `test_parse_catalogue_text` asserts that arbitrary text, and text
+wrapping a constructor-triggering fragment, either parses or raises
+`CatalogueValidationError` — no other exception may escape the untrusted-input
+boundary. `_quote_path` asserts that every segment decodes back to itself,
+carries no raw `/`, and never becomes a dot-only segment, so no value can move
+a request to another route. The import command's local key gate asserts that it
+accepts exactly the keys `validate_new_estate_key` accepts, which catches a
+matching change such as `fullmatch` giving way to `match` that comparing the
+pattern text alone would miss. The example-based cases for each remain as named
+regression examples.
 
 ## Helm chart for local and GitOps (Git-driven operations) previews
 

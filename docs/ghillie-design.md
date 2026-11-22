@@ -127,9 +127,10 @@ processing.
 ### 3.0 Operator CLI scaffold boundary (Task 2.5.a)
 
 The packaged operator CLI is a driving adapter layered alongside the runtime
-server and background workers. Its responsibility in Task 2.5.a is to make the
-MVP control-plane contract executable without pulling estate, ingestion,
-export, metrics, and reporting implementation forward prematurely.
+server and background workers. Task 2.5.a made the MVP control-plane contract
+executable without pulling ingestion, export, metrics, and reporting
+implementation forward prematurely; Task 2.5.b then replaced the estate
+placeholders with live verbs (see §8.5).
 
 The boundary is intentionally explicit:
 
@@ -139,7 +140,22 @@ The boundary is intentionally explicit:
   applying the documented precedence of flag, environment, profile file,
   persisted state, then fallback URL.
 - `ghillie/cli/control_plane.py` is the driven adapter seam for API-backed
-  commands. It owns `httpx` base URL, timeout, and bearer-token setup.
+  commands. It owns `httpx` base URL, timeout, and bearer-token setup, parses a
+  collection response into a validated page, and accepts an optional transport
+  for its owned client.
+- `ghillie/cli/commands/estate.py` holds the Cyclopts estate commands, their
+  parameter annotations, and the three request helpers they share. Each command
+  reads the invocation context once and delegates. `_dry_run_params(config)`
+  builds the D20 query parameter from an explicit configuration;
+  `_call(context, request)` obtains the client from
+  `CommandContext.client_factory` and sends one `ControlPlaneRequest`; and
+  `_page(context, request)` does the same for a collection endpoint and returns
+  the validated page. `ghillie/cli/estate_input.py` validates the estate key,
+  reads the catalogue and enforces the byte limit, `ghillie/cli/estate_view.py`
+  renders a validated page or import document, and
+  `ghillie/cli/presentation.py` owns the hint table, the stderr write and the
+  exit codes. `ghillie/cli/errors.py` carries `LocalInputError`. Tests replace
+  the client factory with one that injects a transport.
 - `ghillie/cli/runtime_adapters.py` is the driven adapter seam for local stack
   integration. Task 2.5.a validates selector names (`cuprum`, `python-api`) and
   leaves concrete orchestration work to later tasks.
@@ -749,15 +765,23 @@ The following components are implemented:
 - **Session middleware** (`SQLAlchemySessionManager`): Provides
   request-scoped `AsyncSession` instances with automatic commit/rollback/close
   per the pattern documented in `async-sqlalchemy-with-pg-and-falcon.md`.
+- **Estate management endpoints** (Task 2.5.b):
+  `POST /estates/{estate_key}/catalogue-import`,
+  `POST /estates/{estate_key}/registry-sync`, `GET /estates`,
+  `GET /estates/{estate_key}/repositories`, and
+  `PATCH /repositories/{owner}/{name}/ingestion`. They delegate to
+  `ghillie.estate.ports.EstateManagement` and render one error envelope (D7,
+  §8.5).
 - **Error handlers**: Render every failure through the shared envelope with a
   stable `code`, including Falcon's own HTTP errors and unexpected exceptions.
 
 **Planned evolution:** The estate application layer is shipped:
 `ghillie/estate/` and the catalogue read queries in
 `ghillie/catalogue/queries.py` implement the current estate surface. The
-remaining planned endpoints are Concordat CloudEvents ingestion, for which
-corresponding resource modules should be created under `ghillie/api/bronze/` and
-`ghillie/api/gold/`.
+remaining planned endpoints are Concordat CloudEvents ingestion plus
+ingestion-run and reporting-run resources, for which corresponding resource
+modules should be created under `ghillie/api/bronze/`, `ghillie/api/gold/`, and
+sibling packages that follow the estate module's port-owned dependency rule.
 
 This structure maintains clear separation between:
 
@@ -787,9 +811,9 @@ and the failure criteria.
 - Health probe endpoints remain in a separate resource module from domain
   endpoints. This allows Kubernetes operators to understand which endpoints
   serve operational purposes versus functional purposes.
-- `AppDependencies` frozen dataclass groups `session_factory` and
-  `reporting_service` to keep constructor argument counts within lint thresholds
-  (`max-args = 4`).
+- `AppDependencies` frozen dataclass groups `session_factory`,
+  `reporting_service`, and `estate_service` to keep constructor argument counts
+  within lint thresholds (`max-args = 4`).
 - `ReportResource` reuses the request-scoped session from
   ``req.context.session`` for repository slug lookups, keeping all reads within
   the middleware's transaction.  The ``ReportingService`` manages its own
@@ -829,6 +853,11 @@ catalogue and registry exceptions and leaves no single place for estate-key
 resolution, translation, locking, and logging. The port is kept because the
 task requires domain logic to be separated from adapters, and the service stays
 a thin coordinator.
+
+The adapters import only `ghillie.estate.ports`, `ghillie.estate.models`, and
+`ghillie.estate.errors`; the service, catalogue, and registry packages stay
+behind the port, which keeps the boundary checkable by Hecate and by the
+import-closure test (O6).
 
 **Affected modules:** `ghillie/estate/ports.py`, `ghillie/estate/service.py`,
 `ghillie/estate/collaborators.py`, and `ghillie/catalogue/queries.py`.
@@ -872,10 +901,14 @@ Creating an estate, which happens on import, requires a key matching
 one to 64 characters, so keys created earlier through Python stay reachable.
 Keys containing `/` cannot be routed and surface as `not_found`.
 
-**Affected modules:** `ghillie/estate/models.py` defines
-`NEW_ESTATE_KEY_PATTERN`, `validate_new_estate_key`, and
-`validate_estate_key_reference`; `ghillie/estate/service.py` applies the
-creation rule only when an import creates an estate.
+**Affected modules:** `ghillie/common/estate.py` defines
+`NEW_ESTATE_KEY_PATTERN` and `MAX_PAGE_OFFSET`, because the CLI, the
+application service, and the domain models all need them and the CLI must not
+import `ghillie.estate` (O6). `ghillie/estate/models.py` imports the pattern
+and defines `validate_new_estate_key` and `validate_estate_key_reference`;
+`ghillie/estate/service.py` imports `MAX_PAGE_OFFSET` from
+`ghillie/common/estate.py` and applies the creation rule only when an import
+creates an estate.
 
 #### Concurrency and storage failures
 
@@ -885,11 +918,16 @@ guarantee covers calls that reach the same instance; separate instances, worker
 processes, and replicas share nothing. The MVP builds one service instance in
 one worker in one replica. Storage failures map per operation: an
 `IntegrityError` raised by an import or a registry projection becomes a `409`
-`conflict`; a connection-level `OperationalError` or `InterfaceError` becomes a
-`503` `storage_unavailable`; and any other `SQLAlchemyError`, including an
-integrity failure during an ingestion toggle, also becomes `503`
-`storage_unavailable`. Error descriptions never include SQL or driver detail;
-the original failure is chained as the cause rather than rendered.
+`conflict`; a catalogue read or import that fails with any other
+`SQLAlchemyError`, and any `SQLAlchemyError` from an ingestion toggle, becomes
+`503` `storage_unavailable`. Registry sync is the exception: a projection that
+fails with a non-integrity `SQLAlchemyError`, or a `RegistrySyncError` whose
+cause is neither an `IntegrityError` nor a connection-level `OperationalError`
+or `InterfaceError`, becomes `500` `registry_sync_failed`. An unexplained sync
+failure is a defect in the projection, not necessarily an outage, so reporting
+it as `503` would send operators to the database for a fault it does not own.
+Error descriptions never include SQL or driver detail; the original failure is
+chained as the cause rather than rendered.
 
 **Affected modules:** `ghillie/estate/service.py` holds the per-estate locks,
 `ghillie/estate/persistence.py` classifies the storage failures, and
@@ -1012,6 +1050,70 @@ unit tests are unaffected.
 
 **Affected modules:** `ghillie/runtime.py` (`create_app`) and
 `ghillie/logging.py` (`configure_logging`).
+
+### 8.5 Estate-management control plane (Task 2.5.b)
+
+Task 2.5.b exposes estate configuration through one application service, one
+HTTP adapter, and the operator CLI. An operator can import a catalogue, project
+its repositories into the Silver registry, list estates and repositories, and
+toggle ingestion without writing Python.
+
+**Architecture.** `ghillie.estate.ports.EstateManagement` is the driving port
+(D9). `ghillie.estate.service.EstateManagementService` implements it on top of
+`CatalogueImporter` and `RepositoryRegistryService`. The HTTP resources in
+`ghillie/api/estate/resources.py` are the server adapter and call the port. The
+CLI in `ghillie/cli/commands/estate.py` is a separate client adapter: it calls
+the HTTP API and never the Python port, so the thin-client boundary stays
+intact. The command module holds the Cyclopts commands and the request helpers
+`_dry_run_params`, `_call` and `_page`; validation and catalogue reading live in
+`ghillie/cli/estate_input.py`, rendering in `ghillie/cli/estate_view.py`, and
+hints and exit codes in `ghillie/cli/presentation.py`.
+`ghillie/cli/control_plane.py` validates a collection response before any
+renderer sees it, and commands obtain their client from
+`CommandContext.client_factory` so tests can inject a transport. Errors are
+defined in `ghillie.estate.errors`, so neither adapter imports catalogue or
+registry exceptions.
+
+**Endpoints.** The five paths in §8.4 accept and return the msgspec structs in
+`ghillie/api/estate/schemas.py` (D8). Import and sync accept an optional
+`dry_run` query parameter; the ingestion `PATCH` does not, so the CLI refuses a
+dry-run toggle locally (D20). Every failure uses the envelope
+`{"title", "description", "code"}` plus optional `field`, `issues`, and
+`max_bytes` (D7). Bearer authentication applies when `GHILLIE_API_TOKEN` is set
+(D14), and `GHILLIE_DB_BOOTSTRAP=create-all` opts in to creating missing tables
+at start-up (D13).
+
+**Decisions recorded here.** D1 (the CLI uploads the catalogue as JSON built
+from the local UTF-8 text), D2 (sync is one synchronous call), D4 (estates have
+no lifecycle state), D5 (one tri-state repository filter and bounded
+pagination), D6 (a required ingestion toggle), D7 (the error envelope), D8
+(msgspec structs), D9 (the driving port), D10 (no inference service, so Vidai
+Mock is not used), D12 (path naming), D13 (start-up decoupling, health-only
+mode, and opt-in schema bootstrap), D14 (optional bearer authentication; the
+token is never logged), D15 (runtime profile hand-off to Task 2.5.e), D16
+(estate key creation pattern), D17 (per-estate serialization and the
+conflict/storage-unavailable mapping), D18 (estate identity on re-import), D19
+(three stacked pull requests), D20 (dry runs for import and sync; local refusal
+for the live-only toggle), and D21 (one structured log line per mutation). PR-C
+added D36 (one dependency-free shared estate contract in
+`ghillie/common/estate.py`) and D37 (one job per CLI unit, with the client
+injected through `CommandContext.client_factory`); both are recorded in the
+ExecPlan's decision log.
+
+**Toggle semantics.** A registry sync never re-enables a linked repository of
+the estate. While the catalogue entry naming it is active, sync applies
+`PRESERVE` and the operator's flag survives later imports and syncs; when the
+entry is present but inactive, sync applies `DISABLE_INACTIVE` and disables the
+row. A row that leaves the catalogue is `DISABLE_REMOVED`, and one that later
+re-enters stays disabled until an operator re-enables it. A repository already
+linked to another estate is reported in `repositories_conflicted` instead of
+being moved. These rules are the subject of
+[ADR-005](adr-005-registry-sync-preserves-operator-ingestion-toggles.md).
+
+**Delivery.** D19 delivered the work as three stacked pull requests: PR-A (the
+toggle-preserving sync and ADR-005), PR-B (the application service, HTTP
+adapter, and OpenAPI contract), and PR-C (the CLI verbs, behavioural and e2e
+coverage, documentation, and roadmap close-out).
 
 ## 9. Evidence Bundle Architecture (Phase 2.1)
 

@@ -8,7 +8,12 @@ port documents, and a failure it does not recognise is re-raised unchanged.
 import typing as typ
 
 import pytest
-from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
+from sqlalchemy.exc import (
+    IntegrityError,
+    OperationalError,
+    ProgrammingError,
+    SQLAlchemyError,
+)
 
 from ghillie.catalogue import queries
 from ghillie.catalogue.models import Catalogue
@@ -200,6 +205,11 @@ async def test_import_catalogue_translates_storage_failures(
             "Database error during sync",
             RegistrySyncFailedError,
         ),
+        (
+            ProgrammingError("SELECT", {}, Exception("no such column")),
+            "Database error during sync",
+            RegistrySyncFailedError,
+        ),
         (None, ESTATE_NOT_FOUND_REASON, EstateNotFoundError),
     ],
 )
@@ -214,6 +224,36 @@ async def test_sync_registry_translates_the_registry_failure(
     registry = _RegistryDouble(error=error)
 
     with pytest.raises(expected):
+        await persistence.sync_registry(_registry(registry), "demo", dry_run=False)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error",
+    [
+        pytest.param(SQLAlchemyError("unexpected"), id="bare-sqlalchemy-error"),
+        pytest.param(
+            ProgrammingError("SELECT", {}, Exception("no such column")),
+            id="programming-error",
+        ),
+    ],
+)
+async def test_sync_registry_keeps_an_unexplained_failure_a_sync_failure(
+    error: Exception,
+) -> None:
+    """An unexplained sync failure stays a 500, not a storage outage.
+
+    Only an integrity clash (``409``) and a connection-level cause (``503``)
+    have a documented outcome during a registry projection. A
+    ``ProgrammingError`` or a bare ``SQLAlchemyError`` is a defect in the sync
+    or the schema, so reporting it as ``503 storage_unavailable`` would send
+    operators to wait for an outage it does not establish. Sync is idempotent,
+    so a retry after the defect is fixed is safe; the original failure stays
+    chained as the cause for the logs.
+    """
+    registry = _RegistryDouble(error=error)
+
+    with pytest.raises(RegistrySyncFailedError):
         await persistence.sync_registry(_registry(registry), "demo", dry_run=False)
 
 
