@@ -122,7 +122,7 @@ route, and leave both unset to run health-only.
 ### Estate management CLI in 2.0.0
 
 The `ghillie estate` verbs are live. See
-[Estate management through the CLI and API (Task 2.5.b)](users-guide.md#estate-management-through-the-cli-and-api-task-25b)
+[Estate management through the CLI and API (Task 2.5.2)](users-guide.md#estate-management-through-the-cli-and-api-task-252)
 for the commands, the exit codes and the error hints.
 
 The live verbs are `ghillie estate import`, `ghillie estate sync`,

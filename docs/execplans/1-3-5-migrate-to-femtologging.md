@@ -1,4 +1,4 @@
-# Adopt femtologging for Ghillie logging
+# Migrate to the femtologging library
 
 This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
@@ -65,7 +65,7 @@ If any constraint cannot be met, stop and escalate.
 ## Progress
 
 - [x] (2026-01-31 00:00Z) Draft ExecPlan in
-  `docs/execplans/adopt-femtologging.md`.
+  `docs/execplans/1-3-5-migrate-to-femtologging.md`.
 - [x] (2026-01-31 00:00Z) ExecPlan approved; status updated to IN PROGRESS.
 - [x] (2026-01-31 00:00Z) Review logging usage and entry points, then confirm
   femtologging exception API against the snapshot.

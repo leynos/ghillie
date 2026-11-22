@@ -4,11 +4,11 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 ## Purpose / big picture
 
-Task 2.3.c adds an HTTP API endpoint, so operators can trigger a fresh
+Task 2.3.3 adds an HTTP API endpoint, so operators can trigger a fresh
 repository report on demand — for example, to respond to a review request —
 without waiting for the next scheduled run. After this change, an operator can
 `POST /reports/repositories/{owner}/{name}`, and receive JSON report metadata
@@ -111,7 +111,7 @@ Success is observable when:
 - [x] Update `specs/openapi.yml` with new endpoint
 - [x] Update `docs/users-guide.md` with on-demand reporting section
 - [x] Update `docs/ghillie-design.md` Section 8.4
-- [x] Mark Task 2.3.c done in `docs/roadmap.md`
+- [x] Mark Task 2.3.3 done in `docs/roadmap.md`
 - [x] All quality gates passed
 
 ## Surprises and discoveries
@@ -127,9 +127,9 @@ Success is observable when:
 
 1. **Modular API structure now, not deferred.** The design document
    (Section 8.4) calls for the `ghillie/api/` modular structure when
-   database-connected endpoints are added. Task 2.3.c is the first such
+   database-connected endpoints are added. Task 2.3.3 is the first such
    endpoint. Implementing the structure now avoids a second restructuring when
-   CloudEvents ingestion (Task 4.1.a) or status query endpoints arrive. The
+   CloudEvents ingestion (Task 4.1.1) or status query endpoints arrive. The
    existing `ghillie/runtime.py` delegates `create_app()` to
    `ghillie.api.app.create_app()` for backwards compatibility with the Granian
    entrypoint.
@@ -397,13 +397,13 @@ not set, it delegates to `ghillie.api.app.create_app()` without deps
 with path parameters, response schemas (`ReportMetadata`, `ErrorResponse`), and
 tags.
 
-**D2. `docs/users-guide.md`**: Add "On-demand report generation (Phase 2.3.c)"
+**D2. `docs/users-guide.md`**: Add "On-demand report generation (Task 2.3.3)"
 section with curl example, response format, required env vars, error responses.
 
 **D3. `docs/ghillie-design.md`**: Update Section 8.4 noting the modular API
 structure is now partially implemented.
 
-**D4. `docs/roadmap.md`**: Mark Task 2.3.c as done with implementation note.
+**D4. `docs/roadmap.md`**: Mark Task 2.3.3 as done with implementation note.
 
 ### Stage E: Quality gates
 
@@ -453,7 +453,7 @@ The change is accepted when:
 7. OpenAPI specification documents the new endpoint.
 8. Users' guide documents the new feature.
 9. Design document records the modular API implementation.
-10. Roadmap marks Task 2.3.c as complete.
+10. Roadmap marks Task 2.3.3 as complete.
 11. All quality gates pass.
 
 Expected test output:
@@ -560,9 +560,9 @@ None new. Uses existing `falcon`, `sqlalchemy`, and stdlib only.
 
 ### Downstream consumers
 
-- Task 4.1.a (CloudEvents ingestion) will add
+- Task 4.1.1 (CloudEvents ingestion) will add
   `ghillie/api/bronze/resources.py`.
-- Task 5.1.a (report retrieval) will add read-only Gold endpoints.
+- Task 5.1.1 (report retrieval) will add read-only Gold endpoints.
 
 ## Critical files
 
@@ -587,4 +587,4 @@ None new. Uses existing `falcon`, `sqlalchemy`, and stdlib only.
 | `specs/openapi.yml`                                   | Modify | Add report endpoint spec             |
 | `docs/users-guide.md`                                 | Modify | Document on-demand reporting         |
 | `docs/ghillie-design.md`                              | Modify | Update Section 8.4                   |
-| `docs/roadmap.md`                                     | Modify | Mark Task 2.3.c done                 |
+| `docs/roadmap.md`                                     | Modify | Mark Task 2.3.3 done                 |

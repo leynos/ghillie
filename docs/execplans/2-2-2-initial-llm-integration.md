@@ -1,4 +1,4 @@
-# Implement initial Large Language Model (LLM) integration
+# Implement initial LLM integration
 
 This execution plan (ExecPlan) is a living document. The sections `Progress`,
 `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must
@@ -6,7 +6,7 @@ be kept up to date as work proceeds.
 
 ## Purpose / big picture
 
-Task 2.2.b implements the first real LLM integration in Ghillie, connecting the
+Task 2.2.2 implements the first real LLM integration in Ghillie, connecting the
 `StatusModel` protocol to an OpenAI-compatible API (GPT-5.1-thinking). This
 integration enables repository evidence bundles to be transformed into
 narrative and structured status reports using an actual language model, moving
@@ -38,7 +38,7 @@ LLM integration testing) and extends Section 9.5 of `docs/ghillie-design.md`.
 - [x] Update `ghillie/status/__init__.py` with new exports
 - [x] Update documentation in `ghillie-design.md` (Section 9.5)
 - [x] Update ADR-002 status from Proposed to Accepted
-- [x] Mark Task 2.2.b as done in `roadmap.md`
+- [x] Mark Task 2.2.2 as done in `roadmap.md`
 - [ ] All quality gates passed (check-fmt, typecheck, lint, markdownlint, test,
   nixie)
 
@@ -66,7 +66,7 @@ To be completed after quality gates pass.
 
 ### Existing structures
 
-The StatusModel infrastructure is complete (Task 2.2.a):
+The StatusModel infrastructure is complete (Task 2.2.1):
 
 - **StatusModel Protocol** (`ghillie/status/protocol.py`): `@runtime_checkable`
   Protocol with `async summarize_repository()` method
@@ -217,7 +217,7 @@ providers:
 
 - Add Section 9.5 to `docs/ghillie-design.md` documenting the OpenAI integration
 - Update ADR-002 status from "Proposed" to "Accepted"
-- Mark Task 2.2.b as done in `docs/roadmap.md`
+- Mark Task 2.2.2 as done in `docs/roadmap.md`
 
 ## Concrete steps
 
@@ -357,7 +357,7 @@ providers:
     - Change status from "Proposed" to "Accepted"
     - Add implementation notes
 
-16. Mark Task 2.2.b as done in `docs/roadmap.md`.
+16. Mark Task 2.2.2 as done in `docs/roadmap.md`.
 
 17. Run quality gates:
 
@@ -469,7 +469,7 @@ If tests fail:
 - httpx (already in dependencies)
 - msgspec (already in dependencies)
 
-**Downstream consumers (Phase 2.3):**
+**Downstream consumers (Step 2.3):**
 
 - Reporting scheduler will instantiate `OpenAIStatusModel` or `MockStatusModel`
   based on configuration
@@ -494,4 +494,4 @@ If tests fail:
 | `tests/features/steps/test_llm_integration_steps.py`  | Create | BDD steps                         |
 | `docs/ghillie-design.md`                              | Modify | Add Section 9.5                   |
 | `docs/adrs/adr-0002-vidaimock-integration-testing.md` | Modify | Update status                     |
-| `docs/roadmap.md`                                     | Modify | Mark Task 2.2.b done              |
+| `docs/roadmap.md`                                     | Modify | Mark Task 2.2.2 done              |

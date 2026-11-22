@@ -41,8 +41,8 @@ Success is observable when all of the following are true:
 - Preserve Ghillie's percent-style logging wrapper contract in
   `ghillie/logging.py`. The new upstream convenience methods still require
   pre-formatted strings and do not support stdlib-style lazy `%` arguments.
-- Treat `docs/execplans/adopt-femtologging.md` as a historical record unless
-  the user explicitly asks to rewrite historical plans.
+- Treat `docs/execplans/1-3-5-migrate-to-femtologging.md` as a historical
+  record unless the user explicitly asks to rewrite historical plans.
 - Add or update tests before changing production code or the dependency pin,
   following the repository's red/green/refactor rules.
 - Update the relevant docs in `docs/` so they describe the new dependency and
@@ -100,7 +100,7 @@ If any constraint cannot be met, stop and escalate.
 - [x] (2026-04-08 UTC) Inspected Ghillie's current `femtologging` usage,
   dependency pin, wrapper module, tests, and bundled docs.
 - [x] (2026-04-08 UTC) Drafted this ExecPlan in
-  `docs/execplans/femtologging-april-2026-migration.md`.
+  `docs/execplans/1-3-5-femtologging-april-2026-migration.md`.
 - [x] (2026-04-08 UTC) Added focused red/green logging tests proving the old
   pin lacked `getLogger`, `isEnabledFor`, and convenience methods, then
   verifying those surfaces after the upgrade.
@@ -170,9 +170,9 @@ If any constraint cannot be met, stop and escalate.
   use case appears during implementation. Rationale: Ghillie already has a
   working Python `handle_record` capture helper, and no current module uses a
   stdlib `logging.Handler` subclass.
-- Decision: leave `docs/execplans/adopt-femtologging.md` unchanged unless the
-  user asks otherwise. Rationale: it documents the January 2026 adoption work
-  and should remain auditable as historical context.
+- Decision: leave `docs/execplans/1-3-5-migrate-to-femtologging.md` unchanged
+  unless the user asks otherwise. Rationale: it documents the January 2026
+  adoption work and should remain auditable as historical context.
 
 ## Context and orientation
 
@@ -408,8 +408,8 @@ git+https://github.com/leynos/femtologging@691a73962df8f99308a82348d99c4f707c245
   `tests/unit/test_reporting_observability.py`.
 - Current documentation now matches the target upstream guide for the changed
   Python API surface and builder names, while the historical
-  `docs/execplans/adopt-femtologging.md` record was intentionally left
-  unchanged.
+  `docs/execplans/1-3-5-migrate-to-femtologging.md` record was intentionally
+  left unchanged.
 - Full gate evidence on 2026-04-08 UTC:
   - `make fmt`
   - `make markdownlint`

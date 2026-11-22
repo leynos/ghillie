@@ -1,4 +1,4 @@
-# Define project evidence structure (Task 3.1.a)
+# Define project evidence structure
 
 This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
@@ -8,12 +8,12 @@ Status: DONE
 
 ## Purpose / big picture
 
-Task 3.1.a introduces domain models and a service for project-level evidence
+Task 3.1.1 introduces domain models and a service for project-level evidence
 bundles. A project evidence bundle aggregates catalogue metadata (project
 description, component list, lifecycle stages, dependency graph) with the
 latest repository-level machine summaries from the Gold layer into a single
 immutable structure suitable for downstream project-level summarization (Task
-3.1.b) and persistence (Task 3.1.c).
+3.1.2) and persistence (Task 3.1.3).
 
 After this change:
 
@@ -39,8 +39,8 @@ After this change:
   first, then implement.
 - Reuse existing enums (`ReportStatus`) and Gold layer models (`Report`,
   `ReportProject`, `ReportScope`).
-- No API endpoint changes (Task 3.1.c scope).
-- No status model changes (Task 3.1.b scope).
+- No API endpoint changes (Task 3.1.3 scope).
+- No status model changes (Task 3.1.2 scope).
 - Quality gates must pass: `make check-fmt`, `make typecheck`, `make lint`,
   `make test`.
 - Markdown must comply with project style (80-col wrap, dash bullets).
@@ -85,7 +85,7 @@ After this change:
 - [x] Update `docs/users-guide.md` with project evidence bundle section.
 - [x] Update `docs/ghillie-design.md` with project evidence design
   decisions.
-- [x] Mark Task 3.1.a as `[x]` in `docs/roadmap.md`.
+- [x] Mark Task 3.1.1 as `[x]` in `docs/roadmap.md`.
 - [x] Run quality gates and record outcomes.
 
 ## Surprises & discoveries
@@ -135,7 +135,7 @@ After this change:
 
 6. **Lifecycle drives status for non-repository components.**
    Components without repositories use their catalogue lifecycle field. A
-   future task (3.2.a) will add manual status support; the
+   future task (3.2.1) will add manual status support; the
    `ComponentEvidence.notes` field provides a hook for this.
 
 ## Outcomes & retrospective

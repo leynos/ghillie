@@ -8,7 +8,7 @@ Status: DONE
 
 ## Purpose / big picture
 
-Task 2.4.a adds post-generation report validation so Ghillie does not persist
+Task 2.4.1 adds post-generation report validation so Ghillie does not persist
 clearly broken model output. After this change, repository report generation
 must validate that:
 
@@ -73,7 +73,7 @@ Success is observable when:
 
 ## Progress
 
-- [x] Draft ExecPlan for Task 2.4.a.
+- [x] Draft ExecPlan for Task 2.4.1.
 - [x] Add failing unit tests for validation logic.
 - [x] Add failing unit tests for service retry/review behaviour.
 - [x] Add failing unit tests for API mapping of validation failures.
@@ -82,7 +82,7 @@ Success is observable when:
 - [x] Implement human-review persistence for exhausted retries.
 - [x] Update API error handlers and endpoint behaviour.
 - [x] Update users' guide and design docs.
-- [x] Mark roadmap Task 2.4.a as done.
+- [x] Mark roadmap Task 2.4.1 as done.
 - [x] Run all quality gates and record outcomes.
 
 ## Surprises & discoveries
@@ -141,7 +141,7 @@ All acceptance criteria are met:
    retry policy, human review markers, and configuration.
 8. `docs/ghillie-design.md` Section 9.6.1 documents the validation and
    retry workflow with a Mermaid flowchart.
-9. `docs/roadmap.md` marks Task 2.4.a as done.
+9. `docs/roadmap.md` marks Task 2.4.1 as done.
 
 Key implementation files:
 
@@ -175,7 +175,7 @@ Current state:
 
 Reference docs reviewed:
 
-- `docs/roadmap.md` (Task 2.4.a objective and completion criteria)
+- `docs/roadmap.md` (Task 2.4.1 objective and completion criteria)
 - `docs/ghillie-design.md` (Sections 9.4-9.7 reporting and status model design)
 - `docs/ghillie-proposal.md` (reporting and coverage semantics)
 - `docs/ghillie-bronze-silver-architecture-design.md` (Gold schema context)
@@ -297,7 +297,7 @@ Update docs:
   validation, retry behaviour, and review-marker lifecycle.
 - `docs/users-guide.md`: document user-visible 422 behaviour and operator
   workflow for reviewing flagged generations.
-- `docs/roadmap.md`: mark Task 2.4.a as done once implementation and quality
+- `docs/roadmap.md`: mark Task 2.4.1 as done once implementation and quality
   gates pass.
 
 ## Concrete steps
@@ -322,7 +322,7 @@ Update docs:
 
 ## Validation and acceptance
 
-Task 2.4.a is complete when all of the following are true:
+Task 2.4.1 is complete when all of the following are true:
 
 - Invalid outputs (empty, truncated, implausible highlights) are rejected
   before `Report` persistence.
@@ -335,7 +335,7 @@ Task 2.4.a is complete when all of the following are true:
   `make markdownlint`, and `make nixie` pass.
 - `docs/users-guide.md` and `docs/ghillie-design.md` reflect the delivered
   behaviour.
-- `docs/roadmap.md` marks Task 2.4.a as done.
+- `docs/roadmap.md` marks Task 2.4.1 as done.
 
 ## Idempotence and recovery
 
@@ -347,4 +347,4 @@ Task 2.4.a is complete when all of the following are true:
 
 ## Revision note
 
-Initial draft created for roadmap Task 2.4.a planning.
+Initial draft created for roadmap Task 2.4.1 planning.

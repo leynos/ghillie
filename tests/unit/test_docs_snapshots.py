@@ -18,6 +18,6 @@ def test_adr_001_snapshot(snapshot: object) -> None:
 def test_femtologging_execplan_snapshot(snapshot: object) -> None:
     """Keep the femtologging migration ExecPlan stable unless updated."""
     content = (
-        _REPO_ROOT / "docs" / "execplans" / "femtologging-april-2026-migration.md"
+        _REPO_ROOT / "docs" / "execplans" / "1-3-5-femtologging-april-2026-migration.md"
     ).read_text(encoding="utf-8")
     assert content == snapshot

@@ -190,16 +190,16 @@ ghillie
     nice
 ```
 
-### Task 2.5.a scaffold status and Task 2.5.b estate delivery
+### Task 2.5.1 scaffold status and Task 2.5.2 estate delivery
 
 The first packaged operator CLI delivery is a scaffold, not a finished control
-plane. The implemented Task 2.5.a contract is:
+plane. The implemented Task 2.5.1 contract is:
 
 - `uv run ghillie --help` exposes the full root noun tree shown above.
 - Every documented noun and verb is registered under the packaged
   `ghillie/cli/` entry point, even where later tasks still own the real backend
   behaviour.
-- Task 2.5.b replaced the estate placeholders with live control-plane calls;
+- Task 2.5.2 replaced the estate placeholders with live control-plane calls;
   the estate section below records their request, response, and error shapes.
   The remaining nouns still return `status: not_implemented` placeholders.
 - Root-global options are resolved before noun dispatch. The scaffold accepts
@@ -207,7 +207,7 @@ plane. The implemented Task 2.5.a contract is:
   `--request-timeout-s`, `--non-interactive` or `--interactive`, and
   `--dry-run` or `--no-dry-run`.
 - Valid placeholder invocations return deterministic structured output with
-  `status: not_implemented` and the message `not implemented in Task 2.5.a`.
+  `status: not_implemented` and the message `not implemented in Task 2.5.1`.
 - Invalid CLI input still fails fast with exit code `2`.
 
 The `stack up` backend selector and the control-plane client seam are real in
@@ -262,7 +262,7 @@ Options: `--cluster-name`, `--namespace`, `--follow`, `--since`.
 
 ## Estate commands (manual estate configuration)
 
-All five estate verbs call the control plane (Task 2.5.b). They honour the root
+All five estate verbs call the control plane (Task 2.5.2). They honour the root
 options `--api-base-url`, `--auth-token`, `--output`, `--dry-run`, and
 `--request-timeout-s`. `json` and `yaml` print the server document unchanged;
 `table` is human-oriented. Invalid local input exits `2`; a control-plane

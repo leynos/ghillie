@@ -142,4 +142,4 @@ is only appropriate where the dynamic boundary cannot be expressed that way.
   <https://raw.githubusercontent.com/leynos/hecate/46f8c8798e7a80a3a1ab5a13c2a000a4423ffc12/docs/configuration.md>
 - Hecate Episodic migration notes:
   <https://raw.githubusercontent.com/leynos/hecate/46f8c8798e7a80a3a1ab5a13c2a000a4423ffc12/docs/migration-episodic.md>
-- Implementation plan: `docs/execplans/adopt-hecate.md`
+- Implementation plan: `docs/execplans/1-6-1-adopt-hecate.md`

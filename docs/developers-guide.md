@@ -318,7 +318,7 @@ The rules and their rationale are recorded in
 [ADR-005](adrs/adr-0005-registry-sync-preserves-operator-ingestion-toggles.md),
 the upgrade actions in the [migration guide](migration-guide.md), and the
 surrounding catalogue and Silver design is in
-[the Bronze/Silver architecture design](ghillie-bronze-silver-architecture-design.md#92-repository-discovery-and-registration-phase-13a).
+[the Bronze/Silver architecture design](ghillie-bronze-silver-architecture-design.md#92-repository-discovery-and-registration-task-131).
 
 ### Persistence and upsert strategies
 
@@ -813,7 +813,7 @@ or tracing infrastructure, and issue #219 tracks that remainder.
 
 ## Estate control-plane adapters
 
-Task 2.5.b exposes estate configuration through one application service and two
+Task 2.5.2 exposes estate configuration through one application service and two
 adapters. Keep new estate work inside that shape.
 
 - **Port first.** Add a method to

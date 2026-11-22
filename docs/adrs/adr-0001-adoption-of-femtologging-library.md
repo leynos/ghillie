@@ -16,7 +16,7 @@ concentrated around ingestion observability and runtime startup:
 - Runtime logging is configured in the ASGI entry point.
 - Ruff LOG rules already enforced via `pyproject.toml`.
 
-The observability work planned in Task 1.3.d requires structured logging for
+The observability work planned in Task 1.3.4 requires structured logging for
 ingestion health metrics. This ADR evaluates femtologging as a replacement for
 stdlib logging.
 
@@ -91,7 +91,7 @@ The following must be in place before migration can proceed:
 - Async-native logging aligned with Ghillie's async architecture
 - Bounded queues prevent logging from blocking ingestion workers
 - Thread-based handlers improve throughput for high-volume logging
-- Foundation for structured logging in observability work (Task 1.3.d)
+- Foundation for structured logging in observability work (Task 1.3.4)
 
 ### Negative
 
@@ -127,8 +127,8 @@ worker threads is better aligned with Ghillie's architecture.
 
 ## References
 
-- Task 1.3.d: Add observability for ingestion health (`docs/roadmap.md`)
-- Task 1.3.e: Migrate to femtologging library (`docs/roadmap.md`)
+- Task 1.3.4: Add observability for ingestion health (`docs/roadmap.md`)
+- Task 1.3.5: Migrate to femtologging library (`docs/roadmap.md`)
 - Current logging guidelines:
   `.rules/python-exception-design-raising-handling-and-logging.md`
 - Femtologging user guide: `docs/femtologging-users-guide.md`

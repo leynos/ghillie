@@ -1,285 +1,321 @@
-# Define and scaffold the operator command-line interface (CLI) contract
+# Define and scaffold the operator CLI contract
 
-This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
-`Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
-`Outcomes & Retrospective` must be kept up to date as work proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 ## Purpose / big picture
 
-Task 2.5.a establishes the operator-facing command surface for the minimum
-viable product (MVP). After this change, Ghillie has a packaged `ghillie`
-command that exposes the noun and verb tree defined in
-`docs/mvp-cli-specification.md`, accepts shared global options for
-control-plane access, and routes those options into two stable seams:
+Task 2.5.1 is the entry task for Step 2.5 in `docs/roadmap.md`. Its job is to
+turn the already-documented MVP operator contract into a runnable, testable
+scaffold. After this task is implemented, a human operator will be able to run
+one packaged `ghillie` command, inspect the full noun/verb tree, pass shared
+control-plane options once at the root, and exercise validated option parsing
+without relying on ad hoc scripts.
 
-1. an `httpx` control-plane client for HTTP APIs, and
-2. a local runtime adapter selector for `cuprum` and `python-api` stack
-   integrations.
+The deliverable is a scaffold, not a completed control plane. It must make the
+operator grammar stable for the follow-on tasks that add real estate,
+ingestion, reporting, export, and local runtime behaviours. Success is
+observable when:
 
-This task is intentionally a scaffold, not the full control plane. The work
-must deliver a runnable CLI skeleton that can be extended by Tasks 2.5.b
-through 2.5.d without changing the operator grammar. The direct user-visible
-outcome is that an operator can run commands such as `ghillie --help`,
-`ghillie stack up --help`, `ghillie estate import --help`, and
-`ghillie report run --help`, see the documented global options, and get stable
-validation of the command tree and option values.
-
-Success is observable when:
-
-1. `uv run ghillie --help` shows the root nouns `stack`, `estate`, `ingest`,
-   `export`, `report`, and `metrics`.
-2. `uv run ghillie stack up --help` and the corresponding help for the other
-   nouns show the documented verb structure.
-3. Global options such as `--api-base-url`, `--auth-token`, `--output`, and
-   `--request-timeout-s` parse from the root and are available to command
-   handlers through one shared context object.
-4. The CLI can build a configured `httpx` control-plane client and can select
-   either the `cuprum` or `python-api` local runtime adapter without ad hoc
-   scripts.
+1. `uv run ghillie --help` lists the top-level nouns `stack`, `estate`,
+   `ingest`, `export`, `report`, and `metrics`.
+2. `uv run ghillie <noun> <verb> --help` works for the verbs documented in
+   `docs/mvp-cli-specification.md`.
+3. Shared root options such as `--api-base-url`, `--auth-token`, `--output`,
+   and `--request-timeout-s` parse once and reach command handlers through one
+   resolved context object.
+4. The scaffold can build an `httpx` control-plane client and select a local
+   runtime adapter named `cuprum` or `python-api`.
 5. Unit tests and `pytest-bdd` scenarios fail before implementation and pass
-   after implementation.
-6. `docs/mvp-cli-specification.md`, `docs/users-guide.md`, and the relevant
-   design documentation reflect the scaffold accurately.
-7. `docs/roadmap.md` marks Task 2.5.a as done only after the implementation,
-   tests, and documentation are complete.
-8. Quality gates pass: `make check-fmt`, `make typecheck`, `make lint`,
-   `make test`, `make markdownlint`, and `make nixie`.
+   afterwards.
+6. `docs/mvp-cli-specification.md`, `docs/users-guide.md`,
+   `docs/ghillie-design.md`, and `docs/roadmap.md` are updated to match the
+   implemented scaffold exactly.
 
 ## Constraints
 
 - Treat `docs/mvp-cli-specification.md` as the contract source of truth for
-  command grammar, configuration precedence, root nouns, and option names.
-- Keep the grammar noun-first: `ghillie <noun> <verb> ...`. Do not introduce a
-  second top-level grammar.
-- Follow a hexagonal split. The CLI is a driving adapter. The HTTP client and
-  local runtime integrations are driven adapters. Command handlers must not
-  embed infrastructure details directly.
-- Do not remove or break the existing `scripts/local_k8s.py` workflow during
-  Task 2.5.a. The new CLI scaffold may wrap or coexist with it, but must not
-  regress the current local preview path.
-- Avoid ad hoc subprocess scripts for control-plane actions. The new scaffold
-  must live under the `ghillie/` package and be exposed as a proper console
+  noun-first grammar, root nouns, documented verbs, shared options, config
+  precedence, persisted state, and backend names.
+- Keep the grammar `ghillie <noun> <verb> ...`. Do not introduce a second
+  top-level grammar or preserve `scripts/local_k8s.py` as the primary operator
   entry point.
-- Do not change the existing Falcon runtime contract in `ghillie/runtime.py`
-  or the current report API path `POST /reports/repositories/{owner}/{name}`.
-- Do not add a new external dependency for Task 2.5.a unless the user approves
-  it. The scaffold can model `cuprum` as a selectable backend name without
-  implementing concrete `cuprum` command execution yet.
-- Follow the repository test-driven development (TDD) policy from
-  `AGENTS.md`: write the new unit tests and behavioural tests first, confirm
-  they fail, then implement.
-- Keep documentation wrapped and lint-clean under the repo markdown rules.
+- Follow a hexagonal boundary from the start. The CLI is a driving adapter.
+  The `httpx` control-plane client and local runtime adapters are driven
+  adapters. Command handlers must stay thin and must not embed HTTP or local
+  orchestration details directly.
+- Deliver the scaffold inside the `ghillie/` package with a proper console
+  entry point in `pyproject.toml`. Do not solve Task 2.5.1 with another
+  standalone script.
+- Do not break the existing `scripts/local_k8s.py` workflow during this task.
+  It remains a reference implementation and can coexist until later tasks move
+  more operator behaviour into the packaged CLI.
+- Do not silently pull Task 2.5.2, 2.5.3, 2.5.4, or 2.5.5 into this change.
+  The scaffold may expose commands for those later tasks, but it must not
+  require their full backend behaviour to satisfy completion.
+- Follow the repository TDD policy. New unit tests and behavioural tests must
+  be written first, demonstrated failing, and then turned green by the
+  implementation.
+- The final implementation must pass `make check-fmt`, `make typecheck`,
+  `make lint`, `make test`, `make markdownlint`, and `make nixie`.
+- Keep Markdown wrapped and lint-clean under
+  `docs/documentation-style-guide.md`.
 
-## Tolerances (exception triggers)
+## Tolerances
 
-- Scope: if Task 2.5.a cannot be completed within roughly 18 files or 1400 net
-  lines of code, stop and reassess the split between scaffold and later tasks.
-- Interface: if implementing the scaffold requires changing the operator
-  grammar already documented in `docs/mvp-cli-specification.md`, stop and
-  update the spec first before writing code.
-- Dependencies: if real `cuprum` support requires adding a new runtime
-  dependency in this task, stop and present the trade-off between adding that
-  dependency now and keeping adapter selection abstract until Task 2.5.d.
-- Behaviour: if the CLI needs to perform real estate-management or ingestion
-  actions to validate the scaffold, stop. Those behaviours belong to later
-  tasks and should not be silently pulled into 2.5.a.
-- Testing: if the CLI cannot be validated with deterministic unit and BDD
-  tests without invoking Docker, Helm, or Kubernetes, stop and redesign the
-  adapter seam.
-- Ambiguity: if Cyclopts cannot support the documented root-global-option
-  behaviour cleanly, stop and document the viable alternatives before
-  proceeding.
+- Scope: if Task 2.5.1 grows beyond roughly 16 to 20 files or requires
+  substantial changes outside the CLI, documentation, and tests, stop and
+  reassess whether later Step 2.5 work is being pulled in too early.
+- Dependencies: if implementing real `cuprum` execution requires a new runtime
+  dependency or a rename from the currently documented spelling, stop and
+  resolve that contract question before continuing.
+- Behaviour: if a command needs real Docker, Helm, Kubernetes, or live HTTP
+  side effects merely to validate parsing and scaffolding, stop and redesign
+  the seam so tests stay deterministic.
+- Packaging: if the packaged CLI cannot run without importing from
+  `scripts/`, stop and extract or defer that coupling explicitly rather than
+  hiding it inside the scaffold.
+- Interface: if Cyclopts cannot support root-scoped global options in a way
+  that matches the spec and help output, stop and update the spec before
+  implementation.
+- Ambiguity: if the stray completion criterion about producing a
+  multi-repository project evidence bundle is intended to be in scope for this
+  task, stop and clarify it. That criterion belongs to project evidence work,
+  not the CLI scaffold described in Task 2.5.1.
 
 ## Risks
 
-- Risk: Cyclopts global-option propagation for nested noun and verb commands
-  may be awkward, leading to drift between help text and actual parsing.
-  Severity: high Likelihood: medium Mitigation: define one explicit
-  context/config dataclass and write failing parser tests before wiring
-  handlers.
+- Risk: the repo already has an older broad Step 2.5 draft, and its
+  implementation suggestions include a package path that would clash with the
+  existing `ghillie/runtime.py` module. Mitigation: this plan keeps the new
+  scaffold under `ghillie/cli/` and avoids proposing a conflicting
+  `ghillie.runtime.*` package.
 
-- Risk: There is no packaged `ghillie` console entry point today, so the first
-  implementation could accidentally become another standalone script. Severity:
-  high Likelihood: medium Mitigation: add the CLI under `ghillie/cli/` and
-  expose it through `[project.scripts]` in `pyproject.toml`.
+- Risk: `docs/mvp-cli-specification.md` and `docs/roadmap.md` both use the
+  backend name `cuprum`, but the repo's existing scripting guidance and
+  dependencies are centred on `plumbum`. Mitigation: preserve `cuprum` as the
+  user-visible selector for Task 2.5.1, treat it as an adapter label rather
+  than a concrete dependency, and record any future rename decision explicitly
+  in the design docs.
 
-- Risk: The spec names `cuprum`, but the repo currently has no runtime
-  dependency for it and already contains Python modules for local k8s
-  orchestration. Severity: medium Likelihood: high Mitigation: keep backend
-  selection abstract in 2.5.a and defer concrete backend execution to later
-  work unless a dependency decision is made explicitly.
+- Risk: `pyproject.toml` currently carries `cyclopts` only in the development
+  dependency group, so the packaged CLI could be accidentally non-runnable in a
+  non-dev installation. Mitigation: promote the CLI's true runtime dependencies
+  into `[project.dependencies]` as part of implementation, and cover the
+  console entry point with tests.
 
-- Risk: Command handlers may accumulate business logic and violate the
-  dependency rule. Severity: medium Likelihood: medium Mitigation: treat
-  handlers as thin translation layers that call typed services, clients, or
-  adapter ports only.
+- Risk: the current local runtime logic lives under `scripts/local_k8s/`, which
+  is suitable for scripts but not yet a clean packaged adapter boundary.
+  Mitigation: Task 2.5.1 should validate adapter selection without depending on
+  full runtime execution. Any extraction of reusable orchestration logic should
+  be minimal and only done if required to keep the packaged CLI clean.
 
-- Risk: Behavioural tests that shell out to the installed command can become
-  flaky if they depend on the developer shell or external tools. Severity:
-  medium Likelihood: medium Mitigation: keep BDD scenarios focused on help
-  output, option validation, and backend selection using pure-Python test
-  doubles.
+- Risk: behavioural tests for a CLI can become brittle if they shell out to a
+  live environment. Mitigation: keep `pytest-bdd` scenarios black-box at the
+  parsing/help layer and use pure-Python doubles for config resolution, client
+  construction, and adapter selection.
 
 ## Progress
 
-- [x] 2026-03-08 Read `AGENTS.md`, the ExecPlans skill, and the
+- [x] 2026-03-13 Read `AGENTS.md`, the `execplans` skill, and the
   `hexagonal-architecture` skill.
-- [x] 2026-03-08 Read roadmap, MVP CLI specification, runtime/API modules, and
-  representative tests.
-- [x] 2026-03-08 Draft this ExecPlan.
-- [ ] Add failing unit tests for CLI packaging, command tree shape, shared
-  global options, control-plane client config, and runtime adapter selection.
-- [ ] Add failing behaviour-driven development (BDD) scenarios via
-  `pytest-bdd` for operator-visible help and option parsing.
-- [ ] Implement the packaged CLI scaffold under `ghillie/cli/`.
-- [ ] Update docs and mark Task 2.5.a done in `docs/roadmap.md`.
-- [ ] Run all quality gates and record the results.
+- [x] 2026-03-13 Queried project notes for architecture, tooling, gotchas, and
+  prior Step 2.5 decisions.
+- [x] 2026-03-13 Read `docs/roadmap.md`,
+  `docs/mvp-cli-specification.md`, `docs/ghillie-design.md`,
+  `docs/ghillie-proposal.md`,
+  `docs/ghillie-bronze-silver-architecture-design.md`,
+  `docs/async-sqlalchemy-with-pg-and-falcon.md`,
+  `docs/testing-async-falcon-endpoints.md`, and
+  `docs/testing-sqlalchemy-with-pytest-and-py-pglite.md`.
+- [x] 2026-03-13 Inspected `pyproject.toml`, `scripts/local_k8s.py`, the
+  existing local-k8s CLI tests, and the earlier Step 2.5 draft ExecPlan.
+- [x] 2026-03-13 Drafted this Task 2.5.1 ExecPlan.
+- [x] 2026-03-14 Added failing unit tests for the packaged CLI app, command
+  tree, shared root options, config precedence, control-plane client wiring,
+  and runtime adapter selection. The red phase failed with
+  `ModuleNotFoundError: No module named 'ghillie.cli'`.
+- [x] 2026-03-14 Added failing `pytest-bdd` scenarios for the
+  operator-visible grammar and validation rules. The red phase failed with the
+  same missing-package error before implementation.
+- [x] 2026-03-14 Implemented the packaged CLI scaffold under `ghillie/cli/`
+  and exposed it as the `ghillie` console entry point in `pyproject.toml`.
+- [x] 2026-03-14 Updated the CLI spec, users' guide, design document, and
+  roadmap entry to match the scaffold.
+- [x] 2026-03-14 Ran all quality gates and captured the final evidence below.
 
 ## Surprises & Discoveries
 
-- `docs/mvp-cli-specification.md` already contains most of the contract needed
-  for Task 2.5.a, including noun-first grammar, configuration precedence, the
-  root command tree, and backend names. The implementation task is mainly to
-  make that contract executable and testable.
-- The repo already contains a small but useful Cyclopts reference in
-  `scripts/local_k8s.py` plus tests in `scripts/tests/test_local_k8s_cli.py`.
-  That code shows how this repo currently tests Cyclopts app structure.
-- The codebase has no packaged `ghillie` console script yet. The current
-  user-facing command surfaces are Python modules and the standalone
-  `scripts/local_k8s.py`.
-- The current HTTP API surface is intentionally narrow. For this task, the
-  `httpx` client plumbing should be real, but most noun handlers will remain
-  skeletal until Tasks 2.5.b through 2.5.d add the corresponding APIs.
+- `docs/mvp-cli-specification.md` already captures most of the contract needed
+  for Task 2.5.1, including the noun-first grammar, root nouns, config
+  precedence, state persistence, and backend names. The main work is to make
+  that contract executable and testable.
+- The repo already contains a small Cyclopts reference in
+  `scripts/local_k8s.py` and structure tests in
+  `scripts/tests/test_local_k8s_cli.py`. Those files are the closest local
+  precedent for command registration and CLI test style.
+- There is no packaged `ghillie` console entry point today.
+  `pyproject.toml` has no `[project.scripts]` section for the operator CLI.
+- `httpx` is already a runtime dependency, which lowers the cost of adding a
+  control-plane client. `cyclopts` is not yet a runtime dependency.
+- The broad Step 2.5 draft is directionally useful, but one of its
+  suggested package moves would conflict with the existing `ghillie/runtime.py`
+  module. This plan avoids that mistake.
+- The extra completion criterion supplied with this request, "At least one
+  multi-repository project can produce a complete project evidence bundle from
+  catalogue and repository data", does not match Task 2.5.1 and should be
+  treated as out of scope unless the roadmap itself is changed.
+- Cyclopts `2.9.x` evaluates function annotations at import time via
+  `inspect.signature(..., eval_str=True)`. That means command modules cannot
+  hide runtime annotation imports such as `Path` behind `TYPE_CHECKING` guards
+  without breaking app import and help rendering.
+- The installed Cyclopts version does not expose newer root-dispatch hooks
+  that would make shared option propagation trivial. The scaffold therefore
+  uses a small explicit pre-parser at the app boundary to collect root-global
+  options before dispatching to the noun tree. This preserves the documented
+  contract while keeping handlers thin and testable.
 
 ## Decision Log
 
-1. The scaffold will be delivered as a packaged CLI inside `ghillie/cli/`,
-   not as another script.
+1. The packaged CLI will live under `ghillie/cli/`, and the console entry point
+   will resolve there.
 
    Rationale: the roadmap explicitly asks for a single CLI without ad hoc
-   scripts. The repo already uses the `ghillie/` package for runtime and API
-   code, and `pyproject.toml` currently lacks a console entry point.
+   scripts. `ghillie/cli/` is the least surprising place to add a driving
+   adapter without colliding with `ghillie/runtime.py`.
 
-2. The CLI will follow a ports-and-adapters shape from the start.
+2. Task 2.5.1 will scaffold every documented noun and verb, but handlers for
+   later tasks will remain thin placeholders with deterministic behaviour.
 
-   Rationale: this is the cleanest way to satisfy the user instruction to use
-   the `hexagonal-architecture` skill. A thin inbound adapter layer under
-   `ghillie/cli/commands/` can depend on typed context objects and ports, while
-   concrete `httpx` and local-runtime adapters stay isolated.
+   Rationale: the operator grammar must stabilize now, while the actual estate,
+   ingestion, reporting, export, and runtime workflows are split into later
+   roadmap tasks.
 
-3. Task 2.5.a will scaffold every documented noun and verb, but it will not
-   silently implement the later control-plane behaviours.
-
-   Rationale: the roadmap splits Step 2.5 into separate tasks with explicit
-   prerequisites. The scaffold must keep the command surface stable without
-   collapsing 2.5.b through 2.5.d into one oversized change.
-
-4. Backend selection for `cuprum` and `python-api` will be part of the stable
-   command contract, even if only lightweight placeholder adapters exist in
-   this task.
+3. Backend selection for `cuprum` and `python-api` will be validated as part of
+   the public contract even if only lightweight placeholder adapters exist at
+   this stage.
 
    Rationale: validated option parsing is part of the completion criteria, and
-   later tasks need a stable backend selector. Concrete backend execution can
-   remain deferred if required dependencies are not yet present.
+   later tasks need the selector to exist before they can attach real runtime
+   behaviour.
 
-5. CLI handlers should stay synchronous at the boundary and use explicit
-   bridging for async infrastructure.
+4. The scaffold will resolve all global configuration into one typed context
+   object before it reaches noun handlers.
 
-   Rationale: Cyclopts usage in this repo is synchronous, and the existing API
-   infrastructure uses async `httpx` and SQLAlchemy. Using a thin `asyncio.run`
-   bridge from command handlers into async clients keeps parser tests simple
-   and avoids spreading async concerns through the command tree.
+   Rationale: this is the cleanest way to keep Cyclopts parsing, config
+   precedence, `httpx` client construction, and adapter selection testable in
+   isolation.
+
+5. The plan preserves the documented `cuprum` spelling for now.
+
+   Rationale: the roadmap and CLI specification already publish that selector.
+   Renaming it in implementation without a documented decision would create
+   contract drift.
+
+6. Task 2.5.1 does not include the project-evidence completion criterion from
+   the user prompt.
+
+   Rationale: that criterion belongs to multi-repository project evidence work
+   and is not part of the roadmap text for Task 2.5.1. The plan calls this out
+   explicitly rather than smuggling unrelated work into the scaffold.
 
 ## Context and orientation
 
-The current repo state matters because Task 2.5.a is mostly about integration
-shape, not novel domain logic.
+The key repository facts a new implementor needs are these.
 
-`docs/mvp-cli-specification.md` already defines the intended operator contract.
-It specifies:
+`docs/roadmap.md` defines Task 2.5.1 as the entry task for the operator-facing
+control plane. It requires a noun/verb CLI grammar, shared global options,
+`httpx` control-plane client plumbing, and local runtime adapter selection.
 
-- the noun-first grammar,
-- the six top-level nouns,
-- the verb tree under each noun,
-- shared global options,
-- configuration precedence,
-- persisted CLI state,
-- and the backend names `cuprum` and `python-api`.
+`docs/mvp-cli-specification.md` already describes the desired operator contract
+in detail. It names the shared options, config precedence, persisted state
+files, root command tree, and backend labels. The implementation must follow
+that document and update it only when reality forces a clarifying change.
 
-`ghillie/api/app.py` and `ghillie/api/factory.py` provide the first reusable
-control-plane HTTP surface and service factory. Today, the only concrete
-operator API provides on-demand repository reporting via
-`POST /reports/repositories/{owner}/{name}`.
+The current reusable runtime and API surfaces are limited:
 
-`scripts/local_k8s.py` is the existing Cyclopts-based local operator tool. It
-is important as a reference, but it is not the final operator CLI because it is
-script-local, verb-first, and limited to local preview lifecycle management.
+- `ghillie/api/app.py` and related API modules expose the current Falcon ASGI
+  application and the on-demand repository report endpoint.
+- `ghillie/runtime.py` is the current server entry point and must not be
+  disturbed by the CLI scaffold.
+- `scripts/local_k8s.py` is a working Cyclopts script for the local preview
+  workflow, backed by modules under `scripts/local_k8s/`. It is a reference for
+  command structure and tests, not the final operator CLI.
 
-`ghillie/runtime.py` remains the runtime entry point and must not be disturbed
-by this work.
+The tests already show the repo's preferred patterns:
 
-The test suite already uses:
+- unit tests for CLI structure and pure config logic,
+- Falcon endpoint tests at the application boundary, and
+- `pytest-bdd` scenarios with feature files under `tests/features/` and step
+  implementations under `tests/features/steps/`.
 
-- unit tests for Cyclopts structure,
-- Falcon test clients for HTTP behaviour,
-- and `pytest-bdd` feature files with step modules under `tests/features/`.
-
-This task should follow the same patterns instead of inventing a separate test
-framework.
+The new CLI scaffold should reuse those patterns rather than inventing new ones.
 
 ## Implementation plan
 
-## Milestone 1: Lock the contract with failing tests
+## Milestone 1: lock the contract with failing tests
 
-Start with tests that describe the scaffold, not the future business logic.
+Begin with tests that describe the scaffold, not later business logic.
 
-Add unit tests under a new CLI-focused area, for example:
+Create new unit tests under `tests/unit/cli/` for the packaged app and the
+small typed pieces that make it work. A good first cut is:
 
 - `tests/unit/cli/test_app.py`
 - `tests/unit/cli/test_global_options.py`
+- `tests/unit/cli/test_config_resolution.py`
 - `tests/unit/cli/test_control_plane_client.py`
-- `tests/unit/cli/test_runtime_adapters.py`
+- `tests/unit/cli/test_runtime_adapter_selection.py`
 
-These tests should assert:
+These tests should assert, before any implementation exists, that:
 
-1. a packaged app object exists and is named `ghillie`,
-2. the root nouns match the spec,
+1. there is a packaged app object named `ghillie`,
+2. the root nouns match the spec exactly,
 3. each noun exposes the documented verbs,
-4. global options parse into one shared configuration object,
-5. config precedence is flag, env, profile, state, fallback,
-6. the control-plane client builder translates config into `httpx` base URL,
-   timeout, and auth headers,
-7. runtime adapter selection accepts `cuprum` and `python-api` and rejects
-   unknown values.
+4. root-global options parse before the noun and end up in one resolved config
+   object,
+5. config precedence is flag, environment, profile file, persisted state, then
+   hard fallback,
+6. the control-plane client builder turns config into `httpx` base URL,
+   timeout, and auth headers correctly, and
+7. runtime adapter selection accepts `cuprum` and `python-api` and rejects any
+   other value.
 
-Add behavioural coverage with `pytest-bdd` for the operator-visible contract.
-Create a feature file such as `tests/features/operator_cli_contract.feature`
-and a step module such as `tests/features/steps/test_operator_cli_steps.py`.
+Add behavioural coverage with `pytest-bdd` using a feature file such as
+`tests/features/operator_cli_contract.feature` and a step module such as
+`tests/features/steps/test_operator_cli_steps.py`.
 
-The BDD scenarios should stay black-box and user-facing. Cover at least these
-cases:
+Keep the scenarios black-box and operator-visible. Cover at least:
 
-1. `ghillie --help` lists the six nouns.
-2. `ghillie stack up --help` exposes the documented backend and wait options.
+1. `ghillie --help` lists the six top-level nouns,
+2. `ghillie stack up --help` exposes the documented backend and wait options,
 3. `ghillie --api-base-url http://127.0.0.1:9999 report run --help` parses
-   successfully, proving root-global options are accepted before the noun.
+   successfully, proving that root-global options are accepted before the noun,
+   and
 4. `ghillie stack up --backend invalid` fails fast with a validation error.
 
-Run the new targeted tests first and confirm they fail before any code is added.
+Run the targeted tests first and capture the red phase before implementation.
 
-Suggested red-phase commands:
+Suggested commands:
 
 ```bash
-UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools uv run pytest tests/unit/cli -v
-UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools uv run pytest tests/features/steps/test_operator_cli_steps.py -v
+set -o pipefail
+UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools uv run pytest tests/unit/cli -v 2>&1 | tee /tmp/ghillie-cli-unit-red.log
 ```
 
-## Milestone 2: Build the packaged CLI core
+```bash
+set -o pipefail
+UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools uv run pytest \
+  tests/features/steps/test_operator_cli_steps.py -v 2>&1 | \
+  tee /tmp/ghillie-cli-bdd-red.log
+```
 
-Add a proper CLI package under `ghillie/cli/`. Keep the package small and
-composed of explicit modules.
+## Milestone 2: build the packaged CLI core
+
+Add a new package rooted at `ghillie/cli/`. Keep it small, explicit, and easy
+to extend.
 
 Create or update these files:
 
@@ -289,45 +325,30 @@ Create or update these files:
 - `ghillie/cli/context.py`
 - `ghillie/cli/config.py`
 - `ghillie/cli/control_plane.py`
-- `ghillie/cli/runtime/ports.py`
-- `ghillie/cli/runtime/factory.py`
+- `ghillie/cli/runtime.py` or `ghillie/cli/runtime_adapters.py`
 
-Update `pyproject.toml` to expose a console entry point that points at the
-module which actually defines `main`:
+Update `pyproject.toml` to expose the console entry point and to carry the CLI
+runtime dependencies under `[project.dependencies]`, not only in the
+development group.
 
-```toml
-[project.scripts]
-ghillie = "ghillie.cli.app:main"
-```
+The scaffold should define four stable concepts:
 
-The CLI core should provide four stable types:
+1. `GlobalOptions`, a frozen dataclass for the raw root options parsed by
+   Cyclopts.
+2. `ResolvedCliConfig`, a frozen dataclass for post-precedence values that
+   handlers actually consume.
+3. `ControlPlaneClient`, a small `httpx` wrapper that knows base URL, auth, and
+   timeout.
+4. `LocalRuntimeAdapter`, a port or protocol for stack-facing operations such
+   as `up`, `down`, `status`, and `logs`.
 
-1. `GlobalOptions`
-   A frozen dataclass capturing root-global values such as API base URL, auth
-   token, output format, timeout, non-interactive mode, and dry-run.
+Keep config loading separate from command registration. That separation makes
+config precedence and client construction testable without spinning the full
+command tree.
 
-2. `ResolvedCliConfig`
-   A frozen dataclass representing the post-precedence configuration that
-   handlers actually use.
+## Milestone 3: register the noun and verb tree
 
-3. `ControlPlaneClient`
-   A thin `httpx` wrapper responsible for building requests and carrying auth,
-   base URL, and timeout configuration. For Task 2.5.a it may expose only a
-   small smoke surface or placeholder methods, but the object itself must be
-   real and tested.
-
-4. `LocalRuntimeAdapter`
-   A port defining the stack-lifecycle actions that later tasks will need. Keep
-   the methods small and noun/verb-aligned, such as `up`, `down`, `status`, and
-   `logs`.
-
-Keep config loading separate from command registration. That separation is what
-allows unit tests to validate precedence without invoking the entire command
-tree.
-
-## Milestone 3: Register the noun and verb tree
-
-Implement the root Cyclopts app and register one command group per noun:
+Implement the root Cyclopts app and one command group per noun:
 
 - `stack`
 - `estate`
@@ -336,11 +357,8 @@ Implement the root Cyclopts app and register one command group per noun:
 - `report`
 - `metrics`
 
-Under each noun, register the verbs from `docs/mvp-cli-specification.md`. The
-handlers for this task can remain skeletal as long as they are runnable and
-validate options cleanly.
-
-Use a dedicated module per noun, for example:
+Under each noun, register the verbs listed in `docs/mvp-cli-specification.md`.
+A practical layout is one module per noun:
 
 - `ghillie/cli/commands/stack.py`
 - `ghillie/cli/commands/estate.py`
@@ -349,85 +367,124 @@ Use a dedicated module per noun, for example:
 - `ghillie/cli/commands/report.py`
 - `ghillie/cli/commands/metrics.py`
 
-Each handler should do only one of these things in Task 2.5.a:
+Each handler should do only the minimum needed in Task 2.5.1:
 
-1. build the shared CLI context,
-2. select the right adapter or client,
-3. return a stable placeholder result for not-yet-implemented behaviours, or
-4. call a small proven surface that already exists.
+1. resolve the shared CLI context,
+2. build the right client or adapter,
+3. validate the documented options, and
+4. return a deterministic placeholder for behaviours owned by later tasks.
 
-Do not let placeholder handlers become unstructured print statements. Even the
-scaffold should return stable machine-readable output for `--output json` and a
-clean human-readable message for the default output mode.
+Define the placeholder behaviour explicitly in the docs and tests. The easiest
+contract is:
 
-For the backend seam:
+- `--help` always works,
+- valid command invocations that belong to later tasks return a clear
+  "not implemented in Task 2.5.1" message, and
+- invalid options fail through normal Cyclopts validation.
 
-- `ghillie/cli/runtime/factory.py` should map `cuprum` and `python-api` to
-  concrete adapter classes.
-- Move reusable local orchestration logic into a package module such as
-  `ghillie.runtime.orchestration` rather than leaving it under `scripts/`.
-- For `python-api`, prefer adapters that import and reuse
-  `ghillie.runtime.orchestration` rather than duplicating orchestration logic.
-- Any entry points retained under `scripts/` should import from
-  `ghillie.runtime.orchestration` instead of owning orchestration logic
-  themselves.
-- For `cuprum`, it is acceptable in Task 2.5.a to provide a placeholder
-  adapter class whose construction is validated even if its execution paths are
-  left for later work.
+Do not let placeholder handlers turn into arbitrary `print()` calls. They
+should still route through one output policy so that `--output json` remains
+predictable.
 
-## Milestone 4: Document the scaffold and leave the repo ready for 2.5.b-d
+## Milestone 4: wire the driven adapters cleanly
 
-Update the documents that describe operator behaviour:
+Implement the control-plane client for real. Even if the CLI does not yet call
+many endpoints, the object itself should be functional and tested. It should
+own:
 
-1. `docs/mvp-cli-specification.md`
+- base URL handling,
+- timeout configuration,
+- bearer-token header injection, and
+- creation and cleanup of the `httpx` client.
 
-   Reconcile any drift discovered during implementation. In particular,
-   document the packaged entry point, the exact placeholder semantics for
-   not-yet-implemented verbs, and any clarifications needed for root-global
-   option parsing.
+Implement runtime adapter selection as a clean seam. For Task 2.5.1 the
+selection logic must be real even if execution remains skeletal:
 
-2. `docs/users-guide.md`
+- selecting `python-api` constructs the adapter class intended to host direct
+  Python integrations later,
+- selecting `cuprum` constructs a separate adapter class, which may remain a
+  placeholder until a concrete dependency decision is made, and
+- unknown adapter names fail validation before any side effects occur.
 
-   Add a new operator CLI section that shows how to inspect the command tree
-   and how global configuration resolution works at MVP scaffold level. Keep
-   examples bounded to behaviours that actually exist after 2.5.a.
+Do not make the packaged CLI depend on imports from `scripts/` just to satisfy
+Task 2.5.1. If a tiny shared helper must move to support clean packaging,
+extract only that helper into `ghillie/cli/` or another non-conflicting package
+inside `ghillie/`. Leave broader local runtime migration for later work.
 
-3. `docs/ghillie-design.md`
+## Milestone 5: update the contract documents
 
-   Record the architectural decision that the operator CLI is a driving adapter
-   with separate HTTP and local-runtime outbound adapters.
+Update the documents that operators and future implementors will read.
 
-4. `docs/roadmap.md`
+`docs/mvp-cli-specification.md` must reflect the implemented command tree,
+placeholder semantics, and any clarifications to config resolution or help
+behaviour discovered during implementation.
 
-   Mark Task 2.5.a as done only after the code, tests, and documentation are
-   merged and the quality gates pass.
+`docs/users-guide.md` must gain an operator CLI section that shows:
+
+- how to inspect the root command tree,
+- how shared configuration is resolved, and
+- what the scaffold can do at Task 2.5.1 versus what remains for later tasks.
+
+`docs/ghillie-design.md` must record the architectural decision that the
+operator CLI is a driving adapter with separate control-plane and local-runtime
+driven adapters.
+
+`docs/roadmap.md` must mark Task 2.5.1 as done only after the implementation,
+tests, documentation updates, and quality gates all pass.
 
 ## Validation and evidence
 
-During implementation, use a red-green-refactor loop for the targeted CLI
-tests, then run the full repository gates.
+Use a red-green-refactor loop for the targeted CLI tests, then run the full
+repository gates sequentially. Run the Make targets through `tee` with
+`set -o pipefail` so failures are preserved in the exit code and logs can be
+inspected afterwards.
 
 Suggested verification commands:
 
 ```bash
-set -o pipefail && make fmt 2>&1 | tee /tmp/ghillie-make-fmt.log
-set -o pipefail && make check-fmt 2>&1 | tee /tmp/ghillie-make-check-fmt.log
-set -o pipefail && make typecheck 2>&1 | tee /tmp/ghillie-make-typecheck.log
-set -o pipefail && make lint 2>&1 | tee /tmp/ghillie-make-lint.log
-set -o pipefail && make test 2>&1 | tee /tmp/ghillie-make-test.log
-set -o pipefail && make markdownlint 2>&1 | tee /tmp/ghillie-make-markdownlint.log
-set -o pipefail && make nixie 2>&1 | tee /tmp/ghillie-make-nixie.log
+set -o pipefail
+make fmt 2>&1 | tee /tmp/ghillie-make-fmt.log
 ```
 
-Record brief evidence in this plan once implementation happens. At minimum,
+```bash
+set -o pipefail
+make check-fmt 2>&1 | tee /tmp/ghillie-make-check-fmt.log
+```
+
+```bash
+set -o pipefail
+make typecheck 2>&1 | tee /tmp/ghillie-make-typecheck.log
+```
+
+```bash
+set -o pipefail
+make lint 2>&1 | tee /tmp/ghillie-make-lint.log
+```
+
+```bash
+set -o pipefail
+make test 2>&1 | tee /tmp/ghillie-make-test.log
+```
+
+```bash
+set -o pipefail
+MDLINT=/root/.bun/bin/markdownlint-cli2 make markdownlint 2>&1 | tee /tmp/ghillie-make-markdownlint.log
+```
+
+```bash
+set -o pipefail
+make nixie 2>&1 | tee /tmp/ghillie-make-nixie.log
+```
+
+Record concise evidence in this plan once implementation happens. At minimum,
 capture:
 
 - the help output proving the noun tree,
-- one example of valid root-global option parsing,
-- one example of invalid backend rejection,
-- and the final gate results.
+- one example showing a valid root-global option parse,
+- one example showing invalid backend rejection, and
+- the final gate results.
 
-Expected operator evidence after completion should look roughly like this:
+Expected operator-visible evidence after completion should look roughly like:
 
 ```plaintext
 $ uv run ghillie --help
@@ -444,11 +501,56 @@ Error: invalid value for --backend
 
 ## Outcomes & Retrospective
 
-This section remains incomplete until Task 2.5.a is implemented.
+Task 2.5.1 is implemented.
 
-The intended outcome is a repo-owned, packaged CLI scaffold that makes the
-operator contract executable and testable without overreaching into the later
-Step 2.5 tasks. A successful implementation leaves the command grammar stable,
-the adapter seams explicit, the docs aligned, and the repo ready for
-estate-management APIs, ingestion run orchestration, and report/export commands
-in the subsequent milestones.
+The repo now carries a packaged operator CLI scaffold under `ghillie/cli/` with
+a console entry point named `ghillie`. The root app exposes the six documented
+nouns, accepts shared configuration once at the root, resolves that
+configuration into one typed context object, constructs a real `httpx`
+control-plane client wrapper, and selects a local runtime adapter named
+`cuprum` or `python-api`.
+
+The command handlers intentionally remain deterministic placeholders for later
+Step 2.5 tasks. Valid invocations return a stable
+`not implemented in Task 2.5.1` status through a shared output policy, while
+invalid options fail during parsing.
+
+Operator-visible evidence captured during implementation:
+
+```plaintext
+$ uv run ghillie --help
+... stack ...
+... estate ...
+... ingest ...
+... export ...
+... report ...
+... metrics ...
+
+$ uv run ghillie --api-base-url http://127.0.0.1:9999 report run --help
+Usage: ghillie report run [OPTIONS]
+
+$ uv run ghillie stack up --backend invalid
+Error: invalid choice for --backend: "invalid"
+```
+
+Test and gate evidence captured during implementation:
+
+- Targeted red phase:
+  `uv run pytest tests/unit/cli -v` failed with
+  `ModuleNotFoundError: No module named 'ghillie.cli'`.
+- Targeted red phase:
+  `uv run pytest tests/features/steps/test_operator_cli_steps.py -v` failed
+  with the same missing-package error.
+- Targeted green phase: `uv run pytest tests/unit/cli -v` passed with
+  `14 passed`.
+- Targeted green phase:
+  `uv run pytest tests/features/steps/test_operator_cli_steps.py -v` passed with
+  `4 passed`.
+- Full repository gates passed:
+  `make fmt`, `make check-fmt`, `make typecheck`, `make lint`, `make test`,
+  `MDLINT=/root/.bun/bin/markdownlint-cli2 make markdownlint`, and `make nixie`.
+- Final test suite result during the full gate run: `730 passed, 35 skipped`.
+
+This leaves the grammar stable, the adapter boundaries explicit, the
+documentation aligned, and the repository ready for the follow-on Task 2.5 work
+without dragging later runtime behaviour into this entry task.

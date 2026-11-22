@@ -17,14 +17,14 @@ For this assessment, an easy execution path means a documented CLI command or
 HTTP API endpoint, rather than bespoke Python scripts.
 
 Assessment date: 2026-03-01. Estate configuration was reassessed on 2026-11-05
-after Task 2.5.b.
+after Task 2.5.2.
 
 ## Executive summary
 
 | MVP behaviour                                                         | Current status                                                                                                                                                                                                                             | Verdict |
 | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
 | 1. k3d/Helm startup with no background tasks and providers configured | Local k3d + Helm deployment is available. Runtime deployment defaults to API-only behaviour (no ingestion/report workers). Provider configuration is possible via generic env/secret injection, but not via a purpose-built operator flow. | Partial |
-| 2. Manual estate configuration                                        | Catalogue import, registry sync, estate and repository listing, and ingestion toggling are available through five HTTP endpoints and the `ghillie estate` CLI verbs (Task 2.5.b).                                                          | Met     |
+| 2. Manual estate configuration                                        | Catalogue import, registry sync, estate and repository listing, and ingestion toggling are available through five HTTP endpoints and the `ghillie estate` CLI verbs (Task 2.5.2).                                                          | Met     |
 | 3. Manual two-week ingestion trigger with observability               | Ingestion worker, structured logs, and lag service exist. No first-class API/CLI to trigger and track one-off backfills (including a two-week run).                                                                                        | Gap     |
 | 4. Structured export of collected data and derived evidence           | Data exists in Bronze/Silver/Gold and in-memory evidence structures exist, but there is no built-in structured export API/CLI. Markdown report sink is available but not a structured export.                                              | Gap     |
 | 5. Manual LLM report trigger over two-week evidence                   | Per-repository on-demand report API exists; background Dramatiq actors exist for repository and estate runs. No API-level window override or estate trigger endpoint.                                                                      | Partial |
@@ -62,7 +62,7 @@ Impact:
 
 ### 2) Manually configure an estate of repositories
 
-Current capabilities (closed by Task 2.5.b):
+Current capabilities (closed by Task 2.5.2):
 
 - Estate catalogue schema/validation exists.
 - Import and registry synchronization services exist.
@@ -81,7 +81,7 @@ Current capabilities (closed by Task 2.5.b):
 
 Residual follow-up:
 
-- Task 2.5.e inherits the runtime-profile hand-off (D15) for deployment
+- Task 2.5.5 inherits the runtime-profile hand-off (D15) for deployment
   profiles; estate configuration itself no longer blocks the MVP workflow.
 
 Impact:
@@ -186,7 +186,7 @@ Impact:
 
 1. Operator control API/CLI for ingestion backfill and report trigger
    operations, including run-state tracking. Estate management was delivered by
-   Task 2.5.b.
+   Task 2.5.2.
 2. Structured export API/CLI with stable schemas for events, evidence, and
    report lineage.
 3. Required metrics API over existing Silver data.

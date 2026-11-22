@@ -1,4 +1,4 @@
-# Define report Markdown and storage
+# Implement report Markdown rendering and filesystem storage
 
 This execution plan (ExecPlan) is a living document. The sections `Progress`,
 `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must
@@ -6,10 +6,10 @@ be kept up to date as work proceeds.
 
 ## Purpose / big picture
 
-Task 2.3.b defines a Markdown format for repository reports and implements a
+Task 2.3.2 defines a Markdown format for repository reports and implements a
 storage mechanism, so operators can navigate to a repository's latest report
 via a predictable file path. This bridges the gap between Gold layer database
-storage (already implemented in 2.3.a) and human-readable report output.
+storage (already implemented in 2.3.1) and human-readable report output.
 
 The Markdown renderer reads from `Report.machine_summary` (the structured JSON
 data) plus repository metadata and produces a well-structured Markdown
@@ -46,7 +46,7 @@ Success is observable when:
 - [x] Update `ghillie/reporting/__init__.py` exports
 - [x] Update `docs/users-guide.md` with usage documentation
 - [x] Update `docs/ghillie-design.md` with design section
-- [x] Mark Task 2.3.b as done in `docs/roadmap.md`
+- [x] Mark Task 2.3.2 as done in `docs/roadmap.md`
 - [x] All quality gates passed (check-fmt, typecheck, lint, markdownlint,
   test, nixie)
 
@@ -428,10 +428,10 @@ if config.report_sink_path is not None:
 
 - Update `ghillie/reporting/__init__.py` with new exports:
   `render_report_markdown`, `ReportSink`, `FilesystemReportSink`.
-- Add "Report Markdown and storage (Phase 2.3.b)" section to
+- Add "Report Markdown and storage (Task 2.3.2)" section to
   `docs/users-guide.md`.
 - Add design section to `docs/ghillie-design.md`.
-- Mark Task 2.3.b as done in `docs/roadmap.md`.
+- Mark Task 2.3.2 as done in `docs/roadmap.md`.
 
 ## Concrete steps
 
@@ -475,12 +475,12 @@ if config.report_sink_path is not None:
 12. Modify `ghillie/reporting/__init__.py`: Add new exports.
 
 13. Update `docs/users-guide.md`: Add "Report Markdown and storage
-    (Phase 2.3.b)" section.
+    (Task 2.3.2)" section.
 
 14. Update `docs/ghillie-design.md`: Add design section for Markdown
     rendering and storage.
 
-15. Update `docs/roadmap.md`: Mark Task 2.3.b as done with implementation
+15. Update `docs/roadmap.md`: Mark Task 2.3.2 as done with implementation
     note.
 
 16. Run quality gates:
@@ -511,7 +511,7 @@ The change is accepted when:
    actors
 7. Users' guide documents the new configuration and path structure
 8. Design document records the architectural decisions
-9. Roadmap marks Task 2.3.b as complete
+9. Roadmap marks Task 2.3.2 as complete
 10. All quality gates pass: `make check-fmt`, `make typecheck`,
     `make lint`, `make test`, `make markdownlint`, `make nixie`
 
@@ -638,7 +638,7 @@ None new. Uses only stdlib (`asyncio.to_thread`, `pathlib`).
 
 ### Downstream consumers
 
-Task 2.3.c (on-demand reporting) will use the same sink infrastructure.
+Task 2.3.3 (on-demand reporting) will use the same sink infrastructure.
 
 ## Critical files
 

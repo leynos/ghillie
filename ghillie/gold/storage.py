@@ -236,7 +236,7 @@ _REPORT_METRIC_COLUMNS: tuple[tuple[str, str], ...] = (
 
 
 def _ensure_report_metric_columns(sync_connection: Connection) -> None:
-    """Add missing report metric columns for databases created before 2.4.b."""
+    """Add missing report metric columns for databases created before 2.4.2."""
     inspector = inspect(sync_connection)
     if "reports" not in set(inspector.get_table_names()):
         return

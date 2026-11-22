@@ -1,4 +1,4 @@
-# Implement Ghillie Helm chart for previews
+# Implement the Ghillie Helm chart for previews
 
 This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
@@ -122,7 +122,7 @@ value configurations.
 - `helm lint charts/ghillie` passes without errors
 - 20 unit tests and 4 BDD tests all pass
 - Makefile targets `helm-lint` and `helm-test` added
-- Task 1.5.b marked complete in roadmap
+- Task 1.5.2 marked complete in roadmap
 
 **Lessons learned:**
 
@@ -133,7 +133,7 @@ value configurations.
 
 ## Context and Orientation
 
-This task implements Task 1.5.b from `docs/roadmap.md`. The design is fully
+This task implements Task 1.5.2 from `docs/roadmap.md`. The design is fully
 specified in `docs/local-k8s-preview-design.md`, which defines:
 
 - Chart layout at `charts/ghillie/`
@@ -301,7 +301,7 @@ Validation: `make helm-lint` and `make helm-test` pass.
 ### Stage H: Documentation Updates
 
 1. Update `docs/roadmap.md`:
-    - Mark Task 1.5.b as complete with `[x]`
+    - Mark Task 1.5.2 as complete with `[x]`
 
 2. Verify `docs/local-k8s-preview-design.md` aligns with implementation (no
     changes expected).
@@ -502,7 +502,7 @@ Required: `helm` version 3.x
 ### Modified files
 
     Makefile (add helm-lint, helm-test targets)
-    docs/roadmap.md (mark 1.5.b complete)
+    docs/roadmap.md (mark 1.5.2 complete)
 
 ### Python dependencies
 

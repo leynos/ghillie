@@ -1,4 +1,4 @@
-# Implement coverage-aware event selection for evidence bundles
+# Implement event selection and grouping per window
 
 This execution plan (ExecPlan) is a living document. The sections `Progress`,
 `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must
@@ -19,14 +19,14 @@ covered events while still honouring the window start/end boundaries.
 ## Progress
 
 - [x] (2026-01-03 00:00Z) Reviewed roadmap and evidence bundle design sections
-  to scope Task 2.1.b and identify affected files.
+  to scope Task 2.1.2 and identify affected files.
 - [x] (2026-01-03 00:30Z) Added unit and behavioural tests that fail without
   coverage-aware selection.
 - [x] (2026-01-03 01:05Z) Implemented coverage-aware selection and event
   grouping logic in `EvidenceBundleService`.
 - [x] (2026-01-03 01:20Z) Updated design and users' guide documentation to
   reflect scope-specific coverage.
-- [x] (2026-01-03 01:55Z) Marked roadmap Task 2.1.b as done and ran all quality
+- [x] (2026-01-03 01:55Z) Marked roadmap Task 2.1.2 as done and ran all quality
   gates (`check-fmt`, `typecheck`, `lint`, `test`, `markdownlint`, `nixie`).
 
 ## Surprises & Discoveries
@@ -73,7 +73,7 @@ Relevant tests and fixtures:
 
 Reference docs for expected behaviour and design constraints:
 
-- `docs/roadmap.md` (Task 2.1.b completion criteria).
+- `docs/roadmap.md` (Task 2.1.2 completion criteria).
 - `docs/ghillie-design.md` (Section 9 evidence bundle decisions).
 - `docs/ghillie-proposal.md` (Section 5.1 coverage semantics).
 - `docs/ghillie-bronze-silver-architecture-design.md` (Gold coverage schema).
@@ -113,7 +113,7 @@ the entity timestamps, and define a deterministic ordering for `event_fact_ids`
 Update documentation to record any decisions about coverage scope and the new
 behaviour of evidence bundles. Reflect the user-visible behaviour in
 `docs/users-guide.md` and update `docs/ghillie-design.md` in the evidence
-bundle section. Finally, mark Task 2.1.b as done in `docs/roadmap.md` and run
+bundle section. Finally, mark Task 2.1.2 as done in `docs/roadmap.md` and run
 all quality gates.
 
 ## Concrete Steps
@@ -150,7 +150,7 @@ all quality gates.
    - Add or update a section in `docs/users-guide.md` describing that evidence
      bundles exclude events already covered by previous reports.
    - Record any decisions in `docs/ghillie-design.md` Section 9.
-   - Mark Task 2.1.b as done in `docs/roadmap.md`.
+   - Mark Task 2.1.2 as done in `docs/roadmap.md`.
 
 5. Run formatting, lint, typecheck, and tests with logs captured.
 

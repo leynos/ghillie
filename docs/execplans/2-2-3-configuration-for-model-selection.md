@@ -1,4 +1,4 @@
-# Configuration for model selection
+# Provide configuration for model selection
 
 This execution plan (ExecPlan) is a living document. The sections `Progress`,
 `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must
@@ -6,7 +6,7 @@ be kept up to date as work proceeds.
 
 ## Purpose / big picture
 
-Task 2.2.c enables operators to select the status model backend and key
+Task 2.2.3 enables operators to select the status model backend and key
 configuration (temperature, maximum tokens) per environment, allowing the same
 reporting job to run against different model backends without code changes.
 
@@ -34,7 +34,7 @@ Success is observable when:
 - [x] Implement `create_status_model()` in `factory.py`
 - [x] Update `__init__.py` exports
 - [x] Update documentation in `docs/users-guide.md`
-- [x] Mark Task 2.2.c as done in `docs/roadmap.md`
+- [x] Mark Task 2.2.3 as done in `docs/roadmap.md`
 - [x] All quality gates passed (check-fmt, typecheck, lint, markdownlint, test)
 
 ## Surprises and discoveries
@@ -72,7 +72,7 @@ existing OpenAI configuration and GitHub client code.
 
 ### Existing structures
 
-The StatusModel infrastructure is complete (Tasks 2.2.a and 2.2.b):
+The StatusModel infrastructure is complete (Tasks 2.2.1 and 2.2.2):
 
 - **StatusModel Protocol** (`ghillie/status/protocol.py`): `@runtime_checkable`
   Protocol with `async summarize_repository()` method
@@ -141,7 +141,7 @@ Created `ghillie/status/factory.py` with `create_status_model()`:
 
 - Updated `ghillie/status/__init__.py` with new exports
 - Updated `docs/users-guide.md` with configuration documentation
-- Marked Task 2.2.c as done in `docs/roadmap.md`
+- Marked Task 2.2.3 as done in `docs/roadmap.md`
 
 ## Validation and acceptance
 
@@ -196,4 +196,4 @@ The change is accepted when:
 | `tests/features/model_selection.feature`             | Create | BDD scenarios                                |
 | `tests/features/steps/test_model_selection_steps.py` | Create | BDD step definitions                         |
 | `docs/users-guide.md`                                | Modify | Configuration documentation                  |
-| `docs/roadmap.md`                                    | Modify | Mark Task 2.2.c done                         |
+| `docs/roadmap.md`                                    | Modify | Mark Task 2.2.3 done                         |
