@@ -310,9 +310,10 @@ def test_repo_set_requires_a_toggle(
             "leynos",
             "--name",
             "wildside",
-        ]
+        ],
+        client_factory=client.factory,
     )
 
     assert result == 2
-    assert client.requests == []
+    assert client.requests == [], "no request may be sent"
     assert capsys.readouterr().err
