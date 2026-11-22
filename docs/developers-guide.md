@@ -420,12 +420,12 @@ library and estate-owned modules.
   optional `ingestion_enabled` filter. `Page[T]` and `RepositoryPage` return
   the items with `limit`, `offset`, `has_more`, and `next_offset`.
 - The pagination bounds are module constants: `DEFAULT_PAGE_LIMIT` 50,
-  `MAX_PAGE_LIMIT` 500, and `MAX_PAGE_OFFSET` `2**31 - 1`. `MAX_PAGE_OFFSET` is
-  a domain-level ceiling in `ghillie/estate/models.py`;
-  `ghillie/catalogue/queries.py` enforces the same storage range before the
-  value is bound, because SQLite raises `OverflowError` beyond its signed
-  64-bit bind range and PostgreSQL rejects an out-of-range `OFFSET` as a
-  storage error.
+  `MAX_PAGE_LIMIT` 500 in `ghillie/estate/models.py`, and `MAX_PAGE_OFFSET`
+  `2**31 - 1` in `ghillie/common/estate.py`, shared with the CLI so it can
+  reject the value locally. `ghillie/catalogue/queries.py` enforces the same
+  storage range before the value is bound, because SQLite raises
+  `OverflowError` beyond its signed 64-bit bind range and PostgreSQL rejects an
+  out-of-range `OFFSET` as a storage error.
 - `MAX_REQUEST_BODY_BYTES` is an HTTP transport limit of 1 MiB, defined in
   `ghillie/api/estate/resources.py`; that adapter enforces it.
 - `validate_new_estate_key` applies `NEW_ESTATE_KEY_PATTERN` only when the
