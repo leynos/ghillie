@@ -143,15 +143,19 @@ The boundary is intentionally explicit:
   commands. It owns `httpx` base URL, timeout, and bearer-token setup, parses a
   collection response into a validated page, and accepts an optional transport
   for its owned client.
-- `ghillie/cli/commands/estate.py` holds the Cyclopts estate commands and their
-  parameter annotations only; each reads the invocation context once and
-  delegates. `ghillie/cli/estate_input.py` validates the estate key, reads the
-  catalogue and enforces the byte limit, `ghillie/cli/estate_view.py` renders a
-  validated page or import document, and `ghillie/cli/presentation.py` owns the
-  hint table, the stderr write and the exit codes. `ghillie/cli/errors.py`
-  carries `LocalInputError`. Commands obtain their client from
-  `CommandContext.client_factory`, which tests replace with a factory that
-  injects a transport.
+- `ghillie/cli/commands/estate.py` holds the Cyclopts estate commands, their
+  parameter annotations, and the three request helpers they share. Each command
+  reads the invocation context once and delegates. `_dry_run_params(config)`
+  builds the D20 query parameter from an explicit configuration;
+  `_call(context, request)` obtains the client from
+  `CommandContext.client_factory` and sends one `ControlPlaneRequest`; and
+  `_page(context, request)` does the same for a collection endpoint and returns
+  the validated page. `ghillie/cli/estate_input.py` validates the estate key,
+  reads the catalogue and enforces the byte limit, `ghillie/cli/estate_view.py`
+  renders a validated page or import document, and
+  `ghillie/cli/presentation.py` owns the hint table, the stderr write and the
+  exit codes. `ghillie/cli/errors.py` carries `LocalInputError`. Tests replace
+  the client factory with one that injects a transport.
 - `ghillie/cli/runtime_adapters.py` is the driven adapter seam for local stack
   integration. Task 2.5.a validates selector names (`cuprum`, `python-api`) and
   leaves concrete orchestration work to later tasks.
@@ -1060,14 +1064,15 @@ toggle ingestion without writing Python.
 `ghillie/api/estate/resources.py` are the server adapter and call the port. The
 CLI in `ghillie/cli/commands/estate.py` is a separate client adapter: it calls
 the HTTP API and never the Python port, so the thin-client boundary stays
-intact. The command module holds only the Cyclopts commands; validation and
-catalogue reading live in `ghillie/cli/estate_input.py`, rendering in
-`ghillie/cli/estate_view.py`, and hints and exit codes in
-`ghillie/cli/presentation.py`. `ghillie/cli/control_plane.py` validates a
-collection response before any renderer sees it, and commands obtain their
-client from `CommandContext.client_factory` so tests can inject a transport.
-Errors are defined in `ghillie.estate.errors`, so neither adapter imports
-catalogue or registry exceptions.
+intact. The command module holds the Cyclopts commands and the request helpers
+`_dry_run_params`, `_call` and `_page`; validation and catalogue reading live in
+`ghillie/cli/estate_input.py`, rendering in `ghillie/cli/estate_view.py`, and
+hints and exit codes in `ghillie/cli/presentation.py`.
+`ghillie/cli/control_plane.py` validates a collection response before any
+renderer sees it, and commands obtain their client from
+`CommandContext.client_factory` so tests can inject a transport. Errors are
+defined in `ghillie.estate.errors`, so neither adapter imports catalogue or
+registry exceptions.
 
 **Endpoints.** The five paths in §8.4 accept and return the msgspec structs in
 `ghillie/api/estate/schemas.py` (D8). Import and sync accept an optional
