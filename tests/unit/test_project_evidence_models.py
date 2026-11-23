@@ -397,14 +397,14 @@ class TestProjectMetadata:
             name="Wildside",
             description="Transactional streaming platform.",
             programme="df12",
-            documentation_paths=("docs/roadmap.md", "docs/adr/"),
+            documentation_paths=("docs/roadmap.md", "docs/adrs/"),
         )
 
         assert metadata.description == "Transactional streaming platform.", (
             "description mismatch"
         )
         assert metadata.programme == "df12", "programme mismatch"
-        assert metadata.documentation_paths == ("docs/roadmap.md", "docs/adr/"), (
+        assert metadata.documentation_paths == ("docs/roadmap.md", "docs/adrs/"), (
             "documentation_paths mismatch"
         )
 

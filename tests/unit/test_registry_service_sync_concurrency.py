@@ -280,7 +280,7 @@ async def test_overlapping_syncs_of_one_estate_share_an_unowned_row(
                 ingestion_enabled=False,
                 # The catalogue supplies these, so seeding them leaves the
                 # update nothing to change beyond a missed claim.
-                documentation_paths=["docs/roadmap.md", "docs/adr/"],
+                documentation_paths=["docs/roadmap.md", "docs/adrs/"],
             )
         )
     _synchronize_silver_load(monkeypatch)
@@ -343,7 +343,7 @@ async def test_a_concurrent_enable_is_not_reflected_in_the_left_disabled_report(
                 estate_id=estate_a_id,
                 catalogue_repository_id=catalogue_ids["leynos/wildside"],
                 ingestion_enabled=False,
-                documentation_paths=["docs/roadmap.md", "docs/adr/"],
+                documentation_paths=["docs/roadmap.md", "docs/adrs/"],
             )
         )
 

@@ -392,11 +392,11 @@ def test_ensure_repository_normalises_documentation_paths(
             return repository
 
     repository = asyncio.run(
-        _create_repo(["docs/roadmap.md", "docs/adr/", "docs/adr/"])
+        _create_repo(["docs/roadmap.md", "docs/adrs/", "docs/adrs/"])
     )
     assert repository.documentation_paths == [
         "docs/roadmap.md",
-        "docs/adr/",
+        "docs/adrs/",
     ], "documentation_paths should preserve first-seen order and drop duplicates"
 
 
@@ -418,7 +418,7 @@ def test_ensure_repository_updates_documentation_paths(
                 repository=Repository(
                     owner="org",
                     name="alpha",
-                    documentation_paths=["docs/adr/"],
+                    documentation_paths=["docs/adrs/"],
                 ),
             )
             first_result = CatalogueImportResult("default", None)
@@ -431,7 +431,7 @@ def test_ensure_repository_updates_documentation_paths(
             assert component.repository is not None
             component.repository.documentation_paths = [
                 "docs/roadmap.md",
-                "docs/adr/",
+                "docs/adrs/",
             ]
             second_result = CatalogueImportResult("default", None)
             importer._ensure_repository(session, repo_index, component, second_result)
@@ -445,7 +445,7 @@ def test_ensure_repository_updates_documentation_paths(
     assert second.repositories_updated == 1
     assert stored_paths == [
         "docs/roadmap.md",
-        "docs/adr/",
+        "docs/adrs/",
     ], "documentation_paths should update to the new normalized order"
 
 

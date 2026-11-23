@@ -19,7 +19,7 @@ projects:
     programme: df12
     documentation_paths:
       - docs/roadmap.md
-      - docs/adr/
+      - docs/adrs/
     noise:
       ignore_authors:
         - dependabot[bot]
@@ -49,8 +49,8 @@ projects:
           default_branch: main
           documentation_paths:
             - docs/roadmap.md
-            - docs/adr/
-            - docs/adr/
+            - docs/adrs/
+            - docs/adrs/
         depends_on:
           - component: wildside-engine
             kind: runtime
@@ -99,7 +99,7 @@ projects:
       Shared building blocks reused across df12 projects.
     programme: df12
     documentation_paths:
-      - docs/adr/
+      - docs/adrs/
     noise:
       ignore_authors:
         - dependabot[bot]

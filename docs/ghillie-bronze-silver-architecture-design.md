@@ -1267,7 +1267,7 @@ controls.
 
 `ghillie.registry.policy` decides the ingestion flag, and sync writes it only
 when the decision differs from the stored value. The rules are recorded in
-[ADR-005](adr-005-registry-sync-preserves-operator-ingestion-toggles.md):
+[ADR-005](adrs/adr-0005-registry-sync-preserves-operator-ingestion-toggles.md):
 
 | Row state               | Catalogue state   | Transition            |
 | ----------------------- | ----------------- | --------------------- |

@@ -16,7 +16,7 @@ so the next import and sync silently reverted an operator's explicit disable.
 From 2.0.0, sync never re-enables a linked repository of the estate. A
 catalogue entry that becomes active again leaves the row disabled until an
 operator enables it. The rule and its rationale are recorded in
-[ADR-005](adr-005-registry-sync-preserves-operator-ingestion-toggles.md).
+[ADR-005](adrs/adr-0005-registry-sync-preserves-operator-ingestion-toggles.md).
 
 **Action after upgrading.** Re-apply any disable that a 1.x sync reverted.
 Compare the repositories an operator expects to be off with
@@ -147,5 +147,5 @@ to use the verbs and flags above, and move the token into `GHILLIE_AUTH_TOKEN`.
 - [Users' guide](users-guide.md) for the day-to-day sync workflow.
 - [Developers' guide](developers-guide.md) for the service API and its
   guarantees.
-- [ADR-005](adr-005-registry-sync-preserves-operator-ingestion-toggles.md) for
-  the toggle-ownership decision.
+- [ADR-005](adrs/adr-0005-registry-sync-preserves-operator-ingestion-toggles.md)
+  for the toggle-ownership decision.

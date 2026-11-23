@@ -240,7 +240,7 @@ def repo_has_doc_paths(discovery_context: DiscoveryContext, slug: str) -> None:
     repo = run_async(get_repository_by_slug(discovery_context["session_factory"], slug))
     assert repo is not None, f"Repository {slug} not found"
     assert len(repo.documentation_paths) > 0, f"Expected documentation_paths for {slug}"
-    # leynos/wildside should have docs/roadmap.md and docs/adr/
+    # leynos/wildside should have docs/roadmap.md and docs/adrs/
     assert "docs/roadmap.md" in repo.documentation_paths
 
 

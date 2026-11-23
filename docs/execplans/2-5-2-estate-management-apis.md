@@ -2776,7 +2776,7 @@ the new `SyncResult` fields `repositories_conflicted: list[str]` and
 committing). Update module and service docstrings, including the incorrect
 `enable_ingestion` and `disable_ingestion` return-value docs.
 
-Write `docs/adr-005-registry-sync-preserves-operator-ingestion-toggles.md`
+Write `docs/adrs/adr-0005-registry-sync-preserves-operator-ingestion-toggles.md`
 (format of ADR-004) and amend
 `docs/ghillie-bronze-silver-architecture-design.md` §9.2 and the users' guide's
 "Enabling and disabling ingestion" section.
@@ -3279,7 +3279,7 @@ exit=0
     {"default_branch": "main", "documentation_paths": [],
      "ingestion_enabled": true, "name": "rstest-bdd", "owner": "leynos"},
     {"default_branch": "main",
-     "documentation_paths": ["docs/roadmap.md", "docs/adr/"],
+     "documentation_paths": ["docs/roadmap.md", "docs/adrs/"],
      "ingestion_enabled": true, "name": "wildside", "owner": "leynos"},
     {"default_branch": "main", "documentation_paths": [],
      "ingestion_enabled": true, "name": "wildside-engine", "owner": "leynos"},
@@ -3345,7 +3345,7 @@ exit=0
   "has_more": false,
   "items": [
     {"default_branch": "main",
-     "documentation_paths": ["docs/roadmap.md", "docs/adr/"],
+     "documentation_paths": ["docs/roadmap.md", "docs/adrs/"],
      "ingestion_enabled": false, "name": "wildside", "owner": "leynos"}
   ],
   "limit": 50,

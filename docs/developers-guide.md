@@ -315,8 +315,8 @@ counts only removed rows that this sync turned from enabled to disabled, so a
 removed row an operator had already disabled is not counted again.
 
 The rules and their rationale are recorded in
-[ADR-005](adr-005-registry-sync-preserves-operator-ingestion-toggles.md), the
-upgrade actions in the [migration guide](migration-guide.md), and the
+[ADR-005](adrs/adr-0005-registry-sync-preserves-operator-ingestion-toggles.md),
+the upgrade actions in the [migration guide](migration-guide.md), and the
 surrounding catalogue and Silver design is in
 [the Bronze/Silver architecture design](ghillie-bronze-silver-architecture-design.md#92-repository-discovery-and-registration-phase-13a).
 
