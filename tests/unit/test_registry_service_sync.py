@@ -275,7 +275,7 @@ async def test_sync_copies_documentation_paths_from_catalogue(
     assert "docs/roadmap.md" in repo.documentation_paths, (
         "A catalogue documentation path should reach Silver"
     )
-    assert "docs/adr/" in repo.documentation_paths, (
+    assert "docs/adrs/" in repo.documentation_paths, (
         "A catalogue documentation directory should reach Silver"
     )
 

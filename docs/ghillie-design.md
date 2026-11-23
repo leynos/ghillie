@@ -1108,7 +1108,7 @@ row. A row that leaves the catalogue is `DISABLE_REMOVED`, and one that later
 re-enters stays disabled until an operator re-enables it. A repository already
 linked to another estate is reported in `repositories_conflicted` instead of
 being moved. These rules are the subject of
-[ADR-005](adr-005-registry-sync-preserves-operator-ingestion-toggles.md).
+[ADR-005](adrs/adr-0005-registry-sync-preserves-operator-ingestion-toggles.md).
 
 **Delivery.** D19 delivered the work as three stacked pull requests: PR-A (the
 toggle-preserving sync and ADR-005), PR-B (the application service, HTTP

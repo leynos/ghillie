@@ -235,7 +235,7 @@ def repository_documentation_paths(import_context: ImportContext) -> None:
 
             assert documentation_paths == [
                 "docs/roadmap.md",
-                "docs/adr/",
+                "docs/adrs/",
             ], (
                 "documentation_paths should preserve first-seen order and drop"
                 " duplicates"

@@ -233,7 +233,7 @@ projects:
           name: gamma
           default_branch: main
           documentation_paths:
-            - docs/adr/
+            - docs/adrs/
     noise:
       ignore_authors: ["bots"]
       ignore_labels: ["chore/deps"]
@@ -250,7 +250,7 @@ projects:
     assert catalogue.projects[0].noise.ignore_labels == ["chore/deps"]
     repository = catalogue.projects[0].components[0].repository
     assert repository is not None
-    assert repository.documentation_paths == ["docs/adr/"]
+    assert repository.documentation_paths == ["docs/adrs/"]
 
 
 def test_lint_catalogue_defaults_repository_doc_paths(tmp_path: Path) -> None:

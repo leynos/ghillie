@@ -96,7 +96,7 @@ class TestRepositoryMetadata:
             name="reef",
             default_branch="main",
             estate_id="estate-1",
-            documentation_paths=("docs/roadmap.md", "docs/adr/"),
+            documentation_paths=("docs/roadmap.md", "docs/adrs/"),
         )
 
         encoded = msgspec.json.encode(metadata)
@@ -104,7 +104,7 @@ class TestRepositoryMetadata:
 
         assert decoded.id == "abc-123"
         assert decoded.slug == "octo/reef"
-        assert decoded.documentation_paths == ("docs/roadmap.md", "docs/adr/")
+        assert decoded.documentation_paths == ("docs/roadmap.md", "docs/adrs/")
 
 
 class TestCommitEvidence:
