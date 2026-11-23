@@ -11,6 +11,7 @@ from ghillie.github.client import _classify_documentation_path
         ("docs/roadmap.md", (True, False)),
         (r"docs\\roadmap.md", (True, False)),
         ("docs/adr/001-design.md", (False, True)),
+        ("docs/adrs/adr-0001-design.md", (False, True)),
         (r"docs\\ADR\\001-design.md", (False, True)),
         ("docs/adr/roadmap.md", (True, True)),
         ("docs/architecture-decision/0001.md", (False, True)),
