@@ -1,4 +1,4 @@
-# Task 1.5.c: Define container image for preview workloads
+# Define container image for preview workloads
 
 This ExecPlan is a living document. The sections Constraints, Tolerances,
 Risks, Progress, Surprises & Discoveries, Decision Log, and Outcomes &
@@ -115,7 +115,7 @@ on port 8080 with health status.
 
 ## Outcomes & Retrospective
 
-Task 1.5.c is complete. The implementation delivers:
+Task 1.5.3 is complete. The implementation delivers:
 
 - Multi-stage Dockerfile with Python 3.12-slim base and non-root user
 - Runtime module (ghillie/runtime.py) with Falcon ASGI app
@@ -238,7 +238,7 @@ Update `docs/users-guide.md` with a new section for container usage, including:
 
 Update `docs/local-k8s-preview-design.md` if any design deviations occurred.
 
-Mark Task 1.5.c as complete in `docs/roadmap.md`.
+Mark Task 1.5.3 as complete in `docs/roadmap.md`.
 
 Run all quality gates and commit.
 
@@ -335,7 +335,7 @@ All commands run from repository root `/data/leynos/Projects/ghillie/`.
        - Add Makefile targets: docker-build, docker-run
        - Add unit tests and BDD tests for runtime module
 
-       Task 1.5.c completion criteria: A local build produces an image that
+       Task 1.5.3 completion criteria: A local build produces an image that
        starts the runtime entrypoint without errors when deployed.
 
        Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"

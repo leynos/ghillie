@@ -336,7 +336,7 @@ class RepositoryEvidenceBundle(msgspec.Struct, kw_only=True, frozen=True):
 
 
 # ---------------------------------------------------------------------------
-# Project-level evidence structures (Task 3.1.a)
+# Project-level evidence structures (Task 3.1.1)
 # ---------------------------------------------------------------------------
 
 

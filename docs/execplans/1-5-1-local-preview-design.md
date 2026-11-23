@@ -1,4 +1,4 @@
-# Local k3d preview design for Ghillie
+# Document the local preview design
 
 This ExecPlan is a living document. The sections `Progress`,
 `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must

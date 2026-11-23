@@ -124,12 +124,12 @@ scale of modern software estates, which may generate thousands of events per
 minute, the gateway must be designed for high availability and asynchronous
 processing.
 
-### 3.0 Operator CLI scaffold boundary (Task 2.5.a)
+### 3.0 Operator CLI scaffold boundary (Task 2.5.1)
 
 The packaged operator CLI is a driving adapter layered alongside the runtime
-server and background workers. Task 2.5.a made the MVP control-plane contract
+server and background workers. Task 2.5.1 made the MVP control-plane contract
 executable without pulling ingestion, export, metrics, and reporting
-implementation forward prematurely; Task 2.5.b then replaced the estate
+implementation forward prematurely; Task 2.5.2 then replaced the estate
 placeholders with live verbs (see §8.5).
 
 The boundary is intentionally explicit:
@@ -157,7 +157,7 @@ The boundary is intentionally explicit:
   exit codes. `ghillie/cli/errors.py` carries `LocalInputError`. Tests replace
   the client factory with one that injects a transport.
 - `ghillie/cli/runtime_adapters.py` is the driven adapter seam for local stack
-  integration. Task 2.5.a validates selector names (`cuprum`, `python-api`) and
+  integration. Task 2.5.1 validates selector names (`cuprum`, `python-api`) and
   leaves concrete orchestration work to later tasks.
 
 This keeps the CLI thin and prevents command handlers from embedding HTTP or
@@ -227,7 +227,7 @@ This schema ensures that every piece of compliance data entering Ghillie
 carries sufficient context (time, source, subject) to be routed and processed
 correctly, regardless of the underlying compliance check that generated it.
 
-### 3.4 Estate catalogue constraints (Phase 1.1)
+### 3.4 Estate catalogue constraints (Step 1.1)
 
 - Catalogue files are parsed with a YAML 1.2 loader, so ambiguous scalars such
   as `on` stay as strings. This avoids silent type flips when repository
@@ -333,7 +333,7 @@ classDiagram
     Project "1" o-- StatusSettings
 ```
 
-#### Noise filter ingestion behaviour (Task 1.3.c)
+#### Noise filter ingestion behaviour (Task 1.3.3)
 
 Noise filters are applied at GitHub ingestion time, before persisting to the
 Bronze `raw_events` table. The ingestion worker loads the project noise
@@ -359,7 +359,7 @@ field (documentation change events). Commit ingestion does not yet fetch a
 per-commit file list in Phase 1, so path-based filtering cannot be applied to
 generic commit events without additional GitHub API calls.
 
-#### Ingestion observability (Task 1.3.d)
+#### Ingestion observability (Task 1.3.4)
 
 The ingestion worker emits structured log events at key lifecycle points,
 enabling operators to monitor throughput, identify failures, and detect stalled
@@ -765,7 +765,7 @@ The following components are implemented:
 - **Session middleware** (`SQLAlchemySessionManager`): Provides
   request-scoped `AsyncSession` instances with automatic commit/rollback/close
   per the pattern documented in `async-sqlalchemy-with-pg-and-falcon.md`.
-- **Estate management endpoints** (Task 2.5.b):
+- **Estate management endpoints** (Task 2.5.2):
   `POST /estates/{estate_key}/catalogue-import`,
   `POST /estates/{estate_key}/registry-sync`, `GET /estates`,
   `GET /estates/{estate_key}/repositories`, and
@@ -1051,9 +1051,9 @@ unit tests are unaffected.
 **Affected modules:** `ghillie/runtime.py` (`create_app`) and
 `ghillie/logging.py` (`configure_logging`).
 
-### 8.5 Estate-management control plane (Task 2.5.b)
+### 8.5 Estate-management control plane (Task 2.5.2)
 
-Task 2.5.b exposes estate configuration through one application service, one
+Task 2.5.2 exposes estate configuration through one application service, one
 HTTP adapter, and the operator CLI. An operator can import a catalogue, project
 its repositories into the Silver registry, list estates and repositories, and
 toggle ingestion without writing Python.
@@ -1090,7 +1090,7 @@ pagination), D6 (a required ingestion toggle), D7 (the error envelope), D8
 (msgspec structs), D9 (the driving port), D10 (no inference service, so Vidai
 Mock is not used), D12 (path naming), D13 (start-up decoupling, health-only
 mode, and opt-in schema bootstrap), D14 (optional bearer authentication; the
-token is never logged), D15 (runtime profile hand-off to Task 2.5.e), D16
+token is never logged), D15 (runtime profile hand-off to Task 2.5.5), D16
 (estate key creation pattern), D17 (per-estate serialization and the
 conflict/storage-unavailable mapping), D18 (estate identity on re-import), D19
 (three stacked pull requests), D20 (dry runs for import and sync; local refusal
@@ -1115,7 +1115,7 @@ toggle-preserving sync and ADR-005), PR-B (the application service, HTTP
 adapter, and OpenAPI contract), and PR-C (the CLI verbs, behavioural and e2e
 coverage, documentation, and roadmap close-out).
 
-## 9. Evidence Bundle Architecture (Phase 2.1)
+## 9. Evidence Bundle Architecture (Step 2.1)
 
 The evidence bundle provides an in-memory representation of repository activity
 within a reporting window, ready for LLM summarization. This structure is the
@@ -1327,7 +1327,7 @@ commit patterns:
 Custom configurations can be provided to `EvidenceBundleService` to match
 project-specific conventions.
 
-### 9.4 Status model interface (Phase 2.2)
+### 9.4 Status model interface (Step 2.2)
 
 The status model interface abstracts LLM-backed summarization behind a
 `StatusModel` protocol. This enables:
@@ -1381,10 +1381,10 @@ model:
 - `to_machine_summary(result)` → `Report.machine_summary`
 - Model identifier (e.g., "mock-v1", "gpt-5.1-thinking") → `Report.model`
 
-This satisfies the Phase 2.2.a completion criteria: at least one implementation
+This satisfies the Task 2.2.1 completion criteria: at least one implementation
 of the interface is available with tests that mock model responses.
 
-### 9.5 OpenAI status model implementation (Phase 2.2.b)
+### 9.5 OpenAI status model implementation (Task 2.2.2)
 
 The OpenAI status model implementation (`OpenAIStatusModel`) provides the first
 real LLM integration in Ghillie, connecting the `StatusModel` protocol to an
@@ -1454,10 +1454,10 @@ falls back to `UNKNOWN` for unrecognized values.
 - Implements `aclose()` for resource cleanup
 - Uses bearer token authentication
 
-This satisfies the Phase 2.2.b completion criteria: round-trip inference
+This satisfies the Task 2.2.2 completion criteria: round-trip inference
 demonstrating the integration using VidaiMock.
 
-### 9.6 Scheduled reporting workflow (Phase 2.3.a)
+### 9.6 Scheduled reporting workflow (Task 2.3.1)
 
 The reporting workflow orchestrates the end-to-end generation of repository
 status reports by coordinating evidence bundle construction, status model
@@ -1584,7 +1584,7 @@ Each generated report creates `ReportCoverage` records linking the report to the
 Gold audit trail and enables downstream queries to identify which events
 contributed to which reports.
 
-### 9.6.1 Report validation and retry workflow (Task 2.4.a)
+### 9.6.1 Report validation and retry workflow (Task 2.4.1)
 
 Generated repository reports must pass correctness validation before
 persistence. Invalid reports are retried with bounded attempts; if still
@@ -1642,7 +1642,7 @@ This design ensures **no silent failures**: invalid reports are never stored to
 the Gold layer, and operators retain visibility into problematic generations
 for triage and remediation.
 
-### 9.6.2 Reporting metrics and cost telemetry (Task 2.4.b)
+### 9.6.2 Reporting metrics and cost telemetry (Task 2.4.2)
 
 Repository-level report generation now records operational metrics per run so
 operators can evaluate latency profile and approximate model cost over a chosen
@@ -1697,7 +1697,7 @@ an estate subset) with:
 This enables operators to track latency profile and approximate reporting cost
 over time by combining token totals with configured model pricing.
 
-### 9.7 Report Markdown rendering and filesystem storage (Phase 2.3.b)
+### 9.7 Report Markdown rendering and filesystem storage (Task 2.3.2)
 
 The reporting pipeline persists Gold layer report records in the database, but
 operators also need human-readable reports at predictable filesystem paths for
@@ -1713,7 +1713,7 @@ database access. It accepts a `Report` record and repository metadata (`owner`,
 The renderer reads exclusively from `Report.machine_summary` (the structured
 dict produced by `to_machine_summary()`) rather than `Report.human_text`. This
 guarantees that the rendered Markdown content matches the database exactly,
-satisfying the completion criteria for Task 2.3.b. The `human_text` field
+satisfying the completion criteria for Task 2.3.2. The `human_text` field
 continues to store the raw LLM summary string and is not consumed by the
 renderer.
 
@@ -1801,7 +1801,7 @@ conditionally create a `FilesystemReportSink` when the
    future adapters for S3, Git push, or notification channels (Slack, email)
    without modifying the reporting service.
 
-### 9.8 Project evidence bundle architecture (Phase 3.1.a)
+### 9.8 Project evidence bundle architecture (Task 3.1.1)
 
 Phase 3 introduces project-level reporting by aggregating repository-level data
 through the catalogue's component graph. The project evidence bundle is the
@@ -1854,7 +1854,7 @@ and gold/silver) and joins results in Python to avoid cross-schema SQL joins:
 
 4. **Lifecycle drives status for non-code components.** Components
    without repositories use their catalogue lifecycle field (planned, active,
-   deprecated). A future task (3.2.a) will add explicit manual status support.
+   deprecated). A future task (3.2.1) will add explicit manual status support.
 
 5. **Graceful handling of missing data.** When a component's repository
    has no Silver record or no Gold report, the component evidence is still

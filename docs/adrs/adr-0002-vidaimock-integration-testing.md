@@ -2,13 +2,13 @@
 
 ## Status
 
-Accepted (Task 2.2.b implemented)
+Accepted (Task 2.2.2 implemented)
 
 ## Context
 
 Ghillie's Intelligence Engine (Section 4 of the design document) relies on
 Large Language Model (LLM) integration for hierarchical summarization of
-repository, project, and estate-level status reports. Task 2.2.b in the roadmap
+repository, project, and estate-level status reports. Task 2.2.2 in the roadmap
 requires implementing an initial LLM integration behind a `StatusModel`
 interface, with prompt templates for evidence bundles.
 
@@ -65,8 +65,8 @@ integrations, running as a subprocess fixture during pytest execution.
 
 The following must be in place before implementation can proceed:
 
-1. Task 2.2.a must define the `StatusModel` interface
-2. Task 2.2.b must implement at least one LLM provider integration
+1. Task 2.2.1 must define the `StatusModel` interface
+2. Task 2.2.2 must implement at least one LLM provider integration
 3. VidaiMock binary must be available (downloaded or built from source)
 4. Provider-specific YAML configurations must be created for test scenarios
 
@@ -282,8 +282,8 @@ approach was rejected because:
 
 ## References
 
-- Task 2.2.a: Define status model interface (`docs/roadmap.md`)
-- Task 2.2.b: Implement initial LLM integration (`docs/roadmap.md`)
+- Task 2.2.1: Define status model interface (`docs/roadmap.md`)
+- Task 2.2.2: Implement initial LLM integration (`docs/roadmap.md`)
 - Intelligence Engine design: Section 4 (`docs/ghillie-design.md`)
 - Evidence Bundle Architecture: Section 9 (`docs/ghillie-design.md`)
 - Existing test helpers: `tests/helpers/event_builders.py`

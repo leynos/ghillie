@@ -1,4 +1,4 @@
-# Add estate-management APIs and command-line interface (CLI) commands
+# Add estate-management APIs and CLI commands
 
 This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
@@ -7,7 +7,7 @@ be kept up to date as work proceeds.
 
 Status: COMPLETE (2026-11-21)
 
-This plan implements roadmap Task 2.5.b (tracked on the branch
+This plan implements roadmap Task 2.5.2 (tracked on the branch
 `2-5-2-estate-management-apis`). It was approved by a human on 2026-11-03 and
 implementation began the same day. It has been revised once after an
 expert-panel design review; see `Decision log` and the revision note at the end.
@@ -145,14 +145,14 @@ per pull request.
   or `ghillie.reporting` in a process with no Dramatiq broker raises
   `RuntimeError` at import time, so the service crashes in every mode unless
   `GHILLIE_ALLOW_STUB_BROKER=1` is set. Severity: medium. Likelihood: certain.
-  Mitigation: out of scope (Task 2.5.e owns worker-free start-up, D15); the
+  Mitigation: out of scope (Task 2.5.5 owns worker-free start-up, D15); the
   users' guide documents the variable; the end-to-end test strips `PYTEST_*`
   variables from the child environment and sets the variable explicitly, so the
   hazard is exercised rather than masked.
 - Risk: the Helm chart injects `DATABASE_URL` with a `postgresql://` URL,
   whereas the runtime reads `GHILLIE_DATABASE_URL` and needs an asyncpg URL, so
   a chart deployment starts in health-only mode. Severity: medium. Likelihood:
-  certain. Mitigation: handed to Task 2.5.e; the runtime logs its mode and
+  certain. Mitigation: handed to Task 2.5.5; the runtime logs its mode and
   registered route families at start-up, and the CLI reports a route-level
   `404` as `endpoint_unavailable` with a health-only-mode hint.
 - Risk: a crafted catalogue uses YAML anchors and aliases to expand into a
@@ -264,7 +264,7 @@ per pull request.
         text now says only that the final ingestion flag is preserved and notes
         the changed-row side effect.
 - [x] (2026-11-06) Reached the hosted pre-merge checks. The PR title now names
-      roadmap task 2.5.b. Two test gaps were closed: the cross-estate conflict
+      roadmap task 2.5.2. Two test gaps were closed: the cross-estate conflict
       test gives the foreign row distinct metadata and compares a full field
       snapshot before and after sync, and the dry run asserts the exact
       six-repository projection instead of a lower bound.
@@ -1029,7 +1029,7 @@ per pull request.
       disposes each test's own SQLite engine, and that the API tests name
       statuses through `http.HTTPStatus` rather than bare numbers. The two
       documentation warnings are answered by a new "Estate management HTTP API
-      (Task 2.5.b)" section in `docs/users-guide.md` and an "Estate management
+      (Task 2.5.2)" section in `docs/users-guide.md` and an "Estate management
       boundary" section in `docs/developers-guide.md`. All eight gates are
       green on the repaired tree: `test` 1496 passed, 17 skipped, interrogate
       100.0%, Ruff and Skylos clean, and `cs check` reports code health 10.00
@@ -1337,17 +1337,17 @@ per pull request.
         registered in `pyproject.toml` so `-m "not e2e"` opts out.
 - [x] PR-C, EP-M6: documentation, roadmap, and final gates.
   - [x] (2026-11-05) Documentation updated to match behaviour: the users' guide
-        gained "Estate management through the CLI and API (Task 2.5.b)" with
+        gained "Estate management through the CLI and API (Task 2.5.2)" with
         the five endpoints, request and response examples, dry runs, toggle
         rules, the `repositories_left_disabled` and `repositories_conflicted`
         semantics, a `jq` bulk re-enable recipe, the error-code table, and the
         start-up variables; the CLI specification's estate section was
-        rewritten from its 2.5.a placeholders and gained the D7 envelope and
+        rewritten from its 2.5.1 placeholders and gained the D7 envelope and
         code table; the design document gained §8.5 and an updated §8.4 module
         tree; the developers' guide gained the adapter, error-vocabulary,
         msgspec, `RunnerTransport`, and `e2e` guidance; the gap analysis marks
-        estate configuration met; the roadmap marks Task 2.5.b done and
-        carries D15 into Task 2.5.e.
+        estate configuration met; the roadmap marks Task 2.5.2 done and
+        carries D15 into Task 2.5.5.
   - [x] (2026-11-05) The third review's `catalogue_invalid` hint was reworded
         and its snapshot and documentation updated. Final gates on the
         complete working tree: `check-fmt`, `check-architecture`, `typecheck`,
@@ -1396,7 +1396,7 @@ per pull request.
         - The developers' guide and design §8.5 now name `EstateManagement`,
           describe the CLI-to-HTTP boundary, and align the decision references
           with this plan.
-        - The roadmap's Task 2.5.e names the import-time broker guard and the
+        - The roadmap's Task 2.5.5 names the import-time broker guard and the
           Helm `DATABASE_URL`/driver mismatches from D15.
         The `Artefacts and notes` section is complete, including the e2e
         transcript, the seeded-mutation results, and the `estate list`
@@ -1588,7 +1588,7 @@ per pull request.
   `ghillie/catalogue/importer.py`; the panel reproduced the same failure for
   `import ghillie.api.app` through `ghillie/reporting/__init__.py` importing
   the reporting actor. Impact: health-only mode is affected too; deferred to
-  Task 2.5.e (D15).
+  Task 2.5.5 (D15).
 - Observation: no production code path creates the Silver, Gold, or Bronze
   tables; `init_*_storage` is called only by tests and by the catalogue
   Dramatiq job. Impact: D13.
@@ -1781,7 +1781,7 @@ expert-panel review.
   `unauthorized`, `payload_too_large`). `issues` is always a list of
   `{"code", "message"}`; catalogue validation strings become
   `{"code": "catalogue_schema", "message": ...}`. RFC 9457 (problem details) is
-  deferred to Task 2.6.c, which can negotiate it with `detail` mirroring
+  deferred to Task 2.6.3, which can negotiate it with `detail` mirroring
   `description`. The CLI writes errors to standard error as
   `{"error": {"code", "message", "hint", "status", "issues"?}}` in `json` and
   `yaml` modes and as readable lines in `table` mode, and exits `3`. JSON and
@@ -1826,9 +1826,9 @@ expert-panel review.
   `/ready`, compared with `hmac.compare_digest`; failures return `401`
   `unauthorized`. Unset means unauthenticated, as today, and a start-up warning
   is logged. The token is never logged.
-- D15, deferred to Task 2.5.e: the import-time broker guard, the Helm
+- D15, deferred to Task 2.5.5: the import-time broker guard, the Helm
   environment-variable and driver mismatch, and worker-free start-up. The
-  hand-off is written into `Outcomes & retrospective` and the roadmap's 2.5.e
+  hand-off is written into `Outcomes & retrospective` and the roadmap's 2.5.5
   entry.
 - D16, estate keys. Creating an estate (import) requires
   `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`; other endpoints accept any 1–64
@@ -1946,7 +1946,7 @@ expert-panel review.
   add a CLI-to-service regression test.
 - D27, pre-merge-check reconciliation. The hosted pre-merge checks raised six
   findings against PR-A. Three are actioned in this round: the title names
-  roadmap task 2.5.b; `test_sync_reports_cross_estate_conflict` gives the
+  roadmap task 2.5.2; `test_sync_reports_cross_estate_conflict` gives the
   foreign row a distinct branch, catalogue link, documentation paths, and sync
   time, then proves a full field snapshot is unchanged; and the dry run asserts
   the exact six-repository creation count. Three are dispositions:
@@ -2249,7 +2249,7 @@ expert-panel review.
 
 Complete. Each pull request records below what shipped against the success
 criteria and its gate results; the D15 hand-off is carried in the roadmap's
-Task 2.5.e entry.
+Task 2.5.5 entry.
 
 ### PR-A, EP-M1 (complete)
 
@@ -2449,10 +2449,10 @@ Documents and skills to keep open:
 
 Upstream artefacts at base commit `2ffdb4d`:
 
-- `docs/roadmap.md` Task 2.5.b. Identifiers assigned by this plan:
-  `RM-2.5.b-IMPORT` (catalogue import per estate), `RM-2.5.b-SYNC` (registry
-  sync), `RM-2.5.b-LIST` (repository listing), `RM-2.5.b-TOGGLE` (ingestion
-  toggles), `RM-2.5.b-DONE` (end to end via CLI and HTTP with no Python).
+- `docs/roadmap.md` Task 2.5.2. Identifiers assigned by this plan:
+  `RM-2.5.2-IMPORT` (catalogue import per estate), `RM-2.5.2-SYNC` (registry
+  sync), `RM-2.5.2-LIST` (repository listing), `RM-2.5.2-TOGGLE` (ingestion
+  toggles), `RM-2.5.2-DONE` (end to end via CLI and HTTP with no Python).
 - `docs/mvp-cli-specification.md`: "Estate commands" (`SPEC-EST-CMDS`), the
   endpoint table (`SPEC-EST-PATHS`), the `--wait/--no-wait` contract
   (`SPEC-WAIT`), "Error handling and exit codes" (`SPEC-EXIT`), "Security
@@ -2464,23 +2464,23 @@ Upstream artefacts at base commit `2ffdb4d`:
 Trace links:
 
 ```plaintext
-RM-2.5.b-TOGGLE -> TDD-REG-SYNC (amended by D3, ADR-005) -> EP-M1
+RM-2.5.2-TOGGLE -> TDD-REG-SYNC (amended by D3, ADR-005) -> EP-M1
                 -> tests/unit/test_registry_sync_policy.py
                 -> tests/unit/test_registry_sync_state_machine.py
                 -> tests/unit/test_registry_service_sync.py::test_sync_preserves_operator_disable
-RM-2.5.b-IMPORT -> SPEC-EST-PATHS (D1, D16, D18, D20) -> EP-M2, EP-M3, EP-M4
+RM-2.5.2-IMPORT -> SPEC-EST-PATHS (D1, D16, D18, D20) -> EP-M2, EP-M3, EP-M4
                 -> tests/unit/test_api_estate_resources.py
                 -> tests/features/estate_management.feature "Operator imports a catalogue for a new estate"
-RM-2.5.b-SYNC   -> SPEC-EST-PATHS, SPEC-WAIT (amended by D2) -> EP-M1, EP-M2, EP-M3, EP-M4
+RM-2.5.2-SYNC   -> SPEC-EST-PATHS, SPEC-WAIT (amended by D2) -> EP-M1, EP-M2, EP-M3, EP-M4
                 -> tests/features/estate_management.feature "Operator syncs the registry and lists repositories"
-RM-2.5.b-LIST   -> SPEC-EST-CMDS (D4, D5) -> EP-M2, EP-M3, EP-M4
+RM-2.5.2-LIST   -> SPEC-EST-CMDS (D4, D5) -> EP-M2, EP-M3, EP-M4
                 -> tests/unit/test_estate_pagination.py
-RM-2.5.b-TOGGLE -> SPEC-EST-CMDS (D6) -> EP-M3, EP-M4
+RM-2.5.2-TOGGLE -> SPEC-EST-CMDS (D6) -> EP-M3, EP-M4
                 -> tests/features/estate_management.feature "Operator disables ingestion and it survives a re-sync"
 SPEC-EXIT       -> D7 -> EP-M3, EP-M4 -> tests/unit/test_api_estate_errors.py, tests/unit/cli/test_estate_error_mapping.py
 SPEC-SEC        -> D14 -> EP-M3, EP-M4 -> tests/unit/test_api_auth.py, tests/unit/cli/test_estate_token_redaction.py
 TDD-CLI-THIN    -> Constraint -> EP-M4 -> tests/unit/cli/test_cli_import_closure.py
-RM-2.5.b-DONE   -> D13 -> EP-M5 -> tests/e2e/test_estate_management_e2e.py
+RM-2.5.2-DONE   -> D13 -> EP-M5 -> tests/e2e/test_estate_management_e2e.py
 ```
 
 D2, D3, D4, D5, and D16 amend `docs/mvp-cli-specification.md` and
@@ -2711,7 +2711,7 @@ Residual gaps: the per-estate lock is in-process, so concurrent requests across
 replicas are not serialized (single replica in MVP); adoption of an unowned row
 and insertion of a new row are arbitrated atomically at the persistence
 boundary (D28). OpenAPI conformance is structural only (paths, methods,
-operation IDs, schema names and required properties) until Task 2.6.c.
+operation IDs, schema names and required properties) until Task 2.6.3.
 
 ## Plan of work
 
@@ -3029,10 +3029,10 @@ snapshots with `-p no:xdist`.
   update the "Operator CLI scaffold" wording; retitle the Python snippets as
   programmatic alternatives.
 - `docs/mvp-cli-specification.md`: apply D2, D4, D5, D6, D7, D16; add request
-  and response shapes and the error-code table; replace the 2.5.a placeholder
+  and response shapes and the error-code table; replace the 2.5.1 placeholder
   note for estate verbs.
 - `docs/ghillie-design.md`: new §8.5 "Estate-management control plane
-  (Task 2.5.b)" recording D1, D2, D4–D10, D12–D21 and linking ADR-005; update
+  (Task 2.5.2)" recording D1, D2, D4–D10, D12–D21 and linking ADR-005; update
   §8.4's module tree and "Planned evolution" note to include
   `ghillie/api/estate/`; update §3.0 to say the estate verbs are live.
 - `docs/developers-guide.md`: msgspec request and response structs (D8), the
@@ -3040,19 +3040,19 @@ snapshots with `-p no:xdist`.
   `RunnerTransport` BDD harness, running and opting out of `e2e` tests, and the
   docstring-only package-initializer rule for port packages.
 - `docs/mvp-gap-analysis.md`: mark the estate-configuration gap closed.
-- `docs/roadmap.md`: mark Task 2.5.b done with an "Implemented" note, and add
-  the D15 hand-off items to Task 2.5.e.
+- `docs/roadmap.md`: mark Task 2.5.2 done with an "Implemented" note, and add
+  the D15 hand-off items to Task 2.5.5.
 
 ## Milestones and plateaus
 
 - EP-M1. Outcome: syncs preserve operator toggles and report cross-estate
-  conflicts instead of failing. Requirements: `RM-2.5.b-TOGGLE`, `TDD-REG-SYNC`
+  conflicts instead of failing. Requirements: `RM-2.5.2-TOGGLE`, `TDD-REG-SYNC`
   amended by ADR-005. Acceptance: O1 discharged. Conformance: `SyncResult`
   gains fields (additive); no schema change; Hecate passes with the new
   `domain_ports` prefix. Recovery: revert PR-A. Remaining gaps: no endpoints.
   Compatibility decision: none.
 - EP-M2. Outcome: the estate service is usable from Python with full tests and
-  a production caller. Requirements: `RM-2.5.b-IMPORT`, `-SYNC`, `-LIST`,
+  a production caller. Requirements: `RM-2.5.2-IMPORT`, `-SYNC`, `-LIST`,
   `-TOGGLE` at the application layer. Acceptance: O2 and O3 discharged; service
   tests pass. Conformance: new Hecate prefixes as specified; importer change is
   keyword-only and additive. Recovery: the package is additive. Remaining gaps:
@@ -3069,7 +3069,7 @@ snapshots with `-p no:xdist`.
   client halves and O6. Recovery: revert the CLI commits. Compatibility
   decision: none (pre-1.0; the verbs were placeholders).
 - EP-M5. Outcome: the journey is proven in-process and across processes.
-  Requirements: `RM-2.5.b-DONE`. Acceptance: nine scenarios and the e2e test
+  Requirements: `RM-2.5.2-DONE`. Acceptance: nine scenarios and the e2e test
   pass in `make test` and in CI. Compatibility decision: none.
 - EP-M6. Outcome: documentation and roadmap match behaviour. Acceptance: all
   gates pass. Compatibility decision: none.
@@ -3360,7 +3360,7 @@ exit=0
 the service default of 50 estates and renders only that first page. The
 document is a page envelope, so `has_more` and `next_offset` are visible in
 `json` and `yaml` output, but the command cannot follow them. This is a
-deliberate scope boundary for Task 2.5.b: the estate catalogue is expected to
+deliberate scope boundary for Task 2.5.2: the estate catalogue is expected to
 hold far fewer than 50 estates, and the repository listing — the collection
 that can grow without bound — does expose paging. A future task that needs to
 enumerate more estates must add the paging options rather than assume the

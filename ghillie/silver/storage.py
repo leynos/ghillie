@@ -51,7 +51,7 @@ class Repository(Base):
         UTCDateTime(), default=utcnow, onupdate=utcnow
     )
 
-    # Task 1.3.a: Repository discovery and registration fields
+    # Task 1.3.1: Repository discovery and registration fields
     catalogue_repository_id: Mapped[str | None] = mapped_column(
         String(36), default=None
     )

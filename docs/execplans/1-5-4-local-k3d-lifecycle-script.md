@@ -1,4 +1,4 @@
-# Implement local k3d lifecycle script (task 1.5.d)
+# Implement local k3d lifecycle script
 
 This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
@@ -135,7 +135,7 @@ Thresholds that trigger escalation when breached:
 - Makefile targets: `local-k8s-up`, `local-k8s-down`, `local-k8s-status`,
   `local-k8s-logs`
 - Users' guide documentation with prerequisites, usage, and configuration
-- Roadmap task 1.5.d marked complete
+- Roadmap task 1.5.4 marked complete
 
 **Lessons learned:**
 
@@ -584,13 +584,13 @@ Validation: `make markdownlint && make nixie`
 Edit `docs/roadmap.md` to change:
 
 ```markdown
-- [ ] **Task 1.5.d – Implement local k3d lifecycle script**
+- [ ] 1.5.4. Implement the local k3d lifecycle script.
 ```
 
 to:
 
 ```markdown
-- [x] **Task 1.5.d – Implement local k3d lifecycle script**
+- [x] 1.5.4. Implement the local k3d lifecycle script.
 ```
 
 Validation: Roadmap reflects completion.

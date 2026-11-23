@@ -1,6 +1,6 @@
 # ghillie Users' Guide
 
-## Operator CLI scaffold (Task 2.5.a)
+## Operator CLI scaffold (Task 2.5.1)
 
 Ghillie now ships a packaged operator CLI entry point:
 
@@ -23,7 +23,7 @@ Shared root configuration is resolved before noun dispatch with this precedence:
 4. `~/.config/ghillie/state.json`.
 5. Fallback `http://127.0.0.1:8080`.
 
-Task 2.5.a delivers the command contract, shared config resolution, control
+Task 2.5.1 delivers the command contract, shared config resolution, control
 plane client wiring, and local runtime adapter selection for `cuprum` and
 `python-api`. The estate verbs are live (see "Estate management through the CLI
 and API"); the other nouns still return deterministic placeholder payloads
@@ -45,7 +45,7 @@ uv run ghillie --api-base-url http://127.0.0.1:9999 report run --help
 
 This proves the shared root options are accepted before the noun command.
 
-## Estate management through the CLI and API (Task 2.5.b)
+## Estate management through the CLI and API (Task 2.5.2)
 
 The estate verbs are live. Every verb is a thin HTTP call to the control plane:
 local validation rejects bad input before any request is sent, and any
@@ -342,7 +342,7 @@ health probes; clients must then send `--auth-token` or set
 broker used by local runs. In production the schema is migrated rather than
 created, so leave `GHILLIE_DB_BOOTSTRAP` unset.
 
-## Estate catalogue (Phase 1.1)
+## Estate catalogue (Step 1.1)
 
 Ghillie now ships a YAML 1.2 catalogue describing programmes, projects,
 components, repositories, and their relationships. Catalogue files are
@@ -455,7 +455,7 @@ In deployments that already run Dramatiq workers, use the
 catalogue path, database URL, estate key, optional estate name, and commit SHA
 so scheduling systems can enqueue work without importing Python modules.
 
-## Bronze raw event store (Phase 1.2)
+## Bronze raw event store (Task 1.2.1)
 
 The Bronze layer retains unmodified GitHub payloads, so Silver transforms can
 be replayed deterministically. Events are written to the `raw_events` table
@@ -525,7 +525,7 @@ investigate drift; otherwise, no additional rows are created. If two workers
 race to insert the same event fact, the late worker re-reads the row and marks
 the raw event as processed instead of failing the transform.
 
-## Silver entity tables (Phase 1.2)
+## Silver entity tables (Task 1.2.2)
 
 Silver now materializes repositories, commits, pull requests, issues, and
 documentation changes from Bronze raw events. The transformer recognizes
@@ -604,7 +604,7 @@ asyncio.run(main())
 Running the example leaves `repositories`, `commits`, and `event_facts`
 populated for the pilot repository without duplicating rows on replay.
 
-## Gold report metadata (Phase 1.2)
+## Gold report metadata (Task 1.2.3)
 
 The Gold layer now persists report metadata alongside the Silver entities but
 separate from raw GitHub payloads. Reports capture:
@@ -708,7 +708,7 @@ complete for its own window even if higher-level reports already include the
 same events. Re-running a repository report without new events returns the same
 bundle.
 
-## Repository discovery and registration (Phase 1.3)
+## Repository discovery and registration (Step 1.3)
 
 The repository registry bridges catalogue-defined repositories with the Silver
 layer ingestion pipeline. It enables controlled GitHub event ingestion by
@@ -863,15 +863,15 @@ The registry copies `documentation_paths` from catalogue repositories into
 Silver. These paths guide the ingestion worker when detecting documentation
 changes such as roadmaps and ADRs.
 
-## Estate management HTTP API (Task 2.5.b)
+## Estate management HTTP API (Task 2.5.2)
 
 The runtime exposes a Falcon ASGI API for estate management. Its five
 operations are defined in [`specs/openapi.yml`](../specs/openapi.yml) and
 driven by `ghillie.estate.ports.EstateManagement`. The catalogue document
 format is described in the
-[Estate catalogue (Phase 1.1)](#estate-catalogue-phase-11) section; the sync
+[Estate catalogue (Step 1.1)](#estate-catalogue-step-11) section; the sync
 rules and their transition table are in
-[Repository discovery and registration (Phase 1.3)](#repository-discovery-and-registration-phase-13).
+[Repository discovery and registration (Step 1.3)](#repository-discovery-and-registration-step-13).
 This section covers only the HTTP surface.
 
 ### Authentication
@@ -1103,7 +1103,7 @@ event, so the alert would never fire. And the handler writes through a bounded
 queue whose overflow policy can drop a record, so the events give rates and
 trends rather than an exact request count.
 
-## Incremental GitHub ingestion (Phase 1.3.b)
+## Incremental GitHub ingestion (Task 1.3.2)
 
 Ghillie polls GitHub per managed repository and appends activity into the Bronze
 `raw_events` table. Each repository has per-kind watermarks stored in
@@ -1181,7 +1181,7 @@ GHILLIE_TEST_DB=postgresql+asyncpg://user:password@host:port/database \
 
 See `docs/testing-sqlalchemy-with-pytest-and-py-pglite.md` for full guidance.
 
-## GitHub ingestion observability (Phase 1.3.d)
+## GitHub ingestion observability (Task 1.3.4)
 
 Ghillie emits structured log events for ingestion health monitoring. All events
 use femtologging with consistent field schemas suitable for parsing by log
@@ -1305,7 +1305,7 @@ Configure alerts based on structured log queries:
    occur repeatedly for the same repository (indicates sustained high activity
    or processing issues).
 
-## Container image (Phase 1.5.c)
+## Container image (Task 1.5.3)
 
 Ghillie provides a container image for Kubernetes deployments. The image runs a
 Falcon Asynchronous Server Gateway Interface (ASGI) application served by
@@ -1407,7 +1407,7 @@ For local k3d previews, import the image into the cluster:
 k3d image import ghillie:local -c <cluster-name>
 ```
 
-## Local k3d preview environment (Phase 1.5.d)
+## Local k3d preview environment (Task 1.5.4)
 
 Ghillie provides a local preview environment using k3d (k3s-in-Docker). This
 enables developers to validate the full Kubernetes deployment locally before
@@ -1518,7 +1518,7 @@ The local preview environment installs the following components:
 Connection strings for the database and cache are automatically extracted from
 operator-managed secrets and injected into the application secret.
 
-## Status model configuration (Phase 2.2.c)
+## Status model configuration (Task 2.2.3)
 
 Ghillie supports configurable large language model (LLM) backends for status
 report generation. The same reporting job can run against different model
@@ -1607,7 +1607,7 @@ config = OpenAIStatusModelConfig(
 openai_model = OpenAIStatusModel(config)
 ```
 
-## Scheduled reporting workflow (Phase 2.3.a)
+## Scheduled reporting workflow (Task 2.3.1)
 
 Ghillie provides a scheduled reporting workflow that orchestrates evidence
 bundle construction, status model invocation, and report persistence. The
@@ -1742,7 +1742,7 @@ generate_reports_for_estate_job.send(
 For Kubernetes deployments, use a CronJob resource with the Dramatiq worker
 container.
 
-## Report Markdown and storage (Phase 2.3.b)
+## Report Markdown and storage (Task 2.3.2)
 
 Ghillie can render repository status reports as Markdown documents and write
 them to the filesystem at predictable paths, making reports navigable by
@@ -1874,7 +1874,7 @@ service = ReportingService(dependencies, config=config, report_sink=sink)
 report = await service.run_for_repository(repository_id)
 ```
 
-## On-demand report generation (Phase 2.3.c)
+## On-demand report generation (Task 2.3.3)
 
 In addition to scheduled reporting, Ghillie provides an HTTP API endpoint for
 generating reports on demand. This enables operators to trigger a fresh report
@@ -1963,7 +1963,7 @@ filesystem as Markdown, just like scheduled reports.
 The endpoint is documented in the OpenAPI specification at
 [`specs/openapi.yml`](../specs/openapi.yml).
 
-## Report correctness validation (Phase 2.4.a)
+## Report correctness validation (Task 2.4.1)
 
 Generated repository reports are validated before persistence. If the status
 model produces output that fails basic correctness checks, Ghillie retries
@@ -2032,7 +2032,7 @@ can locate the review marker directly.
 | --------------------------------- | ------- | --------------------------------- |
 | `GHILLIE_VALIDATION_MAX_ATTEMPTS` | `2`     | Maximum model invocation attempts |
 
-## Reporting metrics and costs (Phase 2.4.b)
+## Reporting metrics and costs (Task 2.4.2)
 
 Repository report generation now captures per-run operational metrics and
 exposes aggregate period snapshots for operators.
@@ -2098,7 +2098,7 @@ For estate-scoped queries, call `get_metrics_for_estate(estate_id, start, end)`.
 currency using pricing configured for the active model (for example, prompt and
 completion token rates from the provider contract).
 
-## Project evidence bundles (Phase 3.1.a)
+## Project evidence bundles (Task 3.1.1)
 
 Project evidence bundles aggregate catalogue metadata, component lifecycle
 stages, repository report summaries, and component dependency graphs into a

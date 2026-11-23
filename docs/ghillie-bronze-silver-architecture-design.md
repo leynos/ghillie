@@ -412,7 +412,7 @@ CREATE TABLE github_ingestion_offsets (
 - A minimal Silver staging table, `event_facts`, reuses the Bronze declarative
   base. `RawEventTransformer` copies Bronze payloads into `event_facts`, marks
   `transform_state` as processed, and verifies on reprocessing that the stored
-  payload matches. This satisfies the Task 1.2.a requirement that re-running
+  payload matches. This satisfies the Task 1.2.1 requirement that re-running
   transforms produces identical Silver outputs.
 
 ### 3.2 Silver: core tables
@@ -1220,7 +1220,7 @@ A few practical constraints you’ll want to bake into the design up front:
 - disable ingestion for some repos,
 - or scale Dramatiq workers horizontally.
 
-### 9.1 Catalogue importer and reconciliation (Phase 1.1.b)
+### 9.1 Catalogue importer and reconciliation (Task 1.1.2)
 
 The catalogue importer materializes the YAML catalogue into `estates`,
 `projects`, `components`, `component_edges`, and `repositories`. It runs inside
@@ -1233,7 +1233,7 @@ actor (`import_catalogue_job`) executes the importer asynchronously, and a
 `GitCatalogueWatcher` polls `git rev-parse` to enqueue new imports whenever the
 catalogue repository's HEAD moves.
 
-### 9.2 Repository discovery and registration (Phase 1.3.a)
+### 9.2 Repository discovery and registration (Task 1.3.1)
 
 The `RepositoryRegistryService` bridges the catalogue domain with the Silver
 layer by synchronizing catalogue repositories into the Silver `repositories`
@@ -1329,18 +1329,18 @@ ______________________________________________________________________
 
 This design provides concrete implementations for:
 
-- **Task 1.2.a – Bronze raw event store**: `raw_events` schema,
+- **Task 1.2.1 – Bronze raw event store**: `raw_events` schema,
   `github_ingestion_offsets`, `persist_raw_event`.
-- **Task 1.2.b – Silver entity tables**: `repositories`, `commits`,
+- **Task 1.2.2 – Silver entity tables**: `repositories`, `commits`,
   `pull_requests`, `issues`, `documentation_changes`, plus transformers.
-- **Task 1.2.c – Gold report metadata schema**: `reports`, `report_projects`,
+- **Task 1.2.3 – Gold report metadata schema**: `reports`, `report_projects`,
   and `report_coverage` tables with scope-aware constraints.
 - **Task 1.3 – GitHub ingestion service**: Granian/Falcon API (for Concordat),
   async Dramatiq pollers for GitHub.
 - **Task 4.1 – Concordat CloudEvents ingestion**: `CloudEvent` msgspec struct
   and `/ingest/concordat` endpoint.
 
-### 10.1 Gold report metadata schema (Phase 1.2.c)
+### 10.1 Gold report metadata schema (Task 1.2.3)
 
 The Gold layer now persists report metadata separately from event ingestion:
 

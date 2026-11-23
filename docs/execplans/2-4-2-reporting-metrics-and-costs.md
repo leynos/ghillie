@@ -8,7 +8,7 @@ Status: DONE
 
 ## Purpose / big picture
 
-Task 2.4.b adds operational telemetry to repository report generation so
+Task 2.4.2 adds operational telemetry to repository report generation so
 operators can assess runtime behaviour and approximate cost over time.
 
 After this change, each generated repository report records:
@@ -114,7 +114,7 @@ Success is observable when:
 
 ## Outcomes & retrospective
 
-Task 2.4.b completion criteria are met:
+Task 2.4.2 completion criteria are met:
 
 - Repository reports now persist latency and token metrics.
 - Reporting lifecycle logs expose operational state and run-level metrics.

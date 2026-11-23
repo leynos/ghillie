@@ -249,8 +249,8 @@ making changes.
   AI-proposed.
 
 - Decision: Proceed with implementation on this branch. Rationale: The user
-  explicitly requested implementation of `docs/execplans/adopt-hecate.md` on
-  2026-06-01, satisfying the plan approval constraint. Date/Author:
+  explicitly requested implementation of `docs/execplans/1-6-1-adopt-hecate.md`
+  on 2026-06-01, satisfying the plan approval constraint. Date/Author:
   2026-06-01T21:44:55Z / User-approved, AI-recorded.
 
 - Decision: Raise Ghillie's existing Cyclopts constraint from `>=2.9,<3` to
@@ -527,7 +527,7 @@ coderabbit review --agent
 Clear all actionable CodeRabbit concerns before moving on. Commit each
 validated milestone with a file-based commit message. Push the branch and
 update the draft pull request summary to mention
-`docs/execplans/adopt-hecate.md`.
+`docs/execplans/1-6-1-adopt-hecate.md`.
 
 ## Concrete steps
 

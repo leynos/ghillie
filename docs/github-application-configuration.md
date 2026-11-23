@@ -275,7 +275,7 @@ include:
 - **Secrets manager integration:** Services like HashiCorp Vault can
   automatically rotate GitHub App tokens using their secrets engine.
 - **Application-level refresh:** Future versions of Ghillie may support direct
-  App authentication with automatic token refresh (see Task 1.4.b in the
+  App authentication with automatic token refresh (see Task 1.4.2 in the
   roadmap).
 
 For pilot deployments, manually refreshing the token before each ingestion run
@@ -497,5 +497,5 @@ production deployments, GitHub Apps are strongly recommended.
   – GitHub documentation for token exchange.
 - [Ghillie users' guide](users-guide.md) – General guidance for configuring and
   operating Ghillie.
-- [Ghillie roadmap](roadmap.md) – Task 1.4.b covers secure credential storage
+- [Ghillie roadmap](roadmap.md) – Task 1.4.2 covers secure credential storage
   and rotation.

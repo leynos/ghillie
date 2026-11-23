@@ -25,7 +25,7 @@ bundle architecture documented in `docs/ghillie-design.md` Section 9.
 - [x] Implemented `ghillie/status/mock.py` with `MockStatusModel`
 - [x] Created `ghillie/status/__init__.py` with public exports
 - [x] Added Section 9.4 to `docs/ghillie-design.md`
-- [x] Marked Task 2.2.a as done in `docs/roadmap.md`
+- [x] Marked Task 2.2.1 as done in `docs/roadmap.md`
 - [x] All quality gates passed (check-fmt, typecheck, lint, test, nixie)
 
 ## Surprises & Discoveries
@@ -151,7 +151,7 @@ heuristics:
 ### Phase 5: Update documentation and roadmap
 
 - Add status model section to `docs/ghillie-design.md`
-- Mark Task 2.2.a as done in `docs/roadmap.md`
+- Mark Task 2.2.1 as done in `docs/roadmap.md`
 
 ## Concrete Steps
 
@@ -209,7 +209,7 @@ heuristics:
 
 8. Update `docs/ghillie-design.md` Section 9 with status model design decisions.
 
-9. Mark Task 2.2.a as done in `docs/roadmap.md`.
+9. Mark Task 2.2.1 as done in `docs/roadmap.md`.
 
 10. Run quality gates:
 
@@ -297,7 +297,7 @@ If tests fail mid-run:
 - `ghillie.evidence.models.ReportStatus` - Status enum (reused)
 - `ghillie.evidence.models.WorkType` - For heuristic classification
 
-**Downstream consumers (Phase 2.3):**
+**Downstream consumers (Step 2.3):**
 
 - Reporting scheduler will call `StatusModel.summarize_repository()`
 - Report storage will use `to_machine_summary()` for `Report.machine_summary`
@@ -314,4 +314,4 @@ If tests fail mid-run:
 | `tests/features/status_model.feature`             | Create | BDD scenarios                  |
 | `tests/features/steps/test_status_model_steps.py` | Create | BDD steps                      |
 | `docs/ghillie-design.md`                          | Modify | Add Section 9.4                |
-| `docs/roadmap.md`                                 | Modify | Mark Task 2.2.a done           |
+| `docs/roadmap.md`                                 | Modify | Mark Task 2.2.1 done           |
