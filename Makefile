@@ -49,7 +49,7 @@ INTERROGATE = $(UV_ENV) uv tool run --python 3.14 --from 'interrogate==$(INTERRO
 
 .PHONY: help all clean build build-release check-architecture lint interrogate fmt check-fmt \
         markdownlint nixie test typecheck helm-lint helm-test \
-        docker-build docker-run spelling spelling-helper-test \
+        docker-build docker-run spelling \
         skylos-allow \
         $(TOOLS) $(VENV_TOOLS) test-workflow-contracts
 
@@ -150,29 +150,13 @@ typecheck: build ## Run typechecking
 markdownlint: spelling $(MDLINT) ## Lint Markdown files and enforce spelling
 	$(MDLINT) '**/*.md'
 
-TYPOS_VERSION ?= 1.48.0
+TYPOS_CONFIG_BUILDER_VERSION ?= v0.1.4
+TYPOS_CONFIG_BUILDER = $(UV_ENV) $(UV) tool run --python 3.14 --from \
+	"git+https://github.com/leynos/typos-config-builder.git@$(TYPOS_CONFIG_BUILDER_VERSION)" \
+	typos-config-builder
 
-spelling: spelling-helper-test ## Enforce en-GB-oxendict spelling in Markdown prose
-	@$(UV_ENV) uv run scripts/generate_typos_config.py
-	@git ls-files -z '*.md' | \
-		xargs -0 -r env $(UV_ENV) uv tool run typos@$(TYPOS_VERSION) \
-		--config typos.toml --force-exclude
-
-spelling-helper-test: uv ## Validate the shared spelling-policy integration
-	@$(RUFF) format --isolated \
-		--target-version py313 --check scripts/generate_typos_config.py \
-		scripts/typos_rollout.py scripts/typos_rollout_cache.py \
-		scripts/tests/test_typos_rollout.py
-	@$(RUFF) check --isolated \
-		--target-version py313 scripts/generate_typos_config.py \
-		scripts/typos_rollout.py scripts/typos_rollout_cache.py \
-		scripts/tests/test_typos_rollout.py
-	@PYTHONPATH=scripts $(UV_ENV) uv run --no-project --python 3.13 \
-		--with pytest==9.0.2 --with pytest-cov==7.0.0 \
-		python -m pytest scripts/tests/test_typos_rollout.py \
-		-c /dev/null --rootdir=. -p no:cacheprovider \
-		--cov=generate_typos_config --cov=typos_rollout \
-		--cov=typos_rollout_cache --cov-fail-under=90
+spelling: ## Enforce en-GB-oxendict spelling in prose
+	$(TYPOS_CONFIG_BUILDER) gate --repository .
 
 nixie: ## Validate Mermaid diagrams
 	$(call ensure_tool,nixie)
