@@ -201,14 +201,14 @@ that formats Python inside Markdown fences, against a tree formatted by an
 older one. The Makefile ran whichever ruff was on `PATH`, so nothing in the
 repository could disagree with it.
 
-| Tool                | Where the version lives                                                                 |
-| ------------------- | --------------------------------------------------------------------------------------- |
-| `ruff`              | `RUFF_VERSION` in the Makefile, matched by the `ruff==` requirement in `pyproject.toml` |
-| `typos`             | `TYPOS_VERSION` in the Makefile                                                         |
-| `mbake`             | `MBAKE_VERSION` in `ci.yml`                                                             |
-| `markdownlint-cli2` | `MARKDOWNLINT_CLI2_VERSION` in `ci.yml`                                                 |
-| `pajv`              | `PAJV_VERSION` in `ci.yml`                                                              |
-| `ty`                | the `dev` dependency group, resolved in `uv.lock`                                       |
+| Tool                   | Where the version lives                                                                 |
+| ---------------------- | --------------------------------------------------------------------------------------- |
+| `ruff`                 | `RUFF_VERSION` in the Makefile, matched by the `ruff==` requirement in `pyproject.toml` |
+| `typos-config-builder` | `TYPOS_CONFIG_BUILDER_VERSION` in the Makefile                                          |
+| `mbake`                | `MBAKE_VERSION` in `ci.yml`                                                             |
+| `markdownlint-cli2`    | `MARKDOWNLINT_CLI2_VERSION` in `ci.yml`                                                 |
+| `pajv`                 | `PAJV_VERSION` in `ci.yml`                                                              |
+| `ty`                   | the `dev` dependency group, resolved in `uv.lock`                                       |
 
 `tests/test_ci_workflow_contract.py` enforces all of it. Every
 `uv tool install`, `npm install -g` and `bun install -g` in `ci.yml` must name
