@@ -90,6 +90,8 @@ jobs:
       - name: Check spelling
         run: make spelling
 
+      - name: Install the YAML lint tools
+        uses: leynos/shared-actions/.github/actions/install-yaml-lint@bd052c68a4792e92c3272fb1b6ea3b594f3ab7f3
       - name: Run architecture, dead-code, and lint checks
         run: make lint
 
